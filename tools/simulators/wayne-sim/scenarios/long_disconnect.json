@@ -1,0 +1,5 @@
+{
+  "name": "long_disconnect",
+  "description": "All dispensers go offline for 10s then reconnect with data flush",
+  "duration_ms": 13000
+}

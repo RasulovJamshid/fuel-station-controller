@@ -1,0 +1,64 @@
+{
+  "$schema": "./schema.json",
+  "site": { "id": "ung-001", "name": "UNG Bostonliq", "timezone": "Asia/Tashkent" },
+  "service": {
+    "port": 3001,
+    "log_level": "info",
+    "log_file": "service.log",
+    "db_path": "transactions.db"
+  },
+  "connection": {
+    "protocol": "wayne_europump",
+    "port": "COM3",
+    "baud_rate": 9600,
+    "parity": "odd",
+    "data_bits": 8,
+    "stop_bits": 1
+  },
+  "polling": {
+    "interval_ms": 140,
+    "offline_threshold": 32,
+    "reconnect_settle_rounds": 3,
+    "response_timeout_ms": 300
+  },
+  "dispensers": [
+    {
+      "addr": "P0",
+      "byte": 80,
+      "label": "Dispenser 1 Side A",
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 5, "product_name": "AI-92", "price": 10500, "active": true }
+      ]
+    },
+    {
+      "addr": "P1",
+      "byte": 81,
+      "label": "Dispenser 1 Side B",
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 5, "product_name": "AI-92", "price": 10500, "active": true }
+      ]
+    },
+    {
+      "addr": "P2",
+      "byte": 82,
+      "label": "Dispenser 2 Side A",
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 5, "product_name": "AI-92", "price": 10500, "active": true },
+        { "index": 2, "product_id": 3, "product_name": "AI-95", "price": 12000, "active": true }
+      ]
+    },
+    {
+      "addr": "P3",
+      "byte": 83,
+      "label": "Dispenser 2 Side B",
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 5, "product_name": "AI-92", "price": 10500, "active": true }
+      ]
+    }
+  ],
+  "sync": { "enabled": false, "backend_url": "https://api.ung.uz", "api_key": "" }
+}

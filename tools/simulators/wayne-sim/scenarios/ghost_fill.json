@@ -1,0 +1,6 @@
+{
+  "name": "ghost_fill",
+  "description": "Nozzle lifted and replaced immediately, no fuel dispensed",
+  "addr": "P2",
+  "duration_ms": 3000
+}

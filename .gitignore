@@ -1,0 +1,78 @@
+# ── Local dev runtime (scripts/azs.sh) ─────────────────────────────────────
+.azs-run/
+*.pid
+
+# ── Rust ────────────────────────────────────────────────────────────────────
+target/
+**/*.rs.bk
+
+# ── Node / frontend ─────────────────────────────────────────────────────────
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+.parcel-cache/
+.turbo/
+.eslintcache
+
+# ── Tauri ───────────────────────────────────────────────────────────────────
+apps/*/src-tauri/gen/
+apps/*/src-tauri/WixTools/
+
+# ── SQLite (runtime transaction DBs) ────────────────────────────────────────
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ── Logs (keep protocol reference captures under docs/logs/) ────────────────
+*.log
+!docs/logs/
+!docs/logs/**
+
+# ── Environment & secrets ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Archives & compressed bundles ───────────────────────────────────────────
+*.7z
+*.bz2
+*.gz
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+*.xz
+*.zip
+*.zipx
+*.zst
+archives/
+archive/
+
+# ── OS junk ─────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# ── Editors ─────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ── Test / coverage ─────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.profraw

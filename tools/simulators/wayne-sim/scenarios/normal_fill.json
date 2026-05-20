@@ -1,0 +1,6 @@
+{
+  "name": "normal_fill",
+  "description": "Standard fill on P2 — lift nozzle, authorize, 15s fill, replace nozzle",
+  "addr": "P2",
+  "duration_ms": 17000
+}

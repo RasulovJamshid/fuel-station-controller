@@ -1,0 +1,232 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Light Theme ─────────────────────────────────────────────────────────
+       All foreground colors target ≥ 4.5 : 1 contrast on the bg-primary surface.
+       Accent colours are dark-saturated so they stay legible on light cards.
+    ──────────────────────────────────────────────────────────────────────── */
+    --color-bg-primary:   242 243 247;   /* warm off-white */
+    --color-bg-secondary: 230 232 240;   /* soft slate-100 */
+    --color-bg-tertiary:  215 218 228;   /* slightly deeper */
+    --color-bg-card:      252 252 255;   /* near white card surface */
+    --color-bg-header:    237 239 247;
+    --color-bg-meter:     248 249 253;
+    --color-bg-input:     255 255 255;
+
+    /* Text — all pass WCAG AA (≥ 4.5:1) on bg-primary */
+    --color-text-primary:   28  32  48;   /* near-black navy   ~14:1 */
+    --color-text-secondary: 54  60  80;   /* dark slate-grey   ~9:1  */
+    --color-text-tertiary:  82  88 110;   /* medium slate      ~6:1  */
+    --color-text-muted:    112 118 140;   /* soft grey         ~4.6:1 */
+    --color-text-inverse:  248 249 252;   /* for text on dark bg */
+
+    --color-border-primary:   188 192 208;
+    --color-border-secondary: 210 213 226;
+    --color-border-focus:      50 100 200;
+
+    /* Accents — dark enough to read as text/icons on light surfaces */
+    --color-accent-emerald:       20 115  68;   /* ~5.9:1 on bg-primary */
+    --color-accent-emerald-light: 28 140  82;   /* ~4.8:1                */
+    --color-accent-emerald-dark:  12  80  48;   /* ~8.8:1                */
+    --color-accent-amber:        155  95   8;   /* ~5.3:1                */
+    --color-accent-amber-light:  120  75   6;   /* ~6.8:1                */
+    --color-accent-amber-dark:   100  55   5;   /* ~8.5:1                */
+    --color-accent-blue:          50  95 165;   /* ~5.5:1                */
+    --color-accent-red:          185  28  28;   /* ~4.7:1                */
+    --color-accent-red-light:    160  30  30;   /* ~5.6:1                */
+    --color-accent-red-dark:     130  20  20;   /* ~7.2:1                */
+
+    --color-status-delivering:  20 115  68;
+    --color-status-preauth:    155  95   8;
+    --color-status-idle:        82  88 110;
+    --color-status-offline:    112 118 140;
+    --color-status-error:      185  28  28;
+
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.10), 0 1px 2px -1px rgb(0 0 0 / 0.08);
+    --shadow-card-hover: 0 4px 8px -2px rgb(0 0 0 / 0.12), 0 2px 4px -2px rgb(0 0 0 / 0.08);
+    --shadow-button: 0 1px 2px 0 rgb(0 0 0 / 0.08);
+    --shadow-button-hover: 0 3px 6px -1px rgb(0 0 0 / 0.10);
+  }
+
+  .dark {
+    /* Dark Theme */
+    --color-bg-primary: 2 6 23;
+    --color-bg-secondary: 15 23 42;
+    --color-bg-tertiary: 30 41 59;
+    --color-bg-card: 15 23 42;
+    --color-bg-header: 2 6 23;
+    --color-bg-meter: 30 41 59;
+    --color-bg-input: 30 41 59;
+
+    --color-text-primary: 248 250 252;
+    --color-text-secondary: 203 213 225;
+    --color-text-tertiary: 148 163 184;
+    --color-text-muted: 100 116 139;
+    --color-text-inverse: 15 23 42;
+
+    --color-border-primary: 51 65 85;
+    --color-border-secondary: 30 41 59;
+    --color-border-focus: 99 102 241;
+
+    --color-accent-emerald: 16 185 129;
+    --color-accent-emerald-light: 52 211 153;
+    --color-accent-emerald-dark: 5 150 105;
+    --color-accent-amber: 245 158 11;
+    --color-accent-amber-light: 251 191 36;
+    --color-accent-amber-dark: 217 119 6;
+    --color-accent-blue: 59 130 246;
+    --color-accent-red: 239 68 68;
+    --color-accent-red-light: 248 113 113;
+    --color-accent-red-dark: 220 38 38;
+
+    --color-status-delivering: 52 211 153;
+    --color-status-preauth: 251 191 36;
+    --color-status-idle: 148 163 184;
+    --color-status-offline: 100 116 139;
+    --color-status-error: 248 113 113;
+
+    --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+    --shadow-card-hover: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+    --shadow-button: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+    --shadow-button-hover: 0 10px 15px -3px rgb(0 0 0 / 0.3);
+  }
+
+  /* Default to dark theme for fuel dispenser industrial look */
+  :root:not(.light) {
+    --color-bg-primary: 2 6 23;
+    --color-bg-secondary: 15 23 42;
+    --color-bg-tertiary: 30 41 59;
+    --color-bg-card: 15 23 42;
+    --color-bg-header: 2 6 23;
+    --color-bg-meter: 30 41 59;
+    --color-bg-input: 30 41 59;
+
+    --color-text-primary: 248 250 252;
+    --color-text-secondary: 203 213 225;
+    --color-text-tertiary: 148 163 184;
+    --color-text-muted: 100 116 139;
+    --color-text-inverse: 15 23 42;
+
+    --color-border-primary: 51 65 85;
+    --color-border-secondary: 30 41 59;
+    --color-border-focus: 99 102 241;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-bg-primary text-text-primary antialiased;
+  }
+}
+
+/* ── Light-mode overrides for structural chrome ───────────────────────────
+   DispenserCard body already uses CSS-variable Tailwind classes and adapts
+   automatically. The chrome (header bar, bottom nav, page wrappers) still
+   uses hardcoded dark slate-* utilities, so we override the ones that
+   would become illegible on the light bg-primary surface.
+──────────────────────────────────────────────────────────────────────────── */
+html.light {
+  color-scheme: light;
+}
+
+/* Page shell */
+html.light body,
+html.light #root > div,
+html.light main {
+  background-color: rgb(var(--color-bg-primary)) !important;
+}
+
+/* Top header bar */
+html.light header.sticky {
+  background-color: rgba(var(--color-bg-header) / 0.97) !important;
+  border-color: rgb(var(--color-border-primary)) !important;
+}
+html.light header.sticky .text-white,
+html.light header.sticky .text-slate-200,
+html.light header.sticky .text-slate-100 {
+  color: rgb(var(--color-text-primary)) !important;
+}
+html.light header.sticky .text-slate-300,
+html.light header.sticky .text-slate-400,
+html.light header.sticky .text-slate-500 {
+  color: rgb(var(--color-text-secondary)) !important;
+}
+html.light header.sticky .font-mono.tabular-nums {
+  color: rgb(var(--color-text-primary)) !important;
+}
+html.light header.sticky .border-slate-700\/80,
+html.light header.sticky .border-slate-800 {
+  border-color: rgb(var(--color-border-primary)) !important;
+}
+html.light header.sticky .bg-slate-950\/60,
+html.light header.sticky .bg-slate-900\/95 {
+  background-color: rgba(var(--color-bg-secondary) / 0.85) !important;
+}
+
+/* Bottom workspace nav */
+html.light nav[aria-label="Workspace"] {
+  background-color: rgba(var(--color-bg-header) / 0.97) !important;
+  border-color: rgb(var(--color-border-primary)) !important;
+}
+html.light nav[aria-label="Workspace"] .text-white {
+  color: rgb(var(--color-text-primary)) !important;
+}
+html.light nav[aria-label="Workspace"] .text-slate-400 {
+  color: rgb(var(--color-text-secondary)) !important;
+}
+html.light nav[aria-label="Workspace"] .bg-slate-800 {
+  background-color: rgb(var(--color-bg-tertiary)) !important;
+}
+html.light nav[aria-label="Workspace"] .bg-slate-800\/50 {
+  background-color: rgba(var(--color-bg-tertiary) / 0.6) !important;
+}
+html.light nav[aria-label="Workspace"] .bg-slate-950\/40 {
+  background-color: rgba(var(--color-bg-secondary) / 0.7) !important;
+}
+html.light nav[aria-label="Workspace"] .border-slate-700 {
+  border-color: rgb(var(--color-border-primary)) !important;
+}
+
+/* Error bar (invoke error) */
+html.light header .bg-red-950\/40 {
+  background-color: rgb(254 226 226) !important;
+}
+html.light header .text-red-100 {
+  color: rgb(153 27 27) !important;
+}
+html.light header .bg-red-900\/60 {
+  background-color: rgb(254 202 202) !important;
+}
+
+/* Shift warning banner */
+html.light header .bg-amber-950\/40 {
+  background-color: rgb(254 243 199) !important;
+}
+html.light header .text-amber-200 {
+  color: rgb(var(--color-accent-amber)) !important;
+}
+
+/* Card ring offset that uses slate-900 */
+html.light .ring-offset-slate-900 {
+  --tw-ring-offset-color: rgb(var(--color-bg-primary));
+}
+
+/* Pre-auth panel (hardcoded amber-950 overlays) */
+html.light .border-amber-500.bg-amber-950\/40 {
+  background-color: rgb(255 247 230) !important;
+}
+html.light .border-amber-500.bg-amber-950\/40 .text-slate-50,
+html.light .border-amber-500.bg-amber-950\/40 .text-amber-100 {
+  color: rgb(var(--color-text-primary)) !important;
+}
+html.light .bg-amber-950\/55 {
+  background-color: rgb(255 237 195) !important;
+}
+html.light .bg-amber-950\/50 {
+  background-color: rgb(255 243 210) !important;
+}

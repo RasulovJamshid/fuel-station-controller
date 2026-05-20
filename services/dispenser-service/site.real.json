@@ -1,0 +1,96 @@
+{
+  "site": {
+    "id": "azs-001",
+    "name": "AZS Station",
+    "timezone": "Asia/Tashkent",
+    "address": null
+  },
+  "service": {
+    "port": 3001,
+    "log_level": "debug",
+    "log_file": "service.log",
+    "db_path": "transactions-real.db"
+  },
+  "connection": {
+    "protocol": "wayne_europump",
+    "port": "/dev/ttyUSB0",
+    "baud_rate": 9600,
+    "parity": "odd",
+    "data_bits": 8,
+    "stop_bits": 1,
+    "response_timeout_ms": 600
+  },
+  "polling": {
+    "interval_ms": 140,
+    "offline_threshold_polls": 6,
+    "reconnect_settle_rounds": 3
+  },
+  "products": [
+    { "id": 1, "name": "AI-92",  "color": "#2196F3", "unit": "litre" },
+    { "id": 2, "name": "AI-95",  "color": "#FF9800", "unit": "litre" },
+    { "id": 3, "name": "Diesel", "color": "#795548", "unit": "litre" }
+  ],
+  "fueling_positions": [
+    {
+      "id": "FP1",
+      "label": "Pump 1",
+      "address_byte": 80,
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 1, "price": 10500, "active": true, "wayne_code": 18 },
+        { "index": 2, "product_id": 2, "price": 14300, "active": true, "wayne_code": 17 },
+        { "index": 3, "product_id": 3, "price": 12400, "active": true, "wayne_code": 0  }
+      ]
+    },
+    {
+      "id": "FP2",
+      "label": "Pump 2",
+      "address_byte": 81,
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 1, "price": 10500, "active": true, "wayne_code": 18 },
+        { "index": 2, "product_id": 2, "price": 14300, "active": true, "wayne_code": 17 },
+        { "index": 3, "product_id": 3, "price": 12400, "active": true, "wayne_code": 0  }
+      ]
+    },
+    {
+      "id": "FP3",
+      "label": "Pump 3",
+      "address_byte": 82,
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 1, "price": 10500, "active": true, "wayne_code": 18 },
+        { "index": 2, "product_id": 2, "price": 14300, "active": true, "wayne_code": 17 },
+        { "index": 3, "product_id": 3, "price": 12400, "active": true, "wayne_code": 0  }
+      ]
+    },
+    {
+      "id": "FP4",
+      "label": "Pump 4",
+      "address_byte": 83,
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 1, "price": 10500, "active": true, "wayne_code": 18 },
+        { "index": 2, "product_id": 2, "price": 14300, "active": true, "wayne_code": 17 },
+        { "index": 3, "product_id": 3, "price": 12400, "active": true, "wayne_code": 0  }
+      ]
+    }
+  ],
+  "sync": {
+    "enabled": false,
+    "backend_url": "",
+    "api_key": ""
+  },
+  "shifts": {
+    "mode": "manual",
+    "scheduled": [],
+    "require_operator_pin": false,
+    "warn_before_end_minutes": 15,
+    "allow_overlap_minutes": 30,
+    "auto_close_on_restart": false
+  },
+  "ui": {
+    "default_auth_mode": "preauth",
+    "preauth_timeout_seconds": 300
+  }
+}

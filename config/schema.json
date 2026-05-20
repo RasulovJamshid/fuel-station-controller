@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AZS site.config",
+  "type": "object",
+  "required": ["site", "service", "connection", "polling", "dispensers"],
+  "properties": {
+    "site": {
+      "type": "object",
+      "required": ["id", "name", "timezone"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "timezone": { "type": "string" }
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": ["port", "log_level", "log_file", "db_path"],
+      "properties": {
+        "port": { "type": "integer" },
+        "log_level": { "type": "string" },
+        "log_file": { "type": "string" },
+        "db_path": { "type": "string" }
+      }
+    },
+    "connection": { "type": "object" },
+    "polling": { "type": "object" },
+    "dispensers": { "type": "array" },
+    "sync": { "type": "object" }
+  }
+}

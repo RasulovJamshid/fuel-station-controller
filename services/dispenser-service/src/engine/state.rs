@@ -1,0 +1,1637 @@
+use chrono::Utc;
+use site_config::{FuelingPositionConfig, SiteConfig};
+use std::collections::HashMap;
+use types::{preset_label, FpState, FpStatus, Preset, StopSource, Transaction, TxStatus};
+use uuid::Uuid;
+use wayne_europump::{decode_amount, decode_volume, Frame};
+
+/// Idle polls required before accepting another reactive nozzle lift after ghost fill.
+const GHOST_RECOVERY_IDLE_POLLS: u8 = 4;
+
+#[derive(Debug, Clone)]
+pub struct StoppedContext {
+    pub stopped_tx_id: String,
+    pub stopped_volume: f64,
+    pub stopped_amount: u64,
+    pub preset: Preset,
+    pub stop_source: StopSource,
+    pub price: u32,
+    pub nozzle_index: u8,
+}
+
+#[derive(Debug, Clone)]
+pub struct PreAuthContext {
+    pub nozzle_index: u8,
+    #[allow(dead_code)]
+    pub product_id: u8,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContinuationContext {
+    pub parent_tx_id: String,
+    pub base_volume: f64,
+    pub base_amount: u64,
+    pub segment_volume: f64,
+    pub segment_amount: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeFp {
+    pub state: FpState,
+    /// Effective price per nozzle index (overrides config after POST /prices).
+    pub nozzle_prices: HashMap<u8, u32>,
+    pub missed: u32,
+    pub settle_after_reconnect: u32,
+    pub current_tx: Option<CurrentTx>,
+    /// Stop delivery as COMPLETED once live volume (L) reaches this value.
+    pub cap_volume_liters: Option<f64>,
+    /// Stop delivery once live amount (sum, same unit as `FpState.amount`) reaches this value.
+    pub cap_amount: Option<u64>,
+    /// In-memory E-stop state (lost on service restart).
+    pub stopped_context: Option<StoppedContext>,
+    pub continuation: Option<ContinuationContext>,
+    /// Last authorize preset (for E-stop continuation).
+    pub last_preset: Preset,
+    pub pre_auth: Option<PreAuthContext>,
+    /// Wall-clock ms when pre-authorization was sent (for timeout).
+    pub pre_auth_started_at: Option<i64>,
+    /// Set when a matching nozzle-up frame is seen during pre-authorization.
+    pub preauth_nozzle_confirmed: bool,
+    /// Set when a nozzle mismatch is detected — blocks Data-frame transition to Authorizing.
+    pub preauth_mismatch_active: bool,
+    /// Block stray NozzleUp re-AUTH until the dispenser has polled idle enough times.
+    pub ghost_recovery: bool,
+    pub consecutive_idle_polls: u8,
+    /// When set, send CONFIG×2 after the first zero-volume Data frame (Wayne expects AUTH first).
+    pub pending_authorize_config: bool,
+    /// Wall-clock ms when the current authorize session started (not reset by poll touch).
+    pub auth_session_started_at: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CurrentTx {
+    pub id: String,
+    pub started_at: i64,
+    pub product_id: u8,
+    pub product_name: String,
+    pub nozzle_index: u8,
+}
+
+impl RuntimeFp {
+    pub fn new(fp: &FuelingPositionConfig, _cfg: &SiteConfig) -> Self {
+        let now = Utc::now().timestamp_millis();
+        let price = fp.default_price().unwrap_or(0);
+        let nozzle_count = fp.nozzle_count().min(u8::MAX as usize) as u8;
+        let mut nozzle_prices = HashMap::new();
+        for n in fp.nozzles.iter().filter(|n| n.active) {
+            nozzle_prices.insert(n.index, n.price);
+        }
+        Self {
+            missed: 0,
+            settle_after_reconnect: 0,
+            current_tx: None,
+            nozzle_prices,
+            cap_volume_liters: None,
+            cap_amount: None,
+            stopped_context: None,
+            continuation: None,
+            last_preset: Preset::Str("full".into()),
+            pre_auth: None,
+            pre_auth_started_at: None,
+            preauth_nozzle_confirmed: false,
+            preauth_mismatch_active: false,
+            ghost_recovery: false,
+            consecutive_idle_polls: 0,
+            pending_authorize_config: false,
+            auth_session_started_at: None,
+            state: FpState {
+                fp_id: fp.id.clone(),
+                label: fp.label.clone(),
+                address_byte: fp.address_byte,
+                status: FpStatus::Offline,
+                volume: 0.0,
+                amount: 0,
+                price,
+                nozzle_index: None,
+                product_id: None,
+                product_name: None,
+                product_color: None,
+                nozzle_count,
+                seq: 0,
+                missed_polls: 0,
+                updated_at: now,
+                stopped_tx_id: None,
+                base_volume: None,
+                base_amount: None,
+                segment_volume: None,
+                segment_amount: None,
+                pre_auth_preset: None,
+                stop_source: None,
+            },
+        }
+    }
+
+    fn touch(&mut self) {
+        self.state.updated_at = Utc::now().timestamp_millis();
+    }
+
+    /// API/WS snapshot: while pre-auth is pending, never expose reactive `NOZZLE_UP`.
+    pub fn snapshot_state(&self) -> FpState {
+        let mut s = self.state.clone();
+        if self.pre_auth.is_some() {
+            if matches!(
+                s.status,
+                FpStatus::Idle | FpStatus::NozzleUp
+            ) {
+                s.status = FpStatus::PreAuthorized;
+            }
+            if s.pre_auth_preset.is_none() {
+                s.pre_auth_preset = Some(preset_label(&self.last_preset));
+            }
+        }
+        if matches!(s.status, FpStatus::Authorizing | FpStatus::Delivering)
+            && s.pre_auth_preset.is_none()
+        {
+            s.pre_auth_preset = Some(preset_label(&self.last_preset));
+        }
+        s
+    }
+
+    pub fn clear_deliver_caps(&mut self) {
+        self.cap_volume_liters = None;
+        self.cap_amount = None;
+    }
+
+    pub fn set_deliver_caps_from_preset(&mut self, preset: &Preset) {
+        self.clear_deliver_caps();
+        match preset {
+            Preset::Str(s) if s.eq_ignore_ascii_case("full") => {}
+            Preset::Volume(v) if *v > 0.0 => {
+                self.cap_volume_liters = Some(*v);
+            }
+            Preset::Amount(a) if *a > 0 => {
+                self.cap_amount = Some(*a);
+            }
+            _ => {}
+        }
+    }
+
+    /// Supervisor reset: lane is ready for a new session (use after E-stop, bad state, or tests).
+    /// Does not insert a transaction row.
+    fn clear_continuation_fields(&mut self) {
+        self.state.stopped_tx_id = None;
+        self.state.base_volume = None;
+        self.state.base_amount = None;
+        self.state.segment_volume = None;
+        self.state.segment_amount = None;
+    }
+
+    fn apply_metering(&mut self, raw_vol: f64, raw_amt: u64) {
+        if let Some(c) = self.continuation.as_mut() {
+            c.segment_volume = raw_vol;
+            c.segment_amount = raw_amt;
+            self.state.segment_volume = Some(raw_vol);
+            self.state.segment_amount = Some(raw_amt);
+            self.state.base_volume = Some(c.base_volume);
+            self.state.base_amount = Some(c.base_amount);
+            self.state.volume = c.base_volume + raw_vol;
+            self.state.amount = c.base_amount + raw_amt;
+        } else {
+            self.state.segment_volume = None;
+            self.state.segment_amount = None;
+            self.state.base_volume = None;
+            self.state.base_amount = None;
+            self.state.volume = raw_vol;
+            self.state.amount = raw_amt;
+        }
+    }
+
+    fn combined_totals(&self) -> (f64, u64) {
+        if let Some(c) = &self.continuation {
+            (
+                c.base_volume + c.segment_volume,
+                c.base_amount + c.segment_amount,
+            )
+        } else {
+            (self.state.volume, self.state.amount)
+        }
+    }
+
+    fn segment_totals(&self) -> (f64, u64) {
+        if let Some(c) = &self.continuation {
+            (c.segment_volume, c.segment_amount)
+        } else {
+            (self.state.volume, self.state.amount)
+        }
+    }
+
+    /// True when the authorized preset limit is reached (full-tank holster always completes).
+    fn sale_target_met(&self) -> bool {
+        if self.last_preset.is_full() {
+            return true;
+        }
+        let (vol, amt) = self.combined_totals();
+        if let Some(cap) = self.cap_volume_liters {
+            return vol + 1e-6 >= cap;
+        }
+        if let Some(cap) = self.cap_amount {
+            return amt >= cap;
+        }
+        true
+    }
+
+    /// Nozzle holstered before the preset cap — close the sale for operator review (no continue).
+    fn holster_ends_sale_early(&self) -> bool {
+        let (vol, _) = self.combined_totals();
+        vol > 0.01 && !self.sale_target_met()
+    }
+
+    /// Finalize a partial sale after holster; lane shows DONE totals, tx is STOPPED in history.
+    fn end_sale_from_holster_early(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        active_shift_id: Option<String>,
+    ) -> FrameEffect {
+        self.stopped_context = None;
+        self.clear_deliver_caps();
+        self.state.status = FpStatus::Done;
+        let tx = self.close_transaction(false, fp_cfg, site, active_shift_id);
+        self.touch();
+        FrameEffect::TransactionDone {
+            tx,
+            action: TxCompleteAction::AcknowledgeIdle,
+        }
+    }
+
+    fn complete_sale_from_holster(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        active_shift_id: Option<String>,
+    ) -> FrameEffect {
+        let (vol, _) = self.combined_totals();
+        self.clear_deliver_caps();
+        self.state.status = FpStatus::Done;
+        let completed = self.sale_target_met() || vol < 0.01;
+        let tx = self.close_transaction(completed, fp_cfg, site, active_shift_id);
+        self.touch();
+        FrameEffect::TransactionDone {
+            tx,
+            action: TxCompleteAction::AcknowledgeIdle,
+        }
+    }
+
+    /// E-stop or lane STOP while fuel was flowing — persist STOPPED tx and await continue/close.
+    fn apply_stopped_display(
+        &mut self,
+        stopped_volume: f64,
+        stopped_amount: u64,
+        stopped_tx_id: String,
+        stop_source: StopSource,
+    ) {
+        self.state.status = FpStatus::Stopped {
+            stopped_volume,
+            stopped_amount,
+            stopped_tx_id: stopped_tx_id.clone(),
+            stop_source,
+        };
+        self.state.stopped_tx_id = Some(stopped_tx_id);
+        self.state.stop_source = Some(stop_source);
+        self.state.volume = stopped_volume;
+        self.state.amount = stopped_amount;
+        self.state.base_volume = None;
+        self.state.base_amount = None;
+        self.state.segment_volume = None;
+        self.state.segment_amount = None;
+    }
+
+    pub fn enter_stopped_state(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        active_shift_id: Option<String>,
+        preset: Preset,
+        stop_source: StopSource,
+    ) -> FrameEffect {
+        self.clear_deliver_caps();
+        let (combined_vol, combined_amt) = self.combined_totals();
+        let tx = self.finish_transaction_with_totals(
+            TxStatus::Stopped,
+            fp_cfg,
+            site,
+            active_shift_id,
+            combined_vol,
+            combined_amt,
+            None,
+        );
+        let stopped_tx_id = tx.id.clone();
+        let nozzle_index = self.state.nozzle_index.unwrap_or(1);
+        self.stopped_context = Some(StoppedContext {
+            stopped_tx_id: stopped_tx_id.clone(),
+            stopped_volume: combined_vol,
+            stopped_amount: combined_amt,
+            preset,
+            stop_source,
+            price: self.state.price,
+            nozzle_index,
+        });
+        self.continuation = None;
+        self.apply_stopped_display(combined_vol, combined_amt, stopped_tx_id.clone(), stop_source);
+        self.touch();
+        FrameEffect::Paused {
+            tx,
+            fp_id: self.state.fp_id.clone(),
+            stopped_volume: combined_vol,
+            stopped_amount: combined_amt,
+            stopped_tx_id,
+            stop_source,
+        }
+    }
+
+    /// Rebuild in-memory E-stop state from a persisted `STOPPED` transaction (e.g. after restart).
+    pub fn rehydrate_stopped_context(
+        &mut self,
+        tx: &Transaction,
+        preset: Preset,
+        stop_source: StopSource,
+    ) {
+        let vol = if tx.combined_volume > 0.0 {
+            tx.combined_volume
+        } else {
+            tx.volume
+        };
+        let amt = if tx.combined_amount > 0 {
+            tx.combined_amount
+        } else {
+            tx.amount
+        };
+        self.stopped_context = Some(StoppedContext {
+            stopped_tx_id: tx.id.clone(),
+            stopped_volume: vol,
+            stopped_amount: amt,
+            preset,
+            stop_source,
+            price: tx.price,
+            nozzle_index: tx.nozzle_index,
+        });
+        self.continuation = None;
+        self.current_tx = None;
+        self.apply_stopped_display(vol, amt, tx.id.clone(), stop_source);
+        self.state.price = tx.price;
+        self.state.nozzle_index = Some(tx.nozzle_index);
+        self.state.product_id = Some(tx.product_id);
+        self.state.product_name = Some(tx.product_name.clone());
+        self.touch();
+    }
+
+    pub fn prepare_continue(&mut self, stopped_tx_id: &str) -> Result<Preset, String> {
+        let sc = self
+            .stopped_context
+            .take()
+            .ok_or_else(|| "lane is not in a continuable stopped state".to_string())?;
+        if sc.stopped_tx_id != stopped_tx_id {
+            self.stopped_context = Some(sc);
+            return Err("stopped_tx_id does not match this lane".into());
+        }
+        let preset = sc.preset.clone();
+        self.continuation = Some(ContinuationContext {
+            parent_tx_id: sc.stopped_tx_id.clone(),
+            base_volume: sc.stopped_volume,
+            base_amount: sc.stopped_amount,
+            segment_volume: 0.0,
+            segment_amount: 0,
+        });
+        self.state.stopped_tx_id = None;
+        self.state.stop_source = None;
+        self.state.status = FpStatus::Authorizing;
+        self.state.base_volume = Some(sc.stopped_volume);
+        self.state.base_amount = Some(sc.stopped_amount);
+        self.state.segment_volume = Some(0.0);
+        self.state.segment_amount = Some(0);
+        self.state.volume = sc.stopped_volume;
+        self.state.amount = sc.stopped_amount;
+        self.set_deliver_caps_from_preset(&preset);
+        self.last_preset = preset.clone();
+        self.touch();
+        Ok(preset)
+    }
+
+    pub fn close_stopped(&mut self, stopped_tx_id: &str) -> Result<(), String> {
+        let sc = self
+            .stopped_context
+            .as_ref()
+            .ok_or_else(|| "lane is not stopped".to_string())?;
+        if sc.stopped_tx_id != stopped_tx_id {
+            return Err("stopped_tx_id does not match this lane".into());
+        }
+        self.stopped_context = None;
+        self.continuation = None;
+        self.current_tx = None;
+        self.clear_deliver_caps();
+        self.clear_continuation_fields();
+        self.state.status = FpStatus::Idle;
+        self.state.stop_source = None;
+        self.state.volume = 0.0;
+        self.state.amount = 0;
+        self.touch();
+        Ok(())
+    }
+
+    fn reset_to_idle(&mut self) {
+        self.stopped_context = None;
+        self.continuation = None;
+        self.current_tx = None;
+        self.pre_auth = None;
+        self.pre_auth_started_at = None;
+        self.pending_authorize_config = false;
+        self.auth_session_started_at = None;
+        self.clear_deliver_caps();
+        self.clear_continuation_fields();
+        self.state.status = FpStatus::Idle;
+        self.state.stop_source = None;
+        self.state.pre_auth_preset = None;
+        self.state.volume = 0.0;
+        self.state.amount = 0;
+        self.state.nozzle_index = None;
+        self.state.product_id = None;
+        self.state.product_name = None;
+        self.state.product_color = None;
+    }
+
+    fn ghost_recovery_active(&self) -> bool {
+        self.ghost_recovery && self.consecutive_idle_polls < GHOST_RECOVERY_IDLE_POLLS
+    }
+
+    pub fn note_dispenser_poll(&mut self, saw_idle: bool) {
+        if !self.ghost_recovery {
+            return;
+        }
+        if saw_idle {
+            self.consecutive_idle_polls = self.consecutive_idle_polls.saturating_add(1);
+            if self.consecutive_idle_polls >= GHOST_RECOVERY_IDLE_POLLS {
+                self.ghost_recovery = false;
+                self.consecutive_idle_polls = 0;
+            }
+        } else {
+            self.consecutive_idle_polls = 0;
+        }
+    }
+
+    pub fn clear_ghost_recovery(&mut self) {
+        self.ghost_recovery = false;
+        self.consecutive_idle_polls = 0;
+    }
+
+    /// In preauth mode, do not send wire AUTH on nozzle lift without operator pre-auth.
+    pub fn allow_reactive_nozzle_auth(&self, auth_mode: &str) -> bool {
+        if self.ghost_recovery_active() {
+            return false;
+        }
+        auth_mode != "preauth" || self.pre_auth.is_some()
+    }
+
+    /// Cancel a zero-volume authorization on the app side and enter ghost recovery
+    /// so stray NozzleUp frames do not re-trigger AUTH.
+    fn cancel_zero_volume_session(&mut self) {
+        self.clear_deliver_caps();
+        self.current_tx = None;
+        self.reset_to_idle();
+        self.ghost_recovery = true;
+        self.consecutive_idle_polls = 0;
+    }
+
+    fn auth_session_age_ms(&self) -> i64 {
+        let started = self
+            .auth_session_started_at
+            .or_else(|| self.current_tx.as_ref().map(|tx| tx.started_at))
+            .unwrap_or(self.state.updated_at);
+        Utc::now().timestamp_millis() - started
+    }
+
+    fn begin_auth_session(&mut self) {
+        self.auth_session_started_at = Some(Utc::now().timestamp_millis());
+        self.pending_authorize_config = true;
+    }
+
+    /// Holster / idle frame (`70 FA`) — handle by current lane status.
+    pub fn apply_idle_response(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        active_shift_id: Option<String>,
+    ) -> FrameEffect {
+        use FpStatus::*;
+
+        match &self.state.status {
+            Offline => {
+                self.state.status = Idle;
+                self.state.pre_auth_preset = None;
+                self.touch();
+                FrameEffect::Online
+            }
+            Idle => {
+                self.touch();
+                FrameEffect::None
+            }
+            Done => {
+                // Pump holstered after DONE ack — lane may go idle on the wire while we keep
+                // the completed sale visible until the desktop operator starts the next session.
+                self.touch();
+                FrameEffect::None
+            }
+            Stopped {
+                stop_source: StopSource::App,
+                stopped_tx_id,
+                ..
+            } => {
+                let tx_id = stopped_tx_id.clone();
+                let tx = self.finalize_stopped_sale(fp_cfg, site, active_shift_id, false);
+                FrameEffect::NozzleRemoved {
+                    fp_id: self.state.fp_id.clone(),
+                    stopped_tx_id: Some(tx_id),
+                    tx,
+                }
+            }
+            Stopped { stop_source: StopSource::External, .. } => {
+                let tx = self.finalize_stopped_sale(fp_cfg, site, active_shift_id, false);
+                FrameEffect::TransactionDone {
+                    tx,
+                    action: TxCompleteAction::AcknowledgeIdle,
+                }
+            }
+            PreAuthorized => {
+                // Holstered while waiting for the correct nozzle — keep pre-auth active.
+                self.touch();
+                FrameEffect::None
+            }
+            NozzleUp => {
+                self.reset_to_idle();
+                self.touch();
+                // Wayne may keep sending NozzleUp until PC sends STOP (§8.3).
+                FrameEffect::NozzleHolstered
+            }
+            Authorizing => {
+                let (vol, amt) = self.combined_totals();
+                if vol < 0.01 && amt == 0 {
+                    self.cancel_zero_volume_session();
+                    self.touch();
+                    return FrameEffect::CompleteGhostFill;
+                }
+                if self.holster_ends_sale_early() {
+                    return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
+                }
+                if self.current_tx.is_some() {
+                    return self.complete_sale_from_holster(fp_cfg, site, active_shift_id);
+                }
+                self.clear_deliver_caps();
+                self.reset_to_idle();
+                self.touch();
+                FrameEffect::StatusChanged
+            }
+            Delivering => {
+                let (vol, amt) = self.combined_totals();
+                if vol < 0.01 && amt == 0 {
+                    self.cancel_zero_volume_session();
+                    self.touch();
+                    return FrameEffect::CompleteGhostFill;
+                }
+                if self.holster_ends_sale_early() {
+                    return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
+                }
+                self.complete_sale_from_holster(fp_cfg, site, active_shift_id)
+            }
+        }
+    }
+
+    fn finalize_stopped_sale(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        _site: &SiteConfig,
+        active_shift_id: Option<String>,
+        completed_normally: bool,
+    ) -> Transaction {
+        let fp_id = self.state.fp_id.clone();
+        let label = self.state.label.clone();
+        let sc = self.stopped_context.take();
+        let (vol, amt, tx_id, nozzle_index, product_id, product_name, price, started_at) =
+            if let Some(sc) = sc {
+                (
+                    sc.stopped_volume,
+                    sc.stopped_amount,
+                    sc.stopped_tx_id,
+                    sc.nozzle_index,
+                    self.state.product_id.unwrap_or(0),
+                    self.state.product_name.clone().unwrap_or_default(),
+                    sc.price,
+                    self.state.updated_at,
+                )
+            } else if let FpStatus::Stopped {
+                stopped_volume,
+                stopped_amount,
+                stopped_tx_id,
+                ..
+            } = &self.state.status
+            {
+                (
+                    *stopped_volume,
+                    *stopped_amount,
+                    stopped_tx_id.clone(),
+                    self.state.nozzle_index.unwrap_or(1),
+                    self.state.product_id.unwrap_or(0),
+                    self.state.product_name.clone().unwrap_or_default(),
+                    self.state.price,
+                    self.state.updated_at,
+                )
+            } else {
+                (
+                    self.state.volume,
+                    self.state.amount,
+                    self.state
+                        .stopped_tx_id
+                        .clone()
+                        .unwrap_or_else(|| Uuid::new_v4().to_string()),
+                    self.state.nozzle_index.unwrap_or(1),
+                    self.state.product_id.unwrap_or(0),
+                    self.state.product_name.clone().unwrap_or_default(),
+                    self.state.price,
+                    self.state.updated_at,
+                )
+            };
+        let status = TxStatus::resolve(vol, completed_normally);
+        self.reset_to_idle();
+        Transaction {
+            id: tx_id,
+            fp_id,
+            label,
+            address_byte: fp_cfg.address_byte,
+            started_at,
+            completed_at: Some(Utc::now().timestamp_millis()),
+            volume: vol,
+            amount: amt,
+            price,
+            nozzle_index,
+            product_id,
+            product_name,
+            status,
+            shift_id: active_shift_id,
+            operator_name: None,
+            parent_tx_id: None,
+            combined_volume: vol,
+            combined_amount: amt,
+        }
+    }
+
+    /// Dispenser short `01 01 05` — idle/ready after ghost-fill holster (sniffer §ghost fill).
+    fn apply_dispenser_idle(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        active_shift_id: Option<String>,
+    ) -> FrameEffect {
+        if matches!(
+            self.state.status,
+            FpStatus::Authorizing | FpStatus::Delivering | FpStatus::NozzleUp
+        ) {
+            let (vol, amt) = self.combined_totals();
+            if vol < 0.01 && amt == 0 {
+                self.cancel_zero_volume_session();
+                self.touch();
+                return FrameEffect::CompleteGhostFill;
+            }
+        }
+        if matches!(self.state.status, FpStatus::Idle | FpStatus::PreAuthorized) {
+            if self.ghost_recovery_active() {
+                self.touch();
+                return FrameEffect::None;
+            }
+            self.reset_to_idle();
+            self.touch();
+            return FrameEffect::CompleteGhostFill;
+        }
+        self.apply_done_response(fp_cfg, site, active_shift_id)
+    }
+
+    /// Done frame (`01 01 05` legacy / composite tail) when not already handled by delivery.
+    pub fn apply_done_response(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        active_shift_id: Option<String>,
+    ) -> FrameEffect {
+        if matches!(self.state.status, FpStatus::Done) {
+            self.touch();
+            return FrameEffect::StatusChanged;
+        }
+        if self.continuation.is_some() {
+            self.touch();
+            return FrameEffect::StatusChanged;
+        }
+        if let FpStatus::Stopped {
+            stop_source: StopSource::External, ..
+        } = &self.state.status
+        {
+            // Lane is paused (nozzle holstered mid-fill). Ignore DONE frames until the
+            // operator continues or holsters again (idle frame finalizes the sale).
+            self.touch();
+            return FrameEffect::StatusChanged;
+        }
+        if matches!(
+            self.state.status,
+            FpStatus::Delivering | FpStatus::Authorizing
+        ) {
+            let (vol, amt) = self.combined_totals();
+            if vol < 0.01 && amt == 0 {
+                self.cancel_zero_volume_session();
+                self.touch();
+                return FrameEffect::CompleteGhostFill;
+            }
+            if self.holster_ends_sale_early() {
+                return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
+            }
+            return self.complete_sale_from_holster(fp_cfg, site, active_shift_id);
+        }
+        if matches!(self.state.status, FpStatus::Idle | FpStatus::NozzleUp) {
+            let (vol, amt) = self.combined_totals();
+            if vol < 0.01 && amt == 0 {
+                if self.ghost_recovery_active() {
+                    self.touch();
+                    return FrameEffect::None;
+                }
+                self.reset_to_idle();
+                self.touch();
+                return FrameEffect::CompleteGhostFill;
+            }
+        }
+        self.touch();
+        FrameEffect::StatusChanged
+    }
+
+    pub fn cancel_pre_auth(&mut self) {
+        self.pre_auth = None;
+        self.pre_auth_started_at = None;
+        self.preauth_nozzle_confirmed = false;
+        self.preauth_mismatch_active = false;
+        self.clear_ghost_recovery();
+        self.clear_deliver_caps();
+        self.state.pre_auth_preset = None;
+        self.state.status = FpStatus::Idle;
+        self.state.volume = 0.0;
+        self.state.amount = 0;
+        self.state.nozzle_index = None;
+        self.state.product_id = None;
+        self.state.product_name = None;
+        self.state.product_color = None;
+        self.touch();
+    }
+
+    pub fn apply_preauthorize_sent(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        nozzle_index: u8,
+        price: u32,
+        preset: Preset,
+    ) {
+        if self.state.status == FpStatus::Done {
+            self.state.volume = 0.0;
+            self.state.amount = 0;
+            self.state.pre_auth_preset = None;
+        }
+        self.set_last_preset(preset);
+        let b = fp_cfg.address_byte;
+        let (name, pid, color) = lookup_nozzle(site, fp_cfg, nozzle_index);
+        self.pre_auth = Some(PreAuthContext {
+            nozzle_index,
+            product_id: pid,
+        });
+        self.pre_auth_started_at = Some(Utc::now().timestamp_millis());
+        self.preauth_nozzle_confirmed = false;
+        self.preauth_mismatch_active = false;
+        self.clear_ghost_recovery();
+        self.state.status = FpStatus::PreAuthorized;
+        self.state.nozzle_index = Some(nozzle_index);
+        self.state.product_id = Some(pid);
+        self.state.product_name = Some(name);
+        self.state.product_color = Some(color);
+        self.state.price = price;
+        self.state.volume = 0.0;
+        self.state.amount = 0;
+        self.state.pre_auth_preset = Some(preset_label(&self.last_preset));
+        self.state.seq = 0;
+        let _ = b;
+        self.touch();
+    }
+
+    /// Returns `Some(mismatch effect)` when the lifted nozzle does not match pre-authorization.
+    fn check_preauth_nozzle(
+        &self,
+        lifted_wayne_code: u8,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+    ) -> Option<FrameEffect> {
+        let pre = self.pre_auth.as_ref()?;
+        let (lifted_idx, lifted_name, _, _) =
+            resolve_wayne_nozzle(site, fp_cfg, lifted_wayne_code);
+        if lifted_idx == pre.nozzle_index {
+            return None;
+        }
+        let (expected_name, _, _) = lookup_nozzle(site, fp_cfg, pre.nozzle_index);
+        Some(FrameEffect::PreAuthNozzleMismatch {
+            expected_nozzle_index: pre.nozzle_index,
+            expected_product_name: expected_name,
+            lifted_nozzle_index: lifted_idx,
+            lifted_product_name: lifted_name,
+        })
+    }
+
+    fn start_delivery_from_pre_auth(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+    ) {
+        let nozzle_index = self
+            .pre_auth
+            .as_ref()
+            .map(|p| p.nozzle_index)
+            .or(self.state.nozzle_index)
+            .unwrap_or(1);
+        let (pname, pid, color) = lookup_nozzle(site, fp_cfg, nozzle_index);
+        self.state.nozzle_index = Some(nozzle_index);
+        self.state.product_id = Some(pid);
+        self.state.product_name = Some(pname.clone());
+        self.state.product_color = Some(color);
+        self.pre_auth = None;
+        self.preauth_nozzle_confirmed = false;
+        if self.state.pre_auth_preset.is_none() {
+            self.state.pre_auth_preset = Some(preset_label(&self.last_preset));
+        }
+        self.begin_auth_session();
+        self.state.status = FpStatus::Authorizing;
+        self.current_tx = Some(CurrentTx {
+            id: Uuid::new_v4().to_string(),
+            started_at: Utc::now().timestamp_millis(),
+            product_id: pid,
+            product_name: pname,
+            nozzle_index,
+        });
+    }
+
+    /// Operator acknowledged a completed/ended sale — return lane to idle for the next customer.
+    pub fn operator_dismiss_display(&mut self, fp: &FuelingPositionConfig) -> Result<(), String> {
+        use FpStatus::*;
+        match self.state.status {
+            Done | Idle => {
+                self.reset_for_operator(fp);
+                Ok(())
+            }
+            Stopped { .. } => Err(
+                "sale is paused — close the transaction or continue the fill".into(),
+            ),
+            Delivering | Authorizing | PreAuthorized | NozzleUp => {
+                Err("pump is still active".into())
+            }
+            Offline => {
+                self.reset_for_operator(fp);
+                Ok(())
+            }
+        }
+    }
+
+    pub fn reset_for_operator(&mut self, fp: &FuelingPositionConfig) {
+        self.clear_deliver_caps();
+        self.current_tx = None;
+        self.stopped_context = None;
+        self.continuation = None;
+        self.pre_auth = None;
+        self.missed = 0;
+        self.settle_after_reconnect = 0;
+        self.state.missed_polls = 0;
+        self.nozzle_prices.clear();
+        for n in fp.nozzles.iter().filter(|n| n.active) {
+            self.nozzle_prices.insert(n.index, n.price);
+        }
+        let price = fp.default_price().unwrap_or(0);
+        let now = Utc::now().timestamp_millis();
+        self.state.volume = 0.0;
+        self.state.amount = 0;
+        self.state.status = FpStatus::Idle;
+        self.state.nozzle_index = None;
+        self.state.product_id = None;
+        self.state.product_name = None;
+        self.state.product_color = None;
+        self.state.price = price;
+        self.state.seq = 0;
+        self.state.updated_at = now;
+        self.state.pre_auth_preset = None;
+        self.state.stop_source = None;
+        self.clear_ghost_recovery();
+        self.clear_continuation_fields();
+        self.touch();
+    }
+
+    pub fn on_poll_success(&mut self) {
+        self.missed = 0;
+        self.state.missed_polls = 0;
+        if self.settle_after_reconnect > 0 {
+            self.settle_after_reconnect -= 1;
+        }
+        self.touch();
+    }
+
+    pub fn on_poll_missed(&mut self, threshold: u32) -> bool {
+        self.missed += 1;
+        self.state.missed_polls = self.missed;
+        self.touch();
+        if self.missed >= threshold && self.state.status != FpStatus::Offline {
+            self.state.status = FpStatus::Offline;
+            return true;
+        }
+        false
+    }
+
+    /// Another pump replied in our poll slot — do not count as a miss for this address.
+    pub fn on_poll_crosstalk(&mut self) {
+        self.touch();
+    }
+
+    pub fn on_reconnect_flush(&mut self, rounds: u32) {
+        self.settle_after_reconnect = rounds;
+    }
+
+    pub fn expire_zero_volume_authorizing(&mut self, timeout_ms: i64) -> bool {
+        if !matches!(
+            self.state.status,
+            FpStatus::Authorizing | FpStatus::Delivering
+        ) {
+            return false;
+        }
+        if self.auth_session_age_ms() < timeout_ms {
+            return false;
+        }
+        let (vol, amt) = self.combined_totals();
+        if vol >= 0.01 || amt > 0 {
+            return false;
+        }
+        self.cancel_zero_volume_session();
+        self.touch();
+        true
+    }
+
+    pub fn apply_frame(
+        &mut self,
+        frame: &Frame,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        active_shift_id: Option<String>,
+    ) -> FrameEffect {
+        if self.settle_after_reconnect > 0 {
+            return FrameEffect::None;
+        }
+        let b = fp_cfg.address_byte;
+        match frame {
+            Frame::Idle { addr } if *addr == b => {
+                self.apply_idle_response(fp_cfg, site, active_shift_id)
+            }
+            Frame::NozzleHolstered { addr, .. } if *addr == b => {
+                match self.state.status {
+                    FpStatus::Authorizing | FpStatus::Delivering => {
+                        let (vol, amt) = self.combined_totals();
+                        if vol < 0.01 && amt == 0 {
+                            self.cancel_zero_volume_session();
+                            self.touch();
+                            FrameEffect::CompleteGhostFill
+                        } else {
+                            self.touch();
+                            FrameEffect::StatusChanged
+                        }
+                    }
+                    FpStatus::PreAuthorized => {
+                        if self.preauth_mismatch_active {
+                            // Mismatch recovery: customer holstering wrong nozzle before
+                            // lifting the correct one — keep pre-auth alive.
+                            self.touch();
+                            FrameEffect::None
+                        } else {
+                            // Nozzle holstered before delivery started — cancel pre-auth.
+                            self.cancel_zero_volume_session();
+                            self.touch();
+                            FrameEffect::NozzleHolstered
+                        }
+                    }
+                    _ => self.apply_idle_response(fp_cfg, site, active_shift_id),
+                }
+            }
+            Frame::NozzleUp {
+                addr,
+                seq,
+                nozzle,
+                ..
+            } if *addr == b => {
+                if self.state.status == FpStatus::Done {
+                    self.reset_to_idle();
+                }
+                if self.ghost_recovery_active() {
+                    self.touch();
+                    return FrameEffect::None;
+                }
+                if matches!(
+                    self.state.status,
+                    FpStatus::Authorizing | FpStatus::Delivering
+                ) {
+                    let (vol, amt) = self.combined_totals();
+                    if vol < 0.01 && amt == 0 && self.auth_session_age_ms() > 2_000 {
+                        self.cancel_zero_volume_session();
+                        self.touch();
+                        return FrameEffect::None;
+                    }
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                }
+                if self.pre_auth.is_some() {
+                    self.state.status = FpStatus::PreAuthorized;
+                    self.state.seq = *seq;
+                    if let Some(effect) = self.check_preauth_nozzle(*nozzle, fp_cfg, site) {
+                        self.preauth_mismatch_active = true;
+                        self.touch();
+                        return effect;
+                    }
+                    self.preauth_mismatch_active = false;
+                    self.preauth_nozzle_confirmed = true;
+                    self.start_delivery_from_pre_auth(fp_cfg, site);
+                    let nozzle_index = self.state.nozzle_index.unwrap_or(1);
+                    let product_id = self.state.product_id.unwrap_or(0);
+                    let product_name = self.state.product_name.clone().unwrap_or_default();
+                    let product_color = self.state.product_color.clone().unwrap_or_default();
+                    let price = self.state.price;
+                    self.touch();
+                    return FrameEffect::NozzleUp {
+                        nozzle_index,
+                        product_id,
+                        product_name,
+                        product_color,
+                        price,
+                    };
+                }
+                let continuing = self.continuation.is_some();
+                self.state.seq = *seq;
+                if continuing {
+                    // Continuation (E-stop resume / Continue fill): keep existing nozzle
+                    // info but resolve the Wayne code again in case prices changed.
+                    let (cfg_idx, name, pid, color) =
+                        resolve_wayne_nozzle(site, fp_cfg, *nozzle);
+                    self.state.nozzle_index = Some(cfg_idx);
+                    self.state.product_id = Some(pid);
+                    self.state.product_name = Some(name);
+                    self.state.product_color = Some(color);
+                    if matches!(self.state.status, FpStatus::Idle | FpStatus::NozzleUp)
+                        || self.state.status.is_stopped()
+                    {
+                        self.state.status = FpStatus::Authorizing;
+                    }
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                } else if let Some(sc) = self.stopped_context.clone() {
+                    // Nozzle lifted while paused — keep stopped totals; use Continue/Resume, not new authorize.
+                    self.apply_stopped_display(
+                        sc.stopped_volume,
+                        sc.stopped_amount,
+                        sc.stopped_tx_id,
+                        sc.stop_source,
+                    );
+                    self.state.price = sc.price;
+                    self.state.nozzle_index = Some(sc.nozzle_index);
+                    let (name, pid, color) = lookup_nozzle(site, fp_cfg, sc.nozzle_index);
+                    self.state.product_id = Some(pid);
+                    self.state.product_name = Some(name);
+                    self.state.product_color = Some(color);
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                } else {
+                    // Fresh nozzle lift. Resolve the Wayne nozzle code to a config
+                    // nozzle index so deduplication and downstream state are consistent.
+                    let (cfg_idx, name, pid, color) =
+                        resolve_wayne_nozzle(site, fp_cfg, *nozzle);
+                    // Real dispensers repeat the same NozzleUp frame on every poll
+                    // while waiting for AUTH. Only fire a new event on the first lift
+                    // (or when the nozzle/product actually changes).
+                    let already_up = self.state.status == FpStatus::NozzleUp
+                        && self.state.nozzle_index == Some(cfg_idx);
+                    self.state.status = FpStatus::NozzleUp;
+                    self.state.volume = 0.0;
+                    self.state.amount = 0;
+                    self.state.nozzle_index = Some(cfg_idx);
+                    self.state.product_id = Some(pid);
+                    self.state.product_name = Some(name.clone());
+                    self.state.product_color = Some(color);
+                    let p = self
+                        .nozzle_prices
+                        .get(&cfg_idx)
+                        .copied()
+                        .or_else(|| site.price_for(b, cfg_idx))
+                        .unwrap_or(self.state.price);
+                    self.state.price = p;
+                    if already_up {
+                        self.touch();
+                        return FrameEffect::StatusChanged;
+                    }
+                    self.touch();
+                    return FrameEffect::NozzleUp {
+                        nozzle_index: cfg_idx,
+                        product_id: pid,
+                        product_name: name,
+                        product_color: self.state.product_color.clone().unwrap_or_default(),
+                        price: self.state.price,
+                    };
+                }
+            }
+            Frame::DispenserIdle { addr, .. } if *addr == b => {
+                self.apply_dispenser_idle(fp_cfg, site, active_shift_id)
+            }
+            Frame::AckC0 { addr } if *addr == b => {
+                self.touch();
+                FrameEffect::StatusChanged
+            }
+            Frame::Data {
+                addr,
+                seq,
+                volume_l,
+                volume_h,
+                amount,
+                sale_complete,
+            } if *addr == b => {
+                self.state.seq = *seq;
+                let raw_vol = decode_volume(*volume_l, *volume_h);
+                let raw_amt = decode_amount(amount[0], amount[1], amount[2]);
+
+                if self.state.status == FpStatus::Offline && self.pre_auth.is_some() {
+                    self.state.status = FpStatus::PreAuthorized;
+                    if self.state.pre_auth_preset.is_none() {
+                        self.state.pre_auth_preset = Some(preset_label(&self.last_preset));
+                    }
+                }
+
+                if self.state.status == FpStatus::Authorizing && self.pending_authorize_config {
+                    self.pending_authorize_config = false;
+                    self.touch();
+                    return FrameEffect::SendAuthorizeConfig;
+                }
+
+                if self.state.status == FpStatus::PreAuthorized {
+                    if !self.preauth_nozzle_confirmed {
+                        // Holstered pre-auth: ignore meter frames until the customer lifts.
+                        self.touch();
+                        return FrameEffect::StatusChanged;
+                    }
+                    if raw_vol > 1e-6 {
+                        self.start_delivery_from_pre_auth(fp_cfg, site);
+                    } else if self.preauth_mismatch_active {
+                        // Wrong nozzle detected — stay PreAuthorized so the customer
+                        // can holster and lift the correct hose.
+                        self.touch();
+                        return FrameEffect::StatusChanged;
+                    } else {
+                        // Nozzle confirmed, zero volume — arming / ghost-fill path.
+                        self.start_delivery_from_pre_auth(fp_cfg, site);
+                        self.touch();
+                        return FrameEffect::StatusChanged;
+                    }
+                }
+
+                // After software preset completion the pump may still send a few data frames;
+                // ignore them so totals stay frozen at the completed sale.
+                if !matches!(
+                    self.state.status,
+                    FpStatus::Authorizing | FpStatus::Delivering
+                ) {
+                    if raw_vol > 1e-6 || raw_amt > 0 {
+                        let nozzle_index = self.state.nozzle_index.unwrap_or(1);
+                        let (pname, pid, color) = lookup_nozzle(site, fp_cfg, nozzle_index);
+                        self.state.nozzle_index = Some(nozzle_index);
+                        self.state.product_id = Some(pid);
+                        self.state.product_name = Some(pname.clone());
+                        self.state.product_color = Some(color);
+                        self.state.status = FpStatus::Authorizing;
+                        if self.current_tx.is_none() {
+                            self.current_tx = Some(CurrentTx {
+                                id: Uuid::new_v4().to_string(),
+                                started_at: Utc::now().timestamp_millis(),
+                                product_id: pid,
+                                product_name: pname,
+                                nozzle_index,
+                            });
+                        }
+                        self.apply_metering(raw_vol, raw_amt);
+                        self.state.status = FpStatus::Delivering;
+                        self.touch();
+                        return FrameEffect::StatusChanged;
+                    }
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                }
+                self.apply_metering(raw_vol, raw_amt);
+                let vol = self.state.volume;
+                let amt = self.state.amount;
+                // First non-zero data frame starts delivery. Zero-volume frames are
+                // normal while the nozzle is up but no fuel has flowed yet (ghost fill).
+                if self.state.status == FpStatus::Authorizing {
+                    if raw_vol > 1e-6 || raw_amt > 0 {
+                        self.state.status = FpStatus::Delivering;
+                        if self.current_tx.is_none() {
+                            let nozzle_index = self.state.nozzle_index.unwrap_or(1);
+                            let (pname, pid, _) = lookup_nozzle(site, fp_cfg, nozzle_index);
+                            self.current_tx = Some(CurrentTx {
+                                id: Uuid::new_v4().to_string(),
+                                started_at: Utc::now().timestamp_millis(),
+                                product_id: pid,
+                                product_name: pname,
+                                nozzle_index,
+                            });
+                        }
+                    }
+                } else if self.state.status == FpStatus::Delivering {
+                    let hit_v = self
+                        .cap_volume_liters
+                        .map_or(false, |cap| vol + 1e-6 >= cap);
+                    let hit_a = self.cap_amount.map_or(false, |cap| amt >= cap);
+                    if hit_v || hit_a {
+                        self.clear_deliver_caps();
+                        self.state.status = FpStatus::Done;
+                        let tx = self.close_transaction(
+                            true,
+                            fp_cfg,
+                            site,
+                            active_shift_id.clone(),
+                        );
+                        return FrameEffect::TransactionDone {
+                            tx,
+                            action: TxCompleteAction::HaltPump,
+                        };
+                    }
+                }
+                if *sale_complete {
+                    if matches!(
+                        self.state.status,
+                        FpStatus::Delivering | FpStatus::Authorizing | FpStatus::Done
+                    ) {
+                        if self.holster_ends_sale_early() {
+                            return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
+                        }
+                        return self.complete_sale_from_holster(fp_cfg, site, active_shift_id);
+                    }
+                }
+                self.touch();
+                FrameEffect::StatusChanged
+            }
+            Frame::TransactionComplete { addr, .. } if *addr == b => {
+                self.apply_done_response(fp_cfg, site, active_shift_id)
+            }
+            Frame::Stopped { addr, .. } if *addr == b => {
+                if self.state.status == FpStatus::Done {
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                }
+                // Resuming after E-stop: sim may still report Stopped until re-authorized.
+                if self.continuation.is_some() {
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                }
+                if matches!(
+                    self.state.status,
+                    FpStatus::Delivering | FpStatus::Authorizing
+                ) {
+                    let preset = self.last_preset.clone();
+                    return self.enter_stopped_state(
+                        fp_cfg,
+                        site,
+                        active_shift_id,
+                        preset,
+                        StopSource::External,
+                    );
+                }
+                self.touch();
+                FrameEffect::StatusChanged
+            }
+            _ => FrameEffect::None,
+        }
+    }
+
+    pub fn set_last_preset(&mut self, preset: Preset) {
+        self.set_deliver_caps_from_preset(&preset);
+        self.last_preset = preset;
+    }
+
+    fn close_transaction(
+        &mut self,
+        completed_normally: bool,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        active_shift_id: Option<String>,
+    ) -> Transaction {
+        let (combined_vol, combined_amt) = self.combined_totals();
+        let parent = self
+            .continuation
+            .as_ref()
+            .map(|c| c.parent_tx_id.clone());
+        let mut status = TxStatus::resolve(combined_vol, completed_normally);
+        if matches!(status, TxStatus::Completed) {
+            if let Some(pid) = parent.clone() {
+                status = TxStatus::ContinuedFrom(pid);
+            }
+        }
+        self.finish_transaction_with_totals(
+            status,
+            fp_cfg,
+            site,
+            active_shift_id,
+            combined_vol,
+            combined_amt,
+            parent,
+        )
+    }
+
+    fn finish_transaction_with_totals(
+        &mut self,
+        status: TxStatus,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        active_shift_id: Option<String>,
+        combined_volume: f64,
+        combined_amount: u64,
+        parent_tx_id: Option<String>,
+    ) -> Transaction {
+        let now = Utc::now().timestamp_millis();
+        let (seg_vol, seg_amt) = self.segment_totals();
+        let ct = self.current_tx.take();
+        let (id, started_at, product_id, product_name, nozzle_index) = if let Some(c) = ct {
+            (
+                c.id,
+                c.started_at,
+                c.product_id,
+                c.product_name,
+                c.nozzle_index,
+            )
+        } else {
+            let nozzle_index = self.state.nozzle_index.unwrap_or(1);
+            let (pname, pid, _) = lookup_nozzle(site, fp_cfg, nozzle_index);
+            (
+                Uuid::new_v4().to_string(),
+                now,
+                pid,
+                pname,
+                nozzle_index,
+            )
+        };
+        self.continuation = None;
+        Transaction {
+            id,
+            fp_id: self.state.fp_id.clone(),
+            label: self.state.label.clone(),
+            address_byte: fp_cfg.address_byte,
+            started_at,
+            completed_at: Some(now),
+            volume: seg_vol,
+            amount: seg_amt,
+            price: self.state.price,
+            nozzle_index,
+            product_id,
+            product_name,
+            status,
+            shift_id: active_shift_id,
+            operator_name: None,
+            parent_tx_id,
+            combined_volume,
+            combined_amount,
+        }
+    }
+
+    /// Open the child segment transaction after continue-fill authorize.
+    pub fn begin_continuation_segment(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+    ) {
+        if self.continuation.is_none() || self.current_tx.is_some() {
+            return;
+        }
+        let nozzle_index = self.state.nozzle_index.unwrap_or(1);
+        let (pname, pid, _) = lookup_nozzle(site, fp_cfg, nozzle_index);
+        self.current_tx = Some(CurrentTx {
+            id: Uuid::new_v4().to_string(),
+            started_at: Utc::now().timestamp_millis(),
+            product_id: pid,
+            product_name: pname,
+            nozzle_index,
+        });
+        if self.state.status != FpStatus::Delivering {
+            self.state.status = FpStatus::Authorizing;
+        }
+        self.touch();
+    }
+
+    /// App resume: hose still in tank — service is re-authorized; expect meter data immediately.
+    pub fn promote_continuation_delivering(&mut self) {
+        if self.continuation.is_some() {
+            self.state.status = FpStatus::Delivering;
+            self.touch();
+        }
+    }
+
+    pub fn apply_authorize_sent(&mut self) {
+        let may_authorize = matches!(
+            self.state.status,
+            FpStatus::NozzleUp | FpStatus::Authorizing
+        ) || (self.state.status == FpStatus::Idle && self.continuation.is_some())
+            || self.state.status.is_stopped();
+        if may_authorize {
+            if !matches!(
+                self.state.status,
+                FpStatus::Authorizing | FpStatus::Delivering
+            ) {
+                self.begin_auth_session();
+            }
+            self.state.status = FpStatus::Authorizing;
+        }
+        self.touch();
+    }
+
+    pub fn apply_done_ack(&mut self) {
+        self.clear_deliver_caps();
+        self.touch();
+    }
+
+    pub fn apply_stop(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        active_shift_id: Option<String>,
+    ) -> Option<FrameEffect> {
+        if self.state.status == FpStatus::PreAuthorized {
+            self.cancel_pre_auth();
+            return Some(FrameEffect::PreAuthCancelled);
+        }
+        if self.state.status.is_stopped() && self.stopped_context.is_some() {
+            return None;
+        }
+        if matches!(
+            self.state.status,
+            FpStatus::Delivering | FpStatus::Authorizing
+        ) || self.current_tx.is_some()
+        {
+            return Some(self.enter_stopped_state(
+                fp_cfg,
+                site,
+                active_shift_id,
+                self.last_preset.clone(),
+                StopSource::App,
+            ));
+        }
+        None
+    }
+
+    pub fn set_nozzle_price(&mut self, nozzle_index: u8, price: u32) -> u32 {
+        let old = self
+            .nozzle_prices
+            .get(&nozzle_index)
+            .copied()
+            .unwrap_or(self.state.price);
+        self.nozzle_prices.insert(nozzle_index, price);
+        if self.state.nozzle_index == Some(nozzle_index) {
+            self.state.price = price;
+        }
+        self.touch();
+        old
+    }
+
+    /// Reload nozzle prices/count from site config after admin catalog changes.
+    pub fn sync_nozzles_from_config(&mut self, fp: &FuelingPositionConfig) {
+        self.nozzle_prices.clear();
+        for n in fp.nozzles.iter().filter(|n| n.active) {
+            self.nozzle_prices.insert(n.index, n.price);
+        }
+        self.state.nozzle_count = fp.nozzle_count().min(u8::MAX as usize) as u8;
+        self.state.label = fp.label.clone();
+        self.touch();
+    }
+}
+
+/// How the poll loop should complete a recorded transaction on the wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TxCompleteAction {
+    /// Pump reported end-of-sale; send DONE (0x05) and return the lane to idle.
+    AcknowledgeIdle,
+    /// Software preset limit reached while still delivering; send STOP (0x08) to halt the pump.
+    HaltPump,
+}
+
+pub enum FrameEffect {
+    None,
+    StatusChanged,
+    PreAuthCancelled,
+    PreAuthNozzleMismatch {
+        expected_nozzle_index: u8,
+        expected_product_name: String,
+        lifted_nozzle_index: u8,
+        lifted_product_name: String,
+    },
+    Online,
+    NozzleUp {
+        nozzle_index: u8,
+        product_id: u8,
+        product_name: String,
+        product_color: String,
+        price: u32,
+    },
+    TransactionDone {
+        tx: Transaction,
+        action: TxCompleteAction,
+    },
+    Paused {
+        tx: Transaction,
+        fp_id: String,
+        stopped_volume: f64,
+        stopped_amount: u64,
+        stopped_tx_id: String,
+        stop_source: StopSource,
+    },
+    NozzleRemoved {
+        fp_id: String,
+        stopped_tx_id: Option<String>,
+        tx: Transaction,
+    },
+    /// Hose returned to holster while waiting for authorize — lane is idle; send STOP on wire.
+    NozzleHolstered,
+    /// Ghost fill complete — send GO_IDLE then compound HALT/GO_IDLE/GET_DISP abort.
+    CompleteGhostFill,
+    /// First zero-volume Data after AUTH — send CONFIG×2 (Wayne expects AUTH before CONFIG).
+    SendAuthorizeConfig,
+}
+
+/// Look up product info by **config nozzle index** (1, 2, 3, …).
+fn lookup_nozzle(
+    site: &SiteConfig,
+    fp: &FuelingPositionConfig,
+    nozzle_index: u8,
+) -> (String, u8, String) {
+    for n in &fp.nozzles {
+        if n.index == nozzle_index {
+            if let Some(p) = site.product(n.product_id) {
+                return (p.name.clone(), n.product_id, p.color.clone());
+            }
+            return ("Unknown".into(), n.product_id, "#888888".into());
+        }
+    }
+    if let Some(n) = fp.nozzles.first() {
+        if let Some(p) = site.product(n.product_id) {
+            return (p.name.clone(), n.product_id, p.color.clone());
+        }
+        return ("Unknown".into(), n.product_id, "#888888".into());
+    }
+    ("Unknown".into(), 0, "#888888".into())
+}
+
+/// Resolve a raw **Wayne nozzle code** (e.g. 0x12 = 18) to a config nozzle entry.
+///
+/// Matching priority:
+/// 1. `NozzleConfig::wayne_code` when non-zero (explicit site mapping).
+/// 2. Direct `NozzleConfig::index` equality (legacy / single-product configs).
+/// 3. First active nozzle as the fallback.
+///
+/// Returns `(config_nozzle_index, product_name, product_id, color)`.
+fn resolve_wayne_nozzle(
+    site: &SiteConfig,
+    fp: &FuelingPositionConfig,
+    wayne_code: u8,
+) -> (u8, String, u8, String) {
+    // 1. Match by explicit wayne_code mapping
+    for n in &fp.nozzles {
+        if n.wayne_code != 0 && n.wayne_code == wayne_code {
+            let (name, pid, color) = lookup_nozzle(site, fp, n.index);
+            return (n.index, name, pid, color);
+        }
+    }
+    // 2. Direct index match (single-product or unconfigured dispenser)
+    for n in &fp.nozzles {
+        if n.index == wayne_code {
+            let (name, pid, color) = lookup_nozzle(site, fp, n.index);
+            return (n.index, name, pid, color);
+        }
+    }
+    // 3. Fallback: first nozzle
+    if let Some(n) = fp.nozzles.first() {
+        let (name, pid, color) = lookup_nozzle(site, fp, n.index);
+        return (n.index, name, pid, color);
+    }
+    (1, "Unknown".into(), 0, "#888888".into())
+}
+
+pub fn initial_runtimes(cfg: &SiteConfig) -> HashMap<u8, RuntimeFp> {
+    let mut m = HashMap::new();
+    for fp in &cfg.fueling_positions {
+        if !fp.active {
+            continue;
+        }
+        m.insert(fp.address_byte, RuntimeFp::new(fp, cfg));
+    }
+    m
+}

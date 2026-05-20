@@ -1,0 +1,128 @@
+{
+  "site": {
+    "id": "dev-001",
+    "name": "Dev station",
+    "timezone": "UTC",
+    "address": null
+  },
+  "service": {
+    "port": 3001,
+    "log_level": "info",
+    "log_file": "service.log",
+    "db_path": "transactions.db"
+  },
+  "connection": {
+    "protocol": "wayne_europump",
+    "port": "/tmp/wayne-sim",
+    "baud_rate": 9600,
+    "parity": "none",
+    "data_bits": 8,
+    "stop_bits": 1,
+    "response_timeout_ms": 300
+  },
+  "polling": {
+    "interval_ms": 200,
+    "offline_threshold_polls": 3,
+    "reconnect_settle_rounds": 3
+  },
+  "products": [
+    { "id": 3, "name": "AI-92", "color": "#2196F3", "unit": "litre" },
+    { "id": 4, "name": "AI-95", "color": "#FF9800", "unit": "litre" },
+    { "id": 5, "name": "AI-98", "color": "#E91E63", "unit": "litre" },
+    { "id": 6, "name": "Diesel", "color": "#795548", "unit": "litre" },
+    { "id": 7, "name": "LPG", "color": "#9C27B0", "unit": "litre" }
+  ],
+  "fueling_positions": [
+    {
+      "id": "FP1",
+      "label": "Dispenser 1 Side A",
+      "address_byte": 80,
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 3, "price": 10500, "active": true },
+        { "index": 2, "product_id": 4, "price": 12000, "active": true },
+        { "index": 3, "product_id": 6, "price": 9800, "active": true },
+        { "index": 4, "product_id": 5, "price": 13500, "active": true }
+      ]
+    },
+    {
+      "id": "FP2",
+      "label": "Dispenser 1 Side B",
+      "address_byte": 81,
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 3, "price": 10500, "active": true },
+        { "index": 2, "product_id": 4, "price": 12000, "active": true },
+        { "index": 3, "product_id": 6, "price": 9800, "active": true },
+        { "index": 4, "product_id": 7, "price": 6500, "active": true }
+      ]
+    },
+    {
+      "id": "FP3",
+      "label": "Dispenser 2 Side A",
+      "address_byte": 82,
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 3, "price": 10500, "active": true },
+        { "index": 2, "product_id": 4, "price": 12000, "active": true },
+        { "index": 3, "product_id": 6, "price": 9800, "active": true },
+        { "index": 4, "product_id": 5, "price": 13500, "active": true }
+      ]
+    },
+    {
+      "id": "FP4",
+      "label": "Dispenser 2 Side B",
+      "address_byte": 83,
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 3, "price": 10500, "active": true },
+        { "index": 2, "product_id": 4, "price": 12000, "active": true },
+        { "index": 3, "product_id": 6, "price": 9800, "active": true },
+        { "index": 4, "product_id": 7, "price": 6500, "active": true }
+      ]
+    }
+    ,
+    {
+      "id": "FP5",
+      "label": "Lane 3 Side A",
+      "address_byte": 84,
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 3, "price": 10500, "active": true },
+        { "index": 2, "product_id": 4, "price": 12000, "active": true },
+        { "index": 3, "product_id": 6, "price": 9800, "active": true },
+        { "index": 4, "product_id": 7, "price": 6500, "active": true }
+      ]
+    }
+    ,
+    {
+      "id": "FP6",
+      "label": "Lane 3 Side B",
+      "address_byte": 85,
+      "active": true,
+      "nozzles": [
+        { "index": 1, "product_id": 3, "price": 10500, "active": true },
+        { "index": 2, "product_id": 4, "price": 12000, "active": true },
+        { "index": 3, "product_id": 6, "price": 9800, "active": true },
+        { "index": 4, "product_id": 7, "price": 6500, "active": true }
+      ]
+    }
+  ],
+  "sync": {
+    "enabled": false,
+    "backend_url": "",
+    "api_key": ""
+  },
+  "shifts": {
+    "mode": "manual",
+    "scheduled": [],
+    "require_operator_pin": false,
+    "warn_before_end_minutes": 15,
+    "allow_overlap_minutes": 30,
+    "auto_close_on_restart": false
+  },
+  "ui": {
+    "default_auth_mode": "preauth",
+    "preauth_timeout_seconds": 300
+  }
+}

@@ -1,0 +1,9 @@
+[package]
+name = "wayne-europump"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+protocol-trait = { path = "../protocol-trait" }
+
+[dev-dependencies]

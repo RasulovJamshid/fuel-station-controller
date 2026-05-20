@@ -1,0 +1,9 @@
+{
+  "name": "fuel-dispenser",
+  "private": true,
+  "description": "Workspace helper scripts (see scripts/azs.sh)",
+  "scripts": {
+    "start": "bash scripts/azs.sh",
+    "azs": "bash scripts/azs.sh"
+  }
+}

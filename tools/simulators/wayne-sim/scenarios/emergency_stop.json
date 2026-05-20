@@ -1,0 +1,6 @@
+{
+  "name": "emergency_stop",
+  "description": "Fill starts on P2, service sends STOP at 5 seconds",
+  "addr": "P2",
+  "duration_ms": 9000
+}

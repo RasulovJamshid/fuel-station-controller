@@ -1,0 +1,1005 @@
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
+use std::time::Duration;
+
+use anyhow::Result;
+use site_config::{FuelingPositionConfig, SiteConfig};
+use sqlx::SqlitePool;
+use tokio::sync::{broadcast, mpsc, RwLock};
+use tracing::{debug, info, warn};
+use types::{preset_label, FpStatus, Preset, UpdatePriceCmd, WsEvent};
+use crate::engine::serial::ReconnectingSerial;
+use wayne_europump::{
+    ack, authorize_config, authorize_initial, busy, done, ghost_fill_abort, parse_frame, poll,
+    stop_frame, stop_pre_frame, Frame, FrameAccumulator,
+};
+
+use super::state::{FrameEffect, RuntimeFp, TxCompleteAction};
+use crate::shifts::ShiftCoordinator;
+
+/// RS-485 needs quiet time between polls to different addresses (ms).
+const RS485_TURNAROUND_MS: u64 = 50;
+const AUTHORIZING_ZERO_VOLUME_TIMEOUT_MS: i64 = 2_000;
+
+/// Send AUTH after nozzle lift; CONFIG is deferred until the first Data frame.
+fn send_nozzle_lift_auth(backend: &SerialBackend, byte: u8) {
+    let _ = exchange_serial(backend, &authorize_initial(byte));
+}
+
+fn send_authorize_config(backend: &SerialBackend, byte: u8, unit_price: u32) {
+    let cfg = authorize_config(byte, unit_price, true);
+    let _ = exchange_serial(backend, &cfg);
+    let _ = exchange_serial(backend, &cfg);
+}
+
+fn complete_ghost_fill_on_wire(backend: &SerialBackend, byte: u8) {
+    let _ = exchange_serial(backend, &done(byte));
+    let _ = exchange_serial(backend, &ghost_fill_abort(byte));
+}
+
+/// Format raw bytes as space-separated hex for log messages.
+fn fmt_hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02X}")).collect::<Vec<_>>().join(" ")
+}
+
+struct PollRxAnalysis {
+    got_valid: bool,
+    saw_foreign: bool,
+    saw_idle: bool,
+}
+
+fn analyze_poll_frames(parsed: &[Frame], polled_addr: u8) -> PollRxAnalysis {
+    let mut got_valid = false;
+    let mut saw_foreign = false;
+    let mut saw_idle = false;
+    for frame in parsed {
+        let Some(addr) = frame.response_addr() else {
+            continue;
+        };
+        if addr == polled_addr {
+            got_valid = true;
+            if matches!(frame, Frame::Idle { .. }) {
+                saw_idle = true;
+            }
+        } else if (0x50..=0x6F).contains(&addr) {
+            saw_foreign = true;
+        }
+    }
+    PollRxAnalysis {
+        got_valid,
+        saw_foreign,
+        saw_idle,
+    }
+}
+
+async fn dispatch_poll_frames(
+    byte: u8,
+    parsed: &[Frame],
+    disp_by_byte: &HashMap<u8, FuelingPositionConfig>,
+    cfg: &SiteConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+    pool: &SqlitePool,
+    backend: &SerialBackend,
+    shifts: &ShiftCoordinator,
+) {
+    for frame in parsed.iter().filter(|f| f.should_apply_before_nozzle_up()) {
+        // ACK every frame that the protocol requires a C0 FA acknowledgement for.
+        // NozzleHolstered (01 01 02) MUST be ACK'd so the dispenser advances
+        // to send 01 01 05 (TransactionComplete). Without the ACK it stalls and
+        // the state machine never escapes Authorizing/Delivering.
+        if matches!(
+            frame,
+            Frame::Data { .. }
+                | Frame::DispenserIdle { .. }
+                | Frame::TransactionComplete { .. }
+                | Frame::NozzleHolstered { .. }
+        ) {
+            let _ = write_serial(backend, &ack(byte));
+        }
+        process_parsed_frame(
+            byte,
+            frame.clone(),
+            disp_by_byte,
+            cfg,
+            runtimes,
+            events,
+            pool,
+            backend,
+            shifts,
+        )
+        .await;
+    }
+    for frame in parsed.iter().filter(|f| matches!(f, Frame::NozzleUp { .. })) {
+        process_parsed_frame(
+            byte,
+            frame.clone(),
+            disp_by_byte,
+            cfg,
+            runtimes,
+            events,
+            pool,
+            backend,
+            shifts,
+        )
+        .await;
+    }
+
+}
+
+#[derive(Debug)]
+pub enum DispatchCommand {
+    Authorize {
+        byte: u8,
+        price: u32,
+        preset: Preset,
+    },
+    ContinueFill {
+        byte: u8,
+        price: u32,
+        preset: Preset,
+    },
+    ResumeFill {
+        byte: u8,
+        price: u32,
+        preset: Preset,
+    },
+    Stop { byte: u8 },
+    EStop,
+    /// Clear all lane runtimes to idle (and optionally sync sim via desktop).
+    ResetAll,
+    /// Operator dismissed completed-sale display on one lane.
+    ResetLane { byte: u8 },
+    UpdatePrices {
+        updates: Vec<UpdatePriceCmd>,
+        changed_by: String,
+    },
+    Preauthorize {
+        byte: u8,
+        price: u32,
+        preset: Preset,
+        nozzle_index: u8,
+    },
+    CancelPreauth { byte: u8 },
+}
+
+pub enum SerialBackend {
+    Real(Arc<ReconnectingSerial>),
+    Mock(Arc<std::sync::Mutex<MockSerial>>),
+}
+
+pub struct MockSerial {
+    out: VecDeque<u8>,
+}
+
+impl MockSerial {
+    pub fn new() -> Self {
+        Self {
+            out: VecDeque::new(),
+        }
+    }
+
+    fn on_write(&mut self, data: &[u8]) {
+        if data.len() >= 4 && data[data.len() - 2] == 0x03 && data[data.len() - 1] == 0xFA {
+            let addr = data[0];
+            if addr != 0 {
+                self.out.extend([addr, 0xC0, 0xFA]);
+            }
+            return;
+        }
+        if data.len() >= 3 {
+            let n = data.len();
+            let addr = data[n - 3];
+            if data[n - 2] == 0x20 && data[n - 1] == 0xFA && addr != 0 {
+                self.out.push_back(addr);
+                self.out.push_back(0x70);
+                self.out.push_back(0xFA);
+            }
+        }
+    }
+
+    fn read_available(&mut self, max: usize) -> Vec<u8> {
+        let mut v = Vec::new();
+        for _ in 0..max {
+            if let Some(b) = self.out.pop_front() {
+                v.push(b);
+            } else {
+                break;
+            }
+        }
+        v
+    }
+}
+
+pub fn exchange_serial(backend: &SerialBackend, out: &[u8]) -> Result<Vec<u8>> {
+    match backend {
+        SerialBackend::Real(real) => real.exchange(out),
+        SerialBackend::Mock(m) => {
+            let mut g = m.lock().unwrap();
+            g.on_write(out);
+            Ok(g.read_available(512))
+        }
+    }
+}
+
+/// Write-only serial send — used for short ACK frames (`C0 FA`) where the
+/// protocol does not expect an immediate response from the dispenser.
+pub fn write_serial(backend: &SerialBackend, out: &[u8]) -> Result<()> {
+    match backend {
+        SerialBackend::Real(real) => real.write_only(out),
+        SerialBackend::Mock(_) => Ok(()),
+    }
+}
+
+pub async fn run_poll_loop(
+    cfg: Arc<SiteConfig>,
+    backend: SerialBackend,
+    runtimes: Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    disp_by_byte: HashMap<u8, FuelingPositionConfig>,
+    events: broadcast::Sender<WsEvent>,
+    mut commands: mpsc::Receiver<DispatchCommand>,
+    pool: SqlitePool,
+    shifts: Arc<ShiftCoordinator>,
+) {
+    let addrs: Vec<u8> = cfg.active_addresses();
+
+    let mut interval = tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    let mut accum = FrameAccumulator::default();
+
+    loop {
+        while let Ok(cmd) = commands.try_recv() {
+            apply_command(&cfg, &runtimes, &events, &pool, &backend, cmd, shifts.as_ref()).await;
+        }
+
+        for &byte in &addrs {
+            interval.tick().await;
+            while let Ok(cmd) = commands.try_recv() {
+                apply_command(&cfg, &runtimes, &events, &pool, &backend, cmd, shifts.as_ref()).await;
+            }
+
+            let poll_f = poll(byte);
+            let mut offline_meta: Option<(String, String)> = None;
+            accum.clear();
+            let mut got_valid_response = false;
+            let mut saw_foreign_response = false;
+            let mut saw_idle_response = false;
+            let real_bus = matches!(backend, SerialBackend::Real(_));
+
+            for attempt in 0..2u32 {
+                match exchange_serial(&backend, &poll_f) {
+                    Ok(chunk) => {
+                        let frames_raw = accum.push_bytes(&chunk);
+                        let parsed: Vec<Frame> =
+                            frames_raw.iter().map(|raw| parse_frame(raw)).collect();
+                        let analysis = analyze_poll_frames(&parsed, byte);
+                        if analysis.saw_foreign {
+                            saw_foreign_response = true;
+                        }
+                        if analysis.saw_idle {
+                            saw_idle_response = true;
+                        }
+
+                        // ── per-poll diagnostic trace ──────────────────────────────────
+                        if real_bus {
+                            debug!(
+                                addr = format_args!("0x{byte:02X}"),
+                                rx_bytes = chunk.len(),
+                                rx = %fmt_hex(&chunk),
+                                frames = parsed.len(),
+                                valid = analysis.got_valid,
+                                foreign = analysis.saw_foreign,
+                                attempt,
+                                "poll"
+                            );
+                        }
+
+                        dispatch_poll_frames(
+                            byte,
+                            &parsed,
+                            &disp_by_byte,
+                            &cfg,
+                            &runtimes,
+                            &events,
+                            &pool,
+                            &backend,
+                            shifts.as_ref(),
+                        )
+                        .await;
+                        if analysis.got_valid {
+                            got_valid_response = true;
+                            break;
+                        }
+                        // Another pump answered in our window — retry once after bus settles.
+                        if attempt == 0 && real_bus && (!chunk.is_empty() || analysis.saw_foreign)
+                        {
+                            debug!(
+                                addr = format_args!("0x{byte:02X}"),
+                                len = chunk.len(),
+                                foreign = analysis.saw_foreign,
+                                "poll retry after RS-485 crosstalk"
+                            );
+                            accum.clear();
+                            tokio::time::sleep(Duration::from_millis(RS485_TURNAROUND_MS))
+                                .await;
+                            continue;
+                        }
+                        break;
+                    }
+                    Err(e) => {
+                        warn!(?e, addr = format_args!("0x{byte:02X}"), attempt, "serial exchange error");
+                        if attempt == 0 && real_bus {
+                            accum.clear();
+                            tokio::time::sleep(Duration::from_millis(RS485_TURNAROUND_MS))
+                                .await;
+                            continue;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    if got_valid_response {
+                        let was_offline = rt.state.status == FpStatus::Offline;
+                        let had_serial_misses = rt.missed > 0;
+                        rt.on_poll_success();
+                        if was_offline {
+                            // Always log when a pump first comes online – critical for address debug
+                            info!(
+                                addr = format_args!("0x{byte:02X}"),
+                                label = %rt.state.label,
+                                "pump came online"
+                            );
+                        }
+                        if was_offline && had_serial_misses {
+                            rt.on_reconnect_flush(cfg.polling.reconnect_settle_rounds);
+                        }
+                    } else if saw_foreign_response {
+                        // Bus is alive; another lane's frame arrived in our slot.
+                        rt.on_poll_crosstalk();
+                    } else {
+                        let miss = rt.missed + 1;
+                        if rt.on_poll_missed(cfg.polling.offline_threshold_polls) {
+                            offline_meta =
+                                Some((rt.state.fp_id.clone(), rt.state.label.clone()));
+                        }
+                        // Log every missed poll so address problems are obvious in the log
+                        if real_bus {
+                            debug!(
+                                addr = format_args!("0x{byte:02X}"),
+                                label = %rt.state.label,
+                                miss,
+                                threshold = cfg.polling.offline_threshold_polls,
+                                "poll miss"
+                            );
+                        }
+                    }
+                }
+            }
+            if let Some((fp_id, label)) = offline_meta {
+                warn!(label, "pump went offline — no response");
+                let _ = events.send(WsEvent::Offline { fp_id, label });
+            }
+
+            if real_bus {
+                tokio::time::sleep(Duration::from_millis(RS485_TURNAROUND_MS)).await;
+            }
+
+            let expired_zero_volume_authorizing = {
+                let mut map = runtimes.write().await;
+                map.get_mut(&byte)
+                    .map(|rt| rt.expire_zero_volume_authorizing(AUTHORIZING_ZERO_VOLUME_TIMEOUT_MS))
+                    .unwrap_or(false)
+            };
+            if expired_zero_volume_authorizing {
+                complete_ghost_fill_on_wire(&backend, byte);
+                info!(
+                    addr = format_args!("0x{byte:02X}"),
+                    "ghost fill timeout → GO_IDLE + compound abort, lane idle"
+                );
+                broadcast_status(byte, &runtimes, &events).await;
+            }
+
+            {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.note_dispenser_poll(got_valid_response && saw_idle_response);
+                }
+            }
+
+            if runtimes
+                .read()
+                .await
+                .get(&byte)
+                .map(|r| {
+                    matches!(
+                        r.state.status,
+                        FpStatus::Authorizing | FpStatus::Delivering
+                    )
+                })
+                .unwrap_or(false)
+            {
+                // Keepalive during authorized/metering — write-only avoids clearing RX
+                // before the next poll on the shared RS-485 bus.
+                let _ = write_serial(&backend, &busy(byte));
+            }
+
+            broadcast_status(byte, &runtimes, &events).await;
+        }
+    }
+}
+
+async fn broadcast_status(
+    byte: u8,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+) {
+    let st = {
+        let map = runtimes.read().await;
+        map.get(&byte).map(|r| r.snapshot_state())
+    };
+    if let Some(s) = st {
+        let _ = events.send(WsEvent::Status(s));
+    }
+}
+
+/// After resume/continue authorize, poll the pump a few times so meter data reaches the runtime.
+async fn kick_delivery_polls(
+    byte: u8,
+    backend: &SerialBackend,
+    disp_by_byte: &HashMap<u8, FuelingPositionConfig>,
+    site: &SiteConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+    pool: &SqlitePool,
+    shifts: &ShiftCoordinator,
+    rounds: usize,
+) {
+    let mut accum = FrameAccumulator::default();
+    for _ in 0..rounds {
+        let poll_f = poll(byte);
+        if let Ok(chunk) = exchange_serial(backend, &poll_f) {
+            if chunk.is_empty() {
+                continue;
+            }
+            let frames_raw = accum.push_bytes(&chunk);
+            for raw in frames_raw {
+                let frame = parse_frame(&raw);
+                if matches!(
+                    frame,
+                    Frame::Data { .. } | Frame::TransactionComplete { .. }
+                ) {
+                    let _ = write_serial(backend, &ack(byte));
+                }
+                process_parsed_frame(
+                    byte,
+                    frame,
+                    disp_by_byte,
+                    site,
+                    runtimes,
+                    events,
+                    pool,
+                    backend,
+                    shifts,
+                )
+                .await;
+            }
+        }
+    }
+    broadcast_status(byte, runtimes, events).await;
+}
+
+async fn process_parsed_frame(
+    byte: u8,
+    frame: Frame,
+    disp_by_byte: &HashMap<u8, FuelingPositionConfig>,
+    site: &SiteConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+    pool: &SqlitePool,
+    backend: &SerialBackend,
+    shifts: &ShiftCoordinator,
+) {
+    let fp_cfg = match disp_by_byte.get(&byte) {
+        Some(x) => x.clone(),
+        None => return,
+    };
+    let active_shift_id = shifts.active_id().await;
+    let effect = {
+        let mut map = runtimes.write().await;
+        let Some(rt) = map.get_mut(&byte) else {
+            return;
+        };
+        rt.apply_frame(&frame, &fp_cfg, site, active_shift_id)
+    };
+    match effect {
+        FrameEffect::Online => {
+            let _ = events.send(WsEvent::Online {
+                fp_id: fp_cfg.id.clone(),
+                label: fp_cfg.label.clone(),
+            });
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::NozzleUp {
+            nozzle_index,
+            product_id,
+            product_name,
+            product_color,
+            price,
+        } => {
+            let auth_mode = site.ui.default_auth_mode.as_str();
+            let allow_auth = {
+                let map = runtimes.read().await;
+                map.get(&byte)
+                    .map(|rt| rt.allow_reactive_nozzle_auth(auth_mode))
+                    .unwrap_or(false)
+            };
+            if !allow_auth {
+                debug!(
+                    addr = format_args!("0x{byte:02X}"),
+                    label = %fp_cfg.label,
+                    auth_mode,
+                    "NozzleUp ignored — preauth required or ghost recovery active"
+                );
+                broadcast_status(byte, runtimes, events).await;
+                return;
+            }
+            let _ = events.send(WsEvent::NozzleUp {
+                fp_id: fp_cfg.id.clone(),
+                nozzle_index,
+                product_id,
+                product_name,
+                product_color,
+                price,
+            });
+            // Protocol §8.3: AUTH on nozzle lift; CONFIG follows first Data frame.
+            send_nozzle_lift_auth(backend, byte);
+            {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.apply_authorize_sent();
+                }
+            }
+            info!(addr = format_args!("0x{byte:02X}"), label = %fp_cfg.label, "NozzleUp → sent AUTH");
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::TransactionDone { tx, action } => {
+            let _ = events.send(WsEvent::Done(tx.clone()));
+            if let Err(e) = crate::db::queries::persist_closed_transaction(pool, &tx).await {
+                warn!(tx_id = %tx.id, ?e, "db persist transaction");
+            } else if let Err(e) = shifts.on_transaction_recorded(&tx).await {
+                warn!(?e, "shift totals update");
+            }
+            match action {
+                TxCompleteAction::AcknowledgeIdle => {
+                    let done_f = done(byte);
+                    let _ = exchange_serial(backend, &done_f);
+                    let mut map = runtimes.write().await;
+                    if let Some(rt) = map.get_mut(&byte) {
+                        rt.apply_done_ack();
+                    }
+                }
+                TxCompleteAction::HaltPump => {
+                    let stop_f = stop_frame(byte);
+                    if let Err(e) = exchange_serial(backend, &stop_f) {
+                        warn!(?e, byte, "preset cap: stop frame failed");
+                    }
+                }
+            }
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::Paused {
+            tx,
+            fp_id,
+            stopped_volume,
+            stopped_amount,
+            stopped_tx_id,
+            stop_source,
+        } => {
+            let source_str = match stop_source {
+                types::StopSource::App => "APP",
+                types::StopSource::External => "EXTERNAL",
+            };
+            let _ = events.send(WsEvent::Paused {
+                fp_id: fp_id.clone(),
+                stopped_volume,
+                stopped_amount,
+                stopped_tx_id: stopped_tx_id.clone(),
+                stop_source: source_str.to_string(),
+            });
+            if let Err(e) = crate::db::queries::insert_transaction(pool, &tx).await {
+                warn!(?e, "db insert paused tx");
+            }
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::PreAuthCancelled => {
+            let fp_id = fp_cfg.id.clone();
+            let _ = events.send(WsEvent::PreAuthCancelled { fp_id });
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::PreAuthNozzleMismatch {
+            expected_nozzle_index,
+            expected_product_name,
+            lifted_nozzle_index,
+            lifted_product_name,
+        } => {
+            let _ = events.send(WsEvent::PreAuthNozzleMismatch {
+                fp_id: fp_cfg.id.clone(),
+                expected_nozzle_index,
+                expected_product_name,
+                lifted_nozzle_index,
+                lifted_product_name,
+            });
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::NozzleRemoved {
+            fp_id,
+            stopped_tx_id,
+            tx,
+        } => {
+            if let Err(e) = crate::db::queries::persist_closed_transaction(pool, &tx).await {
+                warn!(?e, "db persist tx on nozzle removed");
+            } else if let Err(e) = shifts.on_transaction_recorded(&tx).await {
+                warn!(?e, "shift totals on nozzle removed");
+            }
+            let _ = events.send(WsEvent::NozzleRemoved {
+                fp_id: fp_id.clone(),
+                stopped_tx_id,
+            });
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::NozzleHolstered => {
+            let stop_f = stop_frame(byte);
+            let _ = exchange_serial(backend, &stop_f);
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::CompleteGhostFill => {
+            complete_ghost_fill_on_wire(backend, byte);
+            info!(
+                addr = format_args!("0x{byte:02X}"),
+                label = %fp_cfg.label,
+                "ghost fill complete → GO_IDLE + compound abort"
+            );
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::SendAuthorizeConfig => {
+            let unit_price = {
+                let map = runtimes.read().await;
+                map.get(&byte).map(|rt| rt.state.price).unwrap_or(0)
+            };
+            send_authorize_config(backend, byte, unit_price);
+            info!(addr = format_args!("0x{byte:02X}"), label = %fp_cfg.label, unit_price, "sent CONFIG×2 after first Data");
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::StatusChanged => {
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::None => {}
+    }
+}
+
+async fn apply_command(
+    cfg: &SiteConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+    pool: &SqlitePool,
+    backend: &SerialBackend,
+    cmd: DispatchCommand,
+    shifts: &ShiftCoordinator,
+) {
+    match cmd {
+        DispatchCommand::Authorize {
+            byte,
+            price,
+            preset,
+        } => {
+            debug!(byte, price, ?preset, "authorize");
+            let auth = authorize_initial(byte);
+            if exchange_serial(backend, &auth).is_ok() {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.state.price = price;
+                    rt.set_last_preset(preset);
+                    rt.apply_authorize_sent();
+                }
+            }
+        }
+        DispatchCommand::ContinueFill {
+            byte,
+            price,
+            preset,
+        } => {
+            debug!(byte, price, ?preset, "continue fill authorize");
+            let fp_cfg = match cfg.position_by_address(byte) {
+                Some(p) => p.clone(),
+                None => return,
+            };
+            let auth = authorize_initial(byte);
+            if exchange_serial(backend, &auth).is_ok() {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.state.price = price;
+                    rt.set_last_preset(preset);
+                    rt.apply_authorize_sent();
+                    rt.begin_continuation_segment(&fp_cfg, cfg);
+                }
+                broadcast_status(byte, runtimes, events).await;
+            } else {
+                warn!(byte, "continue fill: authorize frame failed");
+            }
+        }
+        DispatchCommand::Stop { byte } => {
+            // §8.2: mid-delivery stop requires the 0x31 pre-command first.
+            let is_delivering = {
+                let map = runtimes.read().await;
+                map.get(&byte)
+                    .map(|rt| rt.state.status == FpStatus::Delivering)
+                    .unwrap_or(false)
+            };
+            if is_delivering {
+                let pre = stop_pre_frame(byte);
+                let _ = exchange_serial(backend, &pre); // dispenser replies C1 FA
+                let _ = write_serial(backend, &ack(byte)); // PC ACKs the C1 FA
+            }
+            let f = stop_frame(byte);
+            let _ = exchange_serial(backend, &f);
+            let fp_cfg = match cfg.position_by_address(byte) {
+                Some(p) => p.clone(),
+                None => return,
+            };
+            let active_shift_id = shifts.active_id().await;
+            let effect = {
+                let mut map = runtimes.write().await;
+                map.get_mut(&byte)
+                    .and_then(|rt| rt.apply_stop(&fp_cfg, cfg, active_shift_id))
+            };
+            if let Some(FrameEffect::Paused {
+                tx,
+                fp_id,
+                stopped_volume,
+                stopped_amount,
+                stopped_tx_id,
+                stop_source,
+            }) = effect
+            {
+                let source_str = match stop_source {
+                    types::StopSource::App => "APP",
+                    types::StopSource::External => "EXTERNAL",
+                };
+                let _ = events.send(WsEvent::Paused {
+                    fp_id,
+                    stopped_volume,
+                    stopped_amount,
+                    stopped_tx_id,
+                    stop_source: source_str.to_string(),
+                });
+                if let Err(e) = crate::db::queries::insert_transaction(pool, &tx).await {
+                    warn!(?e, "db insert paused tx");
+                }
+                broadcast_status(byte, runtimes, events).await;
+            }
+        }
+        DispatchCommand::ResumeFill {
+            byte,
+            price,
+            preset,
+        } => {
+            debug!(byte, price, ?preset, "resume fill (app pause)");
+            let fp_cfg = match cfg.position_by_address(byte) {
+                Some(p) => p.clone(),
+                None => return,
+            };
+            let auth = authorize_initial(byte);
+            if exchange_serial(backend, &auth).is_ok() {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.state.price = price;
+                    rt.set_last_preset(preset);
+                    rt.apply_authorize_sent();
+                    rt.begin_continuation_segment(&fp_cfg, cfg);
+                    rt.promote_continuation_delivering();
+                }
+                drop(map);
+                let disp_by_byte: HashMap<u8, FuelingPositionConfig> = cfg
+                    .active_positions()
+                    .into_iter()
+                    .map(|fp| (fp.address_byte, fp.clone()))
+                    .collect();
+                kick_delivery_polls(
+                    byte,
+                    backend,
+                    &disp_by_byte,
+                    cfg,
+                    runtimes,
+                    events,
+                    pool,
+                    shifts,
+                    6,
+                )
+                .await;
+            } else {
+                warn!(byte, "resume fill: authorize frame failed");
+            }
+        }
+        DispatchCommand::EStop => {
+            // §8.2: broadcast 0x31 pre-commands to all addresses first (write-
+            // only, no wait), then send the 0x30 stop to each in turn.
+            for &addr in &cfg.active_addresses() {
+                let _ = write_serial(backend, &stop_pre_frame(addr));
+            }
+            for &addr in &cfg.active_addresses() {
+                let f = stop_frame(addr);
+                let _ = exchange_serial(backend, &f);
+            }
+            let active_shift_id = shifts.active_id().await;
+            let mut stopped_effects = Vec::new();
+            {
+                let mut map = runtimes.write().await;
+                for fp in cfg.active_positions() {
+                    if let Some(rt) = map.get_mut(&fp.address_byte) {
+                        if let Some(effect) =
+                            rt.apply_stop(fp, cfg, active_shift_id.clone())
+                        {
+                            stopped_effects.push((fp.address_byte, fp.id.clone(), effect));
+                        }
+                    }
+                }
+            }
+            for (byte, _fp_id, effect) in stopped_effects {
+                if let FrameEffect::Paused {
+                    tx,
+                    fp_id,
+                    stopped_volume,
+                    stopped_amount,
+                    stopped_tx_id,
+                    stop_source,
+                } = effect
+                {
+                    let source_str = match stop_source {
+                        types::StopSource::App => "APP",
+                        types::StopSource::External => "EXTERNAL",
+                    };
+                    let _ = events.send(WsEvent::Paused {
+                        fp_id,
+                        stopped_volume,
+                        stopped_amount,
+                        stopped_tx_id,
+                        stop_source: source_str.to_string(),
+                    });
+                    if let Err(e) = crate::db::queries::insert_transaction(pool, &tx).await {
+                        warn!(?e, "db insert paused tx");
+                    }
+                    broadcast_status(byte, runtimes, events).await;
+                }
+            }
+        }
+        DispatchCommand::ResetAll => {
+            for fp in cfg.active_positions() {
+                let byte = fp.address_byte;
+                let done_f = done(byte);
+                let _ = exchange_serial(backend, &done_f);
+            }
+            let mut map = runtimes.write().await;
+            for fp in cfg.active_positions() {
+                if let Some(rt) = map.get_mut(&fp.address_byte) {
+                    rt.reset_for_operator(fp);
+                    let _ = events.send(WsEvent::Status(rt.snapshot_state()));
+                }
+            }
+        }
+        DispatchCommand::ResetLane { byte } => {
+            let fp_cfg = match cfg.position_by_address(byte) {
+                Some(p) => p.clone(),
+                None => return,
+            };
+            let done_f = done(byte);
+            let _ = exchange_serial(backend, &done_f);
+            let mut map = runtimes.write().await;
+            if let Some(rt) = map.get_mut(&byte) {
+                match rt.operator_dismiss_display(&fp_cfg) {
+                    Ok(()) => {
+                        let _ = events.send(WsEvent::Status(rt.snapshot_state()));
+                    }
+                    Err(e) => warn!(byte, %e, "dismiss lane"),
+                }
+            }
+        }
+        DispatchCommand::Preauthorize {
+            byte,
+            price,
+            preset,
+            nozzle_index,
+        } => {
+            debug!(byte, price, ?preset, nozzle_index, "preauthorize");
+            let fp_cfg = match cfg.position_by_address(byte) {
+                Some(p) => p.clone(),
+                None => return,
+            };
+            let auth = authorize_initial(byte);
+            if exchange_serial(backend, &auth).is_ok() {
+                let preset_label_str = preset_label(&preset);
+                {
+                    let mut map = runtimes.write().await;
+                    if let Some(rt) = map.get_mut(&byte) {
+                        rt.apply_preauthorize_sent(&fp_cfg, cfg, nozzle_index, price, preset);
+                    }
+                }
+                let _ = events.send(WsEvent::PreAuthorized {
+                    fp_id: fp_cfg.id.clone(),
+                    price,
+                    preset: preset_label_str,
+                    nozzle_index,
+                });
+                let b = busy(byte);
+                let _ = exchange_serial(backend, &b);
+                broadcast_status(byte, runtimes, events).await;
+                let disp_by_byte: HashMap<u8, FuelingPositionConfig> = cfg
+                    .active_positions()
+                    .into_iter()
+                    .map(|fp| (fp.address_byte, fp.clone()))
+                    .collect();
+                kick_delivery_polls(
+                    byte,
+                    backend,
+                    &disp_by_byte,
+                    cfg,
+                    runtimes,
+                    events,
+                    pool,
+                    shifts,
+                    4,
+                )
+                .await;
+            }
+        }
+        DispatchCommand::CancelPreauth { byte } => {
+            let fp_cfg = match cfg.position_by_address(byte) {
+                Some(p) => p.clone(),
+                None => return,
+            };
+            let f = stop_frame(byte);
+            let _ = exchange_serial(backend, &f);
+            {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    if rt.state.status == FpStatus::PreAuthorized {
+                        rt.cancel_pre_auth();
+                    }
+                }
+            }
+            let _ = events.send(WsEvent::PreAuthCancelled {
+                fp_id: fp_cfg.id.clone(),
+            });
+            broadcast_status(byte, runtimes, events).await;
+        }
+        DispatchCommand::UpdatePrices { updates, changed_by } => {
+            let mut map = runtimes.write().await;
+            for u in updates {
+                let Some(fp) = cfg.position_by_id(&u.fp_id) else {
+                    continue;
+                };
+                let product_name = fp
+                    .nozzles
+                    .iter()
+                    .find(|n| n.index == u.nozzle_index)
+                    .and_then(|n| cfg.product(n.product_id).map(|p| p.name.clone()))
+                    .unwrap_or_default();
+                if let Some(rt) = map.get_mut(&fp.address_byte) {
+                    let old = rt.set_nozzle_price(u.nozzle_index, u.price);
+                    let _ = events.send(WsEvent::PriceUpdated {
+                        fp_id: u.fp_id.clone(),
+                        nozzle_index: u.nozzle_index,
+                        product_name,
+                        old_price: old,
+                        new_price: u.price,
+                        changed_by: changed_by.clone(),
+                    });
+                }
+            }
+        }
+    }
+}

@@ -619,13 +619,18 @@ pub async fn preauthorize(
                     .into(),
             ));
         }
-        let is_idle = map
-            .get(&byte)
-            .is_some_and(|r| matches!(r.state.status, FpStatus::Idle));
-        if !is_idle {
+        let preauth_ok = map.get(&byte).is_some_and(|r| {
+            match r.state.status {
+                FpStatus::Idle => true,
+                FpStatus::NozzleUp => r.state.nozzle_index == Some(nozzle_index),
+                _ => false,
+            }
+        });
+        if !preauth_ok {
             return Err((
                 StatusCode::BAD_REQUEST,
-                "pre-authorize requires IDLE (holstered nozzle)".into(),
+                "pre-authorize requires IDLE (holstered) or NOZZLE_UP on the selected nozzle"
+                    .into(),
             ));
         }
     }
@@ -664,10 +669,8 @@ pub async fn cancel_preauth(
     let byte = fp.address_byte;
     {
         let map = st.runtimes.read().await;
-        let is_preauth = map
-            .get(&byte)
-            .is_some_and(|r| matches!(r.state.status, FpStatus::PreAuthorized));
-        if !is_preauth {
+        let cancellable = map.get(&byte).is_some_and(|r| r.has_cancellable_preauth());
+        if !cancellable {
             return Err((StatusCode::BAD_REQUEST, "lane is not pre-authorized".into()));
         }
     }

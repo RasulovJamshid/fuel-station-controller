@@ -64,6 +64,8 @@ pub struct RuntimeFp {
     pub consecutive_idle_polls: u8,
     /// When set, send CONFIG×2 after the first zero-volume Data frame (Wayne expects AUTH first).
     pub pending_authorize_config: bool,
+    /// Holstered pre-auth already sent AUTH+CONFIG on the wire; lift only needs BUSY + delivery.
+    pub preauth_config_on_wire: bool,
     /// Wall-clock ms when the current authorize session started (not reset by poll touch).
     pub auth_session_started_at: Option<i64>,
 }
@@ -103,6 +105,7 @@ impl RuntimeFp {
             ghost_recovery: false,
             consecutive_idle_polls: 0,
             pending_authorize_config: false,
+            preauth_config_on_wire: false,
             auth_session_started_at: None,
             state: FpState {
                 fp_id: fp.id.clone(),
@@ -182,6 +185,22 @@ impl RuntimeFp {
         self.state.base_amount = None;
         self.state.segment_volume = None;
         self.state.segment_amount = None;
+    }
+
+    /// Reset live meters for a new customer session (preauth lift / wire AUTH).
+    fn zero_delivery_meters(&mut self) {
+        self.clear_continuation_fields();
+        self.state.volume = 0.0;
+        self.state.amount = 0;
+    }
+
+    /// Composite `02 08` frames often end with `03 04 … HH` holster while the hose is
+    /// still hung up during holstered pre-auth — not a customer holster event.
+    fn embedded_holster_is_customer_event(&self) -> bool {
+        !matches!(
+            self.state.status,
+            FpStatus::PreAuthorized if !self.preauth_nozzle_confirmed
+        )
     }
 
     fn apply_metering(&mut self, raw_vol: f64, raw_amt: u64) {
@@ -448,6 +467,7 @@ impl RuntimeFp {
         self.pre_auth = None;
         self.pre_auth_started_at = None;
         self.pending_authorize_config = false;
+        self.preauth_config_on_wire = false;
         self.auth_session_started_at = None;
         self.clear_deliver_caps();
         self.clear_continuation_fields();
@@ -486,12 +506,26 @@ impl RuntimeFp {
         self.consecutive_idle_polls = 0;
     }
 
-    /// In preauth mode, do not send wire AUTH on nozzle lift without operator pre-auth.
+    /// In preauth mode, send wire AUTH only when the session is not already armed on the bus.
     pub fn allow_reactive_nozzle_auth(&self, auth_mode: &str) -> bool {
-        if self.ghost_recovery_active() {
+        if self.ghost_recovery_active() || self.preauth_config_on_wire {
             return false;
         }
-        auth_mode != "preauth" || self.pre_auth.is_some()
+        if auth_mode != "preauth" {
+            return true;
+        }
+        if self.pre_auth.is_some() {
+            return true;
+        }
+        matches!(
+            self.state.status,
+            FpStatus::PreAuthorized | FpStatus::Authorizing | FpStatus::Delivering
+        )
+    }
+
+    pub fn mark_preauth_config_on_wire(&mut self) {
+        self.preauth_config_on_wire = true;
+        self.pending_authorize_config = false;
     }
 
     /// Cancel a zero-volume authorization on the app side and enter ghost recovery
@@ -515,6 +549,56 @@ impl RuntimeFp {
     fn begin_auth_session(&mut self) {
         self.auth_session_started_at = Some(Utc::now().timestamp_millis());
         self.pending_authorize_config = true;
+    }
+
+    /// `03 04 01 PP 00 HH` with holster code (`HH < 0x10`), standalone or inside composite fill.
+    fn apply_nozzle_holstered(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+        active_shift_id: Option<String>,
+    ) -> FrameEffect {
+        if self.ghost_recovery_active() {
+            self.touch();
+            return FrameEffect::None;
+        }
+        match self.state.status {
+            FpStatus::Authorizing | FpStatus::Delivering => {
+                let (vol, amt) = self.combined_totals();
+                if vol < 0.01 && amt == 0 {
+                    self.cancel_zero_volume_session();
+                    self.touch();
+                    FrameEffect::CompleteGhostFill
+                } else if self.holster_ends_sale_early() {
+                    self.end_sale_from_holster_early(fp_cfg, site, active_shift_id)
+                } else if self.current_tx.is_some() {
+                    self.complete_sale_from_holster(fp_cfg, site, active_shift_id)
+                } else {
+                    self.touch();
+                    FrameEffect::StatusChanged
+                }
+            }
+            FpStatus::PreAuthorized => {
+                if self.preauth_mismatch_active {
+                    self.touch();
+                    FrameEffect::None
+                } else {
+                    self.cancel_zero_volume_session();
+                    self.touch();
+                    FrameEffect::NozzleHolstered
+                }
+            }
+            FpStatus::NozzleUp => {
+                self.reset_to_idle();
+                self.touch();
+                FrameEffect::StatusChanged
+            }
+            _ => {
+                self.reset_to_idle();
+                self.touch();
+                FrameEffect::StatusChanged
+            }
+        }
     }
 
     /// Holster / idle frame (`70 FA`) — handle by current lane status.
@@ -572,10 +656,17 @@ impl RuntimeFp {
                 FrameEffect::None
             }
             NozzleUp => {
-                // PCC485 clears the one-shot `03 04` notification after C0 FA; the next poll
-                // is often `70 FA` while the hose is still physically lifted — resend AUTH.
+                // PCC485 clears the one-shot `03 04` after C0 FA; the next poll is often `70 FA`
+                // while the hose is still up — resend AUTH only when a session is pending.
                 self.touch();
-                FrameEffect::ResendAuthorize
+                if self.pre_auth.is_some()
+                    || self.preauth_config_on_wire
+                    || self.current_tx.is_some()
+                {
+                    FrameEffect::ResendAuthorize
+                } else {
+                    FrameEffect::None
+                }
             }
             Authorizing => {
                 let (vol, amt) = self.combined_totals();
@@ -774,6 +865,18 @@ impl RuntimeFp {
         FrameEffect::StatusChanged
     }
 
+    /// Lane has an operator-visible pre-auth that can be cancelled from the UI.
+    pub fn has_cancellable_preauth(&self) -> bool {
+        self.pre_auth.is_some()
+            || self.preauth_config_on_wire
+            || self.state.pre_auth_preset.is_some()
+            || matches!(self.state.status, FpStatus::PreAuthorized)
+            || (matches!(
+                self.state.status,
+                FpStatus::NozzleUp | FpStatus::Authorizing
+            ) && self.state.pre_auth_preset.is_some())
+    }
+
     pub fn cancel_pre_auth(&mut self) {
         self.pre_auth = None;
         self.pre_auth_started_at = None;
@@ -781,10 +884,13 @@ impl RuntimeFp {
         self.preauth_mismatch_active = false;
         self.clear_ghost_recovery();
         self.clear_deliver_caps();
+        self.preauth_config_on_wire = false;
+        self.pending_authorize_config = false;
+        self.auth_session_started_at = None;
+        self.current_tx = None;
         self.state.pre_auth_preset = None;
         self.state.status = FpStatus::Idle;
-        self.state.volume = 0.0;
-        self.state.amount = 0;
+        self.zero_delivery_meters();
         self.state.nozzle_index = None;
         self.state.product_id = None;
         self.state.product_name = None;
@@ -824,8 +930,7 @@ impl RuntimeFp {
         self.state.product_name = Some(name);
         self.state.product_color = Some(color);
         self.state.price = price;
-        self.state.volume = 0.0;
-        self.state.amount = 0;
+        self.zero_delivery_meters();
         self.state.pre_auth_preset = Some(preset_label(&self.last_preset));
         self.state.seq = 0;
         // Customer lifted before the operator entered the limit — start if grades match.
@@ -840,12 +945,14 @@ impl RuntimeFp {
     /// Returns `Some(mismatch effect)` when the lifted nozzle does not match pre-authorization.
     fn check_preauth_nozzle(
         &self,
+        lifted_product: u8,
         lifted_wayne_code: u8,
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
     ) -> Option<FrameEffect> {
         let pre = self.pre_auth.as_ref()?;
-        let (lifted_idx, lifted_name, _, _) = resolve_wayne_nozzle(site, fp_cfg, lifted_wayne_code);
+        let (lifted_idx, lifted_name, _, _) =
+            resolve_wayne_nozzle(site, fp_cfg, lifted_product, lifted_wayne_code);
         if lifted_idx == pre.nozzle_index {
             return None;
         }
@@ -858,7 +965,11 @@ impl RuntimeFp {
         })
     }
 
-    fn start_delivery_from_pre_auth(&mut self, fp_cfg: &FuelingPositionConfig, site: &SiteConfig) {
+    pub(crate) fn start_delivery_from_pre_auth(
+        &mut self,
+        fp_cfg: &FuelingPositionConfig,
+        site: &SiteConfig,
+    ) {
         let nozzle_index = self
             .pre_auth
             .as_ref()
@@ -875,6 +986,7 @@ impl RuntimeFp {
         if self.state.pre_auth_preset.is_none() {
             self.state.pre_auth_preset = Some(preset_label(&self.last_preset));
         }
+        self.zero_delivery_meters();
         self.begin_auth_session();
         self.state.status = FpStatus::Authorizing;
         self.current_tx = Some(CurrentTx {
@@ -1032,36 +1144,14 @@ impl RuntimeFp {
                 }
             }
             Frame::NozzleReturned { addr, .. } if *addr == b => {
-                if self.ghost_recovery_active() {
-                    self.touch();
-                    return FrameEffect::None;
-                }
-                match self.state.status {
-                    FpStatus::Authorizing | FpStatus::Delivering => {
-                        let (vol, amt) = self.combined_totals();
-                        if vol < 0.01 && amt == 0 {
-                            self.cancel_zero_volume_session();
-                            self.touch();
-                            FrameEffect::CompleteGhostFill
-                        } else {
-                            self.touch();
-                            FrameEffect::StatusChanged
-                        }
-                    }
-                    FpStatus::NozzleUp => {
-                        self.reset_to_idle();
-                        self.touch();
-                        FrameEffect::StatusChanged
-                    }
-                    _ => {
-                        self.reset_to_idle();
-                        self.touch();
-                        FrameEffect::StatusChanged
-                    }
-                }
+                self.apply_nozzle_holstered(fp_cfg, site, active_shift_id)
             }
             Frame::NozzleUp {
-                addr, seq, nozzle, ..
+                addr,
+                seq,
+                product,
+                nozzle,
+                ..
             } if *addr == b => {
                 if self.state.status == FpStatus::Done {
                     self.reset_to_idle();
@@ -1083,16 +1173,17 @@ impl RuntimeFp {
                     return FrameEffect::StatusChanged;
                 }
                 if self.pre_auth.is_some() {
-                    self.state.status = FpStatus::PreAuthorized;
                     self.state.seq = *seq;
-                    if let Some(effect) = self.check_preauth_nozzle(*nozzle, fp_cfg, site) {
+                    if let Some(effect) = self.check_preauth_nozzle(*product, *nozzle, fp_cfg, site) {
                         self.preauth_mismatch_active = true;
                         self.touch();
                         return effect;
                     }
                     self.preauth_mismatch_active = false;
                     self.preauth_nozzle_confirmed = true;
-                    self.start_delivery_from_pre_auth(fp_cfg, site);
+                    self.zero_delivery_meters();
+                    self.state.status = FpStatus::NozzleUp;
+                    // Wire AUTH + start_delivery run in poll_loop after this frame.
                     let nozzle_index = self.state.nozzle_index.unwrap_or(1);
                     let product_id = self.state.product_id.unwrap_or(0);
                     let product_name = self.state.product_name.clone().unwrap_or_default();
@@ -1112,7 +1203,8 @@ impl RuntimeFp {
                 if continuing {
                     // Continuation (E-stop resume / Continue fill): keep existing nozzle
                     // info but resolve the Wayne code again in case prices changed.
-                    let (cfg_idx, name, pid, color) = resolve_wayne_nozzle(site, fp_cfg, *nozzle);
+                    let (cfg_idx, name, pid, color) =
+                        resolve_wayne_nozzle(site, fp_cfg, *product, *nozzle);
                     self.state.nozzle_index = Some(cfg_idx);
                     self.state.product_id = Some(pid);
                     self.state.product_name = Some(name);
@@ -1143,15 +1235,17 @@ impl RuntimeFp {
                 } else {
                     // Fresh nozzle lift. Resolve the Wayne nozzle code to a config
                     // nozzle index so deduplication and downstream state are consistent.
-                    let (cfg_idx, name, pid, color) = resolve_wayne_nozzle(site, fp_cfg, *nozzle);
+                    let (cfg_idx, name, pid, color) =
+                        resolve_wayne_nozzle(site, fp_cfg, *product, *nozzle);
                     // Real dispensers repeat the same NozzleUp frame on every poll
                     // while waiting for AUTH. Only fire a new event on the first lift
                     // (or when the nozzle/product actually changes).
+                    // Same physical lift repeated on poll, or switching to another hose on this lane.
                     let already_up = self.state.status == FpStatus::NozzleUp
-                        && self.state.nozzle_index == Some(cfg_idx);
+                        && self.state.nozzle_index == Some(cfg_idx)
+                        && self.state.product_id == Some(pid);
                     self.state.status = FpStatus::NozzleUp;
-                    self.state.volume = 0.0;
-                    self.state.amount = 0;
+                    self.zero_delivery_meters();
                     self.state.nozzle_index = Some(cfg_idx);
                     self.state.product_id = Some(pid);
                     self.state.product_name = Some(name.clone());
@@ -1191,7 +1285,14 @@ impl RuntimeFp {
                 volume_h,
                 amount,
                 sale_complete,
+                hose_product,
+                hose_code,
             } if *addr == b => {
+                if let (Some(_pp), Some(hh)) = (hose_product, hose_code) {
+                    if Frame::is_nozzle_holster_code(*hh) && self.embedded_holster_is_customer_event() {
+                        return self.apply_nozzle_holstered(fp_cfg, site, active_shift_id);
+                    }
+                }
                 self.state.seq = *seq;
                 let raw_vol = decode_volume(*volume_l, *volume_h);
                 let raw_amt = decode_amount(amount[0], amount[1], amount[2]);
@@ -1206,6 +1307,9 @@ impl RuntimeFp {
                 if self.state.status == FpStatus::Authorizing && self.pending_authorize_config {
                     self.pending_authorize_config = false;
                     self.touch();
+                    if self.preauth_config_on_wire {
+                        return FrameEffect::StatusChanged;
+                    }
                     return FrameEffect::SendAuthorizeConfig;
                 }
 
@@ -1468,6 +1572,7 @@ impl RuntimeFp {
                 self.state.status,
                 FpStatus::Authorizing | FpStatus::Delivering
             ) {
+                self.zero_delivery_meters();
                 self.begin_auth_session();
             }
             self.state.status = FpStatus::Authorizing;
@@ -1612,35 +1717,66 @@ fn lookup_nozzle(
     ("Unknown".into(), 0, "#888888".into())
 }
 
-/// Resolve a raw **Wayne nozzle code** (e.g. 0x12 = 18) to a config nozzle entry.
+/// Resolve Wayne `03 04 01 [PP] 00 [HH]` to a config nozzle (supports 4 hoses per pump).
 ///
-/// Matching priority:
-/// 1. `NozzleConfig::wayne_code` when non-zero (explicit site mapping).
-/// 2. Direct `NozzleConfig::index` equality (legacy / single-product configs).
-/// 3. First active nozzle as the fallback.
-///
-/// Returns `(config_nozzle_index, product_name, product_id, color)`.
+/// Lift `HH >= 0x10`; holster `HH` is `lift - 0x10` (e.g. 0x12/0x02, 0x11/0x01, 0x13/0x03).
 fn resolve_wayne_nozzle(
     site: &SiteConfig,
     fp: &FuelingPositionConfig,
-    wayne_code: u8,
+    product_code: u8,
+    hose_code: u8,
 ) -> (u8, String, u8, String) {
-    // 1. Match by explicit wayne_code mapping
-    for n in &fp.nozzles {
-        if n.wayne_code != 0 && n.wayne_code == wayne_code {
+    let lift_code = if Frame::is_nozzle_lift_code(hose_code) {
+        hose_code
+    } else {
+        hose_code.saturating_add(0x10)
+    };
+
+    let active: Vec<_> = fp.nozzles.iter().filter(|n| n.active).collect();
+
+    // 1. Both wayne_product_code and wayne_code (multi-hose pumps).
+    for n in &active {
+        if n.wayne_code != 0
+            && n.wayne_code == lift_code
+            && (n.wayne_product_code == 0 || n.wayne_product_code == product_code)
+        {
             let (name, pid, color) = lookup_nozzle(site, fp, n.index);
             return (n.index, name, pid, color);
         }
     }
-    // 2. Direct index match (single-product or unconfigured dispenser)
-    for n in &fp.nozzles {
-        if n.index == wayne_code {
+
+    // 2. wayne_code only.
+    for n in &active {
+        if n.wayne_code != 0 && n.wayne_code == lift_code {
             let (name, pid, color) = lookup_nozzle(site, fp, n.index);
             return (n.index, name, pid, color);
         }
     }
-    // 3. Fallback: first nozzle
-    if let Some(n) = fp.nozzles.first() {
+
+    // 3. product_code only when exactly one nozzle declares that PP byte.
+    if product_code != 0 {
+        let matches: Vec<_> = active
+            .iter()
+            .filter(|n| n.wayne_product_code == product_code)
+            .collect();
+        if matches.len() == 1 {
+            let n = matches[0];
+            let (name, pid, color) = lookup_nozzle(site, fp, n.index);
+            return (n.index, name, pid, color);
+        }
+    }
+
+    // 4. Legacy index match — never treat holster bytes as indices.
+    if Frame::is_nozzle_lift_code(hose_code) {
+        for n in &active {
+            if n.index == hose_code {
+                let (name, pid, color) = lookup_nozzle(site, fp, n.index);
+                return (n.index, name, pid, color);
+            }
+        }
+    }
+
+    if let Some(n) = active.first() {
         let (name, pid, color) = lookup_nozzle(site, fp, n.index);
         return (n.index, name, pid, color);
     }

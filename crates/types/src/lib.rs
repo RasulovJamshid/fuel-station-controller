@@ -549,6 +549,8 @@ pub struct AdminNozzleRow {
     pub active: bool,
     #[serde(default)]
     pub wayne_code: u8,
+    #[serde(default)]
+    pub wayne_product_code: u8,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -579,6 +581,8 @@ pub struct AdminNozzleInput {
     pub active: bool,
     #[serde(default)]
     pub wayne_code: u8,
+    #[serde(default)]
+    pub wayne_product_code: u8,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

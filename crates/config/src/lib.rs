@@ -136,11 +136,13 @@ pub struct NozzleConfig {
     pub product_id: u8,
     pub price: u32,
     pub active: bool,
-    /// Optional Wayne Europump nozzle code sent in the NozzleUp frame (e.g. 0x12 = 18 for AI-92).
-    /// When non-zero this is used to map the dispenser's raw nozzle code to this config entry.
-    /// Leave 0 (or omit) for protocols that use the config index directly.
+    /// Wayne hose byte on lift (`>= 0x10`) and holster (`lift - 0x10`, e.g. 18/2, 17/1, 19/3).
     #[serde(default)]
     pub wayne_code: u8,
+    /// Wayne product byte in `03 04 01 [PP] 00 [HH]` (e.g. 0x05 = 5, 0x43 = 67, 0x24 = 36).
+    /// Required when one pump has several hoses sharing grades; use 0 to match by `wayne_code` only.
+    #[serde(default)]
+    pub wayne_product_code: u8,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

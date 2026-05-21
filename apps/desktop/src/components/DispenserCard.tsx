@@ -292,6 +292,13 @@ export function DispenserCard({
   const productLabel = state.product_name ?? activeNozzle?.product_name ?? null;
   const productColor = state.product_color ?? activeNozzle?.product_color ?? "#888";
 
+  const liftedNozzleCaption = useMemo(() => {
+    const idx = state.nozzle_index ?? effectiveNozzle;
+    if (idx == null) return null;
+    const grade = productLabel ?? `Grade ${idx}`;
+    return `Nozzle ${idx} · ${grade}`;
+  }, [state.nozzle_index, effectiveNozzle, productLabel]);
+
   const tag = statusTag(state.status as FpStatus);
   const paused = pausedInfo(state);
   const isDelivering = tag === "DELIVERING";
@@ -301,7 +308,6 @@ export function DispenserCard({
     (state.pre_auth_preset != null &&
       tag !== "DONE" &&
       tag !== "DELIVERING" &&
-      tag !== "AUTHORIZING" &&
       tag !== "OFFLINE");
   const isIdle = tag === "IDLE";
   const isNozzleUp = tag === "NOZZLE_UP";
@@ -408,10 +414,14 @@ export function DispenserCard({
       subtitle = "Hose in tank — resume or close";
     } else if (hasActivePreAuth) {
       subtitle = isNozzleUp
-        ? "Lift the authorized grade to start"
+        ? (liftedNozzleCaption ?? "Lift the authorized grade to start")
         : "Awaiting customer to lift nozzle";
-    } else if (isNozzleUp && usePreAuth && !hasActivePreAuth) {
-      subtitle = "Nozzle lifted — set volume or amount";
+    } else if (isNozzleUp) {
+      subtitle =
+        liftedNozzleCaption ??
+        (usePreAuth && !hasActivePreAuth
+          ? "Nozzle lifted — set volume or amount"
+          : "Nozzle lifted");
     } else if (isIdle) {
       subtitle = usePreAuth
         ? "Holstered — ready to pre-authorize"
@@ -441,6 +451,7 @@ export function DispenserCard({
     isIdle,
     isOffline,
     usePreAuth,
+    liftedNozzleCaption,
   ]);
 
   return (

@@ -83,6 +83,7 @@ fn catalog_from_cfg(cfg: &SiteConfig) -> AdminCatalog {
                     price: n.price,
                     active: n.active,
                     wayne_code: n.wayne_code,
+                    wayne_product_code: n.wayne_product_code,
                 })
                 .collect();
             AdminPositionCatalog {
@@ -719,6 +720,7 @@ fn nozzles_from_input(
             price: n.price,
             active: n.active,
             wayne_code: n.wayne_code,
+            wayne_product_code: n.wayne_product_code,
         });
     }
     out.sort_by_key(|n| n.index);

@@ -53,24 +53,49 @@ export function mergeIncomingFpState(
       pre_auth_preset: keepPreAuth
         ? (incoming.pre_auth_preset ?? prev.pre_auth_preset ?? null)
         : null,
+      // New session after preauth: always show zero until live meter data arrives.
+      volume: keepPreAuth ? 0 : incoming.volume,
+      amount: keepPreAuth ? 0 : incoming.amount,
+      base_volume: keepPreAuth ? null : incoming.base_volume,
+      base_amount: keepPreAuth ? null : incoming.base_amount,
+      segment_volume: keepPreAuth ? null : incoming.segment_volume,
+      segment_amount: keepPreAuth ? null : incoming.segment_amount,
+    };
+  }
+
+  // Preauth lift → authorizing: accept zero meters; do not keep a completed sale on screen.
+  if (
+    (incomingTag === "AUTHORIZING" || incomingTag === "DELIVERING") &&
+    (prevTag === "PRE_AUTHORIZED" || prevTag === "NOZZLE_UP" || prev.pre_auth_preset != null) &&
+    incoming.volume === 0 &&
+    incoming.amount === 0
+  ) {
+    return {
+      ...incoming,
+      pre_auth_preset: incoming.pre_auth_preset ?? prev.pre_auth_preset ?? null,
+      base_volume: null,
+      base_amount: null,
+      segment_volume: null,
+      segment_amount: null,
     };
   }
 
   const clearPreAuthPreset =
     incomingTag === "DONE" ||
     incomingTag === "OFFLINE" ||
-    (incomingTag === "IDLE" && incoming.pre_auth_preset == null && prevTag !== "PRE_AUTHORIZED");
+    (incomingTag === "IDLE" && incoming.pre_auth_preset == null);
 
   const preAuthPreset = clearPreAuthPreset
     ? (incoming.pre_auth_preset ?? null)
     : (incoming.pre_auth_preset ?? prev.pre_auth_preset ?? null);
 
+  // Only heal when the service still reports an active pre-auth (not after cancel).
   const healPreAuthorizedIdle =
     incomingTag === "IDLE" &&
-    preAuthPreset != null &&
+    incoming.pre_auth_preset != null &&
     prevTag !== "AUTHORIZING" &&
     prevTag !== "DELIVERING" &&
-    (prevTag === "PRE_AUTHORIZED" || prev.pre_auth_preset != null);
+    prevTag === "PRE_AUTHORIZED";
 
   const keepPreAuthWhileHolstered = healPreAuthorizedIdle;
 

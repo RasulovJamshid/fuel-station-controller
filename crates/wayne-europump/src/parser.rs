@@ -68,6 +68,19 @@ fn try_crc(data: &[u8], ck1: u8, ck2: u8) -> bool {
     false
 }
 
+/// Scan for embedded `03 04 01 [PP] 00 [HH]` in composite fill / status frames.
+pub fn scan_embedded_hose_status(body: &[u8]) -> Option<(u8, u8)> {
+    if body.len() < 6 {
+        return None;
+    }
+    for i in 0..=body.len() - 6 {
+        if body[i] == 0x03 && body[i + 1] == 0x04 && body[i + 2] == 0x01 {
+            return Some((body[i + 3], body[i + 5]));
+        }
+    }
+    None
+}
+
 fn verify_crc(body: &[u8]) -> bool {
     if body.len() < 4 {
         return false;
@@ -145,6 +158,7 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
                     addr,
                     seq,
                     product,
+                    hose: nozzle,
                 };
             }
             return Frame::NozzleUp {
@@ -159,6 +173,9 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
                 && inner[inner.len() - 3] == 0x01
                 && inner[inner.len() - 2] == 0x01
                 && inner[inner.len() - 1] == 0x01;
+            let (hose_product, hose_code) = scan_embedded_hose_status(inner)
+                .map(|(p, h)| (Some(p), Some(h)))
+                .unwrap_or((None, None));
             return Frame::Data {
                 addr,
                 seq,
@@ -166,6 +183,8 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
                 volume_h: inner[7],
                 amount: [inner[9], inner[10], inner[11]],
                 sale_complete,
+                hose_product,
+                hose_code,
             };
         }
         if inner.len() >= 5 && inner[2] == 0x01 && inner[3] == 0x01 {
@@ -397,10 +416,16 @@ mod tests {
         raw.push((crc >> 8) as u8);
         raw.extend([0x03, 0xFA]);
         match parse_frame(&raw) {
-            Frame::NozzleReturned { addr, seq, product } => {
+            Frame::NozzleReturned {
+                addr,
+                seq,
+                product,
+                hose,
+            } => {
                 assert_eq!(addr, 0x53);
                 assert_eq!(seq, 0x3C);
                 assert_eq!(product, 0x05);
+                assert_eq!(hose, 0x02);
             }
             f => panic!("expected NozzleReturned, got {:?}", f),
         }
@@ -416,12 +441,102 @@ mod tests {
         raw.push((crc >> 8) as u8);
         raw.extend([0x03, 0xFA]);
         match parse_frame(&raw) {
-            Frame::NozzleReturned { addr, seq, product } => {
+            Frame::NozzleReturned {
+                addr,
+                seq,
+                product,
+                hose,
+            } => {
                 assert_eq!(addr, 0x51);
                 assert_eq!(seq, 0x31);
                 assert_eq!(product, 0x43);
+                assert_eq!(hose, 0x01);
             }
             f => panic!("expected NozzleReturned, got {:?}", f),
+        }
+    }
+
+    #[test]
+    fn nozzle_returned_fourth_hose_holster_code() {
+        // 4th hose: lift 0x14, holster 0x04 (same PP/HH pattern as grades 1–3).
+        let body = &[0x52u8, 0x3C, 0x03, 0x04, 0x01, 0x43, 0x00, 0x04];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        let f = parse_frame(&raw);
+        assert!(matches!(
+            f,
+            Frame::NozzleReturned {
+                product: 0x43,
+                hose: 0x04,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn nozzle_returned_diesel_holster_code() {
+        // Pump 4 diesel: 53 3C 03 04 01 24 00 03 (from serial.log)
+        let body = &[0x53u8, 0x3C, 0x03, 0x04, 0x01, 0x24, 0x00, 0x03];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        match parse_frame(&raw) {
+            Frame::NozzleReturned {
+                product,
+                hose,
+                ..
+            } => {
+                assert_eq!(product, 0x24);
+                assert_eq!(hose, 0x03);
+            }
+            f => panic!("expected NozzleReturned, got {:?}", f),
+        }
+    }
+
+    #[test]
+    fn composite_fill_embedded_holster() {
+        // Pump 4 idle poll with holster in composite 02 08 (serial.log pattern).
+        let body = &[
+            0x53u8, 0x3C, 0x02, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x01,
+            0x05, 0x00, 0x02,
+        ];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        match parse_frame(&raw) {
+            Frame::Data {
+                hose_product,
+                hose_code,
+                ..
+            } => {
+                assert_eq!(hose_product, Some(0x05));
+                assert_eq!(hose_code, Some(0x02));
+            }
+            f => panic!("expected Data with embedded holster, got {:?}", f),
+        }
+    }
+
+    #[test]
+    fn nozzle_lift_diesel_code() {
+        let body = &[0x53u8, 0x3B, 0x03, 0x04, 0x01, 0x24, 0x00, 0x13];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        match parse_frame(&raw) {
+            Frame::NozzleUp { nozzle, product, .. } => {
+                assert_eq!(product, 0x24);
+                assert_eq!(nozzle, 0x13);
+            }
+            f => panic!("expected NozzleUp, got {:?}", f),
         }
     }
 

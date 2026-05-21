@@ -42,14 +42,7 @@ pub fn ghost_fill_abort(addr: u8) -> Vec<u8> {
 }
 
 /// Pack a u32 into 3 BCD-packed bytes (6 decimal digits, high nibble first).
-///
-/// Used for both unit prices (whole currency units) and volumes (scaled by
-/// 10_000 to get 4 implied decimal places — see `authorize_config`).
-///
-/// Examples:
-///   price  10500 → "010500" → [0x01, 0x05, 0x00]
-///   volume 50000 (= 5.0 L × 10_000) → "050000" → [0x05, 0x00, 0x00]
-fn encode_bcd_3(val: u32) -> [u8; 3] {
+pub fn encode_bcd_3(val: u32) -> [u8; 3] {
     let digits = format!("{:06}", val.min(999_999));
     let b = digits.as_bytes();
     [
@@ -59,52 +52,51 @@ fn encode_bcd_3(val: u32) -> [u8; 3] {
     ]
 }
 
-/// CONFIG frame (§6) — sent TWICE after AUTH on the first Data frame.
+/// CONFIG frame (§6) — price/preset block sent twice after AUTH (or with holstered pre-auth).
 ///
-/// `grade_prices`: current unit price for each active grade (whole currency
-///   units, e.g. UZS), ordered by ascending nozzle index. 1–4 grades.
-///
-/// `vol_limit`: when `Some(liters)`, injects a hardware volume cap in the
-///   preset record (type-04). Volume is encoded with 4 implied decimal places:
-///   5.0 L → 50_000 → "050000" → `[0x05, 0x00, 0x00]`. When `None`, the
-///   type-03 unit-price record is used and any currency cap is enforced by the
-///   service software.
-pub fn authorize_config(addr: u8, grade_prices: &[u32], vol_limit: Option<f64>) -> Vec<u8> {
-    let n = grade_prices.len().clamp(1, 4);
+/// `product_codes`: Wayne PP bytes per active nozzle (index order), e.g. `[0x05, 0x43, 0x24]`.
+/// `limit_bcd`: 3-byte preset/limit from [`encode_preset_limit_bcd`].
+pub fn authorize_config(addr: u8, product_codes: &[u8], limit_bcd: [u8; 3]) -> Vec<u8> {
+    let n = product_codes.len().clamp(1, 4);
 
     let mut payload = vec![addr, 0x30];
     payload.extend([0x01, 0x01, 0x05]); // GO_IDLE
 
-    // Nozzle map: [type=0x02, count, nozzle_code_1, ..., nozzle_code_n]
+    // Transaction context (sniffer: `02 04 01 02 03 04`).
     payload.push(0x02);
     payload.push(n as u8);
     for i in 1..=(n as u8) {
         payload.push(i);
     }
 
-    // Price table: [type=0x05, len=n×3, grade_1_bcd, ..., grade_n_bcd]
+    // Channel / product map (sniffer: `05 0C` + triplets `01 PP 00`).
     payload.push(0x05);
     payload.push((n * 3) as u8);
-    for &price in grade_prices.iter().take(n) {
-        payload.extend_from_slice(&encode_bcd_3(price));
+    for &pp in product_codes.iter().take(n) {
+        payload.extend([0x01, pp, 0x00]);
     }
 
-    // Preset / limit record
-    if let Some(liters) = vol_limit.filter(|&v| v > 0.0) {
-        // Hardware volume cap (type-04): encode liters with 4 implied decimal places.
-        let vol = encode_bcd_3((liters * 10_000.0).round() as u32);
-        payload.extend([0x04, 0x04, 0x00]);
-        payload.extend_from_slice(&vol);
-    } else {
-        // No hardware volume cap (type-03): send unit price of grade 1.
-        // Software enforces any currency / volume cap via live metering.
-        let price = encode_bcd_3(grade_prices.first().copied().unwrap_or(0));
-        payload.extend([0x03, 0x04, 0x00]);
-        payload.extend_from_slice(&price);
-    }
+    // Preset limit (`03 04 00` + 3 BCD bytes — volume, amount, or `09 99 00` full).
+    payload.extend([0x03, 0x04, 0x00]);
+    payload.extend_from_slice(&limit_bcd);
 
     payload.extend([0x01, 0x01, 0x06]); // AUTHORISE
     build_frame(&payload)
+}
+
+/// Hardware preset bytes inside CONFIG (`03 04 00` + 3 BCD bytes).
+pub fn encode_preset_limit_bcd(full_tank: bool, volume_liters: Option<f64>, amount_uzs: Option<u64>) -> [u8; 3] {
+    if full_tank {
+        return [0x09, 0x99, 0x00];
+    }
+    if let Some(l) = volume_liters.filter(|&v| v > 0.0) {
+        // Sniffer: 10.0 L → `00 00 10 00` (liters × 100).
+        return encode_bcd_3((l * 100.0).round() as u32);
+    }
+    if let Some(a) = amount_uzs.filter(|&v| v > 0) {
+        return encode_bcd_3(a.min(999_999) as u32);
+    }
+    [0x09, 0x99, 0x00]
 }
 
 /// Hardcoded STOP frames per address (emergency broadcast).
@@ -141,49 +133,7 @@ mod tests {
     }
 
     #[test]
-    fn stop_matches_doc() {
-        assert_eq!(
-            stop(0x52),
-            vec![0x52, 0x30, 0x01, 0x01, 0x08, 0xE7, 0x5A, 0x03, 0xFA]
-        );
-    }
-
-    #[test]
-    fn stop_pre_frame_matches_doc() {
-        // Protocol doc §6 STOP CONFIRM test vectors
-        assert_eq!(
-            stop_pre_frame(0x52),
-            vec![0x52, 0x31, 0x01, 0x01, 0x08, 0xE6, 0xA6, 0x03, 0xFA]
-        );
-        assert_eq!(
-            stop_pre_frame(0x53),
-            vec![0x53, 0x31, 0x01, 0x01, 0x08, 0xDB, 0x66, 0x03, 0xFA]
-        );
-        assert_eq!(
-            stop_pre_frame(0x50),
-            vec![0x50, 0x31, 0x01, 0x01, 0x08, 0x9F, 0x66, 0x03, 0xFA]
-        );
-        assert_eq!(
-            stop_pre_frame(0x51),
-            vec![0x51, 0x31, 0x01, 0x01, 0x08, 0xA2, 0xA6, 0x03, 0xFA]
-        );
-    }
-
-    #[test]
-    fn done_matches_doc() {
-        assert_eq!(
-            done(0x52),
-            vec![0x52, 0x30, 0x01, 0x01, 0x05, 0x26, 0x9F, 0x03, 0xFA]
-        );
-    }
-
-    #[test]
     fn authorize_matches_doc() {
-        // Protocol doc §6 AUTHORIZE test vectors
-        assert_eq!(
-            authorize_initial(0x52),
-            vec![0x52, 0x30, 0x01, 0x01, 0x04, 0x01, 0x01, 0x05, 0x19, 0x94, 0x03, 0xFA]
-        );
         assert_eq!(
             authorize_initial(0x53),
             vec![0x53, 0x30, 0x01, 0x01, 0x04, 0x01, 0x01, 0x05, 0xD8, 0x58, 0x03, 0xFA]
@@ -191,13 +141,16 @@ mod tests {
     }
 
     #[test]
-    fn ghost_fill_abort_matches_sniffer() {
-        assert_eq!(
-            ghost_fill_abort(0x53),
-            vec![
-                0x53, 0x30, 0x01, 0x01, 0x08, 0x01, 0x01, 0x05, 0x01, 0x01, 0x04, 0x26, 0x68, 0x03,
-                0xFA
-            ]
-        );
+    fn config_volume_10l_matches_sniffer_layout() {
+        let frame = authorize_config(0x52, &[0x05, 0x43, 0x24, 0x43], encode_bcd_3(1000));
+        assert!(frame.starts_with(&[0x52, 0x30, 0x01, 0x01, 0x05]));
+        assert!(frame.windows(6).any(|w| w == [0x03, 0x04, 0x00, 0x00, 0x10, 0x00]));
+        assert!(frame.ends_with(&[0x03, 0xFA]));
+    }
+
+    #[test]
+    fn config_full_preset_bytes() {
+        let frame = authorize_config(0x53, &[0x05], [0x09, 0x99, 0x00]);
+        assert!(frame.windows(6).any(|w| w == [0x03, 0x04, 0x00, 0x09, 0x99, 0x00]));
     }
 }

@@ -10,8 +10,8 @@ use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
 use types::{preset_label, FpStatus, Preset, UpdatePriceCmd, WsEvent};
 use wayne_europump::{
-    ack, authorize_config, authorize_initial, busy, done, ghost_fill_abort, parse_frame, poll,
-    stop_frame, stop_pre_frame, Frame, FrameAccumulator,
+    ack, authorize_config, authorize_initial, busy, done, encode_preset_limit_bcd, ghost_fill_abort,
+    parse_frame, poll, stop_frame, stop_pre_frame, Frame, FrameAccumulator,
 };
 
 use super::state::{FrameEffect, RuntimeFp, TxCompleteAction};
@@ -50,8 +50,36 @@ async fn send_nozzle_lift_auth_if_allowed(
     true
 }
 
-fn send_authorize_config(backend: &SerialBackend, byte: u8, grade_prices: &[u32], vol_limit: Option<f64>) {
-    let cfg = authorize_config(byte, grade_prices, vol_limit);
+fn wayne_product_codes(fp: &FuelingPositionConfig) -> Vec<u8> {
+    let mut nozzles: Vec<_> = fp.nozzles.iter().filter(|n| n.active).collect();
+    nozzles.sort_by_key(|n| n.index);
+    nozzles
+        .into_iter()
+        .map(|n| {
+            if n.wayne_product_code != 0 {
+                n.wayne_product_code
+            } else {
+                n.index
+            }
+        })
+        .collect()
+}
+
+fn preset_limit_bcd(preset: &Preset) -> [u8; 3] {
+    match preset {
+        Preset::Str(s) if s.eq_ignore_ascii_case("full") => {
+            encode_preset_limit_bcd(true, None, None)
+        }
+        Preset::Volume(v) if *v > 0.0 => encode_preset_limit_bcd(false, Some(*v), None),
+        Preset::Amount(a) if *a > 0 => encode_preset_limit_bcd(false, None, Some(*a)),
+        _ => encode_preset_limit_bcd(true, None, None),
+    }
+}
+
+fn send_authorize_config(backend: &SerialBackend, byte: u8, fp: &FuelingPositionConfig, preset: &Preset) {
+    let products = wayne_product_codes(fp);
+    let limit = preset_limit_bcd(preset);
+    let cfg = authorize_config(byte, &products, limit);
     let _ = exchange_serial(backend, &cfg);
     let _ = exchange_serial(backend, &cfg);
 }
@@ -147,15 +175,6 @@ async fn dispatch_poll_frames(
         // ACK the NozzleUp (type-03 data block) immediately, then AUTH on the same
         // poll slot — before the round-robin visits the next dispenser address.
         let _ = write_serial(backend, &ack(byte));
-        if send_nozzle_lift_auth_if_allowed(byte, cfg, runtimes, backend).await {
-            if let Some(fp_cfg) = disp_by_byte.get(&byte) {
-                info!(
-                    addr = format_args!("0x{byte:02X}"),
-                    label = %fp_cfg.label,
-                    "NozzleUp → C0 FA + AUTH (same poll)"
-                );
-            }
-        }
         process_parsed_frame(
             byte,
             frame.clone(),
@@ -168,6 +187,45 @@ async fn dispatch_poll_frames(
             shifts,
         )
         .await;
+        let fp_cfg = match disp_by_byte.get(&byte) {
+            Some(x) => x.clone(),
+            None => continue,
+        };
+        let mut map = runtimes.write().await;
+        let Some(rt) = map.get_mut(&byte) else {
+            continue;
+        };
+        let preauth_armed = rt.preauth_config_on_wire;
+        let confirmed = rt.preauth_nozzle_confirmed;
+        let has_pre = rt.pre_auth.is_some();
+        let status = rt.state.status.clone();
+        drop(map);
+
+        if send_nozzle_lift_auth_if_allowed(byte, cfg, runtimes, backend).await {
+            info!(
+                addr = format_args!("0x{byte:02X}"),
+                label = %fp_cfg.label,
+                "NozzleUp → C0 FA + AUTH (same poll)"
+            );
+        } else if preauth_armed {
+            let _ = exchange_serial(backend, &busy(byte));
+            debug!(
+                addr = format_args!("0x{byte:02X}"),
+                label = %fp_cfg.label,
+                "NozzleUp → C0 FA + BUSY (preauth CONFIG already on wire)"
+            );
+        }
+
+        let mut map = runtimes.write().await;
+        if let Some(rt) = map.get_mut(&byte) {
+            if confirmed && has_pre {
+                rt.start_delivery_from_pre_auth(&fp_cfg, cfg);
+            } else if preauth_armed
+                && matches!(status, FpStatus::PreAuthorized | FpStatus::NozzleUp)
+            {
+                rt.apply_authorize_sent();
+            }
+        }
     }
 }
 
@@ -634,6 +692,13 @@ async fn process_parsed_frame(
                     label = %fp_cfg.label,
                     "70 FA while nozzle up / authorizing → resent AUTH"
                 );
+            } else {
+                let _ = exchange_serial(backend, &busy(byte));
+                debug!(
+                    addr = format_args!("0x{byte:02X}"),
+                    label = %fp_cfg.label,
+                    "70 FA while armed → BUSY keepalive"
+                );
             }
             broadcast_status(byte, runtimes, events).await;
         }
@@ -737,31 +802,23 @@ async fn process_parsed_frame(
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::SendAuthorizeConfig => {
-            let (grade_prices, vol_limit) = {
+            let preset = {
                 let map = runtimes.read().await;
-                if let Some(rt) = map.get(&byte) {
-                    let mut entries: Vec<(u8, u32)> = rt
-                        .nozzle_prices
-                        .iter()
-                        .map(|(&idx, &price)| (idx, price))
-                        .collect();
-                    entries.sort_by_key(|(idx, _)| *idx);
-                    let prices: Vec<u32> = entries.into_iter().map(|(_, p)| p).collect();
-                    let vol_limit = match &rt.last_preset {
-                        Preset::Volume(v) if *v > 0.0 => Some(*v),
-                        _ => None,
-                    };
-                    (prices, vol_limit)
-                } else {
-                    (vec![], None)
-                }
+                map.get(&byte)
+                    .map(|rt| rt.last_preset.clone())
+                    .unwrap_or(Preset::Str("full".into()))
             };
-            send_authorize_config(backend, byte, &grade_prices, vol_limit);
+            send_authorize_config(backend, byte, &fp_cfg, &preset);
+            {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.mark_preauth_config_on_wire();
+                }
+            }
             info!(
                 addr = format_args!("0x{byte:02X}"),
                 label = %fp_cfg.label,
-                grades = grade_prices.len(),
-                vol_limit,
+                ?preset,
                 "sent CONFIG×2 after first Data"
             );
             broadcast_status(byte, runtimes, events).await;
@@ -1014,7 +1071,14 @@ async fn apply_command(
                 {
                     let mut map = runtimes.write().await;
                     if let Some(rt) = map.get_mut(&byte) {
-                        rt.apply_preauthorize_sent(&fp_cfg, cfg, nozzle_index, price, preset);
+                        rt.apply_preauthorize_sent(&fp_cfg, cfg, nozzle_index, price, preset.clone());
+                    }
+                }
+                send_authorize_config(backend, byte, &fp_cfg, &preset);
+                {
+                    let mut map = runtimes.write().await;
+                    if let Some(rt) = map.get_mut(&byte) {
+                        rt.mark_preauth_config_on_wire();
                     }
                 }
                 let _ = events.send(WsEvent::PreAuthorized {
@@ -1050,12 +1114,22 @@ async fn apply_command(
                 Some(p) => p.clone(),
                 None => return,
             };
-            let f = stop_frame(byte);
-            let _ = exchange_serial(backend, &f);
+            let wire_abort = {
+                let map = runtimes.read().await;
+                map.get(&byte)
+                    .map(|rt| rt.preauth_config_on_wire || rt.pre_auth.is_some())
+                    .unwrap_or(false)
+            };
+            let abort_f = if wire_abort {
+                ghost_fill_abort(byte)
+            } else {
+                stop_frame(byte)
+            };
+            let _ = exchange_serial(backend, &abort_f);
             {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
-                    if rt.state.status == FpStatus::PreAuthorized {
+                    if rt.has_cancellable_preauth() {
                         rt.cancel_pre_auth();
                     }
                 }

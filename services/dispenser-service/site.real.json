@@ -9,7 +9,8 @@
     "port": 3001,
     "log_level": "debug",
     "log_file": "service.log",
-    "db_path": "transactions-real.db"
+    "db_path": "transactions-real.db",
+    "serial_log_file": null
   },
   "connection": {
     "protocol": "wayne_europump",
@@ -26,9 +27,24 @@
     "reconnect_settle_rounds": 3
   },
   "products": [
-    { "id": 1, "name": "AI-92",  "color": "#2196F3", "unit": "litre" },
-    { "id": 2, "name": "AI-95",  "color": "#FF9800", "unit": "litre" },
-    { "id": 3, "name": "Diesel", "color": "#795548", "unit": "litre" }
+    {
+      "id": 1,
+      "name": "AI-92",
+      "color": "#2196F3",
+      "unit": "litre"
+    },
+    {
+      "id": 2,
+      "name": "AI-95",
+      "color": "#FF9800",
+      "unit": "litre"
+    },
+    {
+      "id": 3,
+      "name": "Diesel",
+      "color": "#795548",
+      "unit": "litre"
+    }
   ],
   "fueling_positions": [
     {
@@ -37,9 +53,38 @@
       "address_byte": 80,
       "active": true,
       "nozzles": [
-        { "index": 1, "product_id": 1, "price": 10500, "active": true, "wayne_code": 18 },
-        { "index": 2, "product_id": 2, "price": 14300, "active": true, "wayne_code": 17 },
-        { "index": 3, "product_id": 3, "price": 12400, "active": true, "wayne_code": 0  }
+        {
+          "index": 1,
+          "product_id": 2,
+          "price": 14300,
+          "active": true,
+          "wayne_code": 17,
+          "wayne_product_code": 67
+        },
+        {
+          "index": 2,
+          "product_id": 3,
+          "price": 12400,
+          "active": true,
+          "wayne_code": 19,
+          "wayne_product_code": 36
+        },
+        {
+          "index": 3,
+          "product_id": 1,
+          "price": 10500,
+          "active": true,
+          "wayne_code": 18,
+          "wayne_product_code": 5
+        },
+        {
+          "index": 4,
+          "product_id": 2,
+          "price": 14300,
+          "active": true,
+          "wayne_code": 20,
+          "wayne_product_code": 67
+        }
       ]
     },
     {
@@ -48,9 +93,38 @@
       "address_byte": 81,
       "active": true,
       "nozzles": [
-        { "index": 1, "product_id": 1, "price": 10500, "active": true, "wayne_code": 18 },
-        { "index": 2, "product_id": 2, "price": 14300, "active": true, "wayne_code": 17 },
-        { "index": 3, "product_id": 3, "price": 12400, "active": true, "wayne_code": 0  }
+        {
+          "index": 1,
+          "product_id": 1,
+          "price": 10500,
+          "active": true,
+          "wayne_code": 18,
+          "wayne_product_code": 5
+        },
+        {
+          "index": 2,
+          "product_id": 2,
+          "price": 14300,
+          "active": true,
+          "wayne_code": 17,
+          "wayne_product_code": 67
+        },
+        {
+          "index": 3,
+          "product_id": 3,
+          "price": 12400,
+          "active": true,
+          "wayne_code": 19,
+          "wayne_product_code": 36
+        },
+        {
+          "index": 4,
+          "product_id": 2,
+          "price": 14300,
+          "active": true,
+          "wayne_code": 20,
+          "wayne_product_code": 67
+        }
       ]
     },
     {
@@ -59,9 +133,38 @@
       "address_byte": 82,
       "active": true,
       "nozzles": [
-        { "index": 1, "product_id": 1, "price": 10500, "active": true, "wayne_code": 18 },
-        { "index": 2, "product_id": 2, "price": 14300, "active": true, "wayne_code": 17 },
-        { "index": 3, "product_id": 3, "price": 12400, "active": true, "wayne_code": 0  }
+        {
+          "index": 1,
+          "product_id": 1,
+          "price": 10500,
+          "active": true,
+          "wayne_code": 18,
+          "wayne_product_code": 5
+        },
+        {
+          "index": 2,
+          "product_id": 2,
+          "price": 14300,
+          "active": true,
+          "wayne_code": 17,
+          "wayne_product_code": 67
+        },
+        {
+          "index": 3,
+          "product_id": 3,
+          "price": 12400,
+          "active": true,
+          "wayne_code": 19,
+          "wayne_product_code": 36
+        },
+        {
+          "index": 4,
+          "product_id": 2,
+          "price": 14300,
+          "active": true,
+          "wayne_code": 20,
+          "wayne_product_code": 67
+        }
       ]
     },
     {
@@ -70,9 +173,38 @@
       "address_byte": 83,
       "active": true,
       "nozzles": [
-        { "index": 1, "product_id": 1, "price": 10500, "active": true, "wayne_code": 18 },
-        { "index": 2, "product_id": 2, "price": 14300, "active": true, "wayne_code": 17 },
-        { "index": 3, "product_id": 3, "price": 12400, "active": true, "wayne_code": 0  }
+        {
+          "index": 1,
+          "product_id": 1,
+          "price": 10500,
+          "active": true,
+          "wayne_code": 18,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 2,
+          "product_id": 2,
+          "price": 14300,
+          "active": true,
+          "wayne_code": 17,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 3,
+          "product_id": 3,
+          "price": 12400,
+          "active": true,
+          "wayne_code": 19,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 4,
+          "product_id": 2,
+          "price": 14300,
+          "active": true,
+          "wayne_code": 20,
+          "wayne_product_code": 0
+        }
       ]
     }
   ],

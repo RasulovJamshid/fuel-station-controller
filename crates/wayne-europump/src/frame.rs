@@ -22,6 +22,9 @@ pub enum Frame {
         amount: [u8; 3],
         /// Composite fill frame ends with `01 01 01` (sniffer DONE) after optional `01 01 05`.
         sale_complete: bool,
+        /// Trailing `03 04 01 PP 00 HH` hose status when present in composite frames.
+        hose_product: Option<u8>,
+        hose_code: Option<u8>,
     },
     /// Nozzle lifted (`03 04 01 PP 00 HH` with HH ≠ 0x02).
     NozzleUp {
@@ -30,11 +33,12 @@ pub enum Frame {
         product: u8,
         nozzle: u8,
     },
-    /// Nozzle returned to holster (`03 04 01 PP 00 02`).
+    /// Nozzle returned to holster (`03 04 01 PP 00 HH`, `HH < 0x10`).
     NozzleReturned {
         addr: u8,
         seq: u8,
         product: u8,
+        hose: u8,
     },
     /// Short `01 01 05` from dispenser — idle/ready (ghost-fill holster), not sale DONE.
     DispenserIdle {
@@ -104,18 +108,22 @@ impl Frame {
         )
     }
 
-    /// `03 04 01 PP 00 HH` hose byte when the nozzle is returned to the holder.
+    /// `03 04 01 PP 00 HH` — hose hung up vs lifted (universal on ASIS PCC485).
     ///
-    /// Observed on real ASIS hardware (not configurable hose IDs):
-    /// - product `0x05` (regular): lift `0x12`, holster `0x02`
-    /// - product `0x43` (premium): lift `0x11`, holster `0x01`
+    /// Lift codes are the configured hose IDs (`>= 0x10`). Holster codes are the same
+    /// mapping minus `0x10` in the low nibble (not limited to `0x01`/`0x02`):
     ///
-    /// Lift/select codes are `>= 0x10` (e.g. Wayne `wayne_code` 17 → `0x11`, 18 → `0x12`).
+    /// | Product | Lift (HH) | Holster (HH) |
+    /// |---------|-----------|--------------|
+    /// | `0x05`  | `0x12`    | `0x02`       |
+    /// | `0x43`  | `0x11`    | `0x01`       |
+    /// | `0x24`  | `0x13`    | `0x03`       |
+    /// | `0x43`  | `0x14`    | `0x04`       | (4th hose, second premium side)
     pub fn is_nozzle_holster_code(hh: u8) -> bool {
-        hh <= 0x02
+        hh > 0 && hh < 0x10
     }
 
     pub fn is_nozzle_lift_code(hh: u8) -> bool {
-        !Self::is_nozzle_holster_code(hh)
+        hh >= 0x10
     }
 }

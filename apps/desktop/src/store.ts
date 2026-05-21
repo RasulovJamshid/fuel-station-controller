@@ -261,6 +261,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           price: d.price,
           nozzle_index: d.nozzle_index,
           pre_auth_preset: d.preset,
+          volume: 0,
+          amount: 0,
+          base_volume: null,
+          base_amount: null,
+          segment_volume: null,
+          segment_amount: null,
           product_id: nozzle?.product_id ?? next[i]!.product_id,
           product_name: nozzle?.product_name ?? next[i]!.product_name,
           product_color: nozzle?.product_color ?? next[i]!.product_color,
@@ -341,6 +347,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (ev.event === "fp.pre_auth_cancelled") {
       const fpId = ev.data.fp_id;
+      const cleared = { ...get().lastSaleOutcome };
+      delete cleared[fpId];
+      const holdDoneUntil = { ...get().holdDoneUntil };
+      delete holdDoneUntil[fpId];
       const next = [...get().states];
       const i = next.findIndex((s) => s.fp_id === fpId);
       if (i >= 0) {
@@ -350,8 +360,24 @@ export const useAppStore = create<AppState>((set, get) => ({
           pre_auth_preset: null,
           volume: 0,
           amount: 0,
+          base_volume: null,
+          base_amount: null,
+          segment_volume: null,
+          segment_amount: null,
+          nozzle_index: null,
+          product_id: null,
+          product_name: null,
+          product_color: null,
         };
-        set({ states: next });
+        set({
+          states: next,
+          lastSaleOutcome: cleared,
+          holdDoneUntil,
+          preAuthNozzleMismatch: null,
+          preAuthTimeoutFpId: null,
+        });
+      } else {
+        set({ preAuthNozzleMismatch: null, preAuthTimeoutFpId: null });
       }
       return;
     }
@@ -385,18 +411,22 @@ export const useAppStore = create<AppState>((set, get) => ({
           typeof prev.status === "object" && prev.status !== null && "STOPPED" in prev.status
             ? "STOPPED"
             : prev.status;
-        // Ignore lift events only while holstered pre-auth is active (delivery uses status polls).
-        if (prevTag === "PRE_AUTHORIZED") {
-          return;
-        }
+        const keepPreAuth =
+          prevTag === "PRE_AUTHORIZED" && prev.pre_auth_preset != null;
         next[i] = {
           ...prev,
-          status: "NOZZLE_UP",
+          status: keepPreAuth ? "PRE_AUTHORIZED" : "NOZZLE_UP",
           nozzle_index: d.nozzle_index,
           product_id: d.product_id,
           product_name: d.product_name,
           product_color: d.product_color,
           price: d.price,
+          volume: 0,
+          amount: 0,
+          base_volume: null,
+          base_amount: null,
+          segment_volume: null,
+          segment_amount: null,
         };
         set({ states: next });
       }

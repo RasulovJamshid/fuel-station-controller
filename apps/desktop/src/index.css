@@ -122,6 +122,41 @@
   body {
     @apply bg-bg-primary text-text-primary antialiased;
   }
+
+  /* Native form controls ignore Tailwind bg on Linux/WebKit — force theme tokens. */
+  html.dark,
+  :root:not(.light) {
+    color-scheme: dark;
+  }
+
+  html.light {
+    color-scheme: light;
+  }
+
+  select,
+  textarea,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
+    background-color: rgb(var(--color-bg-input));
+    color: rgb(var(--color-text-primary));
+    border-color: rgb(var(--color-border-primary));
+  }
+
+  select {
+    color-scheme: inherit;
+  }
+
+  select option,
+  select optgroup {
+    background-color: rgb(var(--color-bg-input));
+    color: rgb(var(--color-text-primary));
+  }
+
+  select option:checked,
+  select option:hover,
+  select option:focus {
+    background-color: rgb(var(--color-bg-tertiary));
+    color: rgb(var(--color-text-primary));
+  }
 }
 
 /* ── Light-mode overrides for structural chrome ───────────────────────────
@@ -130,9 +165,6 @@
    uses hardcoded dark slate-* utilities, so we override the ones that
    would become illegible on the light bg-primary surface.
 ──────────────────────────────────────────────────────────────────────────── */
-html.light {
-  color-scheme: light;
-}
 
 /* Page shell */
 html.light body,

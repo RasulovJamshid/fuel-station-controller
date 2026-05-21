@@ -154,27 +154,24 @@ async fn nozzle_up(
                 message: Some(format!("position for 0x{:02X} not found", byte)),
             }),
         ),
-        Some(d) => match d.lift_nozzle(
-            cmd.product,
-            cmd.product_name.clone(),
-            cmd.nozzle,
-            cmd.price,
-        ) {
-            Ok(()) => (
-                StatusCode::OK,
-                Json(ApiResponse {
-                    ok: true,
-                    message: None,
-                }),
-            ),
-            Err(e) => (
-                StatusCode::CONFLICT,
-                Json(ApiResponse {
-                    ok: false,
-                    message: Some(e.to_string()),
-                }),
-            ),
-        },
+        Some(d) => {
+            match d.lift_nozzle(cmd.product, cmd.product_name.clone(), cmd.nozzle, cmd.price) {
+                Ok(()) => (
+                    StatusCode::OK,
+                    Json(ApiResponse {
+                        ok: true,
+                        message: None,
+                    }),
+                ),
+                Err(e) => (
+                    StatusCode::CONFLICT,
+                    Json(ApiResponse {
+                        ok: false,
+                        message: Some(e.to_string()),
+                    }),
+                ),
+            }
+        }
     }
 }
 

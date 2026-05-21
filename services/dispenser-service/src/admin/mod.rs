@@ -58,11 +58,10 @@ impl AdminSessions {
 }
 
 pub async fn ensure_admin_defaults(pool: &SqlitePool) -> Result<()> {
-    let row: Option<(String,)> =
-        sqlx::query_as("SELECT value FROM admin_config WHERE key = ?")
-            .bind(PIN_HASH_KEY)
-            .fetch_optional(pool)
-            .await?;
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM admin_config WHERE key = ?")
+        .bind(PIN_HASH_KEY)
+        .fetch_optional(pool)
+        .await?;
     if row.is_some() {
         return Ok(());
     }
@@ -91,20 +90,20 @@ pub async fn ensure_admin_defaults(pool: &SqlitePool) -> Result<()> {
 }
 
 pub async fn must_change_pin(pool: &SqlitePool) -> Result<bool> {
-    let row: Option<(String,)> =
-        sqlx::query_as("SELECT value FROM admin_config WHERE key = ?")
-            .bind(PIN_MUST_CHANGE_KEY)
-            .fetch_optional(pool)
-            .await?;
-    Ok(row.map(|(v,)| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false))
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM admin_config WHERE key = ?")
+        .bind(PIN_MUST_CHANGE_KEY)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row
+        .map(|(v,)| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false))
 }
 
 pub async fn verify_admin_pin(pool: &SqlitePool, pin: &str) -> Result<bool> {
-    let row: Option<(String,)> =
-        sqlx::query_as("SELECT value FROM admin_config WHERE key = ?")
-            .bind(PIN_HASH_KEY)
-            .fetch_optional(pool)
-            .await?;
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM admin_config WHERE key = ?")
+        .bind(PIN_HASH_KEY)
+        .fetch_optional(pool)
+        .await?;
     let Some((hash,)) = row else {
         return Ok(false);
     };

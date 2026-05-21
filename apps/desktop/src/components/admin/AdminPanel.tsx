@@ -8,7 +8,9 @@ import type {
   ShiftSlot,
   UpdatePriceCmd,
 } from "../../types/api";
+import { statusTag } from "../../types/api";
 import { useAppStore } from "../../store";
+import { AdminProductsSection } from "./AdminProductsSection";
 
 function ToggleSwitch({
   checked,
@@ -40,7 +42,6 @@ function ToggleSwitch({
     </button>
   );
 }
-import { AdminProductsSection } from "./AdminProductsSection";
 
 const ADMIN_TOKEN_KEY = "azs_admin_token";
 
@@ -66,6 +67,10 @@ function formatPrice(n: number): string {
   return new Intl.NumberFormat("uz-UZ").format(n);
 }
 
+// Shared input/select class — adapts to both light and dark themes via CSS vars.
+const inputCls =
+  "rounded border border-border-primary bg-bg-input px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-border-focus";
+
 interface Props {
   token: string;
   mustChangePin?: boolean;
@@ -80,6 +85,28 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
   const setSmallScreen = useAppStore((s) => s.setSmallScreen);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
+  const states = useAppStore((s) => s.states);
+
+  // Nozzles that are physically lifted right now (across all dispensers).
+  const liftedNozzles = useMemo(() => {
+    return states
+      .filter((s) => {
+        const tag = statusTag(s.status);
+        return (
+          (tag === "NOZZLE_UP" ||
+            tag === "AUTHORIZING" ||
+            tag === "DELIVERING" ||
+            tag === "STOPPED") &&
+          s.nozzle_index != null
+        );
+      })
+      .map((s) => ({
+        fpId: s.fp_id,
+        nozzleIndex: s.nozzle_index!,
+        productName: s.product_name,
+        productColor: s.product_color,
+      }));
+  }, [states]);
 
   const [prices, setPrices] = useState<AdminPriceEntry[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -95,28 +122,46 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const rowKey = (fpId: string, nozzle: number) => `${fpId}:${nozzle}`;
-
   const loadAll = useCallback(async () => {
     const { invoke } = await import("@tauri-apps/api/core");
-    const [p, h, ops, s] = await Promise.all([
+    const results = await Promise.allSettled([
       invoke<AdminPriceEntry[]>("admin_get_prices", { token }),
       invoke<PriceChange[]>("admin_get_price_history", { token, limit: 50 }),
       invoke<Operator[]>("admin_list_operators", { token }),
       invoke<AdminSettingsSnapshot>("admin_get_settings", { token }),
     ]);
+    const err = results.find((r) => r.status === "rejected") as
+      | PromiseRejectedResult
+      | undefined;
+    if (err) {
+      const msg =
+        err.reason instanceof Error ? err.reason.message : String(err.reason);
+      setInvokeError(msg);
+    }
+    const p =
+      results[0].status === "fulfilled" ? results[0].value : [];
+    const h =
+      results[1].status === "fulfilled" ? results[1].value : [];
+    const ops =
+      results[2].status === "fulfilled" ? results[2].value : [];
+    const s =
+      results[3].status === "fulfilled" ? results[3].value : null;
     setPrices(p);
     setHistory(h);
     setOperators(ops);
-    setSettings(s);
-    setShiftMode((s.shift_mode as ShiftMode) || "manual");
-    setShiftSlots(s.shift_schedule ?? []);
+    if (s) {
+      setSettings(s);
+      setShiftMode((s.shift_mode as ShiftMode) || "manual");
+      setShiftSlots(s.shift_schedule ?? []);
+    }
+    // One draft entry per product (first price seen wins).
     const d: Record<string, string> = {};
     for (const row of p) {
-      d[rowKey(row.fp_id, row.nozzle_index)] = String(row.price);
+      const key = String(row.product_id);
+      if (!(key in d)) d[key] = String(row.price);
     }
     setDraft(d);
-  }, [token]);
+  }, [token, setInvokeError]);
 
   useEffect(() => {
     loadAll().catch((e) => setInvokeError(e instanceof Error ? e.message : String(e)));
@@ -128,19 +173,57 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
     setSiteSnapshot(snap);
   };
 
+  // One row per product for display, sorted by product_id.
+  const productPrices = useMemo(() => {
+    const seen = new Map<number, AdminPriceEntry>();
+    for (const row of prices) {
+      if (!seen.has(row.product_id)) seen.set(row.product_id, row);
+    }
+    return [...seen.values()].sort((a, b) => a.product_id - b.product_id);
+  }, [prices]);
+
+  // product_id → price for nozzle saves (includes unsaved draft from Prices section).
+  const productPriceMap = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const row of prices) {
+      if (!(row.product_id in map)) map[row.product_id] = row.price;
+    }
+    for (const prod of productPrices) {
+      const raw = draft[String(prod.product_id)];
+      if (raw === undefined || raw.trim() === "") continue;
+      const p = parseInt(raw.trim(), 10);
+      if (!Number.isNaN(p) && p > 0) map[prod.product_id] = p;
+    }
+    return map;
+  }, [prices, productPrices, draft]);
+
   const savePrices = async () => {
     setBusy(true);
     setMsg(null);
     try {
+      if (productPrices.length === 0) {
+        setMsg("No products with active nozzles — add products and nozzles first.");
+        return;
+      }
       const updates: UpdatePriceCmd[] = [];
-      for (const row of prices) {
-        const key = rowKey(row.fp_id, row.nozzle_index);
+      for (const prod of productPrices) {
+        const key = String(prod.product_id);
         const raw = draft[key];
-        if (raw === undefined) continue;
-        const price = parseInt(raw, 10);
-        if (Number.isNaN(price) || price <= 0) continue;
-        if (price !== row.price) {
-          updates.push({ fp_id: row.fp_id, nozzle_index: row.nozzle_index, price });
+        if (raw === undefined || raw.trim() === "") continue;
+        const newPrice = parseInt(raw.trim(), 10);
+        if (Number.isNaN(newPrice) || newPrice <= 0) {
+          setMsg(`Enter a valid price for ${prod.product_name}.`);
+          return;
+        }
+        if (newPrice === prod.price) continue;
+        for (const row of prices) {
+          if (row.product_id === prod.product_id) {
+            updates.push({
+              fp_id: row.fp_id,
+              nozzle_index: row.nozzle_index,
+              price: newPrice,
+            });
+          }
         }
       }
       if (updates.length === 0) {
@@ -149,30 +232,34 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
       }
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("admin_update_prices", { token, updates });
-      await loadAll();
-      await refreshConfig();
-      setMsg(`Saved ${updates.length} price(s).`);
+
+      setPrices((prev) => {
+        const next = prev.map((row) => {
+          const u = updates.find(
+            (u) => u.fp_id === row.fp_id && u.nozzle_index === row.nozzle_index,
+          );
+          return u ? { ...row, price: u.price } : row;
+        });
+        const nextDraft: Record<string, string> = {};
+        for (const row of next) {
+          const k = String(row.product_id);
+          if (!(k in nextDraft)) nextDraft[k] = String(row.price);
+        }
+        setDraft(nextDraft);
+        return next;
+      });
+      setMsg(`Prices saved (${updates.length} nozzle update${updates.length === 1 ? "" : "s"}).`);
+      // Refresh history and config in the background (errors don't undo the save).
+      invoke<PriceChange[]>("admin_get_price_history", { token, limit: 50 })
+        .then(setHistory)
+        .catch(() => {});
+      refreshConfig().catch(() => {});
     } catch (e) {
-      setInvokeError(e instanceof Error ? e.message : String(e));
+      setMsg(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
     }
   };
-
-  const applyNow = async (fpId: string) => {
-    setBusy(true);
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("admin_apply_prices_now", { token, fpId });
-      setMsg(`Pushed prices to ${fpId} (pre-authorize while idle).`);
-    } catch (e) {
-      setInvokeError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const fpIds = useMemo(() => [...new Set(prices.map((p) => p.fp_id))], [prices]);
 
   const saveSettings = async () => {
     if (!settings) return;
@@ -250,17 +337,24 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
     }
   };
 
+  // Stable callback — avoids re-triggering AdminProductsSection's useEffect
+  // every render (inline arrows change identity every render).
+  const handleProductsError = useCallback(
+    (m: string) => setInvokeError(m),
+    [setInvokeError],
+  );
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 text-slate-200">
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 text-text-primary">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-white">Station admin</h1>
+        <h1 className="text-xl font-semibold text-text-primary">Station admin</h1>
         <button
           type="button"
           onClick={() => {
             setAdminToken(null);
             onLogout();
           }}
-          className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800"
+          className="rounded-lg border border-border-primary px-3 py-1.5 text-sm text-text-primary hover:bg-bg-secondary"
         >
           Lock admin
         </button>
@@ -280,58 +374,42 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
       <AdminProductsSection
         token={token}
         onMessage={setMsg}
-        onError={(m) => setInvokeError(m)}
+        onError={handleProductsError}
+        onCatalogChanged={loadAll}
+        liftedNozzles={liftedNozzles}
+        productPriceMap={productPriceMap}
       />
 
       <section className="mb-8">
         <h2 className="mb-3 text-lg font-medium text-amber-400">Prices</h2>
-        <div className="overflow-x-auto rounded-lg border border-slate-700">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="bg-slate-800/80 text-slate-400">
+        <p className="mb-2 text-xs text-text-muted">
+          One price per product — applies to all nozzles dispensing that product across every dispenser.
+        </p>
+        <div className="overflow-x-auto rounded-lg border border-border-primary">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-bg-secondary text-text-muted">
               <tr>
-                <th className="px-3 py-2">FP</th>
-                <th className="px-3 py-2">Label</th>
-                <th className="px-3 py-2">Nozzle</th>
                 <th className="px-3 py-2">Product</th>
-                <th className="px-3 py-2">Current</th>
+                <th className="px-3 py-2">Current price</th>
                 <th className="px-3 py-2">New price</th>
-                <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody>
-              {prices.map((row) => {
-                const key = rowKey(row.fp_id, row.nozzle_index);
-                const showApply =
-                  fpIds.indexOf(row.fp_id) ===
-                  prices.findIndex((p) => p.fp_id === row.fp_id);
+              {productPrices.map((row) => {
+                const key = String(row.product_id);
                 return (
-                  <tr key={key} className="border-t border-slate-700/80">
-                    <td className="px-3 py-2 font-mono">{row.fp_id}</td>
-                    <td className="px-3 py-2">{row.label}</td>
-                    <td className="px-3 py-2">{row.nozzle_index}</td>
-                    <td className="px-3 py-2">{row.product_name}</td>
-                    <td className="px-3 py-2 font-mono">{formatPrice(row.price)}</td>
+                  <tr key={key} className="border-t border-border-primary">
+                    <td className="px-3 py-2 font-medium text-text-primary">{row.product_name}</td>
+                    <td className="px-3 py-2 font-mono text-text-muted">{formatPrice(row.price)}</td>
                     <td className="px-3 py-2">
                       <input
                         type="number"
-                        className="w-28 rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono"
+                        className={`w-36 font-mono ${inputCls}`}
                         value={draft[key] ?? ""}
                         onChange={(e) =>
                           setDraft((d) => ({ ...d, [key]: e.target.value }))
                         }
                       />
-                    </td>
-                    <td className="px-3 py-2">
-                      {showApply && (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => applyNow(row.fp_id)}
-                          className="text-xs text-sky-400 hover:underline disabled:opacity-50"
-                        >
-                          Apply now
-                        </button>
-                      )}
                     </td>
                   </tr>
                 );
@@ -348,8 +426,8 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
           Save prices
         </button>
 
-        <h3 className="mb-2 mt-6 text-sm font-medium text-slate-400">Price history</h3>
-        <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-slate-400">
+        <h3 className="mb-2 mt-6 text-sm font-medium text-text-muted">Price history</h3>
+        <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-text-muted">
           {history.map((h) => (
             <li key={h.id}>
               {new Date(h.changed_at).toLocaleString()} — {h.fp_id} #{h.nozzle_index}{" "}
@@ -366,11 +444,11 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
           {operators.map((op) => (
             <li
               key={op.id}
-              className="flex flex-wrap items-center gap-2 rounded border border-slate-700 px-3 py-2 text-sm"
+              className="flex flex-wrap items-center gap-2 rounded border border-border-primary px-3 py-2 text-sm"
             >
-              <span className="font-medium">{op.name}</span>
-              <span className="text-slate-500">{op.has_pin ? "PIN set" : "No PIN"}</span>
-              <span className={op.active ? "text-emerald-400" : "text-slate-500"}>
+              <span className="font-medium text-text-primary">{op.name}</span>
+              <span className="text-text-muted">{op.has_pin ? "PIN set" : "No PIN"}</span>
+              <span className={op.active ? "text-emerald-400" : "text-text-muted"}>
                 {op.active ? "Active" : "Inactive"}
               </span>
               <button
@@ -417,20 +495,20 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
             placeholder="Name"
             value={newOpName}
             onChange={(e) => setNewOpName(e.target.value)}
-            className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
+            className={inputCls}
           />
           <input
             placeholder="PIN (optional)"
             type="password"
             value={newOpPin}
             onChange={(e) => setNewOpPin(e.target.value)}
-            className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
+            className={inputCls}
           />
           <button
             type="button"
             disabled={busy}
             onClick={addOperator}
-            className="rounded-lg bg-slate-700 px-3 py-1 text-sm hover:bg-slate-600"
+            className="rounded-lg border border-border-primary px-3 py-1 text-sm text-text-primary hover:bg-bg-secondary"
           >
             Add operator
           </button>
@@ -442,7 +520,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
         <select
           value={shiftMode}
           onChange={(e) => setShiftMode(e.target.value as ShiftMode)}
-          className="mb-2 rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
+          className={`mb-2 ${inputCls}`}
         >
           <option value="disabled">Disabled</option>
           <option value="manual">Manual</option>
@@ -460,7 +538,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                     next[i] = { ...slot, name: e.target.value };
                     setShiftSlots(next);
                   }}
-                  className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
+                  className={inputCls}
                 />
                 <input
                   placeholder="Start HH:MM"
@@ -470,7 +548,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                     next[i] = { ...slot, start: e.target.value };
                     setShiftSlots(next);
                   }}
-                  className="w-24 rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
+                  className={`w-24 ${inputCls}`}
                 />
                 <input
                   placeholder="End HH:MM"
@@ -480,7 +558,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                     next[i] = { ...slot, end: e.target.value };
                     setShiftSlots(next);
                   }}
-                  className="w-24 rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
+                  className={`w-24 ${inputCls}`}
                 />
               </div>
             ))}
@@ -499,7 +577,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
           type="button"
           disabled={busy}
           onClick={saveShiftSchedule}
-          className="rounded-lg bg-slate-700 px-4 py-2 text-sm hover:bg-slate-600"
+          className="rounded-lg border border-border-primary px-4 py-2 text-sm text-text-primary hover:bg-bg-secondary"
         >
           Save shift schedule
         </button>
@@ -509,7 +587,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
         <section className="mb-8">
           <h2 className="mb-3 text-lg font-medium text-amber-400">Settings</h2>
           <div className="grid max-w-md gap-3 text-sm">
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1 text-text-secondary">
               Polling interval (ms)
               <input
                 type="number"
@@ -520,10 +598,10 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                     polling_interval_ms: Number(e.target.value),
                   })
                 }
-                className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
+                className={inputCls}
               />
             </label>
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1 text-text-secondary">
               Offline threshold (polls)
               <input
                 type="number"
@@ -534,10 +612,10 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                     polling_offline_threshold_polls: Number(e.target.value),
                   })
                 }
-                className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
+                className={inputCls}
               />
             </label>
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1 text-text-secondary">
               Pre-auth timeout (seconds)
               <input
                 type="number"
@@ -548,10 +626,10 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                     preauth_timeout_seconds: Number(e.target.value),
                   })
                 }
-                className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
+                className={inputCls}
               />
             </label>
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1 text-text-secondary">
               Shift warn before end (minutes)
               <input
                 type="number"
@@ -562,7 +640,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                     shifts_warn_before_end_minutes: Number(e.target.value),
                   })
                 }
-                className="rounded border border-slate-600 bg-slate-800 px-2 py-1"
+                className={inputCls}
               />
             </label>
           </div>
@@ -570,7 +648,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
             type="button"
             disabled={busy}
             onClick={saveSettings}
-            className="mt-3 rounded-lg bg-slate-700 px-4 py-2 text-sm hover:bg-slate-600"
+            className="mt-3 rounded-lg border border-border-primary px-4 py-2 text-sm text-text-primary hover:bg-bg-secondary"
           >
             Save settings
           </button>
@@ -579,15 +657,14 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
 
       <section className="mb-8">
         <h2 className="mb-1 text-lg font-medium text-amber-400">Display</h2>
-        <p className="mb-4 text-sm text-slate-500">
+        <p className="mb-4 text-sm text-text-muted">
           Adjust the interface appearance and layout for this station.
         </p>
         <div className="flex flex-col gap-3">
-          {/* Theme */}
-          <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3">
+          <div className="flex items-center justify-between rounded-lg border border-border-primary bg-bg-secondary px-4 py-3">
             <div>
-              <p className="text-sm font-medium text-slate-100">Light mode</p>
-              <p className="mt-0.5 text-xs text-slate-500">
+              <p className="text-sm font-medium text-text-primary">Light mode</p>
+              <p className="mt-0.5 text-xs text-text-muted">
                 Switch to a light colour scheme (warm off-white background)
               </p>
             </div>
@@ -597,11 +674,10 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
               onChange={(v) => setTheme(v ? "light" : "dark")}
             />
           </div>
-          {/* Small screen */}
-          <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3">
+          <div className="flex items-center justify-between rounded-lg border border-border-primary bg-bg-secondary px-4 py-3">
             <div>
-              <p className="text-sm font-medium text-slate-100">Small-screen mode</p>
-              <p className="mt-0.5 text-xs text-slate-500">
+              <p className="text-sm font-medium text-text-primary">Small-screen mode</p>
+              <p className="mt-0.5 text-xs text-text-muted">
                 Compact layout optimised for smaller displays
               </p>
             </div>
@@ -622,14 +698,14 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
             placeholder="Current PIN"
             value={pinCurrent}
             onChange={(e) => setPinCurrent(e.target.value)}
-            className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
+            className={inputCls}
           />
           <input
             type="password"
             placeholder="New PIN"
             value={pinNew}
             onChange={(e) => setPinNew(e.target.value)}
-            className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm"
+            className={inputCls}
           />
           <button
             type="button"

@@ -4,8 +4,8 @@ mod frame;
 mod parser;
 
 pub use builder::{
-    ack, authorize_config, authorize_initial, busy, done, ghost_fill_abort, poll, stop,
-    stop_frame, stop_pre_frame,
+    ack, authorize_config, authorize_initial, busy, done, ghost_fill_abort, poll, stop, stop_frame,
+    stop_pre_frame,
 };
 pub use crc::{build_frame, crc16};
 pub use frame::Frame;

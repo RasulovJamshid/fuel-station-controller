@@ -15,14 +15,14 @@ use engine::{
     initial_runtimes, run_poll_loop, spawn_preauth_timeout_task, DispatchCommand, MockSerial,
     SerialBackend,
 };
-use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing_subscriber::EnvFilter;
 
 use crate::admin::AdminSessions;
 use crate::api::routes::{router, AppState};
 use crate::config::load;
-use crate::engine::ReconnectingSerial;
+use crate::engine::{init_serial_logger, ReconnectingSerial};
 use crate::shifts::{spawn_warning_task, ShiftCoordinator};
 
 #[derive(Parser)]
@@ -56,10 +56,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Run => run(cli.config).await,
         #[cfg(windows)]
-        Commands::Install
-        | Commands::Uninstall
-        | Commands::Start
-        | Commands::Stop => {
+        Commands::Install | Commands::Uninstall | Commands::Start | Commands::Stop => {
             tracing::warn!("service control is not implemented in this build");
             Ok(())
         }
@@ -71,18 +68,37 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
     let log_level = cfg_loaded.service.log_level.clone();
     let db_path = cfg_loaded.service.db_path.clone();
     let port = cfg_loaded.service.port;
+    // Extract before the move into Arc.
+    let serial_log_path = std::env::var("AZS_SERIAL_LOG")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| cfg_loaded.service.serial_log_file.clone());
     let cfg = Arc::new(RwLock::new(cfg_loaded));
     let cfg_for_shifts = Arc::new(cfg.read().await.clone());
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&log_level));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&log_level));
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
-    let db_url = format!("sqlite:{}?mode=rwc", db_path);
+    // Serial frame logger: AZS_SERIAL_LOG env var takes priority over config field.
+    if let Some(ref path) = serial_log_path {
+        match init_serial_logger(path) {
+            Ok(()) => tracing::info!(path = %path, "serial frame logger enabled"),
+            Err(e) => {
+                tracing::warn!(path = %path, ?e, "failed to open serial log — logging disabled")
+            }
+        }
+    }
+
+    let db_opts = SqliteConnectOptions::new()
+        .filename(&db_path)
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .busy_timeout(std::time::Duration::from_secs(5));
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
-        .connect(&db_url)
+        .connect_with(db_opts)
         .await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
+    db::repair::ensure_price_history_columns(&pool).await?;
 
     admin::ensure_admin_defaults(&pool).await?;
 

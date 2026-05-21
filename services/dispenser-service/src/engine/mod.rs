@@ -5,5 +5,5 @@ mod state;
 
 pub use poll_loop::{run_poll_loop, DispatchCommand, MockSerial, SerialBackend};
 pub use preauth_timeout::spawn_preauth_timeout_task;
-pub use serial::ReconnectingSerial;
+pub use serial::{init_serial_logger, ReconnectingSerial};
 pub use state::{initial_runtimes, RuntimeFp};

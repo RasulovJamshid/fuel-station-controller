@@ -10,14 +10,14 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Serialize;
+use site_config::ShiftMode;
 use site_config::{FuelingPositionConfig, Protocol, SiteConfig};
 use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tower_http::trace::TraceLayer;
-use site_config::ShiftMode;
 use types::{
-    AuthorizeCmd, CloseStoppedTxCmd, ContinueFillCmd, CreateOperatorCmd, EndShiftCmd, FpState,
-    FpSnapshot, FpStatus, HandoverCmd, NozzleSnapshot, Operator, Preset, ProductSnapshot,
+    AuthorizeCmd, CloseStoppedTxCmd, ContinueFillCmd, CreateOperatorCmd, EndShiftCmd, FpSnapshot,
+    FpState, FpStatus, HandoverCmd, NozzleSnapshot, Operator, Preset, ProductSnapshot,
     ResumeFillCmd, Shift, ShiftSlot, SiteSnapshot, StartShiftCmd, StopCmd, StopSource, Transaction,
     TxStatus, UpdateAllPricesCmd, WsEvent,
 };
@@ -391,14 +391,9 @@ async fn list_shifts(
 ) -> Result<Json<Vec<Shift>>, (StatusCode, String)> {
     let limit = q.limit.unwrap_or(20).clamp(1, 500);
     let offset = q.offset.unwrap_or(0).max(0);
-    let rows = shift_queries::list_shifts(
-        &st.pool,
-        limit,
-        offset,
-        q.status.as_deref(),
-    )
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let rows = shift_queries::list_shifts(&st.pool, limit, offset, q.status.as_deref())
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(rows))
 }
 
@@ -534,10 +529,7 @@ pub async fn authorize(
     }
     let byte = fp.address_byte;
     let map = st.runtimes.read().await;
-    if map
-        .get(&byte)
-        .is_some_and(|r| r.stopped_context.is_some())
-    {
+    if map.get(&byte).is_some_and(|r| r.stopped_context.is_some()) {
         return Err((
             StatusCode::BAD_REQUEST,
             "sale is paused — use Resume fill or Continue fill with the original transaction, not a new authorization".into(),
@@ -620,13 +612,11 @@ pub async fn preauthorize(
     let byte = fp.address_byte;
     {
         let map = st.runtimes.read().await;
-        if map
-            .get(&byte)
-            .is_some_and(|r| r.stopped_context.is_some())
-        {
+        if map.get(&byte).is_some_and(|r| r.stopped_context.is_some()) {
             return Err((
                 StatusCode::BAD_REQUEST,
-                "sale is paused — use Resume fill or Continue fill, not a new pre-authorization".into(),
+                "sale is paused — use Resume fill or Continue fill, not a new pre-authorization"
+                    .into(),
             ));
         }
         let is_idle = map
@@ -678,10 +668,7 @@ pub async fn cancel_preauth(
             .get(&byte)
             .is_some_and(|r| matches!(r.state.status, FpStatus::PreAuthorized));
         if !is_preauth {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "lane is not pre-authorized".into(),
-            ));
+            return Err((StatusCode::BAD_REQUEST, "lane is not pre-authorized".into()));
         }
     }
     st.commands

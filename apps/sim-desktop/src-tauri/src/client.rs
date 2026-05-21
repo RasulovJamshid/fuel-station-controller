@@ -95,9 +95,8 @@ pub struct SiteLayout {
 impl SimClient {
     pub fn new() -> Self {
         let raw = std::env::var("AZS_SIM_URL").unwrap_or_else(|_| "http://127.0.0.1:3002".into());
-        let base = Url::parse(raw.trim_end_matches('/')).unwrap_or_else(|_| {
-            Url::parse("http://127.0.0.1:3002").expect("default sim url")
-        });
+        let base = Url::parse(raw.trim_end_matches('/'))
+            .unwrap_or_else(|_| Url::parse("http://127.0.0.1:3002").expect("default sim url"));
         Self {
             base,
             http: reqwest::Client::new(),
@@ -183,14 +182,8 @@ impl SimClient {
     }
 
     pub async fn go_offline(&self, fp_id: String) -> Result<(), String> {
-        self.post_json(
-            "sim/go-offline",
-            &OfflineBody {
-                fp_id,
-                flush: None,
-            },
-        )
-        .await
+        self.post_json("sim/go-offline", &OfflineBody { fp_id, flush: None })
+            .await
     }
 
     pub async fn go_online(&self, fp_id: String, flush: bool) -> Result<(), String> {
@@ -258,10 +251,10 @@ impl Default for SimClient {
 
 impl ServiceClient {
     pub fn new() -> Self {
-        let raw = std::env::var("AZS_SERVICE_URL").unwrap_or_else(|_| "http://127.0.0.1:3001".into());
-        let base = Url::parse(raw.trim_end_matches('/')).unwrap_or_else(|_| {
-            Url::parse("http://127.0.0.1:3001").expect("default service url")
-        });
+        let raw =
+            std::env::var("AZS_SERVICE_URL").unwrap_or_else(|_| "http://127.0.0.1:3001".into());
+        let base = Url::parse(raw.trim_end_matches('/'))
+            .unwrap_or_else(|_| Url::parse("http://127.0.0.1:3001").expect("default service url"));
         Self {
             base,
             http: reqwest::Client::new(),

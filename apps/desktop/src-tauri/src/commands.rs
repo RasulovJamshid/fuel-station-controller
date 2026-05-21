@@ -42,7 +42,10 @@ pub async fn sim_nozzle_up(
 }
 
 #[tauri::command]
-pub async fn sim_nozzle_down(sim: tauri::State<'_, SimClient>, fp_id: String) -> Result<(), String> {
+pub async fn sim_nozzle_down(
+    sim: tauri::State<'_, SimClient>,
+    fp_id: String,
+) -> Result<(), String> {
     sim.nozzle_down(fp_id).await
 }
 
@@ -83,14 +86,17 @@ pub async fn authorize(
     let preset = match preset_kind.to_lowercase().as_str() {
         "full" => Preset::Str("full".into()),
         "volume" => {
-            let v = preset_value.ok_or_else(|| "preset_value required: litres for volume preset".to_string())?;
+            let v = preset_value
+                .ok_or_else(|| "preset_value required: litres for volume preset".to_string())?;
             if v <= 0.0 || v > 10_000.0 {
                 return Err("volume must be in (0, 10000] L".into());
             }
             Preset::Volume(v)
         }
         "amount" => {
-            let v = preset_value.ok_or_else(|| "preset_value required: total sum (minor units) for amount preset".to_string())?;
+            let v = preset_value.ok_or_else(|| {
+                "preset_value required: total sum (minor units) for amount preset".to_string()
+            })?;
             if v <= 0.0 || v > 500_000_000_000.0 {
                 return Err("amount out of allowed range".into());
             }
@@ -125,14 +131,17 @@ pub async fn preauthorize(
     let preset = match preset_kind.to_lowercase().as_str() {
         "full" => Preset::Str("full".into()),
         "volume" => {
-            let v = preset_value.ok_or_else(|| "preset_value required: litres for volume preset".to_string())?;
+            let v = preset_value
+                .ok_or_else(|| "preset_value required: litres for volume preset".to_string())?;
             if v <= 0.0 || v > 10_000.0 {
                 return Err("volume must be in (0, 10000] L".into());
             }
             Preset::Volume(v)
         }
         "amount" => {
-            let v = preset_value.ok_or_else(|| "preset_value required: total sum (minor units) for amount preset".to_string())?;
+            let v = preset_value.ok_or_else(|| {
+                "preset_value required: total sum (minor units) for amount preset".to_string()
+            })?;
             if v <= 0.0 || v > 500_000_000_000.0 {
                 return Err("amount out of allowed range".into());
             }
@@ -194,9 +203,7 @@ pub async fn close_stopped_transaction(
     fp_id: String,
     stopped_tx_id: String,
 ) -> Result<(), String> {
-    client
-        .close_stopped_transaction(fp_id, stopped_tx_id)
-        .await
+    client.close_stopped_transaction(fp_id, stopped_tx_id).await
 }
 
 #[tauri::command]
@@ -372,10 +379,7 @@ pub async fn admin_create_operator(
     pin: Option<String>,
 ) -> Result<types::Operator, String> {
     client
-        .admin_create_operator(
-            token,
-            types::CreateOperatorCmd { name, pin },
-        )
+        .admin_create_operator(token, types::CreateOperatorCmd { name, pin })
         .await
 }
 
@@ -388,11 +392,7 @@ pub async fn admin_update_operator(
     pin: Option<String>,
 ) -> Result<types::Operator, String> {
     client
-        .admin_update_operator(
-            token,
-            id,
-            types::AdminUpdateOperatorCmd { active, pin },
-        )
+        .admin_update_operator(token, id, types::AdminUpdateOperatorCmd { active, pin })
         .await
 }
 
@@ -430,10 +430,7 @@ pub async fn admin_shift_schedule(
     scheduled: Vec<types::ShiftSlot>,
 ) -> Result<(), String> {
     client
-        .admin_shift_schedule(
-            token,
-            types::AdminShiftScheduleCmd { mode, scheduled },
-        )
+        .admin_shift_schedule(token, types::AdminShiftScheduleCmd { mode, scheduled })
         .await
 }
 
@@ -464,11 +461,7 @@ pub async fn admin_save_position_nozzles(
     nozzles: Vec<types::AdminNozzleInput>,
 ) -> Result<(), String> {
     client
-        .admin_save_position_nozzles(
-            token,
-            fp_id,
-            types::SavePositionNozzlesCmd { nozzles },
-        )
+        .admin_save_position_nozzles(token, fp_id, types::SavePositionNozzlesCmd { nozzles })
         .await
 }
 
@@ -501,7 +494,8 @@ pub async fn ws_forward_loop(app: AppHandle, ws_url: String) {
                             let _ = app.emit("dispenser_event", t.to_string());
                         }
                         Ok(Message::Ping(payload)) => {
-                            let _ = futures_util::SinkExt::send(&mut write, Message::Pong(payload)).await;
+                            let _ = futures_util::SinkExt::send(&mut write, Message::Pong(payload))
+                                .await;
                         }
                         Ok(Message::Close(_)) | Err(_) => break,
                         _ => {}

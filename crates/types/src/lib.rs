@@ -547,6 +547,8 @@ pub struct AdminNozzleRow {
     pub product_name: String,
     pub price: u32,
     pub active: bool,
+    #[serde(default)]
+    pub wayne_code: u8,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

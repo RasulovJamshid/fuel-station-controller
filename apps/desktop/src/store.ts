@@ -213,8 +213,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (ev.event === "fp.done") {
       const tx = ev.data;
-      const combinedVol = tx.combined_volume > 0 ? tx.combined_volume : tx.volume;
-      const combinedAmt = tx.combined_amount > 0 ? tx.combined_amount : tx.amount;
+      const combinedVol = (tx.combined_volume ?? 0) > 0 ? tx.combined_volume! : tx.volume;
+      const combinedAmt = (tx.combined_amount ?? 0) > 0 ? tx.combined_amount! : tx.amount;
       const outcome =
         tx.status === "COMPLETED"
           ? "completed"
@@ -385,8 +385,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           typeof prev.status === "object" && prev.status !== null && "STOPPED" in prev.status
             ? "STOPPED"
             : prev.status;
-        // Pre-auth sales use fp.status (Authorizing/Delivering); ignore stray reactive events.
-        if (prevTag === "PRE_AUTHORIZED" || prev.pre_auth_preset != null) {
+        // Ignore lift events only while holstered pre-auth is active (delivery uses status polls).
+        if (prevTag === "PRE_AUTHORIZED") {
           return;
         }
         next[i] = {

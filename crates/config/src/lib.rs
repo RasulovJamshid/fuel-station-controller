@@ -61,6 +61,10 @@ pub struct ServiceConfig {
     pub log_level: String,
     pub log_file: String,
     pub db_path: String,
+    /// Path for raw serial frame log (TX/RX hex). `null` or absent = disabled.
+    /// Overridden at runtime by the `AZS_SERIAL_LOG` environment variable.
+    #[serde(default)]
+    pub serial_log_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -261,10 +265,10 @@ impl ShiftConfig {
 
 impl SiteConfig {
     pub fn load(path: &str) -> Result<Self> {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("read site config {}", path))?;
-        let cfg: Self = serde_json::from_str(&text)
-            .with_context(|| format!("parse site config {}", path))?;
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("read site config {}", path))?;
+        let cfg: Self =
+            serde_json::from_str(&text).with_context(|| format!("parse site config {}", path))?;
         cfg.validate()?;
         Ok(cfg)
     }
@@ -294,9 +298,10 @@ impl SiteConfig {
 
     /// Remove a product if no nozzle references it.
     pub fn remove_product(&mut self, id: u8) -> Result<()> {
-        let in_use = self.fueling_positions.iter().any(|fp| {
-            fp.nozzles.iter().any(|n| n.product_id == id)
-        });
+        let in_use = self
+            .fueling_positions
+            .iter()
+            .any(|fp| fp.nozzles.iter().any(|n| n.product_id == id));
         if in_use {
             bail!("product {id} is assigned to a nozzle — remove assignments first");
         }
@@ -309,11 +314,7 @@ impl SiteConfig {
         Ok(())
     }
 
-    pub fn set_position_nozzles(
-        &mut self,
-        fp_id: &str,
-        nozzles: Vec<NozzleConfig>,
-    ) -> Result<()> {
+    pub fn set_position_nozzles(&mut self, fp_id: &str, nozzles: Vec<NozzleConfig>) -> Result<()> {
         let fp = self
             .fueling_positions
             .iter_mut()
@@ -329,10 +330,7 @@ impl SiteConfig {
             .fueling_positions
             .iter_mut()
             .find(|fp| fp.id == fp_id)?;
-        let n = fp
-            .nozzles
-            .iter_mut()
-            .find(|n| n.index == nozzle_index)?;
+        let n = fp.nozzles.iter_mut().find(|n| n.index == nozzle_index)?;
         let old = n.price;
         n.price = price;
         Some(old)
@@ -477,10 +475,7 @@ impl SiteConfig {
             }
 
             if fp.active && fp.nozzles.is_empty() {
-                bail!(
-                    "Fueling position '{}' is active but has no nozzles",
-                    fp.id
-                );
+                bail!("Fueling position '{}' is active but has no nozzles", fp.id);
             }
 
             let mut nozzle_indices = HashSet::new();
@@ -501,13 +496,16 @@ impl SiteConfig {
                 if !product_ids.contains(&nozzle.product_id) {
                     bail!(
                         "Nozzle {} in position '{}' references unknown product_id {}",
-                        nozzle.index, fp.id, nozzle.product_id
+                        nozzle.index,
+                        fp.id,
+                        nozzle.product_id
                     );
                 }
                 if nozzle.active && nozzle.price == 0 {
                     bail!(
                         "Nozzle {} in position '{}' is active but has price = 0",
-                        nozzle.index, fp.id
+                        nozzle.index,
+                        fp.id
                     );
                 }
             }
@@ -527,13 +525,15 @@ impl SiteConfig {
                 if ScheduledShift::parse_time(&slot.start).is_none() {
                     bail!(
                         "Scheduled shift '{}' has invalid start time '{}'",
-                        slot.name, slot.start
+                        slot.name,
+                        slot.start
                     );
                 }
                 if ScheduledShift::parse_time(&slot.end).is_none() {
                     bail!(
                         "Scheduled shift '{}' has invalid end time '{}'",
-                        slot.name, slot.end
+                        slot.name,
+                        slot.end
                     );
                 }
             }

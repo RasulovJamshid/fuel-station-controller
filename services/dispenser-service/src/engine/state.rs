@@ -135,14 +135,12 @@ impl RuntimeFp {
         self.state.updated_at = Utc::now().timestamp_millis();
     }
 
-    /// API/WS snapshot: while pre-auth is pending, never expose reactive `NOZZLE_UP`.
+    /// API/WS snapshot for UI. Holstered pre-auth shows `PRE_AUTHORIZED`; a physical
+    /// lift stays `NOZZLE_UP` so the operator can assign volume/amount (lift-first flow).
     pub fn snapshot_state(&self) -> FpState {
         let mut s = self.state.clone();
         if self.pre_auth.is_some() {
-            if matches!(
-                s.status,
-                FpStatus::Idle | FpStatus::NozzleUp
-            ) {
+            if s.status == FpStatus::Idle {
                 s.status = FpStatus::PreAuthorized;
             }
             if s.pre_auth_preset.is_none() {
@@ -337,7 +335,12 @@ impl RuntimeFp {
             nozzle_index,
         });
         self.continuation = None;
-        self.apply_stopped_display(combined_vol, combined_amt, stopped_tx_id.clone(), stop_source);
+        self.apply_stopped_display(
+            combined_vol,
+            combined_amt,
+            stopped_tx_id.clone(),
+            stop_source,
+        );
         self.touch();
         FrameEffect::Paused {
             tx,
@@ -553,7 +556,10 @@ impl RuntimeFp {
                     tx,
                 }
             }
-            Stopped { stop_source: StopSource::External, .. } => {
+            Stopped {
+                stop_source: StopSource::External,
+                ..
+            } => {
                 let tx = self.finalize_stopped_sale(fp_cfg, site, active_shift_id, false);
                 FrameEffect::TransactionDone {
                     tx,
@@ -566,17 +572,17 @@ impl RuntimeFp {
                 FrameEffect::None
             }
             NozzleUp => {
-                self.reset_to_idle();
+                // PCC485 clears the one-shot `03 04` notification after C0 FA; the next poll
+                // is often `70 FA` while the hose is still physically lifted — resend AUTH.
                 self.touch();
-                // Wayne may keep sending NozzleUp until PC sends STOP (§8.3).
-                FrameEffect::NozzleHolstered
+                FrameEffect::ResendAuthorize
             }
             Authorizing => {
                 let (vol, amt) = self.combined_totals();
                 if vol < 0.01 && amt == 0 {
-                    self.cancel_zero_volume_session();
+                    // Post-AUTH idle while arming / ghost-fill: keep session, resend AUTH.
                     self.touch();
-                    return FrameEffect::CompleteGhostFill;
+                    return FrameEffect::ResendAuthorize;
                 }
                 if self.holster_ends_sale_early() {
                     return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
@@ -728,7 +734,8 @@ impl RuntimeFp {
             return FrameEffect::StatusChanged;
         }
         if let FpStatus::Stopped {
-            stop_source: StopSource::External, ..
+            stop_source: StopSource::External,
+            ..
         } = &self.state.status
         {
             // Lane is paused (nozzle holstered mid-fill). Ignore DONE frames until the
@@ -809,6 +816,8 @@ impl RuntimeFp {
         self.preauth_nozzle_confirmed = false;
         self.preauth_mismatch_active = false;
         self.clear_ghost_recovery();
+        let nozzle_already_up = self.state.status == FpStatus::NozzleUp
+            && self.state.nozzle_index == Some(nozzle_index);
         self.state.status = FpStatus::PreAuthorized;
         self.state.nozzle_index = Some(nozzle_index);
         self.state.product_id = Some(pid);
@@ -819,6 +828,11 @@ impl RuntimeFp {
         self.state.amount = 0;
         self.state.pre_auth_preset = Some(preset_label(&self.last_preset));
         self.state.seq = 0;
+        // Customer lifted before the operator entered the limit — start if grades match.
+        if nozzle_already_up {
+            self.preauth_nozzle_confirmed = true;
+            self.start_delivery_from_pre_auth(fp_cfg, site);
+        }
         let _ = b;
         self.touch();
     }
@@ -831,8 +845,7 @@ impl RuntimeFp {
         site: &SiteConfig,
     ) -> Option<FrameEffect> {
         let pre = self.pre_auth.as_ref()?;
-        let (lifted_idx, lifted_name, _, _) =
-            resolve_wayne_nozzle(site, fp_cfg, lifted_wayne_code);
+        let (lifted_idx, lifted_name, _, _) = resolve_wayne_nozzle(site, fp_cfg, lifted_wayne_code);
         if lifted_idx == pre.nozzle_index {
             return None;
         }
@@ -845,11 +858,7 @@ impl RuntimeFp {
         })
     }
 
-    fn start_delivery_from_pre_auth(
-        &mut self,
-        fp_cfg: &FuelingPositionConfig,
-        site: &SiteConfig,
-    ) {
+    fn start_delivery_from_pre_auth(&mut self, fp_cfg: &FuelingPositionConfig, site: &SiteConfig) {
         let nozzle_index = self
             .pre_auth
             .as_ref()
@@ -885,9 +894,9 @@ impl RuntimeFp {
                 self.reset_for_operator(fp);
                 Ok(())
             }
-            Stopped { .. } => Err(
-                "sale is paused — close the transaction or continue the fill".into(),
-            ),
+            Stopped { .. } => {
+                Err("sale is paused — close the transaction or continue the fill".into())
+            }
             Delivering | Authorizing | PreAuthorized | NozzleUp => {
                 Err("pump is still active".into())
             }
@@ -1022,18 +1031,43 @@ impl RuntimeFp {
                     _ => self.apply_idle_response(fp_cfg, site, active_shift_id),
                 }
             }
+            Frame::NozzleReturned { addr, .. } if *addr == b => {
+                if self.ghost_recovery_active() {
+                    self.touch();
+                    return FrameEffect::None;
+                }
+                match self.state.status {
+                    FpStatus::Authorizing | FpStatus::Delivering => {
+                        let (vol, amt) = self.combined_totals();
+                        if vol < 0.01 && amt == 0 {
+                            self.cancel_zero_volume_session();
+                            self.touch();
+                            FrameEffect::CompleteGhostFill
+                        } else {
+                            self.touch();
+                            FrameEffect::StatusChanged
+                        }
+                    }
+                    FpStatus::NozzleUp => {
+                        self.reset_to_idle();
+                        self.touch();
+                        FrameEffect::StatusChanged
+                    }
+                    _ => {
+                        self.reset_to_idle();
+                        self.touch();
+                        FrameEffect::StatusChanged
+                    }
+                }
+            }
             Frame::NozzleUp {
-                addr,
-                seq,
-                nozzle,
-                ..
+                addr, seq, nozzle, ..
             } if *addr == b => {
                 if self.state.status == FpStatus::Done {
                     self.reset_to_idle();
                 }
                 if self.ghost_recovery_active() {
-                    self.touch();
-                    return FrameEffect::None;
+                    self.clear_ghost_recovery();
                 }
                 if matches!(
                     self.state.status,
@@ -1078,8 +1112,7 @@ impl RuntimeFp {
                 if continuing {
                     // Continuation (E-stop resume / Continue fill): keep existing nozzle
                     // info but resolve the Wayne code again in case prices changed.
-                    let (cfg_idx, name, pid, color) =
-                        resolve_wayne_nozzle(site, fp_cfg, *nozzle);
+                    let (cfg_idx, name, pid, color) = resolve_wayne_nozzle(site, fp_cfg, *nozzle);
                     self.state.nozzle_index = Some(cfg_idx);
                     self.state.product_id = Some(pid);
                     self.state.product_name = Some(name);
@@ -1110,8 +1143,7 @@ impl RuntimeFp {
                 } else {
                     // Fresh nozzle lift. Resolve the Wayne nozzle code to a config
                     // nozzle index so deduplication and downstream state are consistent.
-                    let (cfg_idx, name, pid, color) =
-                        resolve_wayne_nozzle(site, fp_cfg, *nozzle);
+                    let (cfg_idx, name, pid, color) = resolve_wayne_nozzle(site, fp_cfg, *nozzle);
                     // Real dispensers repeat the same NozzleUp frame on every poll
                     // while waiting for AUTH. Only fire a new event on the first lift
                     // (or when the nozzle/product actually changes).
@@ -1257,12 +1289,8 @@ impl RuntimeFp {
                     if hit_v || hit_a {
                         self.clear_deliver_caps();
                         self.state.status = FpStatus::Done;
-                        let tx = self.close_transaction(
-                            true,
-                            fp_cfg,
-                            site,
-                            active_shift_id.clone(),
-                        );
+                        let tx =
+                            self.close_transaction(true, fp_cfg, site, active_shift_id.clone());
                         return FrameEffect::TransactionDone {
                             tx,
                             action: TxCompleteAction::HaltPump,
@@ -1329,10 +1357,7 @@ impl RuntimeFp {
         active_shift_id: Option<String>,
     ) -> Transaction {
         let (combined_vol, combined_amt) = self.combined_totals();
-        let parent = self
-            .continuation
-            .as_ref()
-            .map(|c| c.parent_tx_id.clone());
+        let parent = self.continuation.as_ref().map(|c| c.parent_tx_id.clone());
         let mut status = TxStatus::resolve(combined_vol, completed_normally);
         if matches!(status, TxStatus::Completed) {
             if let Some(pid) = parent.clone() {
@@ -1374,13 +1399,7 @@ impl RuntimeFp {
         } else {
             let nozzle_index = self.state.nozzle_index.unwrap_or(1);
             let (pname, pid, _) = lookup_nozzle(site, fp_cfg, nozzle_index);
-            (
-                Uuid::new_v4().to_string(),
-                now,
-                pid,
-                pname,
-                nozzle_index,
-            )
+            (Uuid::new_v4().to_string(), now, pid, pname, nozzle_index)
         };
         self.continuation = None;
         Transaction {
@@ -1441,7 +1460,8 @@ impl RuntimeFp {
         let may_authorize = matches!(
             self.state.status,
             FpStatus::NozzleUp | FpStatus::Authorizing
-        ) || (self.state.status == FpStatus::Idle && self.continuation.is_some())
+        ) || (self.state.status == FpStatus::Idle
+            && self.continuation.is_some())
             || self.state.status.is_stopped();
         if may_authorize {
             if !matches!(
@@ -1561,6 +1581,8 @@ pub enum FrameEffect {
     },
     /// Hose returned to holster while waiting for authorize — lane is idle; send STOP on wire.
     NozzleHolstered,
+    /// `70 FA` after nozzle-up / during zero-volume authorize — resend AUTH, do not STOP.
+    ResendAuthorize,
     /// Ghost fill complete — send GO_IDLE then compound HALT/GO_IDLE/GET_DISP abort.
     CompleteGhostFill,
     /// First zero-volume Data after AUTH — send CONFIG×2 (Wayne expects AUTH before CONFIG).

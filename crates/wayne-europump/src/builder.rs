@@ -41,49 +41,69 @@ pub fn ghost_fill_abort(addr: u8) -> Vec<u8> {
     ])
 }
 
-/// Pack a unit price (UZS/L) into 3 BCD bytes for the auth-block type-03 record.
-fn encode_unit_price_bcd(price: u32) -> [u8; 3] {
-    let digits = format!("{:06}", price.min(999_999));
-    let mut out = [0u8; 3];
-    for (i, chunk) in digits.as_bytes().chunks(2).enumerate() {
-        let hi = chunk[0].wrapping_sub(b'0');
-        let lo = if chunk.len() > 1 {
-            chunk[1].wrapping_sub(b'0')
-        } else {
-            0
-        };
-        out[i] = (hi << 4) | lo;
-    }
-    out
+/// Pack a u32 into 3 BCD-packed bytes (6 decimal digits, high nibble first).
+///
+/// Used for both unit prices (whole currency units) and volumes (scaled by
+/// 10_000 to get 4 implied decimal places — see `authorize_config`).
+///
+/// Examples:
+///   price  10500 → "010500" → [0x01, 0x05, 0x00]
+///   volume 50000 (= 5.0 L × 10_000) → "050000" → [0x05, 0x00, 0x00]
+fn encode_bcd_3(val: u32) -> [u8; 3] {
+    let digits = format!("{:06}", val.min(999_999));
+    let b = digits.as_bytes();
+    [
+        ((b[0] - b'0') << 4) | (b[1] - b'0'),
+        ((b[2] - b'0') << 4) | (b[3] - b'0'),
+        ((b[4] - b'0') << 4) | (b[5] - b'0'),
+    ]
 }
 
-/// CONFIG frame (§6) — sent TWICE after AUTH on first zero-volume Data.
+/// CONFIG frame (§6) — sent TWICE after AUTH on the first Data frame.
 ///
-/// Layout matches sniffer captures: GO_IDLE + nozzle map + product block +
-/// preset/price + AUTHORISE (`01 01 06`). For zero-volume ghost fill the
-/// working app uses preset record `04 04 00 05 00 00`; full-tank arming uses
-/// `03 04 00 09 99 00`.
-pub fn authorize_config(addr: u8, unit_price: u32, zero_volume: bool) -> Vec<u8> {
-    let price = encode_unit_price_bcd(unit_price);
-    let mut payload = vec![
-        addr, 0x30, 0x01, 0x01, 0x05,
-        // nozzle / grade count
-        0x02, 0x04,
-        // nozzle codes 1–4 (from sniffer captures)
-        0x01, 0x02, 0x03, 0x04,
-        // product channel block (12 bytes — site-specific dispenser layout)
-        0x05, 0x0C, 0x01, 0x43,
-        0x00, 0x01, 0x05,
-        0x00, 0x01, 0x24,
-        0x00, 0x01, 0x43, 0x30,
-    ];
-    if zero_volume {
-        // Ghost fill / zero-volume arming preset from sniffer log.
-        payload.extend([0x04, 0x04, 0x00, 0x05, 0x00, 0x00]);
-    } else {
-        payload.extend([0x03, 0x04, 0x00, price[0], price[1], price[2]]);
+/// `grade_prices`: current unit price for each active grade (whole currency
+///   units, e.g. UZS), ordered by ascending nozzle index. 1–4 grades.
+///
+/// `vol_limit`: when `Some(liters)`, injects a hardware volume cap in the
+///   preset record (type-04). Volume is encoded with 4 implied decimal places:
+///   5.0 L → 50_000 → "050000" → `[0x05, 0x00, 0x00]`. When `None`, the
+///   type-03 unit-price record is used and any currency cap is enforced by the
+///   service software.
+pub fn authorize_config(addr: u8, grade_prices: &[u32], vol_limit: Option<f64>) -> Vec<u8> {
+    let n = grade_prices.len().clamp(1, 4);
+
+    let mut payload = vec![addr, 0x30];
+    payload.extend([0x01, 0x01, 0x05]); // GO_IDLE
+
+    // Nozzle map: [type=0x02, count, nozzle_code_1, ..., nozzle_code_n]
+    payload.push(0x02);
+    payload.push(n as u8);
+    for i in 1..=(n as u8) {
+        payload.push(i);
     }
-    payload.extend([0x01, 0x01, 0x06]);
+
+    // Price table: [type=0x05, len=n×3, grade_1_bcd, ..., grade_n_bcd]
+    payload.push(0x05);
+    payload.push((n * 3) as u8);
+    for &price in grade_prices.iter().take(n) {
+        payload.extend_from_slice(&encode_bcd_3(price));
+    }
+
+    // Preset / limit record
+    if let Some(liters) = vol_limit.filter(|&v| v > 0.0) {
+        // Hardware volume cap (type-04): encode liters with 4 implied decimal places.
+        let vol = encode_bcd_3((liters * 10_000.0).round() as u32);
+        payload.extend([0x04, 0x04, 0x00]);
+        payload.extend_from_slice(&vol);
+    } else {
+        // No hardware volume cap (type-03): send unit price of grade 1.
+        // Software enforces any currency / volume cap via live metering.
+        let price = encode_bcd_3(grade_prices.first().copied().unwrap_or(0));
+        payload.extend([0x03, 0x04, 0x00]);
+        payload.extend_from_slice(&price);
+    }
+
+    payload.extend([0x01, 0x01, 0x06]); // AUTHORISE
     build_frame(&payload)
 }
 
@@ -175,8 +195,8 @@ mod tests {
         assert_eq!(
             ghost_fill_abort(0x53),
             vec![
-                0x53, 0x30, 0x01, 0x01, 0x08, 0x01, 0x01, 0x05, 0x01, 0x01, 0x04, 0x26, 0x68,
-                0x03, 0xFA
+                0x53, 0x30, 0x01, 0x01, 0x08, 0x01, 0x01, 0x05, 0x01, 0x01, 0x04, 0x26, 0x68, 0x03,
+                0xFA
             ]
         );
     }

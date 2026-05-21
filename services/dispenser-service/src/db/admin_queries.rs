@@ -4,11 +4,10 @@ use types::{AdminConfigEntry, CreateOperatorCmd, Operator, PriceChange};
 
 #[allow(dead_code)]
 pub async fn get_config_value(pool: &SqlitePool, key: &str) -> Result<Option<String>> {
-    let row: Option<(String,)> =
-        sqlx::query_as("SELECT value FROM admin_config WHERE key = ?")
-            .bind(key)
-            .fetch_optional(pool)
-            .await?;
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM admin_config WHERE key = ?")
+        .bind(key)
+        .fetch_optional(pool)
+        .await?;
     Ok(row.map(|(v,)| v))
 }
 
@@ -33,11 +32,10 @@ pub async fn set_config_value(
 }
 
 pub async fn list_admin_config(pool: &SqlitePool) -> Result<Vec<AdminConfigEntry>> {
-    let rows: Vec<(String, String, i64, String)> = sqlx::query_as(
-        "SELECT key, value, updated_at, updated_by FROM admin_config ORDER BY key",
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows: Vec<(String, String, i64, String)> =
+        sqlx::query_as("SELECT key, value, updated_at, updated_by FROM admin_config ORDER BY key")
+            .fetch_all(pool)
+            .await?;
     Ok(rows
         .into_iter()
         .map(|(key, value, updated_at, updated_by)| AdminConfigEntry {
@@ -101,7 +99,17 @@ pub async fn list_price_history(pool: &SqlitePool, limit: i64) -> Result<Vec<Pri
     Ok(rows
         .into_iter()
         .map(
-            |(id, fp_id, nozzle, product_id, product_name, old_price, new_price, changed_at, changed_by)| {
+            |(
+                id,
+                fp_id,
+                nozzle,
+                product_id,
+                product_name,
+                old_price,
+                new_price,
+                changed_at,
+                changed_by,
+            )| {
                 PriceChange {
                     id,
                     fp_id,
@@ -118,10 +126,7 @@ pub async fn list_price_history(pool: &SqlitePool, limit: i64) -> Result<Vec<Pri
         .collect())
 }
 
-pub async fn insert_operator(
-    pool: &SqlitePool,
-    cmd: &CreateOperatorCmd,
-) -> Result<Operator> {
+pub async fn insert_operator(pool: &SqlitePool, cmd: &CreateOperatorCmd) -> Result<Operator> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().timestamp_millis();
     let name = cmd.name.trim().to_string();
@@ -183,12 +188,11 @@ pub async fn update_operator(
         active: i64,
         created_at: i64,
     }
-    let row: Option<OpRow> = sqlx::query_as(
-        "SELECT id, name, pin_hash, active, created_at FROM operators WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
+    let row: Option<OpRow> =
+        sqlx::query_as("SELECT id, name, pin_hash, active, created_at FROM operators WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
     Ok(row.map(|r| Operator {
         id: r.id,
         name: r.name,

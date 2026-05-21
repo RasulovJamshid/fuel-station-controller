@@ -102,10 +102,7 @@ pub async fn persist_closed_transaction(pool: &SqlitePool, tx: &Transaction) -> 
     insert_transaction(pool, tx).await
 }
 
-pub async fn finalize_stopped_transaction(
-    pool: &SqlitePool,
-    stopped_tx_id: &str,
-) -> Result<bool> {
+pub async fn finalize_stopped_transaction(pool: &SqlitePool, stopped_tx_id: &str) -> Result<bool> {
     let r = sqlx::query(
         r#"UPDATE transactions
            SET status = 'COMPLETED', completed_at = COALESCE(completed_at, ?)

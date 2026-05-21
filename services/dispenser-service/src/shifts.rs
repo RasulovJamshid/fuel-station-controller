@@ -8,9 +8,7 @@ use chrono::{Local, Timelike};
 use site_config::{ShiftMode, SiteConfig};
 use sqlx::SqlitePool;
 use tokio::sync::RwLock;
-use types::{
-    EndShiftCmd, HandoverCmd, Shift, ShiftStatus, StartShiftCmd, Transaction, WsEvent,
-};
+use types::{EndShiftCmd, HandoverCmd, Shift, ShiftStatus, StartShiftCmd, Transaction, WsEvent};
 use uuid::Uuid;
 
 use crate::db::shift_queries;
@@ -83,11 +81,7 @@ impl ShiftCoordinator {
                         Some(slot.end.clone()),
                     )
                 } else {
-                    (
-                        None,
-                        None,
-                        None,
-                    )
+                    (None, None, None)
                 }
             }
             _ => (None, None, None),
@@ -121,7 +115,8 @@ impl ShiftCoordinator {
         }
         shift_queries::validate_end(&cmd)?;
         let ended_at = chrono::Utc::now().timestamp_millis();
-        shift_queries::close_shift(&self.pool, &cmd.shift_id, ended_at, cmd.notes.as_deref()).await?;
+        shift_queries::close_shift(&self.pool, &cmd.shift_id, ended_at, cmd.notes.as_deref())
+            .await?;
         let shift = shift_queries::get_shift(&self.pool, &cmd.shift_id)
             .await?
             .ok_or_else(|| anyhow!("shift not found"))?;

@@ -40,6 +40,22 @@ export function mergeIncomingFpState(
     };
   }
 
+  // Physical lift: always show NOZZLE_UP unless the lane is already in PRE_AUTHORIZED
+  // (holstered pre-auth — brief status flicker only). Stale pre_auth_preset on IDLE
+  // must not hide the lift.
+  if (incomingTag === "NOZZLE_UP") {
+    const keepPreAuth =
+      prevTag === "PRE_AUTHORIZED" &&
+      (incoming.pre_auth_preset ?? prev.pre_auth_preset) != null;
+    return {
+      ...incoming,
+      status: keepPreAuth ? "PRE_AUTHORIZED" : incoming.status,
+      pre_auth_preset: keepPreAuth
+        ? (incoming.pre_auth_preset ?? prev.pre_auth_preset ?? null)
+        : null,
+    };
+  }
+
   const clearPreAuthPreset =
     incomingTag === "DONE" ||
     incomingTag === "OFFLINE" ||
@@ -49,11 +65,6 @@ export function mergeIncomingFpState(
     ? (incoming.pre_auth_preset ?? null)
     : (incoming.pre_auth_preset ?? prev.pre_auth_preset ?? null);
 
-  const healPreAuthNozzleUp =
-    incomingTag === "NOZZLE_UP" &&
-    (prevTag === "PRE_AUTHORIZED" || prev.pre_auth_preset != null) &&
-    preAuthPreset != null;
-
   const healPreAuthorizedIdle =
     incomingTag === "IDLE" &&
     preAuthPreset != null &&
@@ -61,11 +72,7 @@ export function mergeIncomingFpState(
     prevTag !== "DELIVERING" &&
     (prevTag === "PRE_AUTHORIZED" || prev.pre_auth_preset != null);
 
-  const keepPreAuthWhileHolstered =
-    (healPreAuthNozzleUp || healPreAuthorizedIdle) &&
-    incomingTag !== "AUTHORIZING" &&
-    incomingTag !== "DELIVERING" &&
-    incomingTag !== "DONE";
+  const keepPreAuthWhileHolstered = healPreAuthorizedIdle;
 
   const status = keepPreAuthWhileHolstered ? "PRE_AUTHORIZED" : incoming.status;
 

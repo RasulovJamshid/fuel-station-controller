@@ -95,12 +95,7 @@ impl SimDispenser {
 
     /// Align sim lane with desktop pre-authorization (holstered, ready for grade lift).
     /// Stays Idle on the wire until the service sends authorize (0x04) or the operator lifts.
-    pub fn prepare_preauth_lane(
-        &mut self,
-        nozzle: u8,
-        product: u8,
-        product_name: Option<String>,
-    ) {
+    pub fn prepare_preauth_lane(&mut self, nozzle: u8, product: u8, product_name: Option<String>) {
         self.set_preauth_expectation(nozzle, product, product_name);
         self.product = product;
         self.nozzle = nozzle;
@@ -296,7 +291,9 @@ impl SimDispenser {
                 Ok(())
             }
             // Pre-auth: nozzle already up — fields validated/updated above.
-            SimStatus::NozzleUp if self.authorized_from_idle || self.preauth_nozzle.is_some() => Ok(()),
+            SimStatus::NozzleUp if self.authorized_from_idle || self.preauth_nozzle.is_some() => {
+                Ok(())
+            }
             SimStatus::NozzleUp => Ok(()),
             SimStatus::Delivering => Ok(()),
             SimStatus::Done => {
@@ -406,11 +403,7 @@ impl SimDispenser {
 
     fn next_seq(&mut self) -> u8 {
         let s = self.seq;
-        self.seq = if self.seq >= 0x3F {
-            0x31
-        } else {
-            self.seq + 1
-        };
+        self.seq = if self.seq >= 0x3F { 0x31 } else { self.seq + 1 };
         s
     }
 
@@ -445,36 +438,14 @@ impl SimDispenser {
         let a2_bcd = to_bcd_byte(((a / 100) % 100) as u32);
         let a3_bcd = to_bcd_byte((a % 100) as u32);
         build_frame(&[
-            self.addr,
-            seq,
-            0x02,
-            0x08,
-            0x00,
-            0x00,
-            v1_bcd,
-            v2_bcd,
-            0x00,
-            a1_bcd,
-            a2_bcd,
-            a3_bcd,
+            self.addr, seq, 0x02, 0x08, 0x00, 0x00, v1_bcd, v2_bcd, 0x00, a1_bcd, a2_bcd, a3_bcd,
         ])
     }
 
     fn data_frame_zeros(&mut self) -> Vec<u8> {
         let seq = self.next_seq();
         build_frame(&[
-            self.addr,
-            seq,
-            0x02,
-            0x08,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
+            self.addr, seq, 0x02, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ])
     }
 

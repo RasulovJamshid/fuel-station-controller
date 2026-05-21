@@ -12,6 +12,8 @@
 #   AZS_PTY_REAL        PTY path for dispenser-service (default: /tmp/wayne-real)
 #   AZS_PTY_SIM         PTY path for wayne-sim (default: /tmp/wayne-sim)
 #   AZS_SERIAL_PORT     Real serial port override (default: /dev/ttyUSB0)
+#   AZS_SERIAL_LOG      Enable raw serial frame log. Set to "1" for default path
+#                       (.azs-run/serial.log) or a custom file path. Unset = off.
 
 set -euo pipefail
 
@@ -28,6 +30,12 @@ AZS_SIM_CONFIG="${AZS_SIM_CONFIG:-tools/simulators/wayne-sim/sim.config.json}"
 AZS_PTY_REAL="${AZS_PTY_REAL:-/tmp/wayne-real}"
 AZS_PTY_SIM="${AZS_PTY_SIM:-/tmp/wayne-sim}"
 AZS_SERIAL_PORT="${AZS_SERIAL_PORT:-/dev/ttyUSB0}"
+# Resolve AZS_SERIAL_LOG: "1" → default log path; custom path → use as-is; unset → off.
+AZS_SERIAL_LOG="${AZS_SERIAL_LOG:-}"
+if [[ "$AZS_SERIAL_LOG" == "1" ]]; then
+  AZS_SERIAL_LOG="$STATE_DIR/serial.log"
+fi
+export AZS_SERIAL_LOG
 
 SOCAT_PID=""
 SIM_PID=""
@@ -50,6 +58,8 @@ Environment (optional):
   AZS_SIM_URL         wayne-sim HTTP base (default: http://127.0.0.1:3002)
   AZS_SERVICE_URL     dispenser-service HTTP base (default: http://127.0.0.1:3001)
   AZS_PTY_REAL / AZS_PTY_SIM   PTY symlink paths (defaults: /tmp/wayne-real, /tmp/wayne-sim)
+  AZS_SERIAL_LOG      Raw serial frame log. "1" → .azs-run/serial.log; custom path → that file.
+                      Unset or empty = disabled (default).
 
 Modes:
   help              Show this help.
@@ -81,6 +91,8 @@ Examples:
   ./scripts/azs.sh dev-mock
   AZS_STATE_DIR=/tmp/azs ./scripts/azs.sh dev-sim
   npm run start -- dev-mock
+  AZS_SERIAL_LOG=1 ./scripts/azs.sh dev-real        # serial log → .azs-run/serial.log
+  AZS_SERIAL_LOG=/tmp/serial.log ./scripts/azs.sh dev-real
 EOF
 }
 

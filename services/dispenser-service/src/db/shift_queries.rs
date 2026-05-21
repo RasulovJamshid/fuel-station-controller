@@ -123,7 +123,10 @@ pub async fn list_shifts(
     Ok(out)
 }
 
-async fn position_totals_for_shift(pool: &SqlitePool, shift_id: &str) -> Result<Vec<ShiftPositionTotal>> {
+async fn position_totals_for_shift(
+    pool: &SqlitePool,
+    shift_id: &str,
+) -> Result<Vec<ShiftPositionTotal>> {
     let rows: Vec<(String, String, i64, f64, i64)> = sqlx::query_as(
         r#"SELECT fp_id, label,
                   COUNT(*) as c,
@@ -300,7 +303,9 @@ pub fn validate_end(cmd: &EndShiftCmd) -> Result<()> {
 
 pub fn validate_handover(cmd: &HandoverCmd) -> Result<()> {
     if cmd.outgoing_shift_id.trim().is_empty() || cmd.incoming_operator.trim().is_empty() {
-        return Err(anyhow!("outgoing_shift_id and incoming_operator are required"));
+        return Err(anyhow!(
+            "outgoing_shift_id and incoming_operator are required"
+        ));
     }
     Ok(())
 }

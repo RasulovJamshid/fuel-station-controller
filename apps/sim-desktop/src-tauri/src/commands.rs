@@ -6,12 +6,16 @@ pub async fn probe_sim(sim: tauri::State<'_, SimClient>) -> Result<bool, String>
 }
 
 #[tauri::command]
-pub async fn get_sim_state(sim: tauri::State<'_, SimClient>) -> Result<Vec<crate::client::SimDispenserInfo>, String> {
+pub async fn get_sim_state(
+    sim: tauri::State<'_, SimClient>,
+) -> Result<Vec<crate::client::SimDispenserInfo>, String> {
     sim.get_state().await
 }
 
 #[tauri::command]
-pub async fn get_site_layout(service: tauri::State<'_, ServiceClient>) -> Result<Option<crate::client::SiteLayout>, String> {
+pub async fn get_site_layout(
+    service: tauri::State<'_, ServiceClient>,
+) -> Result<Option<crate::client::SiteLayout>, String> {
     match service.get_site_layout().await {
         Ok(layout) => Ok(Some(layout)),
         Err(_) => Ok(None),
@@ -30,7 +34,10 @@ pub async fn sim_nozzle_up(
 }
 
 #[tauri::command]
-pub async fn sim_nozzle_down(sim: tauri::State<'_, SimClient>, fp_id: String) -> Result<(), String> {
+pub async fn sim_nozzle_down(
+    sim: tauri::State<'_, SimClient>,
+    fp_id: String,
+) -> Result<(), String> {
     sim.nozzle_down(fp_id).await
 }
 
@@ -56,7 +63,8 @@ pub async fn sim_prepare_preauth(
     product: u8,
     product_name: Option<String>,
 ) -> Result<(), String> {
-    sim.prepare_preauth(fp_id, nozzle, product, product_name).await
+    sim.prepare_preauth(fp_id, nozzle, product, product_name)
+        .await
 }
 
 #[tauri::command]
@@ -70,6 +78,9 @@ pub async fn sim_reset_all(sim: tauri::State<'_, SimClient>) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub async fn sim_run_scenario(sim: tauri::State<'_, SimClient>, name: String) -> Result<String, String> {
+pub async fn sim_run_scenario(
+    sim: tauri::State<'_, SimClient>,
+    name: String,
+) -> Result<String, String> {
     sim.run_scenario(name).await
 }

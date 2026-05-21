@@ -328,7 +328,8 @@ export function DispenserCard({
     hasContinuationBase &&
     (tag === "DELIVERING" || tag === "AUTHORIZING");
   const usePreAuth = defaultAuthMode === "preauth";
-  const canOpenPreAuthSetup = isIdle && usePreAuth && !isPaused && !isContinuing;
+  const canOpenPreAuthSetup =
+    (isIdle || isNozzleUp) && usePreAuth && !isPaused && !isContinuing && !hasActivePreAuth;
   const canOpenReactiveSetup =
     isNozzleUp && !isPaused && !isContinuing && !hasActivePreAuth;
   const isOffline = tag === "OFFLINE";
@@ -409,6 +410,8 @@ export function DispenserCard({
       subtitle = isNozzleUp
         ? "Lift the authorized grade to start"
         : "Awaiting customer to lift nozzle";
+    } else if (isNozzleUp && usePreAuth && !hasActivePreAuth) {
+      subtitle = "Nozzle lifted — set volume or amount";
     } else if (isIdle) {
       subtitle = usePreAuth
         ? "Holstered — ready to pre-authorize"

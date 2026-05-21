@@ -1,9 +1,38 @@
 use anyhow::{Context, Result};
 use serialport::{ClearBuffer, DataBits, StopBits};
 use site_config::{ConnectionConfig, SiteConfig};
-use std::sync::{Arc, Mutex};
+use std::io::{BufWriter, Write};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tracing::{info, trace, warn};
+
+// ── Serial frame logger ───────────────────────────────────────────────────────
+// Writes timestamped TX/RX hex lines to a file when enabled.
+// Initialised once at startup via `init_serial_logger`; disabled by default.
+
+static SERIAL_LOG: OnceLock<Mutex<BufWriter<std::fs::File>>> = OnceLock::new();
+
+/// Open (or create/truncate) `path` and start logging every serial frame.
+/// Safe to call multiple times — only the first call takes effect.
+pub fn init_serial_logger(path: &str) -> Result<()> {
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(path)
+        .with_context(|| format!("open serial log '{path}'"))?;
+    // Ignore the error when already initialised (second call is a no-op).
+    let _ = SERIAL_LOG.set(Mutex::new(BufWriter::new(file)));
+    Ok(())
+}
+
+fn serial_log(dir: &str, bytes: &[u8]) {
+    let Some(lock) = SERIAL_LOG.get() else { return };
+    let Ok(mut w) = lock.lock() else { return };
+    let ts = chrono::Local::now().format("%H:%M:%S%.3f");
+    let _ = writeln!(w, "[{ts}] {dir} {}", hex_bytes(bytes));
+    let _ = w.flush();
+}
 
 /// After the last byte, wait this long with no new data before treating the response as complete.
 const INTER_BYTE_SILENCE_MS: u64 = 30;
@@ -119,6 +148,7 @@ impl ReconnectingSerial {
         self.with_open_port(|port| {
             let _ = port.clear(ClearBuffer::Input);
             trace!(tx = %hex_bytes(out), "serial TX");
+            serial_log("TX", out);
             port.write_all(out)?;
             port.flush()?;
             let mut rx = read_response_until_silent(port, initial_ms)?;
@@ -128,6 +158,7 @@ impl ReconnectingSerial {
             if rx.len() >= out.len() && rx.starts_with(out) {
                 rx.drain(..out.len());
             }
+            serial_log("RX", &rx);
             trace!(rx = %hex_bytes(&rx), "serial RX");
             Ok(rx)
         })
@@ -152,6 +183,8 @@ impl ReconnectingSerial {
 
     fn try_write_once(&self, out: &[u8]) -> Result<()> {
         self.with_open_port(|port| {
+            trace!(tx = %hex_bytes(out), "serial TX (write-only)");
+            serial_log("TX", out);
             port.write_all(out)?;
             port.flush()?;
             Ok(())

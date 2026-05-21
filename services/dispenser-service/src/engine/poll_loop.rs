@@ -2,13 +2,13 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::engine::serial::ReconnectingSerial;
 use anyhow::Result;
 use site_config::{FuelingPositionConfig, SiteConfig};
 use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
 use types::{preset_label, FpStatus, Preset, UpdatePriceCmd, WsEvent};
-use crate::engine::serial::ReconnectingSerial;
 use wayne_europump::{
     ack, authorize_config, authorize_initial, busy, done, ghost_fill_abort, parse_frame, poll,
     stop_frame, stop_pre_frame, Frame, FrameAccumulator,
@@ -26,8 +26,32 @@ fn send_nozzle_lift_auth(backend: &SerialBackend, byte: u8) {
     let _ = exchange_serial(backend, &authorize_initial(byte));
 }
 
-fn send_authorize_config(backend: &SerialBackend, byte: u8, unit_price: u32) {
-    let cfg = authorize_config(byte, unit_price, true);
+async fn send_nozzle_lift_auth_if_allowed(
+    byte: u8,
+    site: &SiteConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    backend: &SerialBackend,
+) -> bool {
+    let auth_mode = site.ui.default_auth_mode.as_str();
+    let allow = {
+        let map = runtimes.read().await;
+        map.get(&byte)
+            .map(|rt| rt.allow_reactive_nozzle_auth(auth_mode))
+            .unwrap_or(false)
+    };
+    if !allow {
+        return false;
+    }
+    send_nozzle_lift_auth(backend, byte);
+    let mut map = runtimes.write().await;
+    if let Some(rt) = map.get_mut(&byte) {
+        rt.apply_authorize_sent();
+    }
+    true
+}
+
+fn send_authorize_config(backend: &SerialBackend, byte: u8, grade_prices: &[u32], vol_limit: Option<f64>) {
+    let cfg = authorize_config(byte, grade_prices, vol_limit);
     let _ = exchange_serial(backend, &cfg);
     let _ = exchange_serial(backend, &cfg);
 }
@@ -39,7 +63,10 @@ fn complete_ghost_fill_on_wire(backend: &SerialBackend, byte: u8) {
 
 /// Format raw bytes as space-separated hex for log messages.
 fn fmt_hex(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02X}")).collect::<Vec<_>>().join(" ")
+    b.iter()
+        .map(|x| format!("{x:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 struct PollRxAnalysis {
@@ -84,16 +111,19 @@ async fn dispatch_poll_frames(
     shifts: &ShiftCoordinator,
 ) {
     for frame in parsed.iter().filter(|f| f.should_apply_before_nozzle_up()) {
-        // ACK every frame that the protocol requires a C0 FA acknowledgement for.
+        // ACK every 3X frame with a valid CRC before processing its payload.
         // NozzleHolstered (01 01 02) MUST be ACK'd so the dispenser advances
         // to send 01 01 05 (TransactionComplete). Without the ACK it stalls and
         // the state machine never escapes Authorizing/Delivering.
+        // Stopped (01 01 01) is also a 3X frame and must be ACK'd per the spec.
         if matches!(
             frame,
             Frame::Data { .. }
+                | Frame::Stopped { .. }
                 | Frame::DispenserIdle { .. }
                 | Frame::TransactionComplete { .. }
                 | Frame::NozzleHolstered { .. }
+                | Frame::NozzleReturned { .. }
         ) {
             let _ = write_serial(backend, &ack(byte));
         }
@@ -110,7 +140,22 @@ async fn dispatch_poll_frames(
         )
         .await;
     }
-    for frame in parsed.iter().filter(|f| matches!(f, Frame::NozzleUp { .. })) {
+    for frame in parsed
+        .iter()
+        .filter(|f| matches!(f, Frame::NozzleUp { .. }))
+    {
+        // ACK the NozzleUp (type-03 data block) immediately, then AUTH on the same
+        // poll slot — before the round-robin visits the next dispenser address.
+        let _ = write_serial(backend, &ack(byte));
+        if send_nozzle_lift_auth_if_allowed(byte, cfg, runtimes, backend).await {
+            if let Some(fp_cfg) = disp_by_byte.get(&byte) {
+                info!(
+                    addr = format_args!("0x{byte:02X}"),
+                    label = %fp_cfg.label,
+                    "NozzleUp → C0 FA + AUTH (same poll)"
+                );
+            }
+        }
         process_parsed_frame(
             byte,
             frame.clone(),
@@ -124,7 +169,6 @@ async fn dispatch_poll_frames(
         )
         .await;
     }
-
 }
 
 #[derive(Debug)]
@@ -144,12 +188,16 @@ pub enum DispatchCommand {
         price: u32,
         preset: Preset,
     },
-    Stop { byte: u8 },
+    Stop {
+        byte: u8,
+    },
     EStop,
     /// Clear all lane runtimes to idle (and optionally sync sim via desktop).
     ResetAll,
     /// Operator dismissed completed-sale display on one lane.
-    ResetLane { byte: u8 },
+    ResetLane {
+        byte: u8,
+    },
     UpdatePrices {
         updates: Vec<UpdatePriceCmd>,
         changed_by: String,
@@ -160,7 +208,9 @@ pub enum DispatchCommand {
         preset: Preset,
         nozzle_index: u8,
     },
-    CancelPreauth { byte: u8 },
+    CancelPreauth {
+        byte: u8,
+    },
 }
 
 pub enum SerialBackend {
@@ -250,13 +300,31 @@ pub async fn run_poll_loop(
 
     loop {
         while let Ok(cmd) = commands.try_recv() {
-            apply_command(&cfg, &runtimes, &events, &pool, &backend, cmd, shifts.as_ref()).await;
+            apply_command(
+                &cfg,
+                &runtimes,
+                &events,
+                &pool,
+                &backend,
+                cmd,
+                shifts.as_ref(),
+            )
+            .await;
         }
 
         for &byte in &addrs {
             interval.tick().await;
             while let Ok(cmd) = commands.try_recv() {
-                apply_command(&cfg, &runtimes, &events, &pool, &backend, cmd, shifts.as_ref()).await;
+                apply_command(
+                    &cfg,
+                    &runtimes,
+                    &events,
+                    &pool,
+                    &backend,
+                    cmd,
+                    shifts.as_ref(),
+                )
+                .await;
             }
 
             let poll_f = poll(byte);
@@ -312,8 +380,7 @@ pub async fn run_poll_loop(
                             break;
                         }
                         // Another pump answered in our window — retry once after bus settles.
-                        if attempt == 0 && real_bus && (!chunk.is_empty() || analysis.saw_foreign)
-                        {
+                        if attempt == 0 && real_bus && (!chunk.is_empty() || analysis.saw_foreign) {
                             debug!(
                                 addr = format_args!("0x{byte:02X}"),
                                 len = chunk.len(),
@@ -321,18 +388,21 @@ pub async fn run_poll_loop(
                                 "poll retry after RS-485 crosstalk"
                             );
                             accum.clear();
-                            tokio::time::sleep(Duration::from_millis(RS485_TURNAROUND_MS))
-                                .await;
+                            tokio::time::sleep(Duration::from_millis(RS485_TURNAROUND_MS)).await;
                             continue;
                         }
                         break;
                     }
                     Err(e) => {
-                        warn!(?e, addr = format_args!("0x{byte:02X}"), attempt, "serial exchange error");
+                        warn!(
+                            ?e,
+                            addr = format_args!("0x{byte:02X}"),
+                            attempt,
+                            "serial exchange error"
+                        );
                         if attempt == 0 && real_bus {
                             accum.clear();
-                            tokio::time::sleep(Duration::from_millis(RS485_TURNAROUND_MS))
-                                .await;
+                            tokio::time::sleep(Duration::from_millis(RS485_TURNAROUND_MS)).await;
                             continue;
                         }
                         break;
@@ -364,8 +434,7 @@ pub async fn run_poll_loop(
                     } else {
                         let miss = rt.missed + 1;
                         if rt.on_poll_missed(cfg.polling.offline_threshold_polls) {
-                            offline_meta =
-                                Some((rt.state.fp_id.clone(), rt.state.label.clone()));
+                            offline_meta = Some((rt.state.fp_id.clone(), rt.state.label.clone()));
                         }
                         // Log every missed poll so address problems are obvious in the log
                         if real_bus {
@@ -415,12 +484,7 @@ pub async fn run_poll_loop(
                 .read()
                 .await
                 .get(&byte)
-                .map(|r| {
-                    matches!(
-                        r.state.status,
-                        FpStatus::Authorizing | FpStatus::Delivering
-                    )
-                })
+                .map(|r| matches!(r.state.status, FpStatus::Authorizing | FpStatus::Delivering))
                 .unwrap_or(false)
             {
                 // Keepalive during authorized/metering — write-only avoids clearing RX
@@ -471,7 +535,13 @@ async fn kick_delivery_polls(
                 let frame = parse_frame(&raw);
                 if matches!(
                     frame,
-                    Frame::Data { .. } | Frame::TransactionComplete { .. }
+                    Frame::Data { .. }
+                        | Frame::NozzleUp { .. }
+                        | Frame::Stopped { .. }
+                        | Frame::DispenserIdle { .. }
+                        | Frame::TransactionComplete { .. }
+                        | Frame::NozzleHolstered { .. }
+                        | Frame::NozzleReturned { .. }
                 ) {
                     let _ = write_serial(backend, &ack(byte));
                 }
@@ -532,22 +602,13 @@ async fn process_parsed_frame(
             price,
         } => {
             let auth_mode = site.ui.default_auth_mode.as_str();
-            let allow_auth = {
+            let allow_wire_auth = {
                 let map = runtimes.read().await;
                 map.get(&byte)
                     .map(|rt| rt.allow_reactive_nozzle_auth(auth_mode))
                     .unwrap_or(false)
             };
-            if !allow_auth {
-                debug!(
-                    addr = format_args!("0x{byte:02X}"),
-                    label = %fp_cfg.label,
-                    auth_mode,
-                    "NozzleUp ignored — preauth required or ghost recovery active"
-                );
-                broadcast_status(byte, runtimes, events).await;
-                return;
-            }
+            // Always notify the UI (grade banner + setup). Wire AUTH only in reactive mode.
             let _ = events.send(WsEvent::NozzleUp {
                 fp_id: fp_cfg.id.clone(),
                 nozzle_index,
@@ -556,15 +617,24 @@ async fn process_parsed_frame(
                 product_color,
                 price,
             });
-            // Protocol §8.3: AUTH on nozzle lift; CONFIG follows first Data frame.
-            send_nozzle_lift_auth(backend, byte);
-            {
-                let mut map = runtimes.write().await;
-                if let Some(rt) = map.get_mut(&byte) {
-                    rt.apply_authorize_sent();
-                }
+            if !allow_wire_auth {
+                debug!(
+                    addr = format_args!("0x{byte:02X}"),
+                    label = %fp_cfg.label,
+                    auth_mode,
+                    "NozzleUp UI only — preauth: operator sets limit before wire AUTH"
+                );
             }
-            info!(addr = format_args!("0x{byte:02X}"), label = %fp_cfg.label, "NozzleUp → sent AUTH");
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::ResendAuthorize => {
+            if send_nozzle_lift_auth_if_allowed(byte, site, runtimes, backend).await {
+                debug!(
+                    addr = format_args!("0x{byte:02X}"),
+                    label = %fp_cfg.label,
+                    "70 FA while nozzle up / authorizing → resent AUTH"
+                );
+            }
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::TransactionDone { tx, action } => {
@@ -667,12 +737,33 @@ async fn process_parsed_frame(
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::SendAuthorizeConfig => {
-            let unit_price = {
+            let (grade_prices, vol_limit) = {
                 let map = runtimes.read().await;
-                map.get(&byte).map(|rt| rt.state.price).unwrap_or(0)
+                if let Some(rt) = map.get(&byte) {
+                    let mut entries: Vec<(u8, u32)> = rt
+                        .nozzle_prices
+                        .iter()
+                        .map(|(&idx, &price)| (idx, price))
+                        .collect();
+                    entries.sort_by_key(|(idx, _)| *idx);
+                    let prices: Vec<u32> = entries.into_iter().map(|(_, p)| p).collect();
+                    let vol_limit = match &rt.last_preset {
+                        Preset::Volume(v) if *v > 0.0 => Some(*v),
+                        _ => None,
+                    };
+                    (prices, vol_limit)
+                } else {
+                    (vec![], None)
+                }
             };
-            send_authorize_config(backend, byte, unit_price);
-            info!(addr = format_args!("0x{byte:02X}"), label = %fp_cfg.label, unit_price, "sent CONFIG×2 after first Data");
+            send_authorize_config(backend, byte, &grade_prices, vol_limit);
+            info!(
+                addr = format_args!("0x{byte:02X}"),
+                label = %fp_cfg.label,
+                grades = grade_prices.len(),
+                vol_limit,
+                "sent CONFIG×2 after first Data"
+            );
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::StatusChanged => {
@@ -841,9 +932,7 @@ async fn apply_command(
                 let mut map = runtimes.write().await;
                 for fp in cfg.active_positions() {
                     if let Some(rt) = map.get_mut(&fp.address_byte) {
-                        if let Some(effect) =
-                            rt.apply_stop(fp, cfg, active_shift_id.clone())
-                        {
+                        if let Some(effect) = rt.apply_stop(fp, cfg, active_shift_id.clone()) {
                             stopped_effects.push((fp.address_byte, fp.id.clone(), effect));
                         }
                     }
@@ -976,7 +1065,10 @@ async fn apply_command(
             });
             broadcast_status(byte, runtimes, events).await;
         }
-        DispatchCommand::UpdatePrices { updates, changed_by } => {
+        DispatchCommand::UpdatePrices {
+            updates,
+            changed_by,
+        } => {
             let mut map = runtimes.write().await;
             for u in updates {
                 let Some(fp) = cfg.position_by_id(&u.fp_id) else {

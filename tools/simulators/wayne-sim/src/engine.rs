@@ -89,5 +89,8 @@ pub fn spawn_serial_loop(
 }
 
 fn hex_str(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{:02X}", x)).collect::<Vec<_>>().join(" ")
+    b.iter()
+        .map(|x| format!("{:02X}", x))
+        .collect::<Vec<_>>()
+        .join(" ")
 }

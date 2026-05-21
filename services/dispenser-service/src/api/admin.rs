@@ -9,9 +9,9 @@ use site_config::{NozzleConfig, ProductConfig, ShiftMode, SiteConfig};
 use types::{
     AdminApplyPricesCmd, AdminAuthCmd, AdminAuthResponse, AdminCatalog, AdminChangePinCmd,
     AdminConfigEntry, AdminNozzleInput, AdminNozzleRow, AdminPositionCatalog, AdminPriceEntry,
-    AdminSetConfigCmd, AdminSettingsSnapshot, AdminShiftScheduleCmd,
-    AdminUpdateOperatorCmd, CreateOperatorCmd, Operator, Preset, PriceChange, ProductSnapshot,
-    SavePositionNozzlesCmd, SaveProductsCmd, UpdateAllPricesCmd,
+    AdminSetConfigCmd, AdminSettingsSnapshot, AdminShiftScheduleCmd, AdminUpdateOperatorCmd,
+    CreateOperatorCmd, Operator, Preset, PriceChange, ProductSnapshot, SavePositionNozzlesCmd,
+    SaveProductsCmd, UpdateAllPricesCmd,
 };
 
 use super::routes::AppState;
@@ -23,7 +23,10 @@ use crate::engine::DispatchCommand;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/admin/auth", post(admin_auth))
-        .route("/admin/prices", get(admin_get_prices).post(admin_post_prices))
+        .route(
+            "/admin/prices",
+            get(admin_get_prices).post(admin_post_prices),
+        )
         .route("/admin/prices/apply-now", post(admin_apply_prices_now))
         .route("/admin/prices/history", get(admin_price_history))
         .route(
@@ -34,8 +37,14 @@ pub fn router() -> Router<AppState> {
             "/admin/operators/:id",
             post(admin_update_operator).delete(admin_delete_operator),
         )
-        .route("/admin/config", get(admin_list_config).post(admin_set_config))
-        .route("/admin/settings", get(admin_get_settings).post(admin_post_settings))
+        .route(
+            "/admin/config",
+            get(admin_list_config).post(admin_set_config),
+        )
+        .route(
+            "/admin/settings",
+            get(admin_get_settings).post(admin_post_settings),
+        )
         .route("/admin/shift-schedule", post(admin_shift_schedule))
         .route("/admin/catalog", get(admin_get_catalog))
         .route("/admin/products", post(admin_save_products))
@@ -73,6 +82,7 @@ fn catalog_from_cfg(cfg: &SiteConfig) -> AdminCatalog {
                         .unwrap_or_else(|| "?".into()),
                     price: n.price,
                     active: n.active,
+                    wayne_code: n.wayne_code,
                 })
                 .collect();
             AdminPositionCatalog {
@@ -90,21 +100,63 @@ fn catalog_from_cfg(cfg: &SiteConfig) -> AdminCatalog {
     }
 }
 
+/// Validate, write `site.*.json`, then replace in-memory config (avoids partial updates on I/O failure).
+async fn persist_site_config(
+    st: &AppState,
+    snapshot: SiteConfig,
+) -> Result<(), (StatusCode, String)> {
+    snapshot
+        .validate()
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let config_path = st.config_path.clone();
+    let snapshot_for_disk = snapshot.clone();
+    if let Err(e) =
+        tokio::task::spawn_blocking(move || config::save(&snapshot_for_disk, &config_path))
+            .await
+            .map_err(|e| internal(e))?
+    {
+        let msg = e.to_string();
+        let code = if msg.contains("references unknown product_id")
+            || msg.contains("cannot be empty")
+            || msg.contains("Duplicate")
+            || msg.contains("must be")
+        {
+            StatusCode::BAD_REQUEST
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        };
+        return Err((code, msg));
+    }
+    {
+        let mut cfg = st.cfg.write().await;
+        *cfg = snapshot;
+    }
+    sync_runtimes_from_cfg(st).await;
+    Ok(())
+}
+
 async fn sync_runtimes_from_cfg(st: &AppState) {
-    let cfg = st.cfg.read().await;
-    let mut map = st.runtimes.write().await;
-    for fp in cfg.fueling_positions.iter().filter(|p| p.active) {
+    let positions = {
+        let cfg = st.cfg.read().await;
+        cfg.fueling_positions
+            .iter()
+            .filter(|p| p.active)
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let Ok(mut map) = st.runtimes.try_write() else {
+        tracing::warn!("runtime sync skipped — poll loop is busy");
+        return;
+    };
+    for fp in positions {
         if let Some(rt) = map.get_mut(&fp.address_byte) {
-            rt.sync_nozzles_from_config(fp);
+            rt.sync_nozzles_from_config(&fp);
             let _ = st.events.send(types::WsEvent::Status(rt.state.clone()));
         }
     }
 }
 
-async fn require_admin(
-    st: &AppState,
-    headers: &HeaderMap,
-) -> Result<String, (StatusCode, String)> {
+async fn require_admin(st: &AppState, headers: &HeaderMap) -> Result<String, (StatusCode, String)> {
     let auth = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
@@ -128,9 +180,7 @@ async fn admin_auth(
     {
         return Err((StatusCode::UNAUTHORIZED, "invalid PIN".into()));
     }
-    let must_change = admin::must_change_pin(&st.pool)
-        .await
-        .map_err(internal)?;
+    let must_change = admin::must_change_pin(&st.pool).await.map_err(internal)?;
     let (token, expires_in) = st.admin_sessions.create("admin").await;
     Ok(Json(AdminAuthResponse {
         token,
@@ -185,12 +235,24 @@ async fn admin_post_prices(
     Json(cmd): Json<UpdateAllPricesCmd>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let who = require_admin(&st, &headers).await?;
+
+    struct ChangeRecord {
+        fp_id: String,
+        nozzle_index: u8,
+        product_id: u8,
+        product_name: String,
+        old_price: u32,
+        new_price: u32,
+    }
+
     let mut updates = Vec::new();
-    {
-        let mut cfg = st.cfg.write().await;
+    let mut db_records: Vec<ChangeRecord> = Vec::new();
+    let cfg_snapshot = {
+        let cfg = st.cfg.read().await;
+        let mut snap = cfg.clone();
         for u in &cmd.updates {
             let (product_id, product_name) = {
-                let fp = cfg.position_by_id(&u.fp_id).ok_or_else(|| {
+                let fp = snap.position_by_id(&u.fp_id).ok_or_else(|| {
                     (
                         StatusCode::BAD_REQUEST,
                         format!("unknown fp_id {}", u.fp_id),
@@ -218,42 +280,64 @@ async fn admin_post_prices(
                     .find(|n| n.index == u.nozzle_index)
                     .map(|n| n.product_id)
                     .unwrap_or(0);
-                let product_name = cfg
+                let product_name = snap
                     .product(product_id)
                     .map(|p| p.name.clone())
                     .unwrap_or_default();
                 (product_id, product_name)
             };
-            let old = cfg
+            let old = snap
                 .set_nozzle_price(&u.fp_id, u.nozzle_index, u.price)
                 .unwrap_or(0);
             if old != u.price {
-                admin_queries::insert_price_change(
-                    &st.pool,
-                    &u.fp_id,
-                    u.nozzle_index,
+                db_records.push(ChangeRecord {
+                    fp_id: u.fp_id.clone(),
+                    nozzle_index: u.nozzle_index,
                     product_id,
-                    &product_name,
-                    old,
-                    u.price,
-                    &who,
-                )
-                .await
-                .map_err(internal)?;
+                    product_name,
+                    old_price: old,
+                    new_price: u.price,
+                });
             }
             updates.push(u.clone());
         }
-        config::save(&cfg, &st.config_path).map_err(internal)?;
-    }
+        snap
+    };
+
+    persist_site_config(&st, cfg_snapshot).await?;
+
     let n = updates.len();
     if !updates.is_empty() {
-        st.commands
-            .send(DispatchCommand::UpdatePrices {
-                updates,
-                changed_by: who,
-            })
-            .await
-            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+        let updates_for_runtime = updates;
+        if let Err(e) = st.commands.try_send(DispatchCommand::UpdatePrices {
+            updates: updates_for_runtime,
+            changed_by: who.clone(),
+        }) {
+            tracing::warn!(?e, "UpdatePrices dispatch skipped — config already saved");
+        }
+    }
+
+    // Price history is non-critical. Do not make the admin UI wait on SQLite.
+    if !db_records.is_empty() {
+        let pool = st.pool.clone();
+        tokio::spawn(async move {
+            for c in db_records {
+                if let Err(e) = admin_queries::insert_price_change(
+                    &pool,
+                    &c.fp_id,
+                    c.nozzle_index,
+                    c.product_id,
+                    &c.product_name,
+                    c.old_price,
+                    c.new_price,
+                    &who,
+                )
+                .await
+                {
+                    tracing::warn!(?e, "price history insert failed");
+                }
+            }
+        });
     }
     Ok(Json(serde_json::json!({ "ok": true, "updated": n })))
 }
@@ -267,7 +351,12 @@ async fn admin_apply_prices_now(
     let cfg = st.cfg.read().await;
     let fp = cfg
         .position_by_id(&cmd.fp_id)
-        .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("unknown fp_id {}", cmd.fp_id)))?
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("unknown fp_id {}", cmd.fp_id),
+            )
+        })?
         .clone();
     drop(cfg);
     let byte = fp.address_byte;
@@ -366,15 +455,10 @@ async fn admin_update_operator(
     Json(cmd): Json<AdminUpdateOperatorCmd>,
 ) -> Result<Json<Operator>, (StatusCode, String)> {
     let _who = require_admin(&st, &headers).await?;
-    let op = admin_queries::update_operator(
-        &st.pool,
-        &id,
-        cmd.active,
-        cmd.pin.as_deref(),
-    )
-    .await
-    .map_err(internal)?
-    .ok_or_else(|| (StatusCode::NOT_FOUND, "operator not found".into()))?;
+    let op = admin_queries::update_operator(&st.pool, &id, cmd.active, cmd.pin.as_deref())
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "operator not found".into()))?;
     Ok(Json(op))
 }
 
@@ -464,23 +548,24 @@ async fn admin_post_settings(
     Json(body): Json<SettingsPost>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let _who = require_admin(&st, &headers).await?;
-    {
-        let mut cfg = st.cfg.write().await;
+    let cfg_snapshot = {
+        let cfg = st.cfg.read().await;
+        let mut snap = cfg.clone();
         if let Some(v) = body.polling_interval_ms {
-            cfg.polling.interval_ms = v;
+            snap.polling.interval_ms = v;
         }
         if let Some(v) = body.polling_offline_threshold_polls {
-            cfg.polling.offline_threshold_polls = v;
+            snap.polling.offline_threshold_polls = v;
         }
         if let Some(v) = body.preauth_timeout_seconds {
-            cfg.ui.preauth_timeout_seconds = v;
+            snap.ui.preauth_timeout_seconds = v;
         }
         if let Some(v) = body.shifts_warn_before_end_minutes {
-            cfg.shifts.warn_before_end_minutes = v;
+            snap.shifts.warn_before_end_minutes = v;
         }
-        cfg.validate().map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-        config::save(&cfg, &st.config_path).map_err(internal)?;
-    }
+        snap
+    };
+    persist_site_config(&st, cfg_snapshot).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -501,10 +586,11 @@ async fn admin_shift_schedule(
             ))
         }
     };
-    {
-        let mut cfg = st.cfg.write().await;
-        cfg.shifts.mode = mode;
-        cfg.shifts.scheduled = cmd
+    let cfg_snapshot = {
+        let cfg = st.cfg.read().await;
+        let mut snap = cfg.clone();
+        snap.shifts.mode = mode;
+        snap.shifts.scheduled = cmd
             .scheduled
             .into_iter()
             .map(|s| site_config::ScheduledShift {
@@ -513,9 +599,9 @@ async fn admin_shift_schedule(
                 end: s.end,
             })
             .collect();
-        cfg.validate().map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-        config::save(&cfg, &st.config_path).map_err(internal)?;
-    }
+        snap
+    };
+    persist_site_config(&st, cfg_snapshot).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -535,7 +621,10 @@ async fn admin_save_products(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let _who = require_admin(&st, &headers).await?;
     if cmd.products.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "at least one product is required".into()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "at least one product is required".into(),
+        ));
     }
     let mut products: Vec<ProductConfig> = Vec::new();
     let mut used_ids = std::collections::HashSet::new();
@@ -579,14 +668,14 @@ async fn admin_save_products(
             });
         }
     }
-    {
-        let mut cfg = st.cfg.write().await;
-        cfg.replace_products(products).map_err(|e| {
-            (StatusCode::BAD_REQUEST, e.to_string())
-        })?;
-        config::save(&cfg, &st.config_path).map_err(internal)?;
-    }
-    sync_runtimes_from_cfg(&st).await;
+    let cfg_snapshot = {
+        let cfg = st.cfg.read().await;
+        let mut snap = cfg.clone();
+        snap.replace_products(products)
+            .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+        snap
+    };
+    persist_site_config(&st, cfg_snapshot).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -650,13 +739,14 @@ async fn admin_save_position_nozzles(
         }
         nozzles_from_input(cmd.nozzles, &cfg)?
     };
-    {
-        let mut cfg = st.cfg.write().await;
-        cfg.set_position_nozzles(&fp_id, nozzles)
+    let cfg_snapshot = {
+        let cfg = st.cfg.read().await;
+        let mut snap = cfg.clone();
+        snap.set_position_nozzles(&fp_id, nozzles)
             .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-        config::save(&cfg, &st.config_path).map_err(internal)?;
-    }
-    sync_runtimes_from_cfg(&st).await;
+        snap
+    };
+    persist_site_config(&st, cfg_snapshot).await?;
     Ok(Json(serde_json::json!({ "ok": true, "fp_id": fp_id })))
 }
 

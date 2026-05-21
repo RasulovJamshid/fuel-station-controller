@@ -44,7 +44,9 @@ pub fn spawn_preauth_timeout_task(
             };
             for (byte, fp_id) in expired {
                 tracing::info!(%fp_id, "pre-authorization timed out");
-                let _ = events.send(WsEvent::PreAuthTimeout { fp_id: fp_id.clone() });
+                let _ = events.send(WsEvent::PreAuthTimeout {
+                    fp_id: fp_id.clone(),
+                });
                 let _ = commands.send(DispatchCommand::CancelPreauth { byte }).await;
             }
         }

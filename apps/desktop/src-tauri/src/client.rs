@@ -3,10 +3,9 @@ use serde::Serialize;
 use types::{
     AdminApplyPricesCmd, AdminAuthCmd, AdminAuthResponse, AdminCatalog, AdminChangePinCmd,
     AdminPriceEntry, AdminSettingsSnapshot, AdminShiftScheduleCmd, AdminUpdateOperatorCmd,
-    SavePositionNozzlesCmd, SaveProductsCmd,
     AuthorizeCmd, CloseStoppedTxCmd, ContinueFillCmd, CreateOperatorCmd, EndShiftCmd, FpState,
-    HandoverCmd, Operator, PriceChange, ResumeFillCmd, Shift, SiteSnapshot, StartShiftCmd,
-    StopCmd, Transaction, UpdateAllPricesCmd, UpdatePriceCmd,
+    HandoverCmd, Operator, PriceChange, ResumeFillCmd, SavePositionNozzlesCmd, SaveProductsCmd,
+    Shift, SiteSnapshot, StartShiftCmd, StopCmd, Transaction, UpdateAllPricesCmd, UpdatePriceCmd,
 };
 
 #[derive(Clone)]
@@ -16,13 +15,22 @@ pub struct ServiceClient {
 }
 
 impl ServiceClient {
+    async fn response_error(resp: reqwest::Response) -> String {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        if body.is_empty() {
+            format!("HTTP {status}")
+        } else {
+            format!("{body}")
+        }
+    }
+
     pub fn new(base: Option<String>) -> Self {
         let raw = base
             .or_else(|| std::env::var("AZS_SERVICE_URL").ok())
             .unwrap_or_else(|| "http://127.0.0.1:3001".into());
-        let base = Url::parse(raw.trim_end_matches('/')).unwrap_or_else(|_| {
-            Url::parse("http://127.0.0.1:3001").expect("default url")
-        });
+        let base = Url::parse(raw.trim_end_matches('/'))
+            .unwrap_or_else(|_| Url::parse("http://127.0.0.1:3001").expect("default url"));
         Self {
             base,
             http: reqwest::Client::new(),
@@ -130,10 +138,7 @@ impl ServiceClient {
             return Ok(());
         }
         let status = resp.status();
-        let detail = resp
-            .text()
-            .await
-            .unwrap_or_else(|_| status.to_string());
+        let detail = resp.text().await.unwrap_or_else(|_| status.to_string());
         Err(detail)
     }
 
@@ -152,10 +157,7 @@ impl ServiceClient {
             return Ok(());
         }
         let status = resp.status();
-        let detail = resp
-            .text()
-            .await
-            .unwrap_or_else(|_| status.to_string());
+        let detail = resp.text().await.unwrap_or_else(|_| status.to_string());
         Err(detail)
     }
 
@@ -271,7 +273,10 @@ impl ServiceClient {
     }
 
     pub async fn get_current_shift(&self) -> Result<Option<Shift>, String> {
-        let url = self.base.join("shifts/current").map_err(|e| e.to_string())?;
+        let url = self
+            .base
+            .join("shifts/current")
+            .map_err(|e| e.to_string())?;
         self.http
             .get(url)
             .send()
@@ -315,7 +320,10 @@ impl ServiceClient {
     }
 
     pub async fn handover_shift(&self, cmd: HandoverCmd) -> Result<serde_json::Value, String> {
-        let url = self.base.join("shifts/handover").map_err(|e| e.to_string())?;
+        let url = self
+            .base
+            .join("shifts/handover")
+            .map_err(|e| e.to_string())?;
         self.http
             .post(url)
             .json(&cmd)
@@ -415,11 +423,7 @@ impl ServiceClient {
             .map_err(|e| e.to_string())
     }
 
-    pub async fn admin_apply_prices_now(
-        &self,
-        token: String,
-        fp_id: String,
-    ) -> Result<(), String> {
+    pub async fn admin_apply_prices_now(&self, token: String, fp_id: String) -> Result<(), String> {
         let url = self
             .base
             .join("admin/prices/apply-now")
@@ -460,7 +464,10 @@ impl ServiceClient {
     }
 
     pub async fn admin_list_operators(&self, token: String) -> Result<Vec<Operator>, String> {
-        let url = self.base.join("admin/operators").map_err(|e| e.to_string())?;
+        let url = self
+            .base
+            .join("admin/operators")
+            .map_err(|e| e.to_string())?;
         self.http
             .get(url)
             .headers(Self::auth_headers(&token))
@@ -479,7 +486,10 @@ impl ServiceClient {
         token: String,
         cmd: CreateOperatorCmd,
     ) -> Result<Operator, String> {
-        let url = self.base.join("admin/operators").map_err(|e| e.to_string())?;
+        let url = self
+            .base
+            .join("admin/operators")
+            .map_err(|e| e.to_string())?;
         self.http
             .post(url)
             .headers(Self::auth_headers(&token))
@@ -534,11 +544,11 @@ impl ServiceClient {
         Ok(())
     }
 
-    pub async fn admin_get_settings(
-        &self,
-        token: String,
-    ) -> Result<AdminSettingsSnapshot, String> {
-        let url = self.base.join("admin/settings").map_err(|e| e.to_string())?;
+    pub async fn admin_get_settings(&self, token: String) -> Result<AdminSettingsSnapshot, String> {
+        let url = self
+            .base
+            .join("admin/settings")
+            .map_err(|e| e.to_string())?;
         self.http
             .get(url)
             .headers(Self::auth_headers(&token))
@@ -557,7 +567,10 @@ impl ServiceClient {
         token: String,
         body: serde_json::Value,
     ) -> Result<(), String> {
-        let url = self.base.join("admin/settings").map_err(|e| e.to_string())?;
+        let url = self
+            .base
+            .join("admin/settings")
+            .map_err(|e| e.to_string())?;
         self.http
             .post(url)
             .headers(Self::auth_headers(&token))
@@ -611,17 +624,23 @@ impl ServiceClient {
         token: String,
         cmd: SaveProductsCmd,
     ) -> Result<(), String> {
-        let url = self.base.join("admin/products").map_err(|e| e.to_string())?;
-        self.http
+        let url = self
+            .base
+            .join("admin/products")
+            .map_err(|e| e.to_string())?;
+        let resp = self
+            .http
             .post(url)
             .headers(Self::auth_headers(&token))
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?
-            .error_for_status()
             .map_err(|e| e.to_string())?;
-        Ok(())
+        if resp.status().is_success() {
+            Ok(())
+        } else {
+            Err(Self::response_error(resp).await)
+        }
     }
 
     pub async fn admin_save_position_nozzles(
@@ -634,16 +653,19 @@ impl ServiceClient {
             .base
             .join(&format!("admin/positions/{fp_id}/nozzles"))
             .map_err(|e| e.to_string())?;
-        self.http
+        let resp = self
+            .http
             .post(url)
             .headers(Self::auth_headers(&token))
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?
-            .error_for_status()
             .map_err(|e| e.to_string())?;
-        Ok(())
+        if resp.status().is_success() {
+            Ok(())
+        } else {
+            Err(Self::response_error(resp).await)
+        }
     }
 
     pub async fn admin_change_pin(
@@ -651,7 +673,10 @@ impl ServiceClient {
         token: Option<String>,
         cmd: AdminChangePinCmd,
     ) -> Result<(), String> {
-        let url = self.base.join("admin/change-pin").map_err(|e| e.to_string())?;
+        let url = self
+            .base
+            .join("admin/change-pin")
+            .map_err(|e| e.to_string())?;
         let mut req = self.http.post(url).json(&cmd);
         if let Some(t) = token {
             req = req.headers(Self::auth_headers(&t));
@@ -728,9 +753,8 @@ struct SimApiResponse {
 impl SimClient {
     pub fn new() -> Self {
         let raw = std::env::var("AZS_SIM_URL").unwrap_or_else(|_| "http://127.0.0.1:3002".into());
-        let base = Url::parse(raw.trim_end_matches('/')).unwrap_or_else(|_| {
-            Url::parse("http://127.0.0.1:3002").expect("default sim url")
-        });
+        let base = Url::parse(raw.trim_end_matches('/'))
+            .unwrap_or_else(|_| Url::parse("http://127.0.0.1:3002").expect("default sim url"));
         Self {
             base,
             http: reqwest::Client::new(),
@@ -838,7 +862,10 @@ impl SimClient {
     }
 
     pub async fn nozzle_down(&self, fp_id: String) -> Result<(), String> {
-        let url = self.base.join("sim/nozzle-down").map_err(|e| e.to_string())?;
+        let url = self
+            .base
+            .join("sim/nozzle-down")
+            .map_err(|e| e.to_string())?;
         let body = SimFpBody { fp_id };
         self.http
             .post(url)

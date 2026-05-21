@@ -52,25 +52,38 @@ fn trim_garbage_prefix(buf: &[u8]) -> &[u8] {
     &[]
 }
 
-fn verify_crc(body: &[u8]) -> bool {
-    if body.len() < 4 {
-        return false;
-    }
-    let n = body.len();
-    let data = &body[..n - 4];
-    let ck1 = body[n - 4];
-    let ck2 = body[n - 3];
+fn try_crc(data: &[u8], ck1: u8, ck2: u8) -> bool {
     let crc = crc16(data);
     if ck1 == (crc & 0xFF) as u8 && ck2 == (crc >> 8) as u8 {
         return true;
     }
-    // Some Wayne firmware computes CRC over the address-bit-cleared byte even when
-    // the address byte is transmitted with bit 7 set.  Try the normalised variant.
+    // Some Wayne firmware sets bit-7 on the address byte but computes CRC over
+    // the un-bit-set address.  Try with the high bit masked off.
     if !data.is_empty() && data[0] & 0x80 != 0 {
         let mut norm = data.to_vec();
         norm[0] &= 0x7F;
         let crc2 = crc16(&norm);
         return ck1 == (crc2 & 0xFF) as u8 && ck2 == (crc2 >> 8) as u8;
+    }
+    false
+}
+
+fn verify_crc(body: &[u8]) -> bool {
+    if body.len() < 4 {
+        return false;
+    }
+    let n = body.len();
+    let ck1 = body[n - 4];
+    let ck2 = body[n - 3];
+    // Standard: CRC covers body[..n-4]
+    if try_crc(&body[..n - 4], ck1, ck2) {
+        return true;
+    }
+    // Some Wayne firmware appends an extra status byte after the length-delimited
+    // record payload but before the CRC bytes (observed on real hardware: 13-byte
+    // NozzleUp with 0x10 suffix).  CRC covers body[..n-5] in that case.
+    if n >= 5 {
+        return try_crc(&body[..n - 5], ck1, ck2);
     }
     false
 }
@@ -125,11 +138,20 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
             return Frame::Unknown(raw.to_vec());
         }
         if inner.len() >= 8 && inner[2] == 0x03 && inner[3] == 0x04 && inner[4] == 0x01 {
+            let product = inner[5];
+            let nozzle = inner[7];
+            if Frame::is_nozzle_holster_code(nozzle) {
+                return Frame::NozzleReturned {
+                    addr,
+                    seq,
+                    product,
+                };
+            }
             return Frame::NozzleUp {
                 addr,
                 seq,
-                product: inner[5],
-                nozzle: inner[7],
+                product,
+                nozzle,
             };
         }
         if inner.len() >= 12 && inner[2] == 0x02 && inner[3] == 0x08 {
@@ -306,7 +328,12 @@ mod tests {
         // Pattern: [D2 garbage][52 70 FA idle frame]
         let mut acc = FrameAccumulator::default();
         let frames = acc.push_bytes(&[0xD2, 0x52, 0x70, 0xFA]);
-        assert_eq!(frames.len(), 1, "expected exactly one frame, got {:?}", frames);
+        assert_eq!(
+            frames.len(),
+            1,
+            "expected exactly one frame, got {:?}",
+            frames
+        );
         match parse_frame(&frames[0]) {
             Frame::Idle { addr } => assert_eq!(addr, 0x52),
             f => panic!("expected Idle, got {:?}", f),
@@ -337,12 +364,93 @@ mod tests {
     fn high_bit_addr_nozzle_up_accepted() {
         // Real log frame: 53 3A 03 04 01 05 00 12 BF 29 03 FA  (CRC over [53 3A …])
         // Simulate dispenser sending same frame with bit-7 set on address: D3 3A …
-        let raw = &[0xD3u8, 0x3A, 0x03, 0x04, 0x01, 0x05, 0x00, 0x12, 0xBF, 0x29, 0x03, 0xFA];
+        let raw = &[
+            0xD3u8, 0x3A, 0x03, 0x04, 0x01, 0x05, 0x00, 0x12, 0xBF, 0x29, 0x03, 0xFA,
+        ];
         let frame = parse_frame(raw);
         match frame {
-            Frame::NozzleUp { addr, seq, product, nozzle } => {
+            Frame::NozzleUp {
+                addr,
+                seq,
+                product,
+                nozzle,
+            } => {
                 assert_eq!(addr, 0x53);
                 assert_eq!(seq, 0x3A);
+                assert_eq!(product, 0x05);
+                assert_eq!(nozzle, 0x12);
+            }
+            f => panic!("expected NozzleUp, got {:?}", f),
+        }
+    }
+
+    /// Real hardware NozzleUp from serial.log: pump 0x53 sends an extra byte (0x10)
+    /// after the length-delimited nozzle data.  CRC covers only the 8-byte header+data,
+    /// not the extra byte.  verify_crc must accept this via the n-5 fallback.
+    #[test]
+    fn nozzle_returned_holster_code_regular() {
+        // Pump 4 / AI-92: 53 3C 03 04 01 05 00 02 (from serial.log)
+        let body = &[0x53u8, 0x3C, 0x03, 0x04, 0x01, 0x05, 0x00, 0x02];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        match parse_frame(&raw) {
+            Frame::NozzleReturned { addr, seq, product } => {
+                assert_eq!(addr, 0x53);
+                assert_eq!(seq, 0x3C);
+                assert_eq!(product, 0x05);
+            }
+            f => panic!("expected NozzleReturned, got {:?}", f),
+        }
+    }
+
+    #[test]
+    fn nozzle_returned_holster_code_premium() {
+        // Pumps 1–3 / AI-95: 51 31 03 04 01 43 00 01 (from serial.log)
+        let body = &[0x51u8, 0x31, 0x03, 0x04, 0x01, 0x43, 0x00, 0x01];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        match parse_frame(&raw) {
+            Frame::NozzleReturned { addr, seq, product } => {
+                assert_eq!(addr, 0x51);
+                assert_eq!(seq, 0x31);
+                assert_eq!(product, 0x43);
+            }
+            f => panic!("expected NozzleReturned, got {:?}", f),
+        }
+    }
+
+    #[test]
+    fn nozzle_lift_premium_code() {
+        let body = &[0x51u8, 0x3F, 0x03, 0x04, 0x01, 0x43, 0x00, 0x11];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        match parse_frame(&raw) {
+            Frame::NozzleUp { nozzle, product, .. } => {
+                assert_eq!(product, 0x43);
+                assert_eq!(nozzle, 0x11);
+            }
+            f => panic!("expected NozzleUp, got {:?}", f),
+        }
+    }
+
+    #[test]
+    fn real_hardware_nozzle_up_extra_byte() {
+        let raw = &[
+            0x53u8, 0x3E, 0x03, 0x04, 0x01, 0x05, 0x00, 0x12, 0x10, 0xFA, 0xE9, 0x03, 0xFA,
+        ];
+        match parse_frame(raw) {
+            Frame::NozzleUp { addr, seq, product, nozzle } => {
+                assert_eq!(addr, 0x53);
+                assert_eq!(seq, 0x3E);
                 assert_eq!(product, 0x05);
                 assert_eq!(nozzle, 0x12);
             }

@@ -8,10 +8,12 @@ use site_config::{FuelingPositionConfig, SiteConfig};
 use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
+use site_config::Protocol;
 use types::{preset_label, FpStatus, Preset, UpdatePriceCmd, WsEvent};
 use wayne_europump::{
-    ack, authorize_config, authorize_initial, busy, done, encode_preset_limit_bcd, ghost_fill_abort,
-    parse_frame, poll, stop_frame, stop_pre_frame, Frame, FrameAccumulator,
+    ack, authorise_cmd, authorize_config, authorize_initial, busy, done, encode_preset_limit_bcd,
+    ghost_fill_abort, parse_frame, poll, pre_authorise_price, stop_frame, stop_pre_frame, Frame,
+    FrameAccumulator,
 };
 
 use super::state::{FrameEffect, RuntimeFp, TxCompleteAction};
@@ -19,50 +21,27 @@ use crate::shifts::ShiftCoordinator;
 
 /// RS-485 needs quiet time between polls to different addresses (ms).
 const RS485_TURNAROUND_MS: u64 = 50;
-const AUTHORIZING_ZERO_VOLUME_TIMEOUT_MS: i64 = 2_000;
 
-/// Send AUTH after nozzle lift; CONFIG is deferred until the first Data frame.
-fn send_nozzle_lift_auth(backend: &SerialBackend, byte: u8) {
-    let _ = exchange_serial(backend, &authorize_initial(byte));
-}
-
-async fn send_nozzle_lift_auth_if_allowed(
-    byte: u8,
-    site: &SiteConfig,
-    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
-    backend: &SerialBackend,
-) -> bool {
-    let auth_mode = site.ui.default_auth_mode.as_str();
-    let allow = {
-        let map = runtimes.read().await;
-        map.get(&byte)
-            .map(|rt| rt.allow_reactive_nozzle_auth(auth_mode))
-            .unwrap_or(false)
-    };
-    if !allow {
-        return false;
+/// Wayne PP byte per nozzle for CONFIG (`01 PP 00` triplets). Never use nozzle index on wire.
+fn wayne_pp_byte(n: &site_config::NozzleConfig) -> u8 {
+    if n.wayne_product_code != 0 {
+        return n.wayne_product_code;
     }
-    send_nozzle_lift_auth(backend, byte);
-    let mut map = runtimes.write().await;
-    if let Some(rt) = map.get_mut(&byte) {
-        rt.apply_authorize_sent();
+    match n.product_id {
+        1 => 0x05, // AI-92 (serial.log PP)
+        2 => 0x43, // AI-95
+        3 => 0x24, // Diesel
+        _ => n.index,
     }
-    true
 }
 
 fn wayne_product_codes(fp: &FuelingPositionConfig) -> Vec<u8> {
     let mut nozzles: Vec<_> = fp.nozzles.iter().filter(|n| n.active).collect();
-    nozzles.sort_by_key(|n| n.index);
-    nozzles
-        .into_iter()
-        .map(|n| {
-            if n.wayne_product_code != 0 {
-                n.wayne_product_code
-            } else {
-                n.index
-            }
-        })
-        .collect()
+    // Sort by wayne_code (physical channel on the pump), NOT by nozzle index.
+    // The pump maps lifted hose to channel via the low nibble of the hose byte
+    // (e.g. 0x12 → channel 2). The CONFIG product table must follow this order.
+    nozzles.sort_by_key(|n| n.wayne_code);
+    nozzles.into_iter().map(wayne_pp_byte).collect()
 }
 
 fn preset_limit_bcd(preset: &Preset) -> [u8; 3] {
@@ -76,12 +55,73 @@ fn preset_limit_bcd(preset: &Preset) -> [u8; 3] {
     }
 }
 
-fn send_authorize_config(backend: &SerialBackend, byte: u8, fp: &FuelingPositionConfig, preset: &Preset) {
-    let products = wayne_product_codes(fp);
-    let limit = preset_limit_bcd(preset);
-    let cfg = authorize_config(byte, &products, limit);
-    let _ = exchange_serial(backend, &cfg);
-    let _ = exchange_serial(backend, &cfg);
+/// DartV1: prices for all active nozzles sorted by 1-based index.
+fn dart_nozzle_prices(fp: &FuelingPositionConfig) -> Vec<u32> {
+    let mut nozzles: Vec<_> = fp.nozzles.iter().filter(|n| n.active).collect();
+    nozzles.sort_by_key(|n| n.index);
+    nozzles.iter().map(|n| n.price).collect()
+}
+
+/// DartV1 full-tank BCD is `99 99 99`; volume/amount presets use the same BCD encoding as PCC485.
+fn dart_limit_bcd(preset: &Preset) -> [u8; 3] {
+    match preset {
+        Preset::Volume(v) if *v > 0.0 => encode_preset_limit_bcd(false, Some(*v), None),
+        Preset::Amount(a) if *a > 0 => encode_preset_limit_bcd(false, None, Some(*a)),
+        _ => [0x99, 0x99, 0x99],
+    }
+}
+
+/// Send the wire auth sequence for the configured protocol.
+///
+/// PCC485/WayneEuropump: one compound CONFIG frame.
+/// WayneDartV1: PreAuthorisePrice then AuthoriseCMD (two frames, active nozzle required).
+///
+/// Returns the raw bytes received in response to the final auth frame.  The caller
+/// should pass them to [`ack_frames_in_response`] to ACK any StatusTransition frame
+/// the dispenser may piggy-back on the same read window.
+fn send_auth_pair(
+    backend: &SerialBackend,
+    byte: u8,
+    fp: &FuelingPositionConfig,
+    preset: &Preset,
+    active_nozzle: u8,
+    protocol: &Protocol,
+) -> Vec<u8> {
+    if matches!(protocol, Protocol::WayneDartV1) {
+        let prices = dart_nozzle_prices(fp);
+        let _ = exchange_serial(backend, &pre_authorise_price(byte, &prices, active_nozzle));
+        let limit = dart_limit_bcd(preset);
+        exchange_serial(backend, &authorise_cmd(byte, active_nozzle, limit)).unwrap_or_default()
+    } else {
+        let products = wayne_product_codes(fp);
+        let limit = preset_limit_bcd(preset);
+        let cfg = authorize_config(byte, &products, limit);
+        exchange_serial(backend, &cfg).unwrap_or_default()
+    }
+}
+
+/// After sending an auth frame the dispenser may piggy-back a StatusTransition
+/// (`01 01 02 02 08 00…`) on the same ACK burst.  Parse the raw response and
+/// send `C0 FA` for every frame that requires an ACK, so the pump can advance.
+fn ack_frames_in_response(backend: &SerialBackend, byte: u8, raw: &[u8]) {
+    if raw.is_empty() {
+        return;
+    }
+    let mut acc = FrameAccumulator::default();
+    for frame_raw in acc.push_bytes(raw) {
+        let frame = parse_frame(&frame_raw);
+        if matches!(
+            frame,
+            Frame::Data { .. }
+                | Frame::Stopped { .. }
+                | Frame::DispenserIdle { .. }
+                | Frame::TransactionComplete { .. }
+                | Frame::NozzleHolstered { .. }
+                | Frame::NozzleReturned { .. }
+        ) {
+            let _ = write_serial(backend, &ack(byte));
+        }
+    }
 }
 
 fn complete_ghost_fill_on_wire(backend: &SerialBackend, byte: u8) {
@@ -172,8 +212,8 @@ async fn dispatch_poll_frames(
         .iter()
         .filter(|f| matches!(f, Frame::NozzleUp { .. }))
     {
-        // ACK the NozzleUp (type-03 data block) immediately, then AUTH on the same
-        // poll slot — before the round-robin visits the next dispenser address.
+        // ACK the NozzleUp (type-03 data block) immediately, then send auth on the
+        // same poll slot — before the round-robin visits the next dispenser address.
         let _ = write_serial(backend, &ack(byte));
         process_parsed_frame(
             byte,
@@ -198,32 +238,49 @@ async fn dispatch_poll_frames(
         let preauth_armed = rt.preauth_config_on_wire;
         let confirmed = rt.preauth_nozzle_confirmed;
         let has_pre = rt.pre_auth.is_some();
-        let status = rt.state.status.clone();
+        // nozzle_index is resolved from the Wayne hose code by process_parsed_frame above.
+        let lifted_nozzle = rt.state.nozzle_index.unwrap_or(1);
         drop(map);
 
-        if send_nozzle_lift_auth_if_allowed(byte, cfg, runtimes, backend).await {
+        let auth_mode = cfg.ui.default_auth_mode.as_str();
+        let allow_wire_config = {
+            let map = runtimes.read().await;
+            map.get(&byte)
+                .map(|rt| rt.allow_reactive_nozzle_auth(auth_mode))
+                .unwrap_or(false)
+        };
+        if allow_wire_config {
+            let preset = {
+                let map = runtimes.read().await;
+                map.get(&byte)
+                    .map(|rt| rt.last_preset.clone())
+                    .unwrap_or(Preset::Str("full".into()))
+            };
+            let auth_resp =
+                send_auth_pair(backend, byte, &fp_cfg, &preset, lifted_nozzle, &cfg.connection.protocol);
+            {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.apply_nozzle_lift_config_sent();
+                }
+            }
+            // ACK any StatusTransition the dispenser piggy-backs on the auth ACK burst,
+            // then send BUSY so the pump arms the nozzle.
+            ack_frames_in_response(backend, byte, &auth_resp);
+            let _ = write_serial(backend, &busy(byte));
             info!(
                 addr = format_args!("0x{byte:02X}"),
                 label = %fp_cfg.label,
-                "NozzleUp → C0 FA + AUTH (same poll)"
-            );
-        } else if preauth_armed {
-            let _ = exchange_serial(backend, &busy(byte));
-            debug!(
-                addr = format_args!("0x{byte:02X}"),
-                label = %fp_cfg.label,
-                "NozzleUp → C0 FA + BUSY (preauth CONFIG already on wire)"
+                nozzle = lifted_nozzle,
+                "NozzleUp → ACK + auth + ACK-flush + BUSY"
             );
         }
+        // holstered preauth: CONFIG already on wire, BUSY keepalive handles it
 
         let mut map = runtimes.write().await;
         if let Some(rt) = map.get_mut(&byte) {
-            if confirmed && has_pre {
+            if has_pre || (preauth_armed && confirmed) {
                 rt.start_delivery_from_pre_auth(&fp_cfg, cfg);
-            } else if preauth_armed
-                && matches!(status, FpStatus::PreAuthorized | FpStatus::NozzleUp)
-            {
-                rt.apply_authorize_sent();
             }
         }
     }
@@ -516,21 +573,6 @@ pub async fn run_poll_loop(
                 tokio::time::sleep(Duration::from_millis(RS485_TURNAROUND_MS)).await;
             }
 
-            let expired_zero_volume_authorizing = {
-                let mut map = runtimes.write().await;
-                map.get_mut(&byte)
-                    .map(|rt| rt.expire_zero_volume_authorizing(AUTHORIZING_ZERO_VOLUME_TIMEOUT_MS))
-                    .unwrap_or(false)
-            };
-            if expired_zero_volume_authorizing {
-                complete_ghost_fill_on_wire(&backend, byte);
-                info!(
-                    addr = format_args!("0x{byte:02X}"),
-                    "ghost fill timeout → GO_IDLE + compound abort, lane idle"
-                );
-                broadcast_status(byte, &runtimes, &events).await;
-            }
-
             {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
@@ -538,15 +580,35 @@ pub async fn run_poll_loop(
                 }
             }
 
-            if runtimes
-                .read()
-                .await
-                .get(&byte)
-                .map(|r| matches!(r.state.status, FpStatus::Authorizing | FpStatus::Delivering))
-                .unwrap_or(false)
-            {
-                // Keepalive during authorized/metering — write-only avoids clearing RX
-                // before the next poll on the shared RS-485 bus.
+            let send_busy_keepalive = {
+                let map = runtimes.read().await;
+                map.get(&byte).map_or(false, |rt| {
+                    // Holstered pre-auth: CONFIG is on wire, pump expects BUSY every poll
+                    // to keep the authorization alive until the nozzle is lifted.
+                    if rt.state.status == FpStatus::PreAuthorized && rt.preauth_config_on_wire {
+                        return true;
+                    }
+                    if !matches!(
+                        rt.state.status,
+                        FpStatus::Authorizing | FpStatus::Delivering
+                    ) {
+                        return false;
+                    }
+                    // During zero-volume arming (AUTH sent, CONFIG not yet sent), keep
+                    // polling only — BUSY races the ACK window.  Once CONFIG is on the
+                    // wire (preauth_config_on_wire) the pump expects BUSY every cycle.
+                    if rt.state.status == FpStatus::Authorizing
+                        && rt.nozzle_physically_up()
+                        && rt.state.volume < 0.01
+                        && rt.state.amount == 0
+                        && !rt.preauth_config_on_wire
+                    {
+                        return false;
+                    }
+                    true
+                })
+            };
+            if send_busy_keepalive {
                 let _ = write_serial(&backend, &busy(byte));
             }
 
@@ -686,20 +748,12 @@ async fn process_parsed_frame(
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::ResendAuthorize => {
-            if send_nozzle_lift_auth_if_allowed(byte, site, runtimes, backend).await {
-                debug!(
-                    addr = format_args!("0x{byte:02X}"),
-                    label = %fp_cfg.label,
-                    "70 FA while nozzle up / authorizing → resent AUTH"
-                );
-            } else {
-                let _ = exchange_serial(backend, &busy(byte));
-                debug!(
-                    addr = format_args!("0x{byte:02X}"),
-                    label = %fp_cfg.label,
-                    "70 FA while armed → BUSY keepalive"
-                );
-            }
+            let _ = exchange_serial(backend, &busy(byte));
+            debug!(
+                addr = format_args!("0x{byte:02X}"),
+                label = %fp_cfg.label,
+                "70 FA while armed → BUSY keepalive"
+            );
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::TransactionDone { tx, action } => {
@@ -793,33 +847,61 @@ async fn process_parsed_frame(
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::CompleteGhostFill => {
-            complete_ghost_fill_on_wire(backend, byte);
-            info!(
-                addr = format_args!("0x{byte:02X}"),
-                label = %fp_cfg.label,
-                "ghost fill complete → GO_IDLE + compound abort"
-            );
+            let nozzle_up = {
+                let map = runtimes.read().await;
+                map.get(&byte).is_some_and(|rt| rt.nozzle_physically_up())
+            };
+            if !nozzle_up {
+                complete_ghost_fill_on_wire(backend, byte);
+                info!(
+                    addr = format_args!("0x{byte:02X}"),
+                    label = %fp_cfg.label,
+                    "ghost fill complete → GO_IDLE + compound abort"
+                );
+            } else {
+                debug!(
+                    addr = format_args!("0x{byte:02X}"),
+                    label = %fp_cfg.label,
+                    "ghost fill suppressed — nozzle still lifted on wire"
+                );
+            }
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::SendAuthorizeConfig => {
-            let preset = {
+            let (preset, active_nozzle) = {
                 let map = runtimes.read().await;
-                map.get(&byte)
+                let preset = map
+                    .get(&byte)
                     .map(|rt| rt.last_preset.clone())
-                    .unwrap_or(Preset::Str("full".into()))
+                    .unwrap_or(Preset::Str("full".into()));
+                let nozzle = map
+                    .get(&byte)
+                    .and_then(|rt| rt.state.nozzle_index)
+                    .unwrap_or(1);
+                (preset, nozzle)
             };
-            send_authorize_config(backend, byte, &fp_cfg, &preset);
+            let auth_resp = send_auth_pair(
+                backend,
+                byte,
+                &fp_cfg,
+                &preset,
+                active_nozzle,
+                &site.connection.protocol,
+            );
             {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
                     rt.mark_preauth_config_on_wire();
                 }
             }
+            ack_frames_in_response(backend, byte, &auth_resp);
+            let _ = write_serial(backend, &busy(byte));
             info!(
                 addr = format_args!("0x{byte:02X}"),
                 label = %fp_cfg.label,
                 ?preset,
-                "sent CONFIG×2 after first Data"
+                nozzle = active_nozzle,
+                "sent auth + ACK-flush + BUSY after first Data"
             );
             broadcast_status(byte, runtimes, events).await;
         }
@@ -851,6 +933,7 @@ async fn apply_command(
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
                     rt.state.price = price;
+                    rt.state.pre_auth_preset = Some(preset_label(&preset));
                     rt.set_last_preset(preset);
                     rt.apply_authorize_sent();
                 }
@@ -1065,49 +1148,65 @@ async fn apply_command(
                 Some(p) => p.clone(),
                 None => return,
             };
-            let auth = authorize_initial(byte);
-            if exchange_serial(backend, &auth).is_ok() {
-                let preset_label_str = preset_label(&preset);
-                {
-                    let mut map = runtimes.write().await;
-                    if let Some(rt) = map.get_mut(&byte) {
-                        rt.apply_preauthorize_sent(&fp_cfg, cfg, nozzle_index, price, preset.clone());
-                    }
+            let preset_label_str = preset_label(&preset);
+            let lift_confirmed = {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.apply_preauthorize_sent(&fp_cfg, cfg, nozzle_index, price, preset.clone());
+                    rt.preauth_nozzle_confirmed
+                } else {
+                    false
                 }
-                send_authorize_config(backend, byte, &fp_cfg, &preset);
-                {
-                    let mut map = runtimes.write().await;
-                    if let Some(rt) = map.get_mut(&byte) {
-                        rt.mark_preauth_config_on_wire();
-                    }
+            };
+            if lift_confirmed {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.start_delivery_from_pre_auth(&fp_cfg, cfg);
                 }
-                let _ = events.send(WsEvent::PreAuthorized {
-                    fp_id: fp_cfg.id.clone(),
-                    price,
-                    preset: preset_label_str,
+            } else {
+                // Holstered preauth: CONFIG sent before lift; StatusTransition arrives
+                // during a later POLL when the nozzle is lifted, handled normally then.
+                let _ = send_auth_pair(
+                    backend,
+                    byte,
+                    &fp_cfg,
+                    &preset,
                     nozzle_index,
-                });
+                    &cfg.connection.protocol,
+                );
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.mark_preauth_config_on_wire();
+                }
+            }
+            let _ = events.send(WsEvent::PreAuthorized {
+                fp_id: fp_cfg.id.clone(),
+                price,
+                preset: preset_label_str,
+                nozzle_index,
+            });
+            if !lift_confirmed {
                 let b = busy(byte);
                 let _ = exchange_serial(backend, &b);
-                broadcast_status(byte, runtimes, events).await;
-                let disp_by_byte: HashMap<u8, FuelingPositionConfig> = cfg
-                    .active_positions()
-                    .into_iter()
-                    .map(|fp| (fp.address_byte, fp.clone()))
-                    .collect();
-                kick_delivery_polls(
-                    byte,
-                    backend,
-                    &disp_by_byte,
-                    cfg,
-                    runtimes,
-                    events,
-                    pool,
-                    shifts,
-                    4,
-                )
-                .await;
             }
+            broadcast_status(byte, runtimes, events).await;
+            let disp_by_byte: HashMap<u8, FuelingPositionConfig> = cfg
+                .active_positions()
+                .into_iter()
+                .map(|fp| (fp.address_byte, fp.clone()))
+                .collect();
+            kick_delivery_polls(
+                byte,
+                backend,
+                &disp_by_byte,
+                cfg,
+                runtimes,
+                events,
+                pool,
+                shifts,
+                4,
+            )
+            .await;
         }
         DispatchCommand::CancelPreauth { byte } => {
             let fp_cfg = match cfg.position_by_address(byte) {

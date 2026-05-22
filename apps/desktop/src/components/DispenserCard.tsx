@@ -308,6 +308,7 @@ export function DispenserCard({
     (state.pre_auth_preset != null &&
       tag !== "DONE" &&
       tag !== "DELIVERING" &&
+      tag !== "AUTHORIZING" &&
       tag !== "OFFLINE");
   const isIdle = tag === "IDLE";
   const isNozzleUp = tag === "NOZZLE_UP";

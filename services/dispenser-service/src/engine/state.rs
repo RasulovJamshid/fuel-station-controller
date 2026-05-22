@@ -64,11 +64,19 @@ pub struct RuntimeFp {
     pub consecutive_idle_polls: u8,
     /// When set, send CONFIG×2 after the first zero-volume Data frame (Wayne expects AUTH first).
     pub pending_authorize_config: bool,
+    /// After the first CONFIG, wait for another poll response before sending the repeat.
+    pub pending_authorize_config_repeat: bool,
     /// Holstered pre-auth already sent AUTH+CONFIG on the wire; lift only needs BUSY + delivery.
     pub preauth_config_on_wire: bool,
     /// Wall-clock ms when the current authorize session started (not reset by poll touch).
     pub auth_session_started_at: Option<i64>,
+    /// Latest `03 04 … HH` hose byte from NozzleUp / Data / NozzleReturned.
+    pub last_wire_hose_code: Option<u8>,
+    pub last_wire_hose_at_ms: i64,
 }
+
+/// Hose lift notifications older than this are ignored for "still up" guards.
+const WIRE_LIFT_STALE_MS: i64 = 4_000;
 
 #[derive(Debug, Clone)]
 pub struct CurrentTx {
@@ -105,8 +113,11 @@ impl RuntimeFp {
             ghost_recovery: false,
             consecutive_idle_polls: 0,
             pending_authorize_config: false,
+            pending_authorize_config_repeat: false,
             preauth_config_on_wire: false,
             auth_session_started_at: None,
+            last_wire_hose_code: None,
+            last_wire_hose_at_ms: 0,
             state: FpState {
                 fp_id: fp.id.clone(),
                 label: fp.label.clone(),
@@ -150,8 +161,12 @@ impl RuntimeFp {
                 s.pre_auth_preset = Some(preset_label(&self.last_preset));
             }
         }
+        // Only fill pre_auth_preset from last_preset when there's an active preauth
+        // session. Without this guard, a bare reactive lift after ghost abort would
+        // re-surface a stale preset from the previous (failed) authorization.
         if matches!(s.status, FpStatus::Authorizing | FpStatus::Delivering)
             && s.pre_auth_preset.is_none()
+            && (self.pre_auth.is_some() || self.preauth_config_on_wire)
         {
             s.pre_auth_preset = Some(preset_label(&self.last_preset));
         }
@@ -201,6 +216,27 @@ impl RuntimeFp {
             self.state.status,
             FpStatus::PreAuthorized if !self.preauth_nozzle_confirmed
         )
+    }
+
+    fn note_wire_hose(&mut self, hose: u8) {
+        self.last_wire_hose_code = Some(hose);
+        self.last_wire_hose_at_ms = Utc::now().timestamp_millis();
+    }
+
+    /// Recent lift code (`HH >= 0x10`) — do not ghost-abort or treat as holstered.
+    pub fn nozzle_physically_up(&self) -> bool {
+        let age = Utc::now().timestamp_millis() - self.last_wire_hose_at_ms;
+        if age > WIRE_LIFT_STALE_MS {
+            return false;
+        }
+        self.last_wire_hose_code
+            .is_some_and(Frame::is_nozzle_lift_code)
+    }
+
+    fn preauth_session_armed(&self) -> bool {
+        self.preauth_config_on_wire
+            || self.pending_authorize_config_repeat
+            || self.state.pre_auth_preset.is_some()
     }
 
     fn apply_metering(&mut self, raw_vol: f64, raw_amt: u64) {
@@ -467,8 +503,11 @@ impl RuntimeFp {
         self.pre_auth = None;
         self.pre_auth_started_at = None;
         self.pending_authorize_config = false;
+        self.pending_authorize_config_repeat = false;
         self.preauth_config_on_wire = false;
         self.auth_session_started_at = None;
+        self.last_wire_hose_code = None;
+        self.last_wire_hose_at_ms = 0;
         self.clear_deliver_caps();
         self.clear_continuation_fields();
         self.state.status = FpStatus::Idle;
@@ -506,26 +545,40 @@ impl RuntimeFp {
         self.consecutive_idle_polls = 0;
     }
 
-    /// In preauth mode, send wire AUTH only when the session is not already armed on the bus.
+    /// In preauth mode, send wire AUTH only for lift-first (no holstered CONFIG yet).
     pub fn allow_reactive_nozzle_auth(&self, auth_mode: &str) -> bool {
-        if self.ghost_recovery_active() || self.preauth_config_on_wire {
+        if self.ghost_recovery_active() {
             return false;
         }
         if auth_mode != "preauth" {
             return true;
         }
-        if self.pre_auth.is_some() {
-            return true;
+        // Holstered preauth (§8.4): AUTH+CONFIG already sent — lift is BUSY only.
+        if self.preauth_config_on_wire || self.pre_auth.is_some() {
+            return false;
         }
-        matches!(
-            self.state.status,
-            FpStatus::PreAuthorized | FpStatus::Authorizing | FpStatus::Delivering
-        )
+        matches!(self.state.status, FpStatus::NozzleUp)
     }
 
     pub fn mark_preauth_config_on_wire(&mut self) {
         self.preauth_config_on_wire = true;
         self.pending_authorize_config = false;
+        self.pending_authorize_config_repeat = false;
+    }
+
+    /// Called when CONFIG is sent immediately on nozzle-up (reactive mode).
+    /// Sets Authorizing and marks CONFIG on wire so the Data-frame handler
+    /// skips the deferred-CONFIG path and keepalive just sends BUSY.
+    pub fn apply_nozzle_lift_config_sent(&mut self) {
+        if !matches!(self.state.status, FpStatus::Authorizing | FpStatus::Delivering) {
+            self.zero_delivery_meters();
+        }
+        self.auth_session_started_at = Some(Utc::now().timestamp_millis());
+        self.pending_authorize_config = false;
+        self.pending_authorize_config_repeat = false;
+        self.preauth_config_on_wire = true;
+        self.state.status = FpStatus::Authorizing;
+        self.touch();
     }
 
     /// Cancel a zero-volume authorization on the app side and enter ghost recovery
@@ -538,17 +591,11 @@ impl RuntimeFp {
         self.consecutive_idle_polls = 0;
     }
 
-    fn auth_session_age_ms(&self) -> i64 {
-        let started = self
-            .auth_session_started_at
-            .or_else(|| self.current_tx.as_ref().map(|tx| tx.started_at))
-            .unwrap_or(self.state.updated_at);
-        Utc::now().timestamp_millis() - started
-    }
 
     fn begin_auth_session(&mut self) {
         self.auth_session_started_at = Some(Utc::now().timestamp_millis());
         self.pending_authorize_config = true;
+        self.pending_authorize_config_repeat = false;
     }
 
     /// `03 04 01 PP 00 HH` with holster code (`HH < 0x10`), standalone or inside composite fill.
@@ -566,6 +613,10 @@ impl RuntimeFp {
             FpStatus::Authorizing | FpStatus::Delivering => {
                 let (vol, amt) = self.combined_totals();
                 if vol < 0.01 && amt == 0 {
+                    if self.nozzle_physically_up() {
+                        self.touch();
+                        return FrameEffect::StatusChanged;
+                    }
                     self.cancel_zero_volume_session();
                     self.touch();
                     FrameEffect::CompleteGhostFill
@@ -579,7 +630,12 @@ impl RuntimeFp {
                 }
             }
             FpStatus::PreAuthorized => {
-                if self.preauth_mismatch_active {
+                if self.preauth_config_on_wire {
+                    // Pump is confirming nozzle-holstered state after receiving CONFIG.
+                    // Keep pre-auth alive — delivery begins when the nozzle is lifted.
+                    self.touch();
+                    FrameEffect::None
+                } else if self.preauth_mismatch_active {
                     self.touch();
                     FrameEffect::None
                 } else {
@@ -656,22 +712,30 @@ impl RuntimeFp {
                 FrameEffect::None
             }
             NozzleUp => {
-                // PCC485 clears the one-shot `03 04` after C0 FA; the next poll is often `70 FA`
-                // while the hose is still up — resend AUTH only when a session is pending.
+                // Holstered preauth or lift-first arming: idle polls are BUSY only (see poll_loop).
                 self.touch();
-                if self.pre_auth.is_some()
-                    || self.preauth_config_on_wire
+                if self.preauth_config_on_wire
+                    || self.pre_auth.is_some()
+                    || self.preauth_session_armed()
                     || self.current_tx.is_some()
                 {
-                    FrameEffect::ResendAuthorize
-                } else {
                     FrameEffect::None
+                } else {
+                    FrameEffect::ResendAuthorize
                 }
             }
             Authorizing => {
+                if self.pending_authorize_config_repeat {
+                    self.touch();
+                    return FrameEffect::SendAuthorizeConfig;
+                }
                 let (vol, amt) = self.combined_totals();
                 if vol < 0.01 && amt == 0 {
-                    // Post-AUTH idle while arming / ghost-fill: keep session, resend AUTH.
+                    // Preauth + lift: AUTH/CONFIG already sent; idle polls are BUSY only (no AUTH spam).
+                    if self.preauth_session_armed() || self.nozzle_physically_up() {
+                        self.touch();
+                        return FrameEffect::None;
+                    }
                     self.touch();
                     return FrameEffect::ResendAuthorize;
                 }
@@ -689,6 +753,10 @@ impl RuntimeFp {
             Delivering => {
                 let (vol, amt) = self.combined_totals();
                 if vol < 0.01 && amt == 0 {
+                    if self.nozzle_physically_up() || self.preauth_session_armed() {
+                        self.touch();
+                        return FrameEffect::None;
+                    }
                     self.cancel_zero_volume_session();
                     self.touch();
                     return FrameEffect::CompleteGhostFill;
@@ -792,6 +860,10 @@ impl RuntimeFp {
         ) {
             let (vol, amt) = self.combined_totals();
             if vol < 0.01 && amt == 0 {
+                if self.nozzle_physically_up() {
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                }
                 self.cancel_zero_volume_session();
                 self.touch();
                 return FrameEffect::CompleteGhostFill;
@@ -840,6 +912,10 @@ impl RuntimeFp {
         ) {
             let (vol, amt) = self.combined_totals();
             if vol < 0.01 && amt == 0 {
+                if self.nozzle_physically_up() {
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                }
                 self.cancel_zero_volume_session();
                 self.touch();
                 return FrameEffect::CompleteGhostFill;
@@ -886,6 +962,7 @@ impl RuntimeFp {
         self.clear_deliver_caps();
         self.preauth_config_on_wire = false;
         self.pending_authorize_config = false;
+        self.pending_authorize_config_repeat = false;
         self.auth_session_started_at = None;
         self.current_tx = None;
         self.state.pre_auth_preset = None;
@@ -895,6 +972,8 @@ impl RuntimeFp {
         self.state.product_id = None;
         self.state.product_name = None;
         self.state.product_color = None;
+        self.last_wire_hose_code = None;
+        self.last_wire_hose_at_ms = 0;
         self.touch();
     }
 
@@ -933,10 +1012,9 @@ impl RuntimeFp {
         self.zero_delivery_meters();
         self.state.pre_auth_preset = Some(preset_label(&self.last_preset));
         self.state.seq = 0;
-        // Customer lifted before the operator entered the limit — start if grades match.
+        // Lift-first: CONFIG is sent in poll_loop after this; delivery starts there too.
         if nozzle_already_up {
             self.preauth_nozzle_confirmed = true;
-            self.start_delivery_from_pre_auth(fp_cfg, site);
         }
         let _ = b;
         self.touch();
@@ -987,7 +1065,16 @@ impl RuntimeFp {
             self.state.pre_auth_preset = Some(preset_label(&self.last_preset));
         }
         self.zero_delivery_meters();
-        self.begin_auth_session();
+        // If CONFIG is not yet on the wire, schedule it for the first Data frame.
+        // If it was already sent (holstered preauth or reactive lift), preserve that
+        // state so the Data-frame handler skips SendAuthorizeConfig.
+        if !self.preauth_config_on_wire {
+            self.begin_auth_session();
+        } else {
+            self.auth_session_started_at = Some(Utc::now().timestamp_millis());
+            self.pending_authorize_config = false;
+            self.pending_authorize_config_repeat = false;
+        }
         self.state.status = FpStatus::Authorizing;
         self.current_tx = Some(CurrentTx {
             id: Uuid::new_v4().to_string(),
@@ -1080,25 +1167,6 @@ impl RuntimeFp {
         self.settle_after_reconnect = rounds;
     }
 
-    pub fn expire_zero_volume_authorizing(&mut self, timeout_ms: i64) -> bool {
-        if !matches!(
-            self.state.status,
-            FpStatus::Authorizing | FpStatus::Delivering
-        ) {
-            return false;
-        }
-        if self.auth_session_age_ms() < timeout_ms {
-            return false;
-        }
-        let (vol, amt) = self.combined_totals();
-        if vol >= 0.01 || amt > 0 {
-            return false;
-        }
-        self.cancel_zero_volume_session();
-        self.touch();
-        true
-    }
-
     pub fn apply_frame(
         &mut self,
         frame: &Frame,
@@ -1119,16 +1187,26 @@ impl RuntimeFp {
                     FpStatus::Authorizing | FpStatus::Delivering => {
                         let (vol, amt) = self.combined_totals();
                         if vol < 0.01 && amt == 0 {
-                            self.cancel_zero_volume_session();
-                            self.touch();
-                            FrameEffect::CompleteGhostFill
+                            if self.nozzle_physically_up() {
+                                self.touch();
+                                FrameEffect::StatusChanged
+                            } else {
+                                self.cancel_zero_volume_session();
+                                self.touch();
+                                FrameEffect::CompleteGhostFill
+                            }
                         } else {
                             self.touch();
                             FrameEffect::StatusChanged
                         }
                     }
                     FpStatus::PreAuthorized => {
-                        if self.preauth_mismatch_active {
+                        if self.preauth_config_on_wire {
+                            // Pump confirming nozzle-holstered state after receiving CONFIG.
+                            // Keep pre-auth alive until the nozzle is lifted.
+                            self.touch();
+                            FrameEffect::None
+                        } else if self.preauth_mismatch_active {
                             // Mismatch recovery: customer holstering wrong nozzle before
                             // lifting the correct one — keep pre-auth alive.
                             self.touch();
@@ -1143,7 +1221,22 @@ impl RuntimeFp {
                     _ => self.apply_idle_response(fp_cfg, site, active_shift_id),
                 }
             }
-            Frame::NozzleReturned { addr, .. } if *addr == b => {
+            Frame::NozzleReturned { addr, hose, .. } if *addr == b => {
+                if matches!(
+                    self.state.status,
+                    FpStatus::Authorizing | FpStatus::Delivering
+                ) {
+                    let (vol, amt) = self.combined_totals();
+                    // During zero-volume arming the dispenser sends
+                    // `03 04 01 PP 00 <holster_code>` as an internal state-transition,
+                    // not a customer holster event.  Do NOT update last_wire_hose_code
+                    // — that would clear the lift code (0x12) and break nozzle_physically_up().
+                    if vol < 0.01 && amt == 0 && self.nozzle_physically_up() {
+                        self.touch();
+                        return FrameEffect::StatusChanged;
+                    }
+                }
+                self.note_wire_hose(*hose);
                 self.apply_nozzle_holstered(fp_cfg, site, active_shift_id)
             }
             Frame::NozzleUp {
@@ -1153,6 +1246,7 @@ impl RuntimeFp {
                 nozzle,
                 ..
             } if *addr == b => {
+                self.note_wire_hose(*nozzle);
                 if self.state.status == FpStatus::Done {
                     self.reset_to_idle();
                 }
@@ -1163,18 +1257,14 @@ impl RuntimeFp {
                     self.state.status,
                     FpStatus::Authorizing | FpStatus::Delivering
                 ) {
-                    let (vol, amt) = self.combined_totals();
-                    if vol < 0.01 && amt == 0 && self.auth_session_age_ms() > 2_000 {
-                        self.cancel_zero_volume_session();
-                        self.touch();
-                        return FrameEffect::None;
-                    }
+                    // Repeated lift notifications while arming — stay in session.
                     self.touch();
                     return FrameEffect::StatusChanged;
                 }
                 if self.pre_auth.is_some() {
                     self.state.seq = *seq;
-                    if let Some(effect) = self.check_preauth_nozzle(*product, *nozzle, fp_cfg, site) {
+                    if let Some(effect) = self.check_preauth_nozzle(*product, *nozzle, fp_cfg, site)
+                    {
                         self.preauth_mismatch_active = true;
                         self.touch();
                         return effect;
@@ -1289,9 +1379,26 @@ impl RuntimeFp {
                 hose_code,
             } if *addr == b => {
                 if let (Some(_pp), Some(hh)) = (hose_product, hose_code) {
-                    if Frame::is_nozzle_holster_code(*hh) && self.embedded_holster_is_customer_event() {
+                    if Frame::is_nozzle_holster_code(*hh)
+                        && self.embedded_holster_is_customer_event()
+                    {
+                        if self.nozzle_physically_up()
+                            && matches!(
+                                self.state.status,
+                                FpStatus::Authorizing | FpStatus::Delivering
+                            )
+                        {
+                            // Nozzle is still physically up — embedded holster code is a
+                            // dispenser-internal status transition, not a customer holster.
+                            // Do NOT overwrite last_wire_hose_code with the holster byte;
+                            // that would clear the lift code and break nozzle_physically_up().
+                            self.touch();
+                            return FrameEffect::StatusChanged;
+                        }
+                        self.note_wire_hose(*hh);
                         return self.apply_nozzle_holstered(fp_cfg, site, active_shift_id);
                     }
+                    self.note_wire_hose(*hh);
                 }
                 self.state.seq = *seq;
                 let raw_vol = decode_volume(*volume_l, *volume_h);
@@ -1304,16 +1411,33 @@ impl RuntimeFp {
                     }
                 }
 
-                if self.state.status == FpStatus::Authorizing && self.pending_authorize_config {
+                if self.state.status == FpStatus::Authorizing
+                    && self.pending_authorize_config
+                    && !self.preauth_config_on_wire
+                {
                     self.pending_authorize_config = false;
                     self.touch();
-                    if self.preauth_config_on_wire {
-                        return FrameEffect::StatusChanged;
-                    }
+                    // Lift-first: CONFIG+AUTHORISE after first zero-volume Data (sniffer arming).
                     return FrameEffect::SendAuthorizeConfig;
                 }
 
                 if self.state.status == FpStatus::PreAuthorized {
+                    if let (Some(_pp), Some(hh)) = (hose_product, hose_code) {
+                        if Frame::is_nozzle_lift_code(*hh) {
+                            if let Some(effect) = self.check_preauth_nozzle(*_pp, *hh, fp_cfg, site)
+                            {
+                                self.preauth_mismatch_active = true;
+                                self.touch();
+                                return effect;
+                            }
+                            self.preauth_mismatch_active = false;
+                            self.preauth_nozzle_confirmed = true;
+                            self.zero_delivery_meters();
+                            self.start_delivery_from_pre_auth(fp_cfg, site);
+                            self.touch();
+                            return FrameEffect::StatusChanged;
+                        }
+                    }
                     if !self.preauth_nozzle_confirmed {
                         // Holstered pre-auth: ignore meter frames until the customer lifts.
                         self.touch();
@@ -1690,7 +1814,8 @@ pub enum FrameEffect {
     ResendAuthorize,
     /// Ghost fill complete — send GO_IDLE then compound HALT/GO_IDLE/GET_DISP abort.
     CompleteGhostFill,
-    /// First zero-volume Data after AUTH — send CONFIG×2 (Wayne expects AUTH before CONFIG).
+    /// Send one CONFIG frame. First zero-volume Data sends the first copy; the repeat is sent
+    /// after a later poll response so the pump gets the same gap seen in the sniffer.
     SendAuthorizeConfig,
 }
 

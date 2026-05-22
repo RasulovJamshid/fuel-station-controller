@@ -82,6 +82,7 @@ pub struct ConnectionConfig {
 #[serde(rename_all = "snake_case")]
 pub enum Protocol {
     WayneEuropump,
+    WayneDartV1,
     WayneDartV2,
     Gilbarco,
     #[serde(rename = "mock")]

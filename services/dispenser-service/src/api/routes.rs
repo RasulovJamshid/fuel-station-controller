@@ -619,12 +619,10 @@ pub async fn preauthorize(
                     .into(),
             ));
         }
-        let preauth_ok = map.get(&byte).is_some_and(|r| {
-            match r.state.status {
-                FpStatus::Idle => true,
-                FpStatus::NozzleUp => r.state.nozzle_index == Some(nozzle_index),
-                _ => false,
-            }
+        let preauth_ok = map.get(&byte).is_some_and(|r| match r.state.status {
+            FpStatus::Idle => true,
+            FpStatus::NozzleUp => r.state.nozzle_index == Some(nozzle_index),
+            _ => false,
         });
         if !preauth_ok {
             return Err((

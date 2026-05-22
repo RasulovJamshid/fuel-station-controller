@@ -44,6 +44,13 @@ export function mergeIncomingFpState(
   // (holstered pre-auth — brief status flicker only). Stale pre_auth_preset on IDLE
   // must not hide the lift.
   if (incomingTag === "NOZZLE_UP") {
+    // After lift, service reports AUTHORIZING/DELIVERING — do not pin UI to PRE_AUTHORIZED.
+    if (prevTag === "AUTHORIZING" || prevTag === "DELIVERING") {
+      return {
+        ...incoming,
+        pre_auth_preset: incoming.pre_auth_preset ?? prev.pre_auth_preset ?? null,
+      };
+    }
     const keepPreAuth =
       prevTag === "PRE_AUTHORIZED" &&
       (incoming.pre_auth_preset ?? prev.pre_auth_preset) != null;

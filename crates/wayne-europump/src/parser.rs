@@ -486,11 +486,7 @@ mod tests {
         raw.push((crc >> 8) as u8);
         raw.extend([0x03, 0xFA]);
         match parse_frame(&raw) {
-            Frame::NozzleReturned {
-                product,
-                hose,
-                ..
-            } => {
+            Frame::NozzleReturned { product, hose, .. } => {
                 assert_eq!(product, 0x24);
                 assert_eq!(hose, 0x03);
             }
@@ -502,8 +498,8 @@ mod tests {
     fn composite_fill_embedded_holster() {
         // Pump 4 idle poll with holster in composite 02 08 (serial.log pattern).
         let body = &[
-            0x53u8, 0x3C, 0x02, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x01,
-            0x05, 0x00, 0x02,
+            0x53u8, 0x3C, 0x02, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04,
+            0x01, 0x05, 0x00, 0x02,
         ];
         let crc = crc16(body);
         let mut raw = body.to_vec();
@@ -532,7 +528,9 @@ mod tests {
         raw.push((crc >> 8) as u8);
         raw.extend([0x03, 0xFA]);
         match parse_frame(&raw) {
-            Frame::NozzleUp { nozzle, product, .. } => {
+            Frame::NozzleUp {
+                nozzle, product, ..
+            } => {
                 assert_eq!(product, 0x24);
                 assert_eq!(nozzle, 0x13);
             }
@@ -549,7 +547,9 @@ mod tests {
         raw.push((crc >> 8) as u8);
         raw.extend([0x03, 0xFA]);
         match parse_frame(&raw) {
-            Frame::NozzleUp { nozzle, product, .. } => {
+            Frame::NozzleUp {
+                nozzle, product, ..
+            } => {
                 assert_eq!(product, 0x43);
                 assert_eq!(nozzle, 0x11);
             }
@@ -563,7 +563,12 @@ mod tests {
             0x53u8, 0x3E, 0x03, 0x04, 0x01, 0x05, 0x00, 0x12, 0x10, 0xFA, 0xE9, 0x03, 0xFA,
         ];
         match parse_frame(raw) {
-            Frame::NozzleUp { addr, seq, product, nozzle } => {
+            Frame::NozzleUp {
+                addr,
+                seq,
+                product,
+                nozzle,
+            } => {
                 assert_eq!(addr, 0x53);
                 assert_eq!(seq, 0x3E);
                 assert_eq!(product, 0x05);
@@ -583,6 +588,29 @@ mod tests {
                 assert_eq!(seq, 0x3A);
             }
             f => panic!("expected DispenserIdle, got {:?}", f),
+        }
+    }
+
+    /// StatusTransition frame: `[addr] [seq] 01 01 02 02 08 00×11 [CRC] 03 FA`.
+    /// The parser must match on inner[4]=0x02 and return NozzleHolstered regardless
+    /// of the trailing `02 08 00…` bytes — confirming ack_frames_in_response ACKs it.
+    #[test]
+    fn status_transition_parsed_as_nozzle_holstered() {
+        let body = &[
+            0x52u8, 0x35, 0x01, 0x01, 0x02, // header: addr seq 01 01 02
+            0x02, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // trailing data
+        ];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        match parse_frame(&raw) {
+            Frame::NozzleHolstered { addr, seq } => {
+                assert_eq!(addr, 0x52);
+                assert_eq!(seq, 0x35);
+            }
+            f => panic!("expected NozzleHolstered, got {:?}", f),
         }
     }
 

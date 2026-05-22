@@ -1,15 +1,19 @@
 mod builder;
 mod crc;
+mod dart;
 mod frame;
 mod parser;
 
 pub use builder::{
-    ack, authorize_config, authorize_initial, busy, done, encode_preset_limit_bcd, ghost_fill_abort,
-    poll, stop, stop_frame, stop_pre_frame,
+    ack, authorize_config, authorize_initial, busy, done, encode_preset_limit_bcd,
+    ghost_fill_abort, poll, stop, stop_frame, stop_pre_frame,
 };
 pub use crc::{build_frame, crc16};
+pub use dart::{authorise_cmd, pre_authorise_price};
 pub use frame::Frame;
-pub use parser::{decode_amount, decode_volume, parse_frame, scan_embedded_hose_status, FrameAccumulator};
+pub use parser::{
+    decode_amount, decode_volume, parse_frame, scan_embedded_hose_status, FrameAccumulator,
+};
 
 use protocol_trait::ProtocolDriver;
 

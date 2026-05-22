@@ -12,11 +12,9 @@ pub async fn ensure_price_history_columns(pool: &SqlitePool) -> Result<()> {
             .await?;
 
     if !cols.iter().any(|c| c == "product_name") {
-        sqlx::query(
-            "ALTER TABLE price_history ADD COLUMN product_name TEXT NOT NULL DEFAULT ''",
-        )
-        .execute(pool)
-        .await?;
+        sqlx::query("ALTER TABLE price_history ADD COLUMN product_name TEXT NOT NULL DEFAULT ''")
+            .execute(pool)
+            .await?;
         tracing::info!("repaired price_history: added product_name column");
     }
     if !cols.iter().any(|c| c == "changed_by") {

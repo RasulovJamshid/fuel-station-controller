@@ -69,11 +69,14 @@ pub fn authorize_config(addr: u8, product_codes: &[u8], limit_bcd: [u8; 3]) -> V
         payload.push(i);
     }
 
-    // Channel / product map (sniffer: `05 0C` + triplets `01 PP 00`).
+    // Channel / product map (sniffer: `05 0C` + triplets `01 PP flag`).
+    // The last triplet uses flag=0x30 — observed in every sniffer capture.
+    // Without this flag the pump ACKs CONFIG but never arms the nozzle.
     payload.push(0x05);
     payload.push((n * 3) as u8);
-    for &pp in product_codes.iter().take(n) {
-        payload.extend([0x01, pp, 0x00]);
+    for (i, &pp) in product_codes.iter().take(n).enumerate() {
+        let flag = if i == n - 1 { 0x30 } else { 0x00 };
+        payload.extend([0x01, pp, flag]);
     }
 
     // Preset limit (`03 04 00` + 3 BCD bytes — volume, amount, or `09 99 00` full).
@@ -85,7 +88,11 @@ pub fn authorize_config(addr: u8, product_codes: &[u8], limit_bcd: [u8; 3]) -> V
 }
 
 /// Hardware preset bytes inside CONFIG (`03 04 00` + 3 BCD bytes).
-pub fn encode_preset_limit_bcd(full_tank: bool, volume_liters: Option<f64>, amount_uzs: Option<u64>) -> [u8; 3] {
+pub fn encode_preset_limit_bcd(
+    full_tank: bool,
+    volume_liters: Option<f64>,
+    amount_uzs: Option<u64>,
+) -> [u8; 3] {
     if full_tank {
         return [0x09, 0x99, 0x00];
     }
@@ -141,16 +148,32 @@ mod tests {
     }
 
     #[test]
-    fn config_volume_10l_matches_sniffer_layout() {
-        let frame = authorize_config(0x52, &[0x05, 0x43, 0x24, 0x43], encode_bcd_3(1000));
+    fn config_volume_10l_matches_sniffer_exact() {
+        // Sniffer: 52 30 01 01 05 02 04 01 02 03 04
+        //   05 0C 01 43 00 01 05 00 01 24 00 01 43 30
+        //   03 04 00 00 10 00 01 01 06 [CK] 03 FA
+        let frame = authorize_config(0x52, &[0x43, 0x05, 0x24, 0x43], encode_bcd_3(1000));
         assert!(frame.starts_with(&[0x52, 0x30, 0x01, 0x01, 0x05]));
-        assert!(frame.windows(6).any(|w| w == [0x03, 0x04, 0x00, 0x00, 0x10, 0x00]));
+        // Product triplets: last one must have flag=0x30
+        assert!(
+            frame
+                .windows(12)
+                .any(|w| w
+                    == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00, 0x01, 0x24, 0x00, 0x01, 0x43, 0x30])
+        );
+        assert!(frame
+            .windows(6)
+            .any(|w| w == [0x03, 0x04, 0x00, 0x00, 0x10, 0x00]));
         assert!(frame.ends_with(&[0x03, 0xFA]));
     }
 
     #[test]
     fn config_full_preset_bytes() {
         let frame = authorize_config(0x53, &[0x05], [0x09, 0x99, 0x00]);
-        assert!(frame.windows(6).any(|w| w == [0x03, 0x04, 0x00, 0x09, 0x99, 0x00]));
+        assert!(frame
+            .windows(6)
+            .any(|w| w == [0x03, 0x04, 0x00, 0x09, 0x99, 0x00]));
+        // Single product: it IS the last one, so flag=0x30
+        assert!(frame.windows(3).any(|w| w == [0x01, 0x05, 0x30]));
     }
 }

@@ -250,6 +250,26 @@ impl RuntimeFp {
             || self.state.pre_auth_preset.is_some()
     }
 
+    /// Effective price for the currently active nozzle (falls back to state.price).
+    fn active_nozzle_price(&self) -> u32 {
+        let idx = self.state.nozzle_index.unwrap_or(1);
+        self.nozzle_prices
+            .get(&idx)
+            .copied()
+            .unwrap_or(self.state.price)
+    }
+
+    /// Amount computed from metered volume × actual price.
+    ///
+    /// Wayne hardware computes its own amount display using the truncated displayed price
+    /// (e.g. 10500 → displayed as "0500"), so the pump's raw amount bytes are wrong by the
+    /// leading digits.  We recompute from volume so both the UI and the software cap
+    /// (`cap_amount`) use the correct sum.
+    fn amount_from_volume(&self, vol: f64) -> u64 {
+        let price = self.active_nozzle_price();
+        (vol * price as f64).round() as u64
+    }
+
     fn apply_metering(&mut self, raw_vol: f64, raw_amt: u64) {
         if let Some(c) = self.continuation.as_mut() {
             c.segment_volume = raw_vol;
@@ -1539,12 +1559,13 @@ impl RuntimeFp {
                         }
 
                         // Already recorded this sale — wait for operator dismiss.
+                        // Volume match is sufficient; raw_amt from the pump uses the truncated
+                        // displayed price and no longer equals latch.amount (our computed value).
                         if self.state.status == FpStatus::Done {
                             if let Some(latch) = &self.completed_sale {
                                 let nozzle = wire_nozzle.unwrap_or(latch.nozzle_index);
                                 if nozzle == latch.nozzle_index
                                     && (raw_vol - latch.volume).abs() < 0.02
-                                    && raw_amt == latch.amount
                                 {
                                     self.touch();
                                     return FrameEffect::StatusChanged;
@@ -1570,7 +1591,7 @@ impl RuntimeFp {
                                 nozzle_index,
                             });
                         }
-                        self.apply_metering(raw_vol, raw_amt);
+                        self.apply_metering(raw_vol, self.amount_from_volume(raw_vol));
                         self.state.status = FpStatus::Delivering;
                         self.touch();
                         return FrameEffect::StatusChanged;
@@ -1578,13 +1599,13 @@ impl RuntimeFp {
                     self.touch();
                     return FrameEffect::StatusChanged;
                 }
-                self.apply_metering(raw_vol, raw_amt);
+                self.apply_metering(raw_vol, self.amount_from_volume(raw_vol));
                 let vol = self.state.volume;
                 let amt = self.state.amount;
                 // First non-zero data frame starts delivery. Zero-volume frames are
                 // normal while the nozzle is up but no fuel has flowed yet (ghost fill).
                 if self.state.status == FpStatus::Authorizing {
-                    if raw_vol > 1e-6 || raw_amt > 0 {
+                    if raw_vol > 1e-6 {
                         self.state.status = FpStatus::Delivering;
                         if self.current_tx.is_none() {
                             let nozzle_index = self.state.nozzle_index.unwrap_or(1);

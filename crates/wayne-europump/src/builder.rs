@@ -65,7 +65,12 @@ pub fn encode_price(price_sum_per_litre: u32) -> [u8; 2] {
 /// channel 1 = `0x11`, channel 2 = `0x12`, …), matching `02 04 01 02 03 04`.
 ///
 /// Sniffer product block: `05 0C` + `01 PP flag` × N (3 bytes each; last flag `0x30`).
-/// Reference price block (ASFuelControl SetPriceCMD): `05 0C` + `00 P_hi P_lo` × N per channel.
+/// Price block: `05 [N×3]` + 3-byte BCD price × N per channel.  The pump's 4-digit display
+/// shows only the last 4 decimal digits, but the pump uses the full 6-digit value for its
+/// internal amount accumulator, so totals are always correct.
+/// Examples: 14300 → `[0x01, 0x43, 0x00]` (display "4300", internal 14300),
+///           10500 → `[0x01, 0x05, 0x00]` (display "0500", internal 10500),
+///           9200  → `[0x00, 0x92, 0x00]` (display "9200", internal 9200).
 pub fn authorize_config(addr: u8, product_codes: &[u8], prices: &[u32], limit_bcd: [u8; 3]) -> Vec<u8> {
     let n = product_codes.len().clamp(1, 4);
 
@@ -87,12 +92,11 @@ pub fn authorize_config(addr: u8, product_codes: &[u8], prices: &[u32], limit_bc
         payload.extend([0x01, pp, flag]);
     }
 
-    // Per-channel prices (SetPriceCMD): `05 [n×3]` + `00 P_hi P_lo` per channel in same order.
+    // Per-channel prices: `05 [n×3]` + 3-byte BCD price per channel.
     payload.push(0x05);
     payload.push((n * 3) as u8);
     for i in 0..n {
-        let [p_hi, p_lo] = encode_price(*prices.get(i).unwrap_or(&0));
-        payload.extend([0x00, p_hi, p_lo]);
+        payload.extend(encode_bcd_3(*prices.get(i).unwrap_or(&0)));
     }
 
     // Preset limit (`03 04 00` + 3 BCD bytes — volume, amount, or `09 99 00` full).
@@ -191,13 +195,13 @@ mod tests {
         assert!(frame
             .windows(12)
             .any(|w| w == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00, 0x01, 0x24, 0x00, 0x01, 0x43, 0x30]));
-        // Block 2: [00 P_hi P_lo] × n — prices as last-4-digit BCD
+        // Block 2: 3-byte BCD prices — 14300=[01 43 00], 10500=[01 05 00], 9200=[00 92 00]
         assert!(frame
             .windows(6)
-            .any(|w| w == [0x00, 0x43, 0x00, 0x00, 0x05, 0x00]));
+            .any(|w| w == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00]));
         assert!(frame
             .windows(6)
-            .any(|w| w == [0x00, 0x92, 0x00, 0x00, 0x43, 0x00]));
+            .any(|w| w == [0x00, 0x92, 0x00, 0x01, 0x43, 0x00]));
         assert!(frame
             .windows(6)
             .any(|w| w == [0x03, 0x04, 0x00, 0x00, 0x10, 0x00]));
@@ -216,13 +220,13 @@ mod tests {
         assert!(frame
             .windows(12)
             .any(|w| w == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00, 0x01, 0x24, 0x00, 0x01, 0x05, 0x30]));
-        // Block 2: last-4-digit BCD prices
+        // Block 2: 3-byte BCD prices — 14300=[01 43 00], 10500=[01 05 00], 12400=[01 24 00]
         assert!(frame
             .windows(6)
-            .any(|w| w == [0x00, 0x43, 0x00, 0x00, 0x05, 0x00]));
+            .any(|w| w == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00]));
         assert!(frame
             .windows(6)
-            .any(|w| w == [0x00, 0x24, 0x00, 0x00, 0x05, 0x00]));
+            .any(|w| w == [0x01, 0x24, 0x00, 0x01, 0x05, 0x00]));
     }
 
     #[test]
@@ -246,7 +250,7 @@ mod tests {
             .windows(6)
             .any(|w| w == [0x03, 0x04, 0x00, 0x09, 0x99, 0x00]));
         assert!(frame.windows(3).any(|w| w == [0x01, 0x05, 0x30]));
-        // 10500 % 10000 = 500 → [0x05, 0x00]
-        assert!(frame.windows(3).any(|w| w == [0x00, 0x05, 0x00]));
+        // 10500 as 3-byte BCD → [0x01, 0x05, 0x00]
+        assert!(frame.windows(3).any(|w| w == [0x01, 0x05, 0x00]));
     }
 }

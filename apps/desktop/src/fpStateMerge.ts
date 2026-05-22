@@ -44,6 +44,18 @@ export function mergeIncomingFpState(
   // (holstered pre-auth — brief status flicker only). Stale pre_auth_preset on IDLE
   // must not hide the lift.
   if (incomingTag === "NOZZLE_UP") {
+    // Another hose lifted while DONE still shows the previous sale — show the new lift.
+    if (
+      prevTag === "DONE" &&
+      prev.nozzle_index != null &&
+      incoming.nozzle_index != null &&
+      prev.nozzle_index !== incoming.nozzle_index
+    ) {
+      return {
+        ...incoming,
+        pre_auth_preset: null,
+      };
+    }
     // After lift, service reports AUTHORIZING/DELIVERING — do not pin UI to PRE_AUTHORIZED.
     if (prevTag === "AUTHORIZING" || prevTag === "DELIVERING") {
       return {

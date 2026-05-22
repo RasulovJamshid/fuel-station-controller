@@ -413,6 +413,15 @@ export const useAppStore = create<AppState>((set, get) => ({
             : prev.status;
         const keepPreAuth =
           prevTag === "PRE_AUTHORIZED" && prev.pre_auth_preset != null;
+        const holdDoneUntil = { ...get().holdDoneUntil };
+        // Lifting a different grade must not replay the completed-sale screen.
+        if (
+          prevTag === "DONE" &&
+          prev.nozzle_index != null &&
+          prev.nozzle_index !== d.nozzle_index
+        ) {
+          delete holdDoneUntil[d.fp_id];
+        }
         next[i] = {
           ...prev,
           status: keepPreAuth ? "PRE_AUTHORIZED" : "NOZZLE_UP",
@@ -428,7 +437,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           segment_volume: null,
           segment_amount: null,
         };
-        set({ states: next });
+        set({ states: next, holdDoneUntil });
       }
       return;
     }

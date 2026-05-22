@@ -46,44 +46,53 @@ pub fn encode_bcd_3(val: u32) -> [u8; 3] {
 
 /// Encode a price (sum per litre) into the 2-byte Wayne wire format.
 ///
-/// Wire format: `val = price / 100`, then BCD-pack as `[val/100, ((val%100/10)<<4)|(val%10)]`.
-/// Examples: 14300 → `[0x01, 0x43]`, 10500 → `[0x01, 0x05]`, 15000 → `[0x01, 0x50]`.
+/// Encodes the last 4 decimal digits of the price as BCD, matching the display
+/// unit used by Wayne hardware in Uzbekistan.
+/// Examples: 14300 → `[0x43, 0x00]` (shows "4300"), 10500 → `[0x05, 0x00]` (shows "0500"),
+/// 9200 → `[0x92, 0x00]` (shows "9200").
+/// Delivery accuracy is unaffected — amount presets are always pre-converted to
+/// volume before being sent to the pump.
 pub fn encode_price(price_sum_per_litre: u32) -> [u8; 2] {
-    let val = price_sum_per_litre / 100;
-    let hi = (val / 100) as u8;
-    let lo = (((val % 100) / 10) << 4) as u8 | (val % 10) as u8;
+    let val = price_sum_per_litre % 10_000;
+    let hi = (((val / 1000) << 4) | ((val / 100) % 10)) as u8;
+    let lo = ((((val / 10) % 10) << 4) | (val % 10)) as u8;
     [hi, lo]
 }
 
-/// CONFIG frame (§6) — price/preset block sent twice after AUTH (or with holstered pre-auth).
+/// CONFIG frame (§6) — product map, per-channel prices, and preset (sent on AUTH / pre-auth).
 ///
-/// `product_codes`: Wayne PP bytes per active nozzle (wayne_code order), e.g. `[0x05, 0x43, 0x24]`.
-/// `prices`: price per litre (sum units) for each nozzle, aligned with `product_codes`.
-/// `limit_bcd`: 3-byte preset/limit from [`encode_preset_limit_bcd`].
+/// `product_codes` and `prices` must be in the same order: sorted by [`wayne_code`] (physical
+/// channel 1 = `0x11`, channel 2 = `0x12`, …), matching `02 04 01 02 03 04`.
 ///
-/// Each product entry: `01 PP flag P_hi P_lo 00 P_hi P_lo 00` (9 bytes).
-/// Price is embedded twice per product so the pump bills at the app price, not its internal price.
+/// Sniffer product block: `05 0C` + `01 PP flag` × N (3 bytes each; last flag `0x30`).
+/// Reference price block (ASFuelControl SetPriceCMD): `05 0C` + `00 P_hi P_lo` × N per channel.
 pub fn authorize_config(addr: u8, product_codes: &[u8], prices: &[u32], limit_bcd: [u8; 3]) -> Vec<u8> {
     let n = product_codes.len().clamp(1, 4);
 
     let mut payload = vec![addr, 0x30];
     payload.extend([0x01, 0x01, 0x05]); // GO_IDLE
 
-    // Transaction context (sniffer: `02 04 01 02 03 04`).
+    // Transaction context (sniffer: `02 04 01 02 03 04` = channels 1..N).
     payload.push(0x02);
     payload.push(n as u8);
     for i in 1..=(n as u8) {
         payload.push(i);
     }
 
-    // Channel / product map: `05 [len]` + 9-byte entries `01 PP flag P_hi P_lo 00 P_hi P_lo 00`.
-    // Price is sent twice per product. The last entry uses flag=0x30 — required to arm the nozzle.
+    // Product map (sniffer): `05 [n×3]` + `01 PP flag` per channel.
     payload.push(0x05);
-    payload.push((n * 9) as u8);
+    payload.push((n * 3) as u8);
     for (i, &pp) in product_codes.iter().take(n).enumerate() {
         let flag = if i == n - 1 { 0x30 } else { 0x00 };
+        payload.extend([0x01, pp, flag]);
+    }
+
+    // Per-channel prices (SetPriceCMD): `05 [n×3]` + `00 P_hi P_lo` per channel in same order.
+    payload.push(0x05);
+    payload.push((n * 3) as u8);
+    for i in 0..n {
         let [p_hi, p_lo] = encode_price(*prices.get(i).unwrap_or(&0));
-        payload.extend([0x01, pp, flag, p_hi, p_lo, 0x00, p_hi, p_lo, 0x00]);
+        payload.extend([0x00, p_hi, p_lo]);
     }
 
     // Preset limit (`03 04 00` + 3 BCD bytes — volume, amount, or `09 99 00` full).
@@ -162,16 +171,15 @@ mod tests {
 
     #[test]
     fn encode_price_examples() {
-        assert_eq!(encode_price(14300), [0x01, 0x43]);
-        assert_eq!(encode_price(10500), [0x01, 0x05]);
-        assert_eq!(encode_price(15000), [0x01, 0x50]);
-        assert_eq!(encode_price(9200), [0x00, 0x92]);
+        assert_eq!(encode_price(14300), [0x43, 0x00]);
+        assert_eq!(encode_price(10500), [0x05, 0x00]);
+        assert_eq!(encode_price(15000), [0x50, 0x00]);
+        assert_eq!(encode_price(9200),  [0x92, 0x00]);
+        assert_eq!(encode_price(12400), [0x24, 0x00]);
     }
 
     #[test]
     fn config_volume_10l_with_prices() {
-        // 4 products at prices [14300, 10500, 9200, 14300]; volume preset 10L.
-        // Each product entry: `01 PP flag P_hi P_lo 00 P_hi P_lo 00` (9 bytes).
         let frame = authorize_config(
             0x52,
             &[0x43, 0x05, 0x24, 0x43],
@@ -179,25 +187,42 @@ mod tests {
             encode_bcd_3(1000),
         );
         assert!(frame.starts_with(&[0x52, 0x30, 0x01, 0x01, 0x05]));
-        // Length byte for 4 × 9-byte entries = 0x24.
-        assert!(frame.windows(2).any(|w| w == [0x05, 0x24]));
-        // Product 1 (AI-95, not last): `01 43 00 01 43 00 01 43 00`
+        // Block 1: [01 PP flag] × 4
         assert!(frame
-            .windows(9)
-            .any(|w| w == [0x01, 0x43, 0x00, 0x01, 0x43, 0x00, 0x01, 0x43, 0x00]));
-        // Product 4 (last, flag=0x30): `01 43 30 01 43 00 01 43 00`
+            .windows(12)
+            .any(|w| w == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00, 0x01, 0x24, 0x00, 0x01, 0x43, 0x30]));
+        // Block 2: [00 P_hi P_lo] × n — prices as last-4-digit BCD
         assert!(frame
-            .windows(9)
-            .any(|w| w == [0x01, 0x43, 0x30, 0x01, 0x43, 0x00, 0x01, 0x43, 0x00]));
-        // Diesel (PP=0x24, price=9200 → [0x00, 0x92]): `01 24 00 00 92 00 00 92 00`
+            .windows(6)
+            .any(|w| w == [0x00, 0x43, 0x00, 0x00, 0x05, 0x00]));
         assert!(frame
-            .windows(9)
-            .any(|w| w == [0x01, 0x24, 0x00, 0x00, 0x92, 0x00, 0x00, 0x92, 0x00]));
-        // Volume preset: `03 04 00 00 10 00` (10L = 1000 centilitres)
+            .windows(6)
+            .any(|w| w == [0x00, 0x92, 0x00, 0x00, 0x43, 0x00]));
         assert!(frame
             .windows(6)
             .any(|w| w == [0x03, 0x04, 0x00, 0x00, 0x10, 0x00]));
         assert!(frame.ends_with(&[0x03, 0xFA]));
+    }
+
+    #[test]
+    fn config_fp4_prices_per_channel() {
+        let frame = authorize_config(
+            0x53,
+            &[0x43, 0x05, 0x24, 0x05],
+            &[14300, 10500, 12400, 10500],
+            [0x09, 0x99, 0x00],
+        );
+        // Block 1 unchanged
+        assert!(frame
+            .windows(12)
+            .any(|w| w == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00, 0x01, 0x24, 0x00, 0x01, 0x05, 0x30]));
+        // Block 2: last-4-digit BCD prices
+        assert!(frame
+            .windows(6)
+            .any(|w| w == [0x00, 0x43, 0x00, 0x00, 0x05, 0x00]));
+        assert!(frame
+            .windows(6)
+            .any(|w| w == [0x00, 0x24, 0x00, 0x00, 0x05, 0x00]));
     }
 
     #[test]
@@ -220,9 +245,8 @@ mod tests {
         assert!(frame
             .windows(6)
             .any(|w| w == [0x03, 0x04, 0x00, 0x09, 0x99, 0x00]));
-        // Single product (last): flag=0x30, price=10500→[0x01,0x05]
-        assert!(frame
-            .windows(9)
-            .any(|w| w == [0x01, 0x05, 0x30, 0x01, 0x05, 0x00, 0x01, 0x05, 0x00]));
+        assert!(frame.windows(3).any(|w| w == [0x01, 0x05, 0x30]));
+        // 10500 % 10000 = 500 → [0x05, 0x00]
+        assert!(frame.windows(3).any(|w| w == [0x00, 0x05, 0x00]));
     }
 }

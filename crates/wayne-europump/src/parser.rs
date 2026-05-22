@@ -77,11 +77,12 @@ struct FillDataFields {
     hose_code: Option<u8>,
 }
 
-/// Live meter block: `02 08 00 00 [V1][V2] 00 [A1][A2][A3]` at `off`.
-fn parse_fill_data_block(inner: &[u8]) -> Option<FillDataFields> {
-    let off = if inner.len() >= 12 && inner[2] == 0x02 && inner[3] == 0x08 {
-        2usize
-    } else if inner.len() >= 15
+/// Locate `02 08` meter block inside a composite data frame.
+fn find_fill_data_offset(inner: &[u8]) -> Option<(usize, bool)> {
+    if inner.len() >= 12 && inner[2] == 0x02 && inner[3] == 0x08 {
+        return Some((2, false));
+    }
+    if inner.len() >= 15
         && inner[2] == 0x01
         && inner[3] == 0x01
         && inner[4] == 0x04
@@ -89,10 +90,36 @@ fn parse_fill_data_block(inner: &[u8]) -> Option<FillDataFields> {
         && inner[6] == 0x08
     {
         // BUSY-wrapped fill data (PC sent `30 01 01 04` keepalive during delivery).
-        5usize
-    } else {
-        return None;
-    };
+        return Some((5, false));
+    }
+    for off in 2..inner.len().saturating_sub(9) {
+        if inner[off] == 0x02 && inner[off + 1] == 0x08 {
+            let config_echo = off >= 6 && inner[2] == 0x03 && inner[3] == 0x04 && inner[4] == 0x00;
+            return Some((off, config_echo));
+        }
+    }
+    None
+}
+
+/// Hose status from `03 04 01 PP 00 HH`, or holster derived from CONFIG echo before `02 08`.
+fn embedded_hose_from_fill(inner: &[u8], off: usize, config_echo: bool) -> (Option<u8>, Option<u8>) {
+    if let Some((p, h)) = scan_embedded_hose_status(inner) {
+        return (Some(p), Some(h));
+    }
+    if config_echo && off >= 6 {
+        let pp = inner[off - 2];
+        let hh = inner[off - 1];
+        if Frame::is_nozzle_lift_code(hh) {
+            // Pump echoes last lifted hose (`0x12`); holster is `HH - 0x10` (`0x02`).
+            return (Some(pp), Some(hh - 0x10));
+        }
+    }
+    (None, None)
+}
+
+/// Live meter block: `02 08 00 00 [V1][V2] 00 [A1][A2][A3]` at `off`.
+fn parse_fill_data_block(inner: &[u8]) -> Option<FillDataFields> {
+    let (off, config_echo) = find_fill_data_offset(inner)?;
     if inner.len() < off + 10 {
         return None;
     }
@@ -100,9 +127,7 @@ fn parse_fill_data_block(inner: &[u8]) -> Option<FillDataFields> {
         && inner[inner.len() - 3] == 0x01
         && inner[inner.len() - 2] == 0x01
         && inner[inner.len() - 1] == 0x01;
-    let (hose_product, hose_code) = scan_embedded_hose_status(inner)
-        .map(|(p, h)| (Some(p), Some(h)))
-        .unwrap_or((None, None));
+    let (hose_product, hose_code) = embedded_hose_from_fill(inner, off, config_echo);
     Some(FillDataFields {
         volume_l: inner[off + 4],
         volume_h: inner[off + 5],
@@ -113,14 +138,26 @@ fn parse_fill_data_block(inner: &[u8]) -> Option<FillDataFields> {
     })
 }
 
-/// Scan for embedded `03 04 01 [PP] 00 [HH]` in composite fill / status frames.
+/// Scan for embedded hose status in composite fill / status frames.
+///
+/// Two variants observed in the wild:
+/// - Standard: `03 04 01 [PP] 00 [HH]` — product at [i+3], hose at [i+5].
+/// - Type-B:   `03 04 00 [??] [PP] [HH]` — product at [i+4], hose at [i+5].
 pub fn scan_embedded_hose_status(body: &[u8]) -> Option<(u8, u8)> {
     if body.len() < 6 {
         return None;
     }
     for i in 0..=body.len() - 6 {
-        if body[i] == 0x03 && body[i + 1] == 0x04 && body[i + 2] == 0x01 {
-            return Some((body[i + 3], body[i + 5]));
+        if body[i] == 0x03 && body[i + 1] == 0x04 {
+            if body[i + 2] == 0x01 {
+                // Standard: 03 04 01 PP 00 HH
+                return Some((body[i + 3], body[i + 5]));
+            }
+            if body[i + 2] == 0x00 && Frame::is_nozzle_holster_code(body[i + 5]) {
+                // Type-B variant: 03 04 00 [??] PP HH — only for holster codes.
+                // Lift codes here are config-echo prefixes; let the caller handle them.
+                return Some((body[i + 4], body[i + 5]));
+            }
         }
     }
     None
@@ -213,6 +250,22 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
                 nozzle,
             };
         }
+        // State-transition frames (`01 01 XX`) must be checked before the generic
+        // fill-data scan because some real-world frames carry both the `01 01 02`
+        // holster signal and a trailing `02 08 00…` block.  The state byte at [4]
+        // takes precedence; BUSY (`0x04`) is intentionally absent here so
+        // BUSY-wrapped fill frames (`01 01 04 02 08 …`) fall through to fill-data.
+        if inner.len() >= 5 && inner[2] == 0x01 && inner[3] == 0x01 {
+            match inner[4] {
+                // Standalone dispenser state: IDLE (ghost-fill holster) — not sale DONE.
+                0x05 if inner.len() == 5 => return Frame::DispenserIdle { addr, seq },
+                0x05 => return Frame::TransactionComplete { addr, seq },
+                0x01 => return Frame::Stopped { addr, seq },
+                // Nozzle holstered / post-stop idle (§5.5) — not a lift.
+                0x02 | 0x00 => return Frame::NozzleHolstered { addr, seq },
+                _ => {}
+            }
+        }
         if let Some(data) = parse_fill_data_block(inner) {
             return Frame::Data {
                 addr,
@@ -225,15 +278,18 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
                 hose_code: data.hose_code,
             };
         }
-        if inner.len() >= 5 && inner[2] == 0x01 && inner[3] == 0x01 {
-            match inner[4] {
-                // Standalone dispenser state: IDLE (ghost-fill holster) — not sale DONE.
-                0x05 if inner.len() == 5 => return Frame::DispenserIdle { addr, seq },
-                0x05 => return Frame::TransactionComplete { addr, seq },
-                0x01 => return Frame::Stopped { addr, seq },
-                // Nozzle holstered / post-stop idle (§5.5) — not a lift.
-                0x02 | 0x00 => return Frame::NozzleHolstered { addr, seq },
-                _ => {}
+        // Variant firmware: `03 04 00 [?] PP HH` — NozzleUp without a meter block.
+        // Some Wayne hardware uses 0x00 at position[4] instead of 0x01; product is
+        // at position[6] and nozzle code at position[7].  The fill-data check above
+        // already handles the case where this prefix is followed by a `02 08` block.
+        if inner.len() >= 8 && inner[2] == 0x03 && inner[3] == 0x04 && inner[4] == 0x00 {
+            let product = inner[6];
+            let nozzle = inner[7];
+            if Frame::is_nozzle_holster_code(nozzle) {
+                return Frame::NozzleReturned { addr, seq, product, hose: nozzle };
+            }
+            if Frame::is_nozzle_lift_code(nozzle) {
+                return Frame::NozzleUp { addr, seq, product, nozzle };
             }
         }
     }
@@ -533,6 +589,35 @@ mod tests {
     }
 
     #[test]
+    fn composite_fill_config_echo_prefix() {
+        // Post-holster ghost fill: `03 04 00 [preset] PP HH` then `02 08` (serial.log FP4).
+        let body = &[
+            0x53u8, 0x38, 0x03, 0x04, 0x00, 0x01, 0x05, 0x12, 0x02, 0x08, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        ];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        match parse_frame(&raw) {
+            Frame::Data {
+                hose_product,
+                hose_code,
+                volume_l,
+                volume_h,
+                ..
+            } => {
+                assert_eq!(hose_product, Some(0x05));
+                assert_eq!(hose_code, Some(0x02));
+                assert_eq!(volume_l, 0);
+                assert_eq!(volume_h, 0);
+            }
+            f => panic!("expected Data, got {:?}", f),
+        }
+    }
+
+    #[test]
     fn composite_fill_embedded_holster() {
         // Pump 4 idle poll with holster in composite 02 08 (serial.log pattern).
         let body = &[
@@ -554,6 +639,42 @@ mod tests {
                 assert_eq!(hose_code, Some(0x02));
             }
             f => panic!("expected Data with embedded holster, got {:?}", f),
+        }
+    }
+
+    /// Some Wayne hardware sends `03 04 00 [?] PP HH` instead of `03 04 01 PP 00 HH`.
+    /// Real log: 53 3F 03 04 00 01 24 13 70 D4 03 FA — diesel nozzle 3 lifted on pump 4.
+    #[test]
+    fn nozzle_up_variant_type_b() {
+        let raw = &[
+            0x53u8, 0x3F, 0x03, 0x04, 0x00, 0x01, 0x24, 0x13, 0x70, 0xD4, 0x03, 0xFA,
+        ];
+        match parse_frame(raw) {
+            Frame::NozzleUp { addr, seq, product, nozzle } => {
+                assert_eq!(addr, 0x53);
+                assert_eq!(seq, 0x3F);
+                assert_eq!(product, 0x24);
+                assert_eq!(nozzle, 0x13);
+            }
+            f => panic!("expected NozzleUp, got {:?}", f),
+        }
+    }
+
+    #[test]
+    fn nozzle_holster_variant_type_b() {
+        // Same format but with holster code (< 0x10)
+        let body = &[0x53u8, 0x3F, 0x03, 0x04, 0x00, 0x01, 0x24, 0x03];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        match parse_frame(&raw) {
+            Frame::NozzleReturned { product, hose, .. } => {
+                assert_eq!(product, 0x24);
+                assert_eq!(hose, 0x03);
+            }
+            f => panic!("expected NozzleReturned, got {:?}", f),
         }
     }
 

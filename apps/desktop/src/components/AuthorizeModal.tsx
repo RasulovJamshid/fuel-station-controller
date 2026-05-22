@@ -1,5 +1,5 @@
 import type { FpState, NozzleSnapshot } from "../types/api";
-import type { AuthorizeRequest } from "./DispenserCard";
+import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 import { SaleSetupPanel } from "./SaleSetupPanel";
 
 type Props = {
@@ -8,6 +8,7 @@ type Props = {
   fpNozzles: NozzleSnapshot[];
   mode?: "preauth" | "reactive";
   initialNozzle?: number | null;
+  initialFillMode?: FillMode;
   onClose: () => void;
   onConfirm: (req: AuthorizeRequest) => void;
 };
@@ -18,6 +19,7 @@ export function AuthorizeModal({
   fpNozzles,
   mode = "reactive",
   initialNozzle = null,
+  initialFillMode,
   onClose,
   onConfirm,
 }: Props) {
@@ -43,10 +45,11 @@ export function AuthorizeModal({
           {title} — Pump {state.fp_id}
         </p>
         <SaleSetupPanel
-          key={`${state.fp_id}-${initialNozzle ?? "none"}`}
+          key={`${state.fp_id}-${initialNozzle ?? "none"}-${initialFillMode ?? "full"}`}
           fpId={state.fp_id}
           activeNozzles={activeNozzles}
           initialNozzle={initialNozzle}
+          initialFillMode={initialFillMode}
           title={title}
           subtitle="Choose product and fill limit"
           theme={mode === "preauth" ? "amber" : "emerald"}

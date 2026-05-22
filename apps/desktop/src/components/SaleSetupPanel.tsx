@@ -15,6 +15,7 @@ export type SaleSetupPanelProps = {
   fpId: string;
   activeNozzles: NozzleSnapshot[];
   initialNozzle?: number | null;
+  initialFillMode?: FillMode;
   title?: string;
   subtitle?: string;
   confirmLabel: string;
@@ -27,6 +28,7 @@ export function SaleSetupPanel({
   fpId,
   activeNozzles,
   initialNozzle = null,
+  initialFillMode,
   title = "Pre-authorize",
   subtitle = "Choose product and fill limit for this sale",
   confirmLabel,
@@ -51,7 +53,7 @@ export function SaleSetupPanel({
     }
     return activeNozzles.length === 1 ? (activeNozzles[0]?.index ?? null) : null;
   });
-  const [fillMode, setFillMode] = useState<FillMode>("full");
+  const [fillMode, setFillMode] = useState<FillMode>(initialFillMode ?? "full");
   const [volLiters, setVolLiters] = useState("25");
   const [amtSum, setAmtSum] = useState("");
 
@@ -63,11 +65,11 @@ export function SaleSetupPanel({
     } else {
       setSelectedNozzle(null);
     }
-    setFillMode("full");
+    setFillMode(initialFillMode ?? "full");
     setVolLiters("25");
     setAmtSum("");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when pump or hint changes
-  }, [fpId, initialNozzle]);
+  }, [fpId, initialNozzle, initialFillMode]);
 
   const effectiveNozzle =
     selectedNozzle ?? (activeNozzles.length === 1 ? activeNozzles[0]!.index : null);

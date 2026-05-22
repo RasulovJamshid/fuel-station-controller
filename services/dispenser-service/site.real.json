@@ -44,6 +44,12 @@
       "name": "Diesel",
       "color": "#795548",
       "unit": "litre"
+    },
+    {
+      "id": 4,
+      "name": "AI-91",
+      "color": "#4CAF50",
+      "unit": "litre"
     }
   ],
   "fueling_positions": [
@@ -175,19 +181,19 @@
       "nozzles": [
         {
           "index": 1,
-          "product_id": 1,
-          "price": 10500,
-          "active": true,
-          "wayne_code": 18,
-          "wayne_product_code": 5
-        },
-        {
-          "index": 2,
           "product_id": 2,
           "price": 14300,
           "active": true,
           "wayne_code": 17,
           "wayne_product_code": 67
+        },
+        {
+          "index": 2,
+          "product_id": 1,
+          "price": 10500,
+          "active": true,
+          "wayne_code": 18,
+          "wayne_product_code": 5
         },
         {
           "index": 3,
@@ -199,11 +205,11 @@
         },
         {
           "index": 4,
-          "product_id": 2,
-          "price": 14300,
+          "product_id": 4,
+          "price": 10500,
           "active": true,
           "wayne_code": 20,
-          "wayne_product_code": 67
+          "wayne_product_code": 5
         }
       ]
     }

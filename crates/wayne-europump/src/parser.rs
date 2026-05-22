@@ -68,6 +68,51 @@ fn try_crc(data: &[u8], ck1: u8, ck2: u8) -> bool {
     false
 }
 
+struct FillDataFields {
+    volume_l: u8,
+    volume_h: u8,
+    amount: [u8; 3],
+    sale_complete: bool,
+    hose_product: Option<u8>,
+    hose_code: Option<u8>,
+}
+
+/// Live meter block: `02 08 00 00 [V1][V2] 00 [A1][A2][A3]` at `off`.
+fn parse_fill_data_block(inner: &[u8]) -> Option<FillDataFields> {
+    let off = if inner.len() >= 12 && inner[2] == 0x02 && inner[3] == 0x08 {
+        2usize
+    } else if inner.len() >= 15
+        && inner[2] == 0x01
+        && inner[3] == 0x01
+        && inner[4] == 0x04
+        && inner[5] == 0x02
+        && inner[6] == 0x08
+    {
+        // BUSY-wrapped fill data (PC sent `30 01 01 04` keepalive during delivery).
+        5usize
+    } else {
+        return None;
+    };
+    if inner.len() < off + 10 {
+        return None;
+    }
+    let sale_complete = inner.len() >= off + 15
+        && inner[inner.len() - 3] == 0x01
+        && inner[inner.len() - 2] == 0x01
+        && inner[inner.len() - 1] == 0x01;
+    let (hose_product, hose_code) = scan_embedded_hose_status(inner)
+        .map(|(p, h)| (Some(p), Some(h)))
+        .unwrap_or((None, None));
+    Some(FillDataFields {
+        volume_l: inner[off + 4],
+        volume_h: inner[off + 5],
+        amount: [inner[off + 7], inner[off + 8], inner[off + 9]],
+        sale_complete,
+        hose_product,
+        hose_code,
+    })
+}
+
 /// Scan for embedded `03 04 01 [PP] 00 [HH]` in composite fill / status frames.
 pub fn scan_embedded_hose_status(body: &[u8]) -> Option<(u8, u8)> {
     if body.len() < 6 {
@@ -168,23 +213,16 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
                 nozzle,
             };
         }
-        if inner.len() >= 12 && inner[2] == 0x02 && inner[3] == 0x08 {
-            let sale_complete = inner.len() >= 17
-                && inner[inner.len() - 3] == 0x01
-                && inner[inner.len() - 2] == 0x01
-                && inner[inner.len() - 1] == 0x01;
-            let (hose_product, hose_code) = scan_embedded_hose_status(inner)
-                .map(|(p, h)| (Some(p), Some(h)))
-                .unwrap_or((None, None));
+        if let Some(data) = parse_fill_data_block(inner) {
             return Frame::Data {
                 addr,
                 seq,
-                volume_l: inner[6],
-                volume_h: inner[7],
-                amount: [inner[9], inner[10], inner[11]],
-                sale_complete,
-                hose_product,
-                hose_code,
+                volume_l: data.volume_l,
+                volume_h: data.volume_h,
+                amount: data.amount,
+                sale_complete: data.sale_complete,
+                hose_product: data.hose_product,
+                hose_code: data.hose_code,
             };
         }
         if inner.len() >= 5 && inner[2] == 0x01 && inner[3] == 0x01 {
@@ -611,6 +649,32 @@ mod tests {
                 assert_eq!(seq, 0x35);
             }
             f => panic!("expected NozzleHolstered, got {:?}", f),
+        }
+    }
+
+    #[test]
+    fn busy_wrapped_fill_data_parsed() {
+        // After PC BUSY during delivery: `01 01 04` prefix before `02 08` meter block.
+        let body = &[
+            0x53u8, 0x3D, 0x01, 0x01, 0x04, 0x02, 0x08, 0x00, 0x00, 0x00, 0x15, 0x00, 0x00,
+            0x15, 0x75,
+        ];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        match parse_frame(&raw) {
+            Frame::Data {
+                volume_l,
+                volume_h,
+                amount,
+                ..
+            } => {
+                assert_eq!(decode_volume(volume_l, volume_h), 0.15);
+                assert_eq!(decode_amount(amount[0], amount[1], amount[2]), 1575);
+            }
+            f => panic!("expected Data, got {:?}", f),
         }
     }
 

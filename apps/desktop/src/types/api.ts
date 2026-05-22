@@ -275,6 +275,7 @@ export interface AdminNozzleRow {
   price: number;
   active: boolean;
   wayne_code: number;
+  wayne_product_code: number;
 }
 
 export interface AdminProductInput {
@@ -290,4 +291,5 @@ export interface AdminNozzleInput {
   price: number;
   active: boolean;
   wayne_code: number;
+  wayne_product_code: number;
 }

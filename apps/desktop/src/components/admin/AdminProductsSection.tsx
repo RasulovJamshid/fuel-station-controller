@@ -39,7 +39,7 @@ function newProductDraft(): ProductDraft {
 }
 
 function newNozzleDraft(index: number, productId: number): NozzleDraft {
-  return { index, product_id: productId, price: 10500, active: true, wayne_code: 0 };
+  return { index, product_id: productId, price: 10500, active: true, wayne_code: 0, wayne_product_code: 0 };
 }
 
 export function AdminProductsSection({
@@ -102,6 +102,7 @@ export function AdminProductsSection({
         price: n.price,
         active: n.active,
         wayne_code: n.wayne_code ?? 0,
+        wayne_product_code: n.wayne_product_code ?? 0,
       }));
     }
     setPositionNozzles(byFp);
@@ -209,6 +210,20 @@ export function AdminProductsSection({
       ...prev,
       [selectedFp]: (prev[selectedFp] ?? []).filter((n) => n.index !== index),
     }));
+  };
+
+  const moveNozzle = (nozzleIndex: number, direction: "up" | "down") => {
+    setPositionNozzles((prev) => {
+      const list = [...(prev[selectedFp] ?? [])].sort((a, b) => a.index - b.index);
+      const i = list.findIndex((n) => n.index === nozzleIndex);
+      const j = direction === "up" ? i - 1 : i + 1;
+      if (j < 0 || j >= list.length) return prev;
+      const tmp = list[i]!.index;
+      list[i] = { ...list[i]!, index: list[j]!.index };
+      list[j] = { ...list[j]!, index: tmp };
+      list.sort((a, b) => a.index - b.index);
+      return { ...prev, [selectedFp]: list };
+    });
   };
 
   const inputCls = "rounded border border-border-primary bg-bg-input px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-border-focus";
@@ -389,7 +404,7 @@ export function AdminProductsSection({
             })}
 
           <div className="mb-3 overflow-x-auto rounded-lg border border-border-primary">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[860px] text-left text-sm">
               <thead className="bg-bg-secondary text-text-muted">
                 <tr>
                   <th className="px-3 py-2">#</th>
@@ -400,14 +415,21 @@ export function AdminProductsSection({
                       HW Code
                     </span>
                   </th>
+                  <th className="px-3 py-2">
+                    <span title="Wayne product byte (PP) in CONFIG frame — identifies the fuel grade to the pump.">
+                      PP Code
+                    </span>
+                  </th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
               <tbody>
-                {currentNozzles.map((n) => {
+                {[...currentNozzles].sort((a, b) => a.index - b.index).map((n, _i, sorted) => {
                   const isLifted = liftedNozzles.some(
                     (l) => l.fpId === selectedFp && l.nozzleIndex === n.index,
                   );
+                  const isFirst = sorted[0]!.index === n.index;
+                  const isLast = sorted[sorted.length - 1]!.index === n.index;
                   return (
                   <tr
                     key={n.index}
@@ -420,6 +442,26 @@ export function AdminProductsSection({
                   >
                     <td className="px-3 py-2 font-mono text-text-primary">
                       <span className="flex items-center gap-1.5">
+                        <span className="flex flex-col gap-0.5">
+                          <button
+                            type="button"
+                            disabled={busy || isFirst}
+                            onClick={() => moveNozzle(n.index, "up")}
+                            className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:text-text-primary disabled:opacity-20"
+                            title="Move up"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy || isLast}
+                            onClick={() => moveNozzle(n.index, "down")}
+                            className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:text-text-primary disabled:opacity-20"
+                            title="Move down"
+                          >
+                            ▼
+                          </button>
+                        </span>
                         {n.index}
                         {isLifted && (
                           <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-600/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white animate-pulse">
@@ -469,6 +511,22 @@ export function AdminProductsSection({
                         }
                         placeholder="0"
                         title="0 = auto-match by slot position"
+                        className={`w-16 font-mono ${inputCls}`}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={255}
+                        value={n.wayne_product_code}
+                        onChange={(e) =>
+                          updateNozzle(n.index, {
+                            wayne_product_code: Math.max(0, Math.min(255, parseInt(e.target.value, 10) || 0)),
+                          })
+                        }
+                        placeholder="0"
+                        title="Wayne PP byte in CONFIG frame — identifies the fuel grade to the pump."
                         className={`w-16 font-mono ${inputCls}`}
                       />
                     </td>

@@ -12,7 +12,7 @@ use site_config::Protocol;
 use types::{preset_label, FpStatus, Preset, UpdatePriceCmd, WsEvent};
 use wayne_europump::{
     ack, authorise_cmd, authorize_config, authorize_initial, busy, done, encode_preset_limit_bcd,
-    ghost_fill_abort, parse_frame, poll, pre_authorise_price, stop_frame, stop_pre_frame, Frame,
+    parse_frame, poll, pre_authorise_price, stop_frame, stop_pre_frame, Frame,
     FrameAccumulator,
 };
 
@@ -44,14 +44,23 @@ fn wayne_product_codes(fp: &FuelingPositionConfig) -> Vec<u8> {
     nozzles.into_iter().map(wayne_pp_byte).collect()
 }
 
-fn preset_limit_bcd(preset: &Preset) -> [u8; 3] {
+/// Per-nozzle prices for the Wayne CONFIG frame, sorted by wayne_code (same order as product codes).
+fn wayne_nozzle_prices(fp: &FuelingPositionConfig) -> Vec<u32> {
+    let mut nozzles: Vec<_> = fp.nozzles.iter().filter(|n| n.active).collect();
+    nozzles.sort_by_key(|n| n.wayne_code);
+    nozzles.into_iter().map(|n| n.price).collect()
+}
+
+fn preset_limit_bcd(preset: &Preset, price_per_liter: u32) -> [u8; 3] {
     match preset {
         Preset::Str(s) if s.eq_ignore_ascii_case("full") => {
-            encode_preset_limit_bcd(true, None, None)
+            encode_preset_limit_bcd(true, None, None, None)
         }
-        Preset::Volume(v) if *v > 0.0 => encode_preset_limit_bcd(false, Some(*v), None),
-        Preset::Amount(a) if *a > 0 => encode_preset_limit_bcd(false, None, Some(*a)),
-        _ => encode_preset_limit_bcd(true, None, None),
+        Preset::Volume(v) if *v > 0.0 => encode_preset_limit_bcd(false, Some(*v), None, None),
+        Preset::Amount(a) if *a > 0 => {
+            encode_preset_limit_bcd(false, None, Some(*a), Some(price_per_liter))
+        }
+        _ => encode_preset_limit_bcd(true, None, None, None),
     }
 }
 
@@ -63,10 +72,12 @@ fn dart_nozzle_prices(fp: &FuelingPositionConfig) -> Vec<u32> {
 }
 
 /// DartV1 full-tank BCD is `99 99 99`; volume/amount presets use the same BCD encoding as PCC485.
-fn dart_limit_bcd(preset: &Preset) -> [u8; 3] {
+fn dart_limit_bcd(preset: &Preset, price_per_liter: u32) -> [u8; 3] {
     match preset {
-        Preset::Volume(v) if *v > 0.0 => encode_preset_limit_bcd(false, Some(*v), None),
-        Preset::Amount(a) if *a > 0 => encode_preset_limit_bcd(false, None, Some(*a)),
+        Preset::Volume(v) if *v > 0.0 => encode_preset_limit_bcd(false, Some(*v), None, None),
+        Preset::Amount(a) if *a > 0 => {
+            encode_preset_limit_bcd(false, None, Some(*a), Some(price_per_liter))
+        }
         _ => [0x99, 0x99, 0x99],
     }
 }
@@ -85,17 +96,19 @@ fn send_auth_pair(
     fp: &FuelingPositionConfig,
     preset: &Preset,
     active_nozzle: u8,
+    price_per_liter: u32,
     protocol: &Protocol,
 ) -> Vec<u8> {
     if matches!(protocol, Protocol::WayneDartV1) {
         let prices = dart_nozzle_prices(fp);
         let _ = exchange_serial(backend, &pre_authorise_price(byte, &prices, active_nozzle));
-        let limit = dart_limit_bcd(preset);
+        let limit = dart_limit_bcd(preset, price_per_liter);
         exchange_serial(backend, &authorise_cmd(byte, active_nozzle, limit)).unwrap_or_default()
     } else {
         let products = wayne_product_codes(fp);
-        let limit = preset_limit_bcd(preset);
-        let cfg = authorize_config(byte, &products, limit);
+        let prices = wayne_nozzle_prices(fp);
+        let limit = preset_limit_bcd(preset, price_per_liter);
+        let cfg = authorize_config(byte, &products, &prices, limit);
         exchange_serial(backend, &cfg).unwrap_or_default()
     }
 }
@@ -126,7 +139,6 @@ fn ack_frames_in_response(backend: &SerialBackend, byte: u8, raw: &[u8]) {
 
 fn complete_ghost_fill_on_wire(backend: &SerialBackend, byte: u8) {
     let _ = exchange_serial(backend, &done(byte));
-    let _ = exchange_serial(backend, &ghost_fill_abort(byte));
 }
 
 /// Format raw bytes as space-separated hex for log messages.
@@ -250,14 +262,27 @@ async fn dispatch_poll_frames(
                 .unwrap_or(false)
         };
         if allow_wire_config {
-            let preset = {
+            let (preset, price) = {
                 let map = runtimes.read().await;
-                map.get(&byte)
+                let preset = map
+                    .get(&byte)
                     .map(|rt| rt.last_preset.clone())
-                    .unwrap_or(Preset::Str("full".into()))
+                    .unwrap_or(Preset::Str("full".into()));
+                let price = map
+                    .get(&byte)
+                    .map(|rt| rt.state.price)
+                    .unwrap_or_else(|| fp_cfg.default_price().unwrap_or(0));
+                (preset, price)
             };
-            let auth_resp =
-                send_auth_pair(backend, byte, &fp_cfg, &preset, lifted_nozzle, &cfg.connection.protocol);
+            let auth_resp = send_auth_pair(
+                backend,
+                byte,
+                &fp_cfg,
+                &preset,
+                lifted_nozzle,
+                price,
+                &cfg.connection.protocol,
+            );
             {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
@@ -856,7 +881,7 @@ async fn process_parsed_frame(
                 info!(
                     addr = format_args!("0x{byte:02X}"),
                     label = %fp_cfg.label,
-                    "ghost fill complete → GO_IDLE + compound abort"
+                    "ghost fill complete → GO_IDLE"
                 );
             } else {
                 debug!(
@@ -868,7 +893,7 @@ async fn process_parsed_frame(
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::SendAuthorizeConfig => {
-            let (preset, active_nozzle) = {
+            let (preset, active_nozzle, price) = {
                 let map = runtimes.read().await;
                 let preset = map
                     .get(&byte)
@@ -878,7 +903,11 @@ async fn process_parsed_frame(
                     .get(&byte)
                     .and_then(|rt| rt.state.nozzle_index)
                     .unwrap_or(1);
-                (preset, nozzle)
+                let price = map
+                    .get(&byte)
+                    .map(|rt| rt.state.price)
+                    .unwrap_or_else(|| fp_cfg.default_price().unwrap_or(0));
+                (preset, nozzle, price)
             };
             let auth_resp = send_auth_pair(
                 backend,
@@ -886,6 +915,7 @@ async fn process_parsed_frame(
                 &fp_cfg,
                 &preset,
                 active_nozzle,
+                price,
                 &site.connection.protocol,
             );
             {
@@ -1172,6 +1202,7 @@ async fn apply_command(
                     &fp_cfg,
                     &preset,
                     nozzle_index,
+                    price,
                     &cfg.connection.protocol,
                 );
                 let mut map = runtimes.write().await;
@@ -1213,17 +1244,7 @@ async fn apply_command(
                 Some(p) => p.clone(),
                 None => return,
             };
-            let wire_abort = {
-                let map = runtimes.read().await;
-                map.get(&byte)
-                    .map(|rt| rt.preauth_config_on_wire || rt.pre_auth.is_some())
-                    .unwrap_or(false)
-            };
-            let abort_f = if wire_abort {
-                ghost_fill_abort(byte)
-            } else {
-                stop_frame(byte)
-            };
+            let abort_f = stop_frame(byte);
             let _ = exchange_serial(backend, &abort_f);
             {
                 let mut map = runtimes.write().await;

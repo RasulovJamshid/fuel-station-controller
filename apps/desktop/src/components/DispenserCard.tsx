@@ -229,6 +229,7 @@ export function DispenserCard({
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"preauth" | "reactive">("preauth");
   const [modalNozzleHint, setModalNozzleHint] = useState<number | null>(null);
+  const [modalFillMode, setModalFillMode] = useState<FillMode>("full");
   const nozzleRemovedAt = useAppStore((s) => s.nozzleRemovedAt[state.fp_id]);
   const preAuthTimeoutFpId = useAppStore((s) => s.preAuthTimeoutFpId);
   const preAuthNozzleMismatch = useAppStore((s) => s.preAuthNozzleMismatch);
@@ -348,18 +349,33 @@ export function DispenserCard({
     !hasActivePreAuth &&
     !(canOpenReactiveSetup && state.product_name == null);
 
-  const openPreAuthSetup = () => {
+  const openPreAuthSetup = (fillMode?: FillMode) => {
     if (!canOpenPreAuthSetup || !positionActive) return;
     setModalMode("preauth");
-    setModalNozzleHint(activeNozzles.length === 1 ? (activeNozzles[0]?.index ?? null) : null);
+    setModalFillMode(fillMode ?? "full");
+    setModalNozzleHint(effectiveNozzle ?? (activeNozzles.length === 1 ? (activeNozzles[0]?.index ?? null) : null));
     setModalOpen(true);
   };
 
-  const openReactiveSetup = (nozzleIndex?: number) => {
+  const openReactiveSetup = (nozzleIndex?: number, fillMode?: FillMode) => {
     if (!canOpenReactiveSetup || !positionActive) return;
     setModalMode("reactive");
+    setModalFillMode(fillMode ?? "full");
     setModalNozzleHint(nozzleIndex ?? null);
     setModalOpen(true);
+  };
+
+  const handleQuickAuthorize = (fillMode: FillMode) => {
+    if (!positionActive) return;
+    const req: AuthorizeRequest = {
+      fpId: state.fp_id,
+      nozzleIndex: effectiveNozzle ?? (activeNozzles[0]?.index ?? null),
+      fillMode,
+      limitValue: null,
+      priceOverride: null,
+    };
+    if (usePreAuth && canOpenPreAuthSetup) onPreAuthorize?.(req);
+    else if (canOpenReactiveSetup) onAuthorize(req);
   };
 
   const closeModal = () => {
@@ -853,11 +869,46 @@ export function DispenserCard({
             <p className="text-center text-xs font-medium text-accent-blue/90">
               Resuming original fill — same product, price, and limit as the first authorization.
             </p>
-          ) : canOpenPreAuthSetup && positionActive ? (
+          ) : isNozzleUp && canOpenPreAuthSetup && positionActive ? (
+            <div className={`flex flex-col ${compact ? "gap-1" : "gap-2"}`}>
+              <button
+                type="button"
+                className={`w-full rounded-md bg-accent-amber font-black uppercase tracking-widest text-text-inverse border-2 border-accent-amber-dark transition-all duration-200 hover:bg-accent-amber-light hover:border-accent-amber hover:shadow-lg active:bg-accent-amber-dark active:border-accent-amber-dark ${primaryBtnH} ${compact ? "text-sm" : "text-lg"}`}
+                onClick={() => handleQuickAuthorize("full")}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <ShieldCheck className={compact ? "h-4 w-4" : "h-5 w-5"} />
+                  {compact ? "FULL TANK" : "AUTHORIZE — FULL TANK"}
+                </span>
+              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md border-2 border-border-primary bg-bg-secondary font-bold uppercase tracking-wider text-text-primary transition-all duration-200 hover:bg-bg-tertiary hover:border-border-secondary ${compact ? "py-1.5 text-xs" : "py-2.5 text-sm"}`}
+                  onClick={() => openPreAuthSetup("volume")}
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Fuel className={compact ? "h-3 w-3" : "h-4 w-4"} />
+                    {compact ? "VOLUME" : "BY VOLUME"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md border-2 border-border-primary bg-bg-secondary font-bold uppercase tracking-wider text-text-primary transition-all duration-200 hover:bg-bg-tertiary hover:border-border-secondary ${compact ? "py-1.5 text-xs" : "py-2.5 text-sm"}`}
+                  onClick={() => openPreAuthSetup("amount")}
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Fuel className={compact ? "h-3 w-3" : "h-4 w-4"} />
+                    {compact ? "AMOUNT" : "BY AMOUNT"}
+                  </span>
+                </button>
+              </div>
+            </div>
+          ) : isIdle && canOpenPreAuthSetup && positionActive ? (
             <button
               type="button"
               className={`w-full rounded-md bg-accent-amber font-black uppercase tracking-widest text-text-inverse border-2 border-accent-amber-dark transition-all duration-200 hover:bg-accent-amber-light hover:border-accent-amber hover:shadow-lg active:bg-accent-amber-dark active:border-accent-amber-dark ${primaryBtnH} ${compact ? "text-sm" : "text-lg"}`}
-              onClick={openPreAuthSetup}
+              onClick={() => openPreAuthSetup()}
             >
               <span className="flex items-center justify-center gap-2">
                 <ShieldCheck className={compact ? "h-4 w-4" : "h-5 w-5"} />
@@ -865,22 +916,40 @@ export function DispenserCard({
               </span>
             </button>
           ) : canOpenReactiveSetup && positionActive ? (
-            <button
-              type="button"
-              className={`w-full rounded-md bg-accent-emerald font-black uppercase tracking-widest text-text-inverse border-2 border-accent-emerald-dark transition-all duration-200 hover:bg-accent-emerald-light hover:border-accent-emerald hover:shadow-lg active:bg-accent-emerald-dark active:border-accent-emerald-dark ${primaryBtnH} ${compact ? "text-sm" : "text-lg"}`}
-              onClick={() =>
-                openReactiveSetup(
-                  hasMultipleProducts ? undefined : activeNozzles[0]?.index,
-                )
-              }
-            >
-              <span className="flex items-center justify-center gap-2">
-                <Fuel className={compact ? "h-4 w-4" : "h-5 w-5"} />
-                {hasMultipleProducts
-                  ? (compact ? "CHOOSE & AUTHORIZE" : "CHOOSE PRODUCT & AUTHORIZE")
-                  : (compact ? "AUTHORIZE" : "SET UP & AUTHORIZE")}
-              </span>
-            </button>
+            <div className={`flex flex-col ${compact ? "gap-1" : "gap-2"}`}>
+              <button
+                type="button"
+                className={`w-full rounded-md bg-accent-emerald font-black uppercase tracking-widest text-text-inverse border-2 border-accent-emerald-dark transition-all duration-200 hover:bg-accent-emerald-light hover:border-accent-emerald hover:shadow-lg active:bg-accent-emerald-dark active:border-accent-emerald-dark ${primaryBtnH} ${compact ? "text-sm" : "text-lg"}`}
+                onClick={() => handleQuickAuthorize("full")}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <Fuel className={compact ? "h-4 w-4" : "h-5 w-5"} />
+                  {compact ? "FULL TANK" : "AUTHORIZE — FULL TANK"}
+                </span>
+              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md border-2 border-border-primary bg-bg-secondary font-bold uppercase tracking-wider text-text-primary transition-all duration-200 hover:bg-bg-tertiary hover:border-border-secondary ${compact ? "py-1.5 text-xs" : "py-2.5 text-sm"}`}
+                  onClick={() => openReactiveSetup(hasMultipleProducts ? undefined : activeNozzles[0]?.index, "volume")}
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Fuel className={compact ? "h-3 w-3" : "h-4 w-4"} />
+                    {compact ? "VOLUME" : "BY VOLUME"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md border-2 border-border-primary bg-bg-secondary font-bold uppercase tracking-wider text-text-primary transition-all duration-200 hover:bg-bg-tertiary hover:border-border-secondary ${compact ? "py-1.5 text-xs" : "py-2.5 text-sm"}`}
+                  onClick={() => openReactiveSetup(hasMultipleProducts ? undefined : activeNozzles[0]?.index, "amount")}
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Fuel className={compact ? "h-3 w-3" : "h-4 w-4"} />
+                    {compact ? "AMOUNT" : "BY AMOUNT"}
+                  </span>
+                </button>
+              </div>
+            </div>
           ) : isDone ? (
             <button
               type="button"
@@ -915,6 +984,7 @@ export function DispenserCard({
         fpNozzles={configuredNozzles}
         mode={modalMode}
         initialNozzle={modalNozzleHint}
+        initialFillMode={modalFillMode}
         onClose={closeModal}
         onConfirm={handleModalConfirm}
       />

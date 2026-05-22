@@ -545,7 +545,8 @@ impl RuntimeFp {
         self.consecutive_idle_polls = 0;
     }
 
-    /// In preauth mode, send wire AUTH only for lift-first (no holstered CONFIG yet).
+    /// In preauth mode, wire AUTH is always operator-initiated (never fired by a bare nozzle lift).
+    /// The operator picks Full / Volume / Amount from the UI after the nozzle is lifted.
     pub fn allow_reactive_nozzle_auth(&self, auth_mode: &str) -> bool {
         if self.ghost_recovery_active() {
             return false;
@@ -553,11 +554,10 @@ impl RuntimeFp {
         if auth_mode != "preauth" {
             return true;
         }
-        // Holstered preauth (§8.4): AUTH+CONFIG already sent — lift is BUSY only.
-        if self.preauth_config_on_wire || self.pre_auth.is_some() {
-            return false;
-        }
-        matches!(self.state.status, FpStatus::NozzleUp)
+        // Preauth mode: never auto-authorize on lift — wait for the operator.
+        // Holstered preauth (§8.4) is handled by start_delivery_from_pre_auth; it does not
+        // need this path.
+        false
     }
 
     pub fn mark_preauth_config_on_wire(&mut self) {
@@ -630,9 +630,16 @@ impl RuntimeFp {
                 }
             }
             FpStatus::PreAuthorized => {
+                // Customer confirmed the lift (set by NozzleUp handler) — they have now
+                // holstered.  Cancel the pre-auth completely; do not keep it alive.
+                if self.preauth_nozzle_confirmed {
+                    self.cancel_pre_auth();
+                    self.touch();
+                    return FrameEffect::NozzleHolstered;
+                }
                 if self.preauth_config_on_wire {
-                    // Pump is confirming nozzle-holstered state after receiving CONFIG.
-                    // Keep pre-auth alive — delivery begins when the nozzle is lifted.
+                    // Pump confirming nozzle-holstered state after receiving CONFIG,
+                    // before the customer has touched the nozzle.  Keep pre-auth alive.
                     self.touch();
                     FrameEffect::None
                 } else if self.preauth_mismatch_active {
@@ -1201,9 +1208,15 @@ impl RuntimeFp {
                         }
                     }
                     FpStatus::PreAuthorized => {
+                        // Customer confirmed the lift and has now holstered — cancel.
+                        if self.preauth_nozzle_confirmed {
+                            self.cancel_pre_auth();
+                            self.touch();
+                            return FrameEffect::NozzleHolstered;
+                        }
                         if self.preauth_config_on_wire {
-                            // Pump confirming nozzle-holstered state after receiving CONFIG.
-                            // Keep pre-auth alive until the nozzle is lifted.
+                            // Pump confirming nozzle-holstered state after receiving CONFIG,
+                            // before the customer has touched the nozzle.  Keep pre-auth alive.
                             self.touch();
                             FrameEffect::None
                         } else if self.preauth_mismatch_active {
@@ -1222,20 +1235,12 @@ impl RuntimeFp {
                 }
             }
             Frame::NozzleReturned { addr, hose, .. } if *addr == b => {
-                if matches!(
-                    self.state.status,
-                    FpStatus::Authorizing | FpStatus::Delivering
-                ) {
-                    let (vol, amt) = self.combined_totals();
-                    // During zero-volume arming the dispenser sends
-                    // `03 04 01 PP 00 <holster_code>` as an internal state-transition,
-                    // not a customer holster event.  Do NOT update last_wire_hose_code
-                    // — that would clear the lift code (0x12) and break nozzle_physically_up().
-                    if vol < 0.01 && amt == 0 && self.nozzle_physically_up() {
-                        self.touch();
-                        return FrameEffect::StatusChanged;
-                    }
-                }
+                // Update the hose code before calling apply_nozzle_holstered so that
+                // nozzle_physically_up() sees the holster byte (< 0x10) and returns
+                // false.  The previous guard (skip cancel while nozzle_physically_up())
+                // caused genuine customer holsters to be silently ignored when the lift
+                // was less than WIRE_LIFT_STALE_MS old, leaving the preauth visible on
+                // the next lift.
                 self.note_wire_hose(*hose);
                 self.apply_nozzle_holstered(fp_cfg, site, active_shift_id)
             }
@@ -1812,7 +1817,7 @@ pub enum FrameEffect {
     NozzleHolstered,
     /// `70 FA` after nozzle-up / during zero-volume authorize — resend AUTH, do not STOP.
     ResendAuthorize,
-    /// Ghost fill complete — send GO_IDLE then compound HALT/GO_IDLE/GET_DISP abort.
+    /// Ghost fill complete — send GO_IDLE (done) on the wire.
     CompleteGhostFill,
     /// Send one CONFIG frame. First zero-volume Data sends the first copy; the repeat is sent
     /// after a later poll response so the pump gets the same gap seen in the sniffer.

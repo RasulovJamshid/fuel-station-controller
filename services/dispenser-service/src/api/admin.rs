@@ -109,6 +109,30 @@ async fn persist_site_config(
     snapshot
         .validate()
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    // Pre-flight: check the config file is writable before attempting the save.
+    {
+        let meta = std::fs::metadata(&st.config_path);
+        let writable = match meta {
+            Ok(m) => !m.permissions().readonly(),
+            // File doesn't exist yet — parent directory writability will be checked on save.
+            Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => true,
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Cannot stat config file: {e}"),
+                ))
+            }
+        };
+        if !writable {
+            return Err((
+                StatusCode::FORBIDDEN,
+                format!(
+                    "Config file is read-only: {}. Run `chmod u+w` on it to allow editing.",
+                    st.config_path.display()
+                ),
+            ));
+        }
+    }
     let config_path = st.config_path.clone();
     let snapshot_for_disk = snapshot.clone();
     if let Err(e) =

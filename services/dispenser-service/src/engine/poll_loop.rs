@@ -798,10 +798,13 @@ async fn process_parsed_frame(
                     }
                 }
                 TxCompleteAction::HaltPump => {
-                    let stop_f = stop_frame(byte);
-                    if let Err(e) = exchange_serial(backend, &stop_f) {
-                        warn!(?e, byte, "preset cap: stop frame failed");
-                    }
+                    // Do NOT send stop_frame here. The pump already has a matching
+                    // hardware volume limit (set via CONFIG) and is decelerating to
+                    // hit it precisely. Sending STOP mid-deceleration triggers a C1 FA
+                    // handshake that we never complete, leaving the pump waiting for ACK
+                    // and ignoring polls — causing spurious offline transitions.
+                    // The pump will finish naturally and send sale_complete / NozzleReturned,
+                    // both of which are handled gracefully in Done state.
                 }
             }
             broadcast_status(byte, runtimes, events).await;
@@ -958,14 +961,60 @@ async fn apply_command(
             preset,
         } => {
             debug!(byte, price, ?preset, "authorize");
-            let auth = authorize_initial(byte);
-            if exchange_serial(backend, &auth).is_ok() {
-                let mut map = runtimes.write().await;
-                if let Some(rt) = map.get_mut(&byte) {
-                    rt.state.price = price;
-                    rt.state.pre_auth_preset = Some(preset_label(&preset));
-                    rt.set_last_preset(preset);
-                    rt.apply_authorize_sent();
+            let fp_cfg = match cfg.position_by_address(byte) {
+                Some(p) => p.clone(),
+                None => return,
+            };
+
+            // If the nozzle is already physically up, pump 4 (type-B firmware) sends
+            // another NozzleUp frame after authorize_initial — not a Data frame — so the
+            // deferred SendAuthorizeConfig path never fires.  Mirror the reactive
+            // NozzleUp handler: send the full CONFIG immediately and mark it on wire.
+            let (nozzle_already_up, lifted_nozzle) = {
+                let map = runtimes.read().await;
+                let rt = map.get(&byte);
+                (
+                    rt.map_or(false, |r| r.state.status == FpStatus::NozzleUp),
+                    rt.and_then(|r| r.state.nozzle_index).unwrap_or(1),
+                )
+            };
+
+            if nozzle_already_up {
+                let auth_resp = send_auth_pair(
+                    backend,
+                    byte,
+                    &fp_cfg,
+                    &preset,
+                    lifted_nozzle,
+                    price,
+                    &cfg.connection.protocol,
+                );
+                {
+                    let mut map = runtimes.write().await;
+                    if let Some(rt) = map.get_mut(&byte) {
+                        rt.state.price = price;
+                        rt.set_last_preset(preset);
+                        rt.apply_nozzle_lift_config_sent();
+                    }
+                }
+                ack_frames_in_response(backend, byte, &auth_resp);
+                let _ = write_serial(backend, &busy(byte));
+                info!(
+                    addr = format_args!("0x{byte:02X}"),
+                    label = %fp_cfg.label,
+                    nozzle = lifted_nozzle,
+                    "Authorize (nozzle already up) → full CONFIG + BUSY"
+                );
+            } else {
+                let auth = authorize_initial(byte);
+                if exchange_serial(backend, &auth).is_ok() {
+                    let mut map = runtimes.write().await;
+                    if let Some(rt) = map.get_mut(&byte) {
+                        rt.state.price = price;
+                        rt.state.pre_auth_preset = Some(preset_label(&preset));
+                        rt.set_last_preset(preset);
+                        rt.apply_authorize_sent();
+                    }
                 }
             }
         }

@@ -1636,9 +1636,12 @@ impl RuntimeFp {
                     }
                 }
                 if *sale_complete {
+                    // Done is excluded: software-cap already closed the transaction;
+                    // the pump's own hardware-limit completion arrives shortly after
+                    // and must not re-close an already-recorded sale.
                     if matches!(
                         self.state.status,
-                        FpStatus::Delivering | FpStatus::Authorizing | FpStatus::Done
+                        FpStatus::Delivering | FpStatus::Authorizing
                     ) {
                         if self.holster_ends_sale_early() {
                             return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);

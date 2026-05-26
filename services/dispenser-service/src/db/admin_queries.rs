@@ -1,5 +1,7 @@
 use anyhow::Result;
+use site_config::{NozzleConfig, ProductConfig};
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use types::{AdminConfigEntry, CreateOperatorCmd, Operator, PriceChange};
 
 #[allow(dead_code)]
@@ -208,4 +210,138 @@ pub async fn delete_operator(pool: &SqlitePool, id: &str) -> Result<bool> {
         .execute(pool)
         .await?;
     Ok(r.rows_affected() > 0)
+}
+
+pub async fn save_products_to_db(
+    pool: &SqlitePool,
+    products: &[ProductConfig],
+    updated_by: &str,
+) -> Result<()> {
+    let now = chrono::Utc::now().timestamp_millis();
+    tracing::info!("save_products_to_db: acquiring transaction");
+    let mut tx = pool.begin().await?;
+    tracing::info!("save_products_to_db: deleting old rows");
+    sqlx::query("DELETE FROM products").execute(&mut *tx).await?;
+    for p in products {
+        sqlx::query(
+            "INSERT INTO products (id, name, color, unit, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(p.id as i64)
+        .bind(&p.name)
+        .bind(&p.color)
+        .bind(&p.unit)
+        .bind(now)
+        .bind(updated_by)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tracing::info!("save_products_to_db: committing");
+    tx.commit().await?;
+    tracing::info!("save_products_to_db: done");
+    Ok(())
+}
+
+pub async fn load_products_from_db(pool: &SqlitePool) -> Result<Vec<ProductConfig>> {
+    let rows: Vec<(i64, String, String, String)> =
+        sqlx::query_as("SELECT id, name, color, unit FROM products ORDER BY id")
+            .fetch_all(pool)
+            .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, name, color, unit)| ProductConfig {
+            id: id as u8,
+            name,
+            color,
+            unit,
+        })
+        .collect())
+}
+
+pub async fn save_fp_nozzles_to_db(
+    pool: &SqlitePool,
+    fp_id: &str,
+    nozzles: &[NozzleConfig],
+    updated_by: &str,
+) -> Result<()> {
+    let now = chrono::Utc::now().timestamp_millis();
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM fp_nozzles WHERE fp_id = ?")
+        .bind(fp_id)
+        .execute(&mut *tx)
+        .await?;
+    for n in nozzles {
+        sqlx::query(
+            "INSERT INTO fp_nozzles \
+             (fp_id, nozzle_index, product_id, price, active, wayne_code, wayne_product_code, updated_at, updated_by) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(fp_id)
+        .bind(n.index as i64)
+        .bind(n.product_id as i64)
+        .bind(n.price as i64)
+        .bind(if n.active { 1i64 } else { 0 })
+        .bind(n.wayne_code as i64)
+        .bind(n.wayne_product_code as i64)
+        .bind(now)
+        .bind(updated_by)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn load_fp_nozzles_from_db(
+    pool: &SqlitePool,
+) -> Result<HashMap<String, Vec<NozzleConfig>>> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        fp_id: String,
+        nozzle_index: i64,
+        product_id: i64,
+        price: i64,
+        active: i64,
+        wayne_code: i64,
+        wayne_product_code: i64,
+    }
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT fp_id, nozzle_index, product_id, price, active, wayne_code, wayne_product_code \
+         FROM fp_nozzles ORDER BY fp_id, nozzle_index",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut map: HashMap<String, Vec<NozzleConfig>> = HashMap::new();
+    for r in rows {
+        map.entry(r.fp_id).or_default().push(NozzleConfig {
+            index: r.nozzle_index as u8,
+            product_id: r.product_id as u8,
+            price: r.price as u32,
+            active: r.active != 0,
+            wayne_code: r.wayne_code as u8,
+            wayne_product_code: r.wayne_product_code as u8,
+        });
+    }
+    Ok(map)
+}
+
+pub async fn update_nozzle_price_in_db(
+    pool: &SqlitePool,
+    fp_id: &str,
+    nozzle_index: u8,
+    price: u32,
+    updated_by: &str,
+) -> Result<()> {
+    let now = chrono::Utc::now().timestamp_millis();
+    sqlx::query(
+        "UPDATE fp_nozzles SET price = ?, updated_at = ?, updated_by = ? \
+         WHERE fp_id = ? AND nozzle_index = ?",
+    )
+    .bind(price as i64)
+    .bind(now)
+    .bind(updated_by)
+    .bind(fp_id)
+    .bind(nozzle_index as i64)
+    .execute(pool)
+    .await?;
+    Ok(())
 }

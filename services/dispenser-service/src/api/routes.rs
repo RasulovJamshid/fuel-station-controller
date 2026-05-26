@@ -19,7 +19,7 @@ use types::{
     AuthorizeCmd, CloseStoppedTxCmd, ContinueFillCmd, CreateOperatorCmd, EndShiftCmd, FpSnapshot,
     FpState, FpStatus, HandoverCmd, NozzleSnapshot, Operator, Preset, ProductSnapshot,
     ResumeFillCmd, Shift, ShiftSlot, SiteSnapshot, StartShiftCmd, StopCmd, StopSource, Transaction,
-    TxStatus, UpdateAllPricesCmd, WsEvent,
+    TxStatus, TxSummary, UpdateAllPricesCmd, WsEvent,
 };
 
 use crate::admin::AdminSessions;
@@ -62,6 +62,7 @@ pub fn router(state: AppState) -> Router {
         .route("/prices", post(update_prices))
         .route("/products", get(get_products))
         .route("/transactions", get(get_transactions))
+        .route("/transactions/summary", get(get_transactions_summary))
         .route("/transactions/:id", get(get_transaction))
         .route("/shifts/current", get(get_current_shift))
         .route("/shifts/start", post(start_shift))
@@ -443,6 +444,7 @@ pub struct HealthBody {
     pub status: &'static str,
     pub site: String,
     pub uptime_s: u64,
+    pub config_path: String,
 }
 
 pub async fn health(State(st): State<AppState>) -> Json<HealthBody> {
@@ -451,6 +453,7 @@ pub async fn health(State(st): State<AppState>) -> Json<HealthBody> {
         status: "ok",
         site,
         uptime_s: st.started.elapsed().as_secs(),
+        config_path: st.config_path.display().to_string(),
     })
 }
 
@@ -619,16 +622,11 @@ pub async fn preauthorize(
                     .into(),
             ));
         }
-        let preauth_ok = map.get(&byte).is_some_and(|r| match r.state.status {
-            FpStatus::Idle => true,
-            FpStatus::NozzleUp => r.state.nozzle_index == Some(nozzle_index),
-            _ => false,
-        });
+        let preauth_ok = map.get(&byte).is_some_and(|r| matches!(r.state.status, FpStatus::Idle));
         if !preauth_ok {
             return Err((
                 StatusCode::BAD_REQUEST,
-                "pre-authorize requires IDLE (holstered) or NOZZLE_UP on the selected nozzle"
-                    .into(),
+                "pre-authorize requires IDLE — nozzle must be holstered before authorizing".into(),
             ));
         }
     }
@@ -812,7 +810,10 @@ pub struct TxQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
     pub fp_id: Option<String>,
-    pub status: Option<String>,
+    /// Comma-separated status values, e.g. "COMPLETED,CONTINUED_FROM". Empty = all.
+    pub statuses: Option<String>,
+    pub from_ms: Option<i64>,
+    pub until_ms: Option<i64>,
 }
 
 pub async fn get_transactions(
@@ -821,16 +822,46 @@ pub async fn get_transactions(
 ) -> Result<Json<Vec<Transaction>>, (StatusCode, String)> {
     let limit = q.limit.unwrap_or(50).clamp(1, 500);
     let offset = q.offset.unwrap_or(0).max(0);
+    let statuses_raw = q.statuses.as_deref().unwrap_or("");
+    let status_vec: Vec<&str> = statuses_raw
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
     let rows = queries::list_transactions(
         &st.pool,
         limit,
         offset,
         q.fp_id.as_deref(),
-        q.status.as_deref(),
+        &status_vec,
+        q.from_ms,
+        q.until_ms,
     )
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(rows))
+}
+
+pub async fn get_transactions_summary(
+    State(st): State<AppState>,
+    Query(q): Query<TxQuery>,
+) -> Result<Json<TxSummary>, (StatusCode, String)> {
+    let statuses_raw = q.statuses.as_deref().unwrap_or("");
+    let status_vec: Vec<&str> = statuses_raw
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    let summary = queries::summarize_transactions(
+        &st.pool,
+        q.fp_id.as_deref(),
+        &status_vec,
+        q.from_ms,
+        q.until_ms,
+    )
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(summary))
 }
 
 pub async fn get_transaction(

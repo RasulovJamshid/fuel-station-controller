@@ -13,12 +13,18 @@ fn protocol_str(p: &Protocol) -> String {
 
 pub async fn ws_upgrade(mut socket: WebSocket, st: AppState) {
     let mut rx = st.events.subscribe();
-    let cfg = st.cfg.read().await;
-    let fp_count = cfg.active_positions().len();
+    let (site_name, fp_count, protocol) = {
+        let cfg = st.cfg.read().await;
+        (
+            cfg.site.name.clone(),
+            cfg.active_positions().len(),
+            protocol_str(&cfg.connection.protocol),
+        )
+    };
     let hello = WsEvent::Connected {
-        site_name: cfg.site.name.clone(),
+        site_name,
         fp_count,
-        protocol: protocol_str(&cfg.connection.protocol),
+        protocol,
     };
     let hello = serde_json::to_string(&hello).unwrap_or_default();
     let _ = socket.send(Message::Text(hello)).await;

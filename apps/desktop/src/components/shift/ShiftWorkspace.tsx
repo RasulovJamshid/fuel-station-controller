@@ -22,18 +22,18 @@ export function ShiftWorkspace({
 }: Props) {
   if (mode === "disabled") {
     return (
-      <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-amber-800/40 bg-amber-950/20 p-8 text-center sm:p-12">
-        <p className="text-slate-200">Shift tracking is off for the running service.</p>
-        <p className="mt-3 max-w-lg text-sm leading-relaxed text-slate-400">
-          The API reports <code className="text-amber-200">shifts.mode = disabled</code>. Editing only{" "}
-          <code className="text-slate-300">site.config.json</code> is not enough if you start the
+      <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-accent-amber/40 bg-accent-amber/10 p-8 text-center shadow-inner sm:p-12">
+        <p className="font-bold text-text-primary">Shift tracking is off for the running service.</p>
+        <p className="mt-3 max-w-lg text-sm leading-relaxed text-text-secondary">
+          The API reports <code className="text-accent-amber font-mono font-bold">shifts.mode = disabled</code>. Editing only{" "}
+          <code className="text-text-primary font-mono font-bold">site.config.json</code> is not enough if you start the
           service with another file (for example{" "}
-          <code className="text-slate-300">site.mock.json</code> via{" "}
-          <code className="text-slate-300">./scripts/azs.sh dev-mock</code>).
+          <code className="text-text-primary font-mono font-bold">site.mock.json</code> via{" "}
+          <code className="text-text-primary font-mono font-bold">./scripts/azs.sh dev-mock</code>).
         </p>
-        <p className="mt-3 max-w-lg text-sm text-slate-500">
-          Add a <code className="text-slate-400">shifts</code> block with{" "}
-          <code className="text-slate-400">&quot;mode&quot;: &quot;manual&quot;</code> to the site
+        <p className="mt-3 max-w-lg text-sm text-text-tertiary">
+          Add a <code className="text-text-secondary font-mono font-bold">shifts</code> block with{" "}
+          <code className="text-text-secondary font-mono font-bold">&quot;mode&quot;: &quot;manual&quot;</code> to the site
           file your launcher uses, then restart dispenser-service.
         </p>
       </div>
@@ -41,10 +41,10 @@ export function ShiftWorkspace({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-y-auto pr-2 pb-10">
       <div>
-        <h2 className="text-base font-semibold text-slate-100">Shift management</h2>
-        <p className="mt-1 text-sm text-slate-400">
+        <h2 className="text-lg font-bold text-text-primary">Shift management</h2>
+        <p className="mt-1 text-sm font-medium text-text-secondary">
           {mode === "scheduled"
             ? "Scheduled slots from site config. Start or hand over from the header when on duty."
             : "Manual shifts: start when you begin work and end or hand over from the header."}
@@ -52,18 +52,18 @@ export function ShiftWorkspace({
       </div>
 
       {mode === "scheduled" && schedule.length > 0 ? (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-border-primary/80 bg-bg-card/60 p-5 shadow-card backdrop-blur-sm">
+          <div className="mb-3 text-[10px] font-bold uppercase tracking-wider text-text-muted">
             Daily schedule
           </div>
-          <ul className="grid gap-2 sm:grid-cols-3">
+          <ul className="grid gap-2.5 sm:grid-cols-3">
             {schedule.map((s) => (
               <li
                 key={s.name}
-                className="rounded-lg border border-slate-700/80 bg-slate-800/40 px-3 py-2 text-sm"
+                className="rounded-xl border border-border-primary/50 bg-bg-secondary/50 px-4 py-3 text-sm transition-colors hover:bg-bg-tertiary/60 shadow-sm"
               >
-                <span className="font-medium text-slate-200">{s.name}</span>
-                <span className="mt-0.5 block font-mono text-xs text-slate-400">
+                <span className="font-bold text-text-primary">{s.name}</span>
+                <span className="mt-1 block font-mono text-xs font-semibold text-text-tertiary">
                   {s.start} – {s.end}
                 </span>
               </li>
@@ -75,34 +75,34 @@ export function ShiftWorkspace({
       {currentShift ? (
         <div className="space-y-4">
           <ShiftReportPanel shift={currentShift} />
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             <button
               type="button"
               onClick={onHandover}
-              className="rounded-lg border border-sky-700/50 bg-sky-950/40 px-4 py-2 text-sm font-medium text-sky-200 hover:bg-sky-900/50"
+              className="rounded-xl border border-accent-blue/40 bg-accent-blue/15 px-5 py-2.5 text-sm font-bold tracking-wide text-accent-blue shadow-button hover:bg-accent-blue/25 hover:shadow-button-hover transition-all"
             >
               Handover
             </button>
             <button
               type="button"
               onClick={onEnd}
-              className="rounded-lg border border-red-800/50 bg-red-950/40 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-900/50"
+              className="rounded-xl border border-accent-red/40 bg-accent-red/15 px-5 py-2.5 text-sm font-bold tracking-wide text-accent-red shadow-button hover:bg-accent-red/25 hover:shadow-button-hover transition-all"
             >
               End shift
             </button>
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-6">
-          <p className="text-sm text-amber-100">No active shift.</p>
-          <p className="mt-1 text-sm text-amber-200/70">
-            Use <span className="font-medium">Start</span> in the header to open a shift before
+        <div className="rounded-2xl border border-accent-amber/40 bg-accent-amber/10 p-6 shadow-inner">
+          <p className="text-sm font-bold text-accent-amber-dark dark:text-accent-amber-light">No active shift.</p>
+          <p className="mt-1 text-sm font-medium text-accent-amber-dark/80 dark:text-accent-amber-light/80">
+            Use <span className="font-bold">Start</span> in the header to open a shift before
             authorizing dispensers.
           </p>
           <button
             type="button"
             onClick={onStart}
-            className="mt-4 rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
+            className="mt-5 rounded-xl bg-accent-amber px-5 py-2.5 text-sm font-bold tracking-wide text-text-inverse shadow-button hover:brightness-110 hover:shadow-button-hover transition-all"
           >
             Start shift
           </button>
@@ -110,24 +110,13 @@ export function ShiftWorkspace({
       )}
 
       {recentShifts.length > 0 ? (
-        <div className="min-h-0 flex-1">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Recent closed shifts
+        <div className="min-h-0 shrink-0">
+          <div className="mb-4 text-xs font-bold uppercase tracking-widest text-text-muted">
+            Yopilgan smenalar (Tarix)
           </div>
-          <div className="max-h-64 space-y-2 overflow-y-auto">
+          <div className="space-y-6">
             {recentShifts.map((s) => (
-              <div
-                key={s.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/30 px-3 py-2 text-sm"
-              >
-                <span className="text-slate-200">
-                  {s.operator_name}
-                  {s.shift_name ? ` · ${s.shift_name}` : ""}
-                </span>
-                <span className="font-mono text-xs text-slate-500">
-                  {s.total_transactions} tx · {s.total_volume.toFixed(1)} L
-                </span>
-              </div>
+              <ShiftReportPanel key={s.id} shift={s} />
             ))}
           </div>
         </div>

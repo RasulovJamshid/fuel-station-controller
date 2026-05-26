@@ -67,24 +67,19 @@
       "nozzles": [
         {
           "index": 1,
-          "product_id": 6,
+          "product_id": 3,
           "price": 10500,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 4,
           "price": 12000,
           "active": true,
-          "wayne_code": 0
-        },
-        {
-          "index": 3,
-          "product_id": 5,
-          "price": 13500,
-          "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         }
       ]
     },
@@ -99,14 +94,16 @@
           "product_id": 3,
           "price": 11000,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 4,
           "price": 12000,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         }
       ]
     },
@@ -121,14 +118,16 @@
           "product_id": 3,
           "price": 11000,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 4,
           "price": 12000,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         }
       ]
     },
@@ -143,14 +142,16 @@
           "product_id": 3,
           "price": 11000,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 6,
           "price": 12000,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         }
       ]
     },
@@ -165,28 +166,32 @@
           "product_id": 3,
           "price": 11000,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 4,
           "price": 12000,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         },
         {
           "index": 3,
           "product_id": 6,
           "price": 9800,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         },
         {
           "index": 4,
           "product_id": 5,
           "price": 13500,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         }
       ]
     },
@@ -201,28 +206,32 @@
           "product_id": 3,
           "price": 11000,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 4,
           "price": 12000,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         },
         {
           "index": 3,
           "product_id": 6,
           "price": 9800,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         },
         {
           "index": 4,
           "product_id": 7,
           "price": 6500,
           "active": true,
-          "wayne_code": 0
+          "wayne_code": 0,
+          "wayne_product_code": 0
         }
       ]
     }

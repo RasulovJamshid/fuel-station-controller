@@ -246,8 +246,22 @@ pub async fn get_transactions(
     limit: Option<i64>,
     offset: Option<i64>,
     fp_id: Option<String>,
+    statuses: Option<String>,
+    from_ms: Option<i64>,
+    until_ms: Option<i64>,
 ) -> Result<Vec<types::Transaction>, String> {
-    client.get_transactions(limit, offset, fp_id).await
+    client.get_transactions(limit, offset, fp_id, statuses, from_ms, until_ms).await
+}
+
+#[tauri::command]
+pub async fn get_transactions_summary(
+    client: tauri::State<'_, ServiceClient>,
+    fp_id: Option<String>,
+    statuses: Option<String>,
+    from_ms: Option<i64>,
+    until_ms: Option<i64>,
+) -> Result<types::TxSummary, String> {
+    client.get_transactions_summary(fp_id, statuses, from_ms, until_ms).await
 }
 
 #[tauri::command]

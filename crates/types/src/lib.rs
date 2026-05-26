@@ -589,3 +589,11 @@ pub struct AdminNozzleInput {
 pub struct SavePositionNozzlesCmd {
     pub nozzles: Vec<AdminNozzleInput>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TxSummary {
+    pub count: i64,
+    pub total_volume: f64,
+    pub total_amount: i64,
+}
+

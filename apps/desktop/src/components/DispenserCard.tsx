@@ -1,33 +1,48 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Droplets,
-  ShieldCheck,
-  Fuel,
-  Loader2,
-  CheckCircle2,
-  AlertOctagon,
-  WifiOff,
-  Power,
-  Play,
-  XCircle,
-  Ban,
-} from "lucide-react";
+import banIcon from "@/assets/icons/ban.svg";
+import checkIcon from "@/assets/icons/check.svg";
+import dangerIcon from "@/assets/icons/danger.svg";
+import dispenserIcon from "@/assets/icons/dispenser.svg";
+import dropletIcon from "@/assets/icons/fuel.svg";
+import eyeOffIcon from "@/assets/icons/eye-off.svg";
+import fullTankIcon from "@/assets/icons/full-tank.svg";
+import loaderIcon from "@/assets/icons/loader.svg";
+import pauseIcon from "@/assets/icons/pause.svg";
+import playIcon from "@/assets/icons/play.svg";
+import powerIcon from "@/assets/icons/power.svg";
+import shieldIcon from "@/assets/icons/shield.svg";
+import wifiOffIcon from "@/assets/icons/wifi-off.svg";
+import xCircleIcon from "@/assets/icons/x-circle.svg";
 import type { AuthMode, FpState, FpStatus, FpStatusTag, NozzleSnapshot } from "../types/api";
 import { pausedInfo, statusTag } from "../types/api";
 import { useAppStore } from "../store";
-import { AuthorizeModal } from "./AuthorizeModal";
+import { PumpCardForm, PumpCardProgress } from "./PumpCardForm";
 import { PreAuthNozzleMismatchAlert } from "./PreAuthNozzleMismatchAlert";
 
 export type FillMode = "full" | "volume" | "amount";
 
 const fmtSum = new Intl.NumberFormat("uz-UZ");
 
-function meterAmountTextClass(formatted: string, delivering: boolean): string {
-  const len = formatted.length;
-  if (len > 14) return delivering ? "text-sm leading-snug" : "text-sm leading-snug";
-  if (len > 10) return delivering ? "text-base leading-snug" : "text-base leading-snug";
-  if (len > 7) return delivering ? "text-lg leading-snug" : "text-lg leading-snug";
-  return delivering ? "text-xl leading-none" : "text-lg leading-none";
+function InlineIcon({
+  src,
+  alt = "",
+  className = "",
+  animated = false,
+}: {
+  src: string;
+  alt?: string;
+  className?: string;
+  animated?: boolean;
+}) {
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={`${className} ${animated ? "animate-spin" : ""}`.trim()}
+      aria-hidden={alt === "" ? true : undefined}
+      draggable={false}
+    />
+  );
 }
 
 function ContinuationMeterColumn({
@@ -62,9 +77,13 @@ function ContinuationMeterColumn({
   );
 }
 
-function formatPricePerLiter(price: number): string {
-  if (price <= 0) return "—";
-  return `${fmtSum.format(price)} SUM/L`;
+/** Parse a volume target from pre_auth_preset for progress display. */
+function parseVolumeTargetLiters(preset: string | null | undefined): number | null {
+  if (!preset) return null;
+  const m = preset.match(/([\d.,]+)\s*L/i);
+  if (!m) return null;
+  const v = Number.parseFloat(m[1].replace(",", "."));
+  return Number.isFinite(v) && v > 0 ? v : null;
 }
 
 function preAuthLimitDisplay(preset: string | null | undefined): {
@@ -85,103 +104,19 @@ function preAuthLimitDisplay(preset: string | null | undefined): {
   return { kindLabel: "Authorized limit", value: raw };
 }
 
-function badgeClass(status: FpStatusTag) {
-  switch (status) {
-    case "DELIVERING":
-      return "border-accent-emerald/50 bg-accent-emerald/15 text-accent-emerald-light ring-1 ring-accent-emerald/30";
-    case "PRE_AUTHORIZED":
-      return "border-accent-amber/50 bg-accent-amber/15 text-accent-amber-light ring-1 ring-accent-amber/35";
-    case "NOZZLE_UP":
-    case "AUTHORIZING":
-      return "border-accent-emerald/45 bg-accent-emerald/12 text-accent-emerald-light ring-1 ring-accent-emerald/25";
-    case "DONE":
-      return "border-accent-blue/50 bg-accent-blue/15 text-accent-blue ring-1 ring-accent-blue/30";
-    case "STOPPED":
-      return "border-accent-red/50 bg-accent-red/15 text-accent-red-light ring-1 ring-accent-red/30";
-    case "OFFLINE":
-      return "border-text-muted/50 bg-bg-tertiary/40 text-text-tertiary ring-1 ring-border-primary/40";
-    default:
-      return "border-border-primary/50 bg-bg-secondary/60 text-text-tertiary ring-1 ring-border-primary/35";
-  }
-}
+const STATUS_ICON_MAP: Partial<Record<FpStatusTag, { src: string; animated?: boolean }>> = {
+  DELIVERING: { src: dropletIcon },
+  PRE_AUTHORIZED: { src: shieldIcon },
+  NOZZLE_UP: { src: fullTankIcon },
+  AUTHORIZING: { src: loaderIcon, animated: true },
+  DONE: { src: checkIcon },
+  STOPPED: { src: dangerIcon },
+  OFFLINE: { src: wifiOffIcon },
+};
 
 function StatusIcon({ tag, className = "" }: { tag: FpStatusTag; className?: string }) {
-  switch (tag) {
-    case "DELIVERING":
-      return <Droplets className={`animate-pulse ${className}`} />;
-    case "PRE_AUTHORIZED":
-      return <ShieldCheck className={className} />;
-    case "NOZZLE_UP":
-      return <Fuel className={className} />;
-    case "AUTHORIZING":
-      return <Loader2 className={`animate-spin ${className}`} />;
-    case "DONE":
-      return <CheckCircle2 className={className} />;
-    case "STOPPED":
-      return <AlertOctagon className={className} />;
-    case "OFFLINE":
-      return <WifiOff className={className} />;
-    default:
-      return <Power className={className} />;
-  }
-}
-
-function statusAccentBar(status: FpStatusTag) {
-  switch (status) {
-    case "DELIVERING":
-    case "NOZZLE_UP":
-    case "AUTHORIZING":
-      return "from-accent-emerald-light via-accent-emerald to-accent-emerald-dark";
-    case "PRE_AUTHORIZED":
-      return "from-accent-amber-light via-accent-amber to-accent-amber-dark";
-    case "DONE":
-      return "from-accent-blue via-accent-blue to-blue-600";
-    case "STOPPED":
-      return "from-accent-red-light via-accent-red to-accent-red-dark";
-    case "OFFLINE":
-      return "from-text-muted via-border-primary to-border-secondary";
-    default:
-      return "from-border-primary via-border-secondary to-bg-tertiary";
-  }
-}
-
-function statusHeaderSurface(status: FpStatusTag) {
-  switch (status) {
-    case "DELIVERING":
-    case "NOZZLE_UP":
-    case "AUTHORIZING":
-      return "border-accent-emerald/25 bg-gradient-to-br from-accent-emerald-dark/20 via-bg-primary/95 to-bg-primary";
-    case "PRE_AUTHORIZED":
-      return "border-accent-amber/30 bg-gradient-to-br from-accent-amber-dark/15 via-bg-primary/95 to-bg-primary";
-    case "DONE":
-      return "border-accent-blue/25 bg-gradient-to-br from-accent-blue/15 via-bg-primary/95 to-bg-primary";
-    case "STOPPED":
-      return "border-accent-red/25 bg-gradient-to-br from-accent-red-dark/15 via-bg-primary/95 to-bg-primary";
-    case "OFFLINE":
-      return "border-border-primary/40 bg-gradient-to-br from-bg-secondary via-bg-primary to-bg-primary";
-    default:
-      return "border-border-secondary/50 bg-gradient-to-br from-bg-secondary/90 via-bg-primary to-bg-primary";
-  }
-}
-
-function cardShellClass(status: FpStatusTag) {
-  switch (status) {
-    case "DELIVERING":
-      return "border-accent-emerald bg-accent-emerald/10 shadow-accent-emerald/20";
-    case "PRE_AUTHORIZED":
-      return "border-accent-amber bg-accent-amber/15 shadow-lg shadow-accent-amber/30 ring-2 ring-accent-amber/25";
-    case "NOZZLE_UP":
-    case "AUTHORIZING":
-      return "border-accent-emerald bg-accent-emerald/10 shadow-accent-emerald/25 ring-2 ring-accent-emerald/40";
-    case "DONE":
-      return "border-accent-blue bg-accent-blue/10 shadow-accent-blue/20";
-    case "STOPPED":
-      return "border-accent-red bg-accent-red/10";
-    case "OFFLINE":
-      return "border-accent-red-light/60 bg-bg-secondary/80 opacity-70";
-    default:
-      return "border-border-primary bg-bg-card/80";
-  }
+  const icon = STATUS_ICON_MAP[tag] ?? { src: powerIcon };
+  return <InlineIcon src={icon.src} className={className} animated={icon.animated} />;
 }
 
 export interface AuthorizeRequest {
@@ -201,6 +136,7 @@ export interface DispenserCardProps {
   defaultAuthMode?: AuthMode;
   /** Compact layout for 6+ card grids. */
   compact?: boolean;
+  onHide?: () => void;
   onAuthorize: (req: AuthorizeRequest) => void;
   onPreAuthorize?: (req: AuthorizeRequest) => void;
   onCancelPreAuth?: (fpId: string) => void;
@@ -217,6 +153,7 @@ export function DispenserCard({
   positionActive = true,
   defaultAuthMode = "reactive",
   compact = false,
+  onHide,
   onAuthorize,
   onPreAuthorize,
   onCancelPreAuth,
@@ -226,10 +163,10 @@ export function DispenserCard({
   onCloseStopped,
   onDismissSale,
 }: DispenserCardProps) {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<"preauth" | "reactive">("preauth");
-  const [modalNozzleHint, setModalNozzleHint] = useState<number | null>(null);
-  const [modalFillMode, setModalFillMode] = useState<FillMode>("full");
+  const [formStart, setFormStart] = useState<{ disabled: boolean; onStart: () => void }>({
+    disabled: true,
+    onStart: () => {},
+  });
   const nozzleRemovedAt = useAppStore((s) => s.nozzleRemovedAt[state.fp_id]);
   const preAuthTimeoutFpId = useAppStore((s) => s.preAuthTimeoutFpId);
   const preAuthNozzleMismatch = useAppStore((s) => s.preAuthNozzleMismatch);
@@ -320,7 +257,6 @@ export function DispenserCard({
     () => preAuthLimitDisplay(state.pre_auth_preset),
     [state.pre_auth_preset],
   );
-  const isNozzleUpOrAuth = isNozzleUp || isAuthorizing;
   const isDone = tag === "DONE";
   const holsterEndedSale = isDone && lastSaleOutcome === "holster_ended";
   const abortedSale = isDone && lastSaleOutcome === "aborted";
@@ -337,72 +273,46 @@ export function DispenserCard({
     (tag === "DELIVERING" || tag === "AUTHORIZING");
   const usePreAuth = defaultAuthMode === "preauth";
   const canOpenPreAuthSetup =
-    (isIdle || isNozzleUp) && usePreAuth && !isPaused && !isContinuing && !hasActivePreAuth;
+    isIdle && usePreAuth && !isPaused && !isContinuing && !hasActivePreAuth;
   const canOpenReactiveSetup =
-    isNozzleUp && !isPaused && !isContinuing && !hasActivePreAuth;
+    isNozzleUp && !usePreAuth && !isPaused && !isContinuing && !hasActivePreAuth;
+  const showUnplannedLift =
+    isNozzleUp && usePreAuth && !hasActivePreAuth && !isPaused;
   const isOffline = tag === "OFFLINE";
-  const hasMultipleProducts = activeNozzles.length > 1;
-  const showProductBanner =
-    positionActive &&
-    productLabel != null &&
-    !canOpenPreAuthSetup &&
-    !hasActivePreAuth &&
-    !(canOpenReactiveSetup && state.product_name == null);
-
-  const openPreAuthSetup = (fillMode?: FillMode) => {
-    if (!canOpenPreAuthSetup || !positionActive) return;
-    setModalMode("preauth");
-    setModalFillMode(fillMode ?? "full");
-    setModalNozzleHint(effectiveNozzle ?? (activeNozzles.length === 1 ? (activeNozzles[0]?.index ?? null) : null));
-    setModalOpen(true);
-  };
-
-  const openReactiveSetup = (nozzleIndex?: number, fillMode?: FillMode) => {
-    if (!canOpenReactiveSetup || !positionActive) return;
-    setModalMode("reactive");
-    setModalFillMode(fillMode ?? "full");
-    setModalNozzleHint(nozzleIndex ?? null);
-    setModalOpen(true);
-  };
-
-  const handleQuickAuthorize = (fillMode: FillMode) => {
+  const handleFormStart = (req: AuthorizeRequest) => {
     if (!positionActive) return;
-    const req: AuthorizeRequest = {
-      fpId: state.fp_id,
-      nozzleIndex: effectiveNozzle ?? (activeNozzles[0]?.index ?? null),
-      fillMode,
-      limitValue: null,
-      priceOverride: null,
-    };
-    if (usePreAuth && canOpenPreAuthSetup) onPreAuthorize?.(req);
+    if (canOpenPreAuthSetup) onPreAuthorize?.(req);
     else if (canOpenReactiveSetup) onAuthorize(req);
   };
 
-  const closeModal = () => {
-    setModalOpen(false);
-    setModalNozzleHint(null);
-  };
+  const showPumpForm =
+    positionActive &&
+    !isOffline &&
+    !isDelivering &&
+    !isPaused &&
+    !isDone &&
+    !hasActivePreAuth &&
+    !isAuthorizing &&
+    (canOpenPreAuthSetup || canOpenReactiveSetup);
 
-  const handleModalConfirm = (req: AuthorizeRequest) => {
-    if (modalMode === "preauth") onPreAuthorize?.(req);
-    else onAuthorize(req);
-  };
-
-  useEffect(() => {
-    if (!modalOpen) return;
-    if (
-      (modalMode === "preauth" && !canOpenPreAuthSetup) ||
-      (modalMode === "reactive" && !canOpenReactiveSetup)
-    ) {
-      setModalOpen(false);
-      setModalNozzleHint(null);
-    }
-  }, [modalOpen, modalMode, canOpenPreAuthSetup, canOpenReactiveSetup]);
-
-  const p = compact ? "p-3" : "p-5";
-  const cardMinH = compact ? "min-h-[18rem]" : "min-h-[26rem]";
-  const primaryBtnH = compact ? "min-h-[2.5rem]" : "min-h-[3rem]";
-  const headerBleed = compact ? "-mx-3 -mt-3 mb-2" : "-mx-5 -mt-5 mb-3";
+  const kolonkaTitle =
+    state.label?.trim() ||
+    (state.fp_id.match(/\d+/) ? `${state.fp_id.match(/\d+/)![0]}-KOLONKA` : `${state.fp_id}-KOLONKA`);
+  const isOnline = !isOffline;
+  const statusTone = isOffline
+    ? "offline"
+    : isDelivering
+      ? "delivering"
+      : hasActivePreAuth
+        ? "preauth"
+        : isPaused
+          ? "paused"
+          : isDone
+            ? "done"
+            : isNozzleUp
+              ? "nozzle_up"
+              : "idle";
+  const cardMinH = compact ? "min-h-[420px]" : "min-h-[560px]";
 
   const statusHeader = useMemo(() => {
     const statusLabel = tag.replace(/_/g, " ");
@@ -434,11 +344,9 @@ export function DispenserCard({
         ? (liftedNozzleCaption ?? "Lift the authorized grade to start")
         : "Awaiting customer to lift nozzle";
     } else if (isNozzleUp) {
-      subtitle =
-        liftedNozzleCaption ??
-        (usePreAuth && !hasActivePreAuth
-          ? "Nozzle lifted — set volume or amount"
-          : "Nozzle lifted");
+      subtitle = usePreAuth && !hasActivePreAuth
+        ? "Cannot start — nozzle lifted without pre-authorization"
+        : (liftedNozzleCaption ?? "Nozzle lifted");
     } else if (isIdle) {
       subtitle = usePreAuth
         ? "Holstered — ready to pre-authorize"
@@ -471,228 +379,188 @@ export function DispenserCard({
     liftedNozzleCaption,
   ]);
 
+  const displayVolume = isPaused ? (paused?.stopped_volume ?? 0) : state.volume;
+  const progressTarget = parseVolumeTargetLiters(state.pre_auth_preset);
+
   return (
     <>
       <div
-        className={`relative flex h-full min-h-0 flex-col rounded-md border-2 shadow-lg transition-colors duration-300 hover:shadow-xl ${cardMinH} ${p} ${cardShellClass(tag)} ${
-          showPreAuthMismatchBanner ? "ring-4 ring-red-500/50 ring-offset-2 ring-offset-slate-900" : ""
-        } ${!positionActive ? "opacity-60 grayscale-[50%]" : ""}`}
+        className={`pump-card pump-card--${statusTone} ${cardMinH} relative flex w-full min-w-0 flex-col overflow-hidden rounded-xl border pt-4 ${compact ? "gap-2 px-3 pb-3" : "gap-3 px-4 pb-4"} ${
+          isDelivering || (isNozzleUp && !showUnplannedLift) ? "ring-1 ring-accent-emerald/25" : showUnplannedLift ? "ring-1 ring-accent-red/30" : ""
+        } ${showPreAuthMismatchBanner ? "ring-2 ring-accent-red/50" : ""} ${
+          !positionActive ? "opacity-60 grayscale-[50%]" : ""
+        }`}
       >
-        <header
-          className={`shrink-0 overflow-hidden rounded-t-sm border-b ${statusHeaderSurface(tag)} ${headerBleed}`}
-        >
-          <div
-            className={`w-full ${compact ? "h-1" : "h-2"} bg-gradient-to-r ${statusAccentBar(tag)}`}
-            aria-hidden
-          />
-          <div
-            className={`flex min-w-0 items-start justify-between gap-3 ${compact ? "px-2.5 py-2" : "px-3.5 py-3"}`}
-          >
-            <div className="min-w-0 flex-1">
-              <p
-                className={`font-semibold uppercase tracking-[0.14em] text-text-muted ${compact ? "text-[8px]" : "text-[9px]"}`}
-              >
-                {state.label || "Fuel position"}
-              </p>
-              <h2
-                className={`mt-0.5 truncate font-black tracking-tight text-text-primary ${compact ? "text-lg leading-tight" : "text-2xl leading-none"}`}
-              >
-                Pump {state.fp_id}
-              </h2>
-              <p
-                className={`mt-1 text-text-tertiary ${compact ? "line-clamp-1 text-[10px] leading-snug" : "line-clamp-2 text-xs leading-snug"}`}
-              >
-                {!positionActive ? (
-                  <span className="font-medium text-text-muted">Inactive · </span>
-                ) : null}
-                {statusHeader.subtitle}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1.5">
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <InlineIcon
+              src={dispenserIcon}
+              className={`shrink-0 ${compact ? "h-4 w-4" : "h-5 w-5"}`}
+            />
+            <h2
+              className={`truncate font-bold uppercase tracking-wide text-text-primary ${compact ? "text-sm" : "text-base"}`}
+            >
+              {kolonkaTitle}
+            </h2>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {isNozzleUp && showPumpForm && (
               <span
-                className={`inline-flex items-center gap-1 rounded-full border font-bold uppercase tracking-wide ${compact ? "px-2 py-0.5 text-[8px]" : "px-2.5 py-1 text-[10px]"} ${badgeClass(tag)}`}
-                aria-label={`Status: ${statusHeader.statusLabel}`}
-                title={statusHeader.statusLabel}
+                className="flex items-center gap-1 rounded-full bg-accent-emerald/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-emerald"
+                title={liftedNozzleCaption ?? "Nozzle lifted"}
               >
-                <StatusIcon tag={tag} className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
-                {statusHeader.statusLabel}
+                <InlineIcon src={dropletIcon} className="h-3 w-3" animated />
+                {compact ? "" : "Nozzle up"}
               </span>
+            )}
+            {showUnplannedLift && (
+              <span
+                className="flex items-center gap-1 rounded-full bg-accent-red/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-red"
+                title="Nozzle lifted without pre-authorization"
+              >
+                <InlineIcon src={dangerIcon} className="h-3 w-3" />
+                {compact ? "" : "No pre-auth"}
+              </span>
+            )}
+            <span
+              className={`pump-auth-badge ${usePreAuth ? "pump-auth-badge--preauth" : "pump-auth-badge--reactive"}`}
+              title={usePreAuth ? "Pre-authorize mode" : "Reactive mode"}
+            >
+              {usePreAuth ? "PRE" : "R"}
+            </span>
+            <span
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${isOnline ? "bg-accent-emerald online-dot-glow" : "bg-text-muted"}`}
+              title={isOnline ? "Online" : "Offline"}
+              aria-label={isOnline ? "Online" : "Offline"}
+            />
+            <button
+              type="button"
+              onClick={onHide}
+              className="shrink-0 text-text-muted opacity-40 hover:opacity-100 hover:text-text-secondary transition-opacity"
+              title="Hide card"
+            >
+              <InlineIcon src={eyeOffIcon} className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-1 min-w-0 flex-col gap-2">
+          {/* Status chip when not showing setup form */}
+          {!showPumpForm && !hasActivePreAuth && (
+            <div
+              className={`pump-status-chip flex items-center gap-2 rounded-lg border px-2.5 py-1.5 ${compact ? "text-[10px]" : "text-xs"}`}
+            >
+              <StatusIcon tag={tag} className="h-3.5 w-3.5 shrink-0 text-text-tertiary" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                  {statusHeader.statusLabel}
+                </p>
+                <p className="truncate text-text-secondary">{statusHeader.subtitle}</p>
+              </div>
               {statusHeader.rightMeta ? (
-                <span
-                  className={`max-w-[9rem] rounded-md border border-border-primary bg-bg-secondary px-2 py-0.5 text-right font-mono font-semibold tabular-nums leading-tight text-text-primary ${compact ? "text-[9px]" : "text-[11px]"}`}
-                >
-                  {statusHeader.rightMeta}
-                </span>
+                <span className="shrink-0 font-mono tabular-nums text-text-muted">{statusHeader.rightMeta}</span>
               ) : null}
             </div>
-          </div>
-        </header>
-        {hasActivePreAuth && !showPreAuthMismatchBanner && (
-          <div className={`shrink-0 w-full ${compact ? "mb-2" : "mb-3"}`}>{(
-              <div
-                className="w-full overflow-hidden rounded-md border-2 border-amber-500 bg-amber-950/40"
-                role="status"
-              >
-                <div
-                  className="h-1.5 w-full"
+          )}
+
+          {showUnplannedLift && (
+            <div className="rounded-lg border border-accent-red/40 bg-accent-red/10 px-3 py-3">
+              <div className="flex items-start gap-2">
+                <InlineIcon src={dangerIcon} className="mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-accent-red">Pre-authorization required</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-text-secondary">
+                    Filling cannot start. Ask customer to replace the nozzle, then pre-authorize before lifting.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {hasActivePreAuth && !showPumpForm && (
+            <div
+              className="rounded-lg border border-accent-amber/40 bg-accent-amber/10 px-3 py-2"
+              role="status"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
                   style={{ backgroundColor: productColor }}
                   aria-hidden
                 />
-                <div className={compact ? "px-2.5 py-2" : "px-4 py-3"}>
-                  {(() => {
-                    const limit = preAuthLimitDisplay(state.pre_auth_preset);
-                    return (
-                      <>
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <p
-                              className={`font-bold uppercase tracking-wider text-amber-400/90 ${compact ? "text-[9px]" : "text-[10px]"}`}
-                            >
-                              Authorized product
-                            </p>
-                            <p
-                              className={`truncate font-black leading-tight text-text-primary ${compact ? "text-sm" : "text-lg"}`}
-                            >
-                              {productLabel ?? "—"}
-                            </p>
-                            {effectiveNozzle != null && (
-                              <p
-                                className={`mt-0.5 font-medium text-amber-300/80 ${compact ? "text-[9px]" : "text-[10px]"}`}
-                              >
-                                Nozzle {effectiveNozzle}
-                              </p>
-                            )}
-                          </div>
-                          <div className="shrink-0 border-l border-amber-500/40 pl-3 text-right">
-                            <p
-                              className={`font-bold uppercase tracking-wider text-amber-400/90 ${compact ? "text-[9px]" : "text-[10px]"}`}
-                            >
-                              Rate
-                            </p>
-                            <p
-                              className={`font-mono font-bold tabular-nums text-amber-300 ${compact ? "text-[10px]" : "text-xs"}`}
-                            >
-                              {formatPricePerLiter(displayPrice)}
-                            </p>
-                          </div>
-                        </div>
-                        <div
-                          className={`mt-2 rounded-md border border-amber-500/35 bg-amber-950/55 text-center ${compact ? "px-2 py-2" : "px-3 py-3"}`}
-                        >
-                          <p
-                            className={`font-bold uppercase tracking-widest text-amber-400/90 ${compact ? "text-[9px]" : "text-[10px]"}`}
-                          >
-                            {limit.kindLabel}
-                          </p>
-                          <p
-                            className={`mt-0.5 font-mono font-black tabular-nums leading-none tracking-tight text-amber-300 drop-shadow-[0_0_12px_rgba(252,211,77,0.25)] ${compact ? "text-2xl" : "text-4xl"}`}
-                          >
-                            {limit.value}
-                          </p>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-                <div
-                  className={`flex items-center gap-2 border-t border-amber-500/40 bg-amber-950/50 ${compact ? "px-2.5 py-1.5" : "px-4 py-2"}`}
-                >
-                  <Fuel
-                    className={`shrink-0 text-amber-300 ${compact ? "h-4 w-4" : "h-5 w-5"}`}
-                    aria-hidden
-                  />
-                  <div className="min-w-0">
-                    <p
-                      className={`font-bold uppercase leading-tight tracking-wide text-amber-100 ${compact ? "text-[10px]" : "text-xs"}`}
-                    >
-                      {isNozzleUp
-                        ? compact
-                          ? "Lift correct grade to start"
-                          : "Lift the authorized grade to start"
-                        : compact
-                          ? "Awaiting customer nozzle"
-                          : "Awaiting customer to lift nozzle"}
-                    </p>
-                    <p
-                      className={`text-amber-200/80 ${compact ? "text-[9px]" : "text-[11px]"}`}
-                    >
-                      {isNozzleUp
-                        ? "Ready when the correct nozzle is lifted"
-                        : "Holstered — lift nozzle when customer is ready"}
-                    </p>
-                  </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-text-primary">
+                    {productLabel ?? "—"}
+                  </p>
+                  <p className="font-mono text-xs tabular-nums text-accent-amber">
+                    {preAuthLimitDisplay(state.pre_auth_preset).value}
+                  </p>
                 </div>
               </div>
-            )}
-          </div>
-        )}
+              <p className="mt-1 text-[10px] text-text-tertiary">
+                {isNozzleUp ? "Lift nozzle to start" : "Awaiting customer nozzle"}
+              </p>
+            </div>
+          )}
 
-        {showProductBanner && (
-          <div className={`shrink-0 overflow-hidden rounded-md border-2 border-border-primary bg-bg-meter shadow-sm ${compact ? "mb-2" : "mb-4"}`}>
-            <div 
-              className="h-2 w-full border-b border-border-primary" 
-              style={{ 
-                backgroundColor: productColor,
-                borderTop: `3px solid ${productColor}`
-              }} 
-            />
-            <div className={`flex items-center justify-between gap-3 ${compact ? "px-3 py-2" : "px-5 py-4"}`}>
-              <div className="min-w-0">
-                {!compact && (
-                  <div className="text-xs font-bold uppercase tracking-wider text-text-muted mb-1">PRODUCT GRADE</div>
-                )}
-                <div className={`truncate font-bold text-text-primary transition-colors ${compact ? "text-sm" : "text-base"}`}>
-                  {productLabel ?? "—"}
-                </div>
-                {!compact && (
-                  <div className="mt-1 text-xs font-medium text-text-tertiary">
-                    FUEL TYPE
-                  </div>
-                )}
+          {!showPumpForm && (
+            <div className="grid grid-cols-3 gap-1 rounded-lg border border-border-primary/60 bg-bg-input/45 px-2.5 py-1.5">
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-text-muted">Grade</p>
+                <p className="truncate text-xs font-semibold text-text-primary">{productLabel ?? "—"}</p>
               </div>
-              <div className="shrink-0 text-right border-l border-border-primary pl-4">
-                {!compact && (
-                  <div className="text-xs font-bold uppercase tracking-wider text-text-muted mb-1">RATE</div>
-                )}
-                <div className={`font-mono font-bold text-accent-amber tabular-nums ${compact ? "text-sm" : "text-base"}`}>
-                  {formatPricePerLiter(displayPrice)}
-                </div>
-                {!compact && (
-                  <div className="mt-1 text-xs font-medium text-text-tertiary">
-                    PRICE PER LITER
-                  </div>
-                )}
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-text-muted">Nozzle</p>
+                <p className="truncate text-xs font-semibold text-text-primary">{effectiveNozzle ?? "—"}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] uppercase tracking-wide text-text-muted">Price</p>
+                <p className="truncate font-mono text-xs font-semibold tabular-nums text-accent-blue">
+                  {displayPrice > 0 ? fmtSum.format(displayPrice) : "—"}
+                </p>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div
-          className={`min-w-0 shrink-0 overflow-hidden rounded-md border-2 bg-bg-meter ${compact ? "mb-2 p-3" : "mb-4 p-5"} ${
-            isDelivering
-              ? "border-accent-emerald bg-accent-emerald/10"
-              : hasActivePreAuth
-                ? "border-accent-amber bg-accent-amber/10"
-                : isPaused
-                  ? "border-accent-red bg-accent-red/10"
-                  : "border-border-primary"
-          }`}
-        >
-          {isContinuing && (
-            <div className="mb-1 grid min-w-0 grid-cols-3 gap-1">
+          {showPumpForm ? (
+            <div className="flex flex-1 min-w-0">
+              <PumpCardForm
+                fpId={state.fp_id}
+                activeNozzles={activeNozzles}
+                initialNozzle={effectiveNozzle}
+                compact={compact}
+                disabled={!positionActive}
+                onStart={handleFormStart}
+                onReadyChange={setFormStart}
+              />
+            </div>
+          ) : null}
+
+          {showPreAuthMismatchBanner && preAuthNozzleMismatch && (
+            <PreAuthNozzleMismatchAlert
+              expectedProductName={preAuthNozzleMismatch.expectedProductName}
+              liftedProductName={preAuthNozzleMismatch.liftedProductName}
+              expectedColor={preAuthNozzleMismatch.expectedColor}
+              liftedColor={preAuthNozzleMismatch.liftedColor}
+            />
+          )}
+
+          {isContinuing && !showPumpForm && (
+            <div className="grid grid-cols-3 gap-1 rounded-lg border border-border-primary bg-bg-input/50 p-2">
               <ContinuationMeterColumn
                 label="Base"
                 volume={state.base_volume ?? 0}
                 amount={state.base_amount ?? 0}
               />
               <ContinuationMeterColumn
-                label="+ Current"
+                label="+ Now"
                 volume={state.segment_volume ?? 0}
                 amount={state.segment_amount ?? 0}
                 volumeClass="text-accent-emerald"
               />
               <ContinuationMeterColumn
-                label="= Total"
+                label="Total"
                 volume={state.volume}
                 amount={state.amount}
                 volumeClass="text-text-primary"
@@ -700,80 +568,50 @@ export function DispenserCard({
               />
             </div>
           )}
-          {!isContinuing && (
-            <div className="grid min-w-0 grid-cols-2 gap-2">
-              <div className="min-w-0">
-                <p className="mb-1 text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-                  <div className="w-2 h-2 bg-accent-emerald rounded-full border border-accent-emerald-light"></div>
-                  VOLUME
-                </p>
-                <p
-                  className={`flex min-w-0 items-baseline gap-1 font-mono font-bold tabular-nums text-text-primary ${
-                    isDelivering
-                      ? `animate-pulse ${compact ? "text-lg leading-none" : "text-2xl leading-none"}`
-                      : compact
-                        ? "text-lg leading-none"
-                        : "text-2xl leading-none"
-                  }`}
-                >
-                  <span className="min-w-0 truncate">
-                    {(isPaused ? paused.stopped_volume : state.volume).toFixed(2)}
-                  </span>
-                  <span className={`shrink-0 font-semibold text-text-tertiary ${compact ? "text-sm" : "text-base"}`}>L</span>
-                </p>
-                {!compact && (
-                  <p className="mt-2 text-xs font-medium text-text-tertiary border-t border-border-primary pt-2">
-                    LITERS DISPENSED
-                  </p>
-                )}
-              </div>
-              <div className="min-w-0 text-right">
-                <p className="mb-1 text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2 justify-end">
-                  <div className="w-2 h-2 bg-accent-blue rounded-full border border-blue-300"></div>
-                  AMOUNT
-                </p>
-                <p
-                  className={`flex min-w-0 flex-wrap items-baseline justify-end gap-x-1 font-mono font-bold tabular-nums text-accent-blue ${
-                    isDelivering
-                      ? `animate-pulse ${meterAmountTextClass(
-                          fmtSum.format(isPaused ? paused.stopped_amount : state.amount),
-                          true,
-                        )}`
-                      : meterAmountTextClass(
-                          fmtSum.format(isPaused ? paused.stopped_amount : state.amount),
-                          false,
-                        )
-                  }`}
-                >
-                  <span className="min-w-0 break-all">
-                    {fmtSum.format(isPaused ? paused.stopped_amount : state.amount)}
-                  </span>
-                  <span className="shrink-0 text-xs font-semibold text-text-tertiary">SUM</span>
-                </p>
-                {!compact && (
-                  <p className="mt-2 text-xs font-medium text-text-tertiary border-t border-border-primary pt-2">
-                    TOTAL COST
-                  </p>
-                )}
-              </div>
-            </div>
+
+          {(isDelivering || isPaused || (hasActivePreAuth && displayVolume > 0)) && !showPumpForm && (
+            <PumpCardProgress
+              volume={displayVolume}
+              targetLiters={progressTarget}
+              compact={compact}
+            />
           )}
         </div>
 
         <div
-          className={`mt-auto flex shrink-0 flex-col justify-end ${compact ? "min-h-[3.25rem]" : "min-h-[4.5rem]"}`}
+          className="mt-auto flex shrink-0 flex-col justify-end gap-2"
           onClick={(e) => e.stopPropagation()}
         >
-          {isDelivering ? (
+          {showPumpForm ? (
             <button
               type="button"
-              title="Emergency Stop"
-              className={`flex w-full flex-col items-center justify-center rounded-md bg-accent-red font-black tracking-widest text-text-inverse border-2 border-accent-red-dark transition-all duration-200 hover:bg-accent-red-light hover:border-accent-red active:bg-accent-red-dark active:border-accent-red-dark ${primaryBtnH} ${compact ? "text-sm" : "text-lg"}`}
-              onClick={() => onStop(state.fp_id)}
+              disabled={formStart.disabled}
+              onClick={formStart.onStart}
+              className={`btn-start-glow pump-start-button flex items-center justify-center gap-2 rounded-lg font-bold uppercase text-white transition disabled:cursor-not-allowed disabled:opacity-70 ${compact ? "py-2 text-xs" : "py-2.5 text-sm"}`}
             >
-              {!compact && <span className="mb-1 text-2xl">⚠️</span>}
-              {compact ? "STOP" : "EMERGENCY STOP"}
+              <InlineIcon src={playIcon} className="h-4 w-4" />
+              Start
             </button>
+          ) : isDelivering ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled
+                className={`btn-start-glow pump-start-button flex items-center justify-center gap-1.5 rounded-lg font-bold uppercase text-white/70 ${compact ? "py-2 text-xs" : "py-2.5 text-sm"}`}
+              >
+                <InlineIcon src={playIcon} className="h-4 w-4" />
+                Start
+              </button>
+              <button
+                type="button"
+                title="Pause / stop fill"
+                className={`flex items-center justify-center gap-1.5 rounded-lg border border-amber-900/50 bg-amber-950/40 font-bold uppercase text-accent-amber hover:bg-amber-950/60 ${compact ? "py-2 text-xs" : "py-2.5 text-sm"}`}
+                onClick={() => onStop(state.fp_id)}
+              >
+                <InlineIcon src={pauseIcon} className="h-4 w-4" />
+                Pauza
+              </button>
+            </div>
           ) : showNozzleRemovedBanner ? (
             <p className="text-center text-sm font-semibold text-accent-amber-light">
               Nozzle removed — fill closed
@@ -792,11 +630,11 @@ export function DispenserCard({
               )}
               <button
                 type="button"
-                className={`w-full rounded-md bg-accent-emerald font-black uppercase tracking-widest text-text-inverse border-2 border-accent-emerald-dark transition-all duration-200 hover:bg-accent-emerald-light hover:border-accent-emerald active:bg-accent-emerald-dark active:border-accent-emerald-dark ${primaryBtnH} ${compact ? "text-sm" : "text-lg"}`}
+                className={`btn-start-glow pump-start-button w-full rounded-lg py-2.5 font-bold uppercase text-white ${compact ? "text-xs" : "text-sm"}`}
                 onClick={() => onResumeFill(state.fp_id, paused.stopped_tx_id)}
               >
                 <span className="flex items-center justify-center gap-2">
-                  <Play className={compact ? "h-4 w-4" : "h-5 w-5"} />
+                  <InlineIcon src={playIcon} className={compact ? "h-4 w-4" : "h-5 w-5"} />
                   RESUME FILL
                 </span>
               </button>
@@ -806,7 +644,7 @@ export function DispenserCard({
                 onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
               >
                 <span className="flex items-center justify-center gap-1.5">
-                  <XCircle className={compact ? "h-3 w-3" : "h-4 w-4"} />
+                  <InlineIcon src={xCircleIcon} className={compact ? "h-3 w-3" : "h-4 w-4"} />
                   Close transaction
                 </span>
               </button>
@@ -824,7 +662,7 @@ export function DispenserCard({
                 onClick={() => onContinueFill(state.fp_id, paused.stopped_tx_id)}
               >
                 <span className="flex items-center justify-center gap-2">
-                  <Play className={compact ? "h-4 w-4" : "h-5 w-5"} />
+                  <InlineIcon src={playIcon} className={compact ? "h-4 w-4" : "h-5 w-5"} />
                   Continue fill
                 </span>
               </button>
@@ -834,160 +672,48 @@ export function DispenserCard({
                 onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
               >
                 <span className="flex items-center justify-center gap-2">
-                  <XCircle className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
+                  <InlineIcon src={xCircleIcon} className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
                   Close transaction
                 </span>
               </button>
             </div>
           ) : hasActivePreAuth ? (
-            <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
-              {showPreAuthMismatchBanner && preAuthNozzleMismatch && (
-                <PreAuthNozzleMismatchAlert
-                  expectedProductName={preAuthNozzleMismatch.expectedProductName}
-                  liftedProductName={preAuthNozzleMismatch.liftedProductName}
-                  expectedColor={preAuthNozzleMismatch.expectedColor}
-                  liftedColor={preAuthNozzleMismatch.liftedColor}
-                />
-              )}
+            <>
               {showPreAuthTimeoutBanner && (
                 <p className="text-center text-xs font-medium text-accent-amber">
-                  Pre-authorization timed out — cancelled automatically
+                  Pre-authorization timed out
                 </p>
               )}
               <button
                 type="button"
-                className={`w-full rounded-md bg-bg-secondary font-bold uppercase tracking-wider text-text-secondary border-2 border-border-primary transition-all duration-200 hover:bg-bg-tertiary hover:border-border-secondary active:bg-bg-primary active:border-border-primary ${primaryBtnH} ${compact ? "text-sm" : "text-sm"}`}
+                className="w-full rounded-lg border border-border-primary bg-bg-secondary py-2 text-xs font-bold uppercase tracking-wide text-text-secondary hover:bg-bg-tertiary"
                 onClick={() => onCancelPreAuth?.(state.fp_id)}
               >
                 <span className="flex items-center justify-center gap-2">
-                  <Ban className={compact ? "h-4 w-4" : "h-4 w-4"} />
-                  {compact ? "Cancel" : "Cancel pre-authorization"}
+                  <InlineIcon src={banIcon} className="h-4 w-4" />
+                  Bekor qilish
                 </span>
               </button>
-            </div>
-          ) : isContinuing && !isDelivering ? (
-            <p className="text-center text-xs font-medium text-accent-blue/90">
-              Resuming original fill — same product, price, and limit as the first authorization.
+            </>
+          ) : showUnplannedLift ? (
+            <p className="text-center text-xs font-semibold text-accent-red/80">
+              Replace nozzle — then pre-authorize
             </p>
-          ) : isNozzleUp && canOpenPreAuthSetup && positionActive ? (
-            <div className={`flex flex-col ${compact ? "gap-1" : "gap-2"}`}>
-              <button
-                type="button"
-                className={`w-full rounded-md bg-accent-amber font-black uppercase tracking-widest text-text-inverse border-2 border-accent-amber-dark transition-all duration-200 hover:bg-accent-amber-light hover:border-accent-amber hover:shadow-lg active:bg-accent-amber-dark active:border-accent-amber-dark ${primaryBtnH} ${compact ? "text-sm" : "text-lg"}`}
-                onClick={() => handleQuickAuthorize("full")}
-              >
-                <span className="flex items-center justify-center gap-2">
-                  <ShieldCheck className={compact ? "h-4 w-4" : "h-5 w-5"} />
-                  {compact ? "FULL TANK" : "AUTHORIZE — FULL TANK"}
-                </span>
-              </button>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className={`flex-1 rounded-md border-2 border-border-primary bg-bg-secondary font-bold uppercase tracking-wider text-text-primary transition-all duration-200 hover:bg-bg-tertiary hover:border-border-secondary ${compact ? "py-1.5 text-xs" : "py-2.5 text-sm"}`}
-                  onClick={() => openPreAuthSetup("volume")}
-                >
-                  <span className="flex items-center justify-center gap-1.5">
-                    <Fuel className={compact ? "h-3 w-3" : "h-4 w-4"} />
-                    {compact ? "VOLUME" : "BY VOLUME"}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={`flex-1 rounded-md border-2 border-border-primary bg-bg-secondary font-bold uppercase tracking-wider text-text-primary transition-all duration-200 hover:bg-bg-tertiary hover:border-border-secondary ${compact ? "py-1.5 text-xs" : "py-2.5 text-sm"}`}
-                  onClick={() => openPreAuthSetup("amount")}
-                >
-                  <span className="flex items-center justify-center gap-1.5">
-                    <Fuel className={compact ? "h-3 w-3" : "h-4 w-4"} />
-                    {compact ? "AMOUNT" : "BY AMOUNT"}
-                  </span>
-                </button>
-              </div>
-            </div>
-          ) : isIdle && canOpenPreAuthSetup && positionActive ? (
-            <button
-              type="button"
-              className={`w-full rounded-md bg-accent-amber font-black uppercase tracking-widest text-text-inverse border-2 border-accent-amber-dark transition-all duration-200 hover:bg-accent-amber-light hover:border-accent-amber hover:shadow-lg active:bg-accent-amber-dark active:border-accent-amber-dark ${primaryBtnH} ${compact ? "text-sm" : "text-lg"}`}
-              onClick={() => openPreAuthSetup()}
-            >
-              <span className="flex items-center justify-center gap-2">
-                <ShieldCheck className={compact ? "h-4 w-4" : "h-5 w-5"} />
-                PRE-AUTHORIZE
-              </span>
-            </button>
-          ) : canOpenReactiveSetup && positionActive ? (
-            <div className={`flex flex-col ${compact ? "gap-1" : "gap-2"}`}>
-              <button
-                type="button"
-                className={`w-full rounded-md bg-accent-emerald font-black uppercase tracking-widest text-text-inverse border-2 border-accent-emerald-dark transition-all duration-200 hover:bg-accent-emerald-light hover:border-accent-emerald hover:shadow-lg active:bg-accent-emerald-dark active:border-accent-emerald-dark ${primaryBtnH} ${compact ? "text-sm" : "text-lg"}`}
-                onClick={() => handleQuickAuthorize("full")}
-              >
-                <span className="flex items-center justify-center gap-2">
-                  <Fuel className={compact ? "h-4 w-4" : "h-5 w-5"} />
-                  {compact ? "FULL TANK" : "AUTHORIZE — FULL TANK"}
-                </span>
-              </button>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className={`flex-1 rounded-md border-2 border-border-primary bg-bg-secondary font-bold uppercase tracking-wider text-text-primary transition-all duration-200 hover:bg-bg-tertiary hover:border-border-secondary ${compact ? "py-1.5 text-xs" : "py-2.5 text-sm"}`}
-                  onClick={() => openReactiveSetup(hasMultipleProducts ? undefined : activeNozzles[0]?.index, "volume")}
-                >
-                  <span className="flex items-center justify-center gap-1.5">
-                    <Fuel className={compact ? "h-3 w-3" : "h-4 w-4"} />
-                    {compact ? "VOLUME" : "BY VOLUME"}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={`flex-1 rounded-md border-2 border-border-primary bg-bg-secondary font-bold uppercase tracking-wider text-text-primary transition-all duration-200 hover:bg-bg-tertiary hover:border-border-secondary ${compact ? "py-1.5 text-xs" : "py-2.5 text-sm"}`}
-                  onClick={() => openReactiveSetup(hasMultipleProducts ? undefined : activeNozzles[0]?.index, "amount")}
-                >
-                  <span className="flex items-center justify-center gap-1.5">
-                    <Fuel className={compact ? "h-3 w-3" : "h-4 w-4"} />
-                    {compact ? "AMOUNT" : "BY AMOUNT"}
-                  </span>
-                </button>
-              </div>
-            </div>
+          ) : isContinuing && !isDelivering ? (
+            <p className="text-center text-xs text-accent-blue/90">Resuming fill…</p>
           ) : isDone ? (
             <button
               type="button"
-              className={`w-full rounded-md font-black uppercase tracking-widest text-text-inverse border-2 transition-all duration-200 hover:shadow-lg active:scale-[0.99] ${primaryBtnH} ${compact ? "text-sm" : "text-base"} ${
-                holsterEndedSale
-                  ? "bg-accent-amber border-accent-amber-dark hover:bg-accent-amber-light hover:border-accent-amber"
-                  : "bg-accent-emerald border-accent-emerald-dark hover:bg-accent-emerald-light hover:border-accent-emerald"
-              }`}
+              className={`btn-start-glow w-full rounded-lg py-2.5 font-bold uppercase text-text-inverse ${
+                holsterEndedSale ? "bg-accent-amber hover:bg-accent-amber-light" : "bg-accent-emerald hover:bg-accent-emerald-light"
+              } ${compact ? "text-xs" : "text-sm"}`}
               onClick={() => onDismissSale?.(state.fp_id)}
             >
-              {compact ? "Ready for next sale" : "Ready for next customer"}
+              {compact ? "Keyingi mijoz" : "Keyingi mijozga tayyor"}
             </button>
-          ) : (
-            <button
-              type="button"
-              disabled
-              className={`w-full rounded-xl font-black uppercase tracking-widest cursor-not-allowed bg-bg-secondary/80 text-text-muted ${primaryBtnH} ${compact ? "text-sm" : "text-lg"}`}
-            >
-              {isOffline
-                ? (compact ? "Pump offline" : "Pump offline — waiting for connection")
-                : usePreAuth
-                  ? (compact ? "Pre-authorize when ready" : "Holstered — pre-authorize when ready")
-                  : "Awaiting nozzle"}
-            </button>
-          )}
+          ) : null}
         </div>
       </div>
-
-      <AuthorizeModal
-        open={modalOpen}
-        state={state}
-        fpNozzles={configuredNozzles}
-        mode={modalMode}
-        initialNozzle={modalNozzleHint}
-        initialFillMode={modalFillMode}
-        onClose={closeModal}
-        onConfirm={handleModalConfirm}
-      />
     </>
   );
 }

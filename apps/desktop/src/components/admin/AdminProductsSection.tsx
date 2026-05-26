@@ -143,9 +143,12 @@ export function AdminProductsSection({
       });
       await invoke("admin_save_products", { token, products: payload });
       onMessage("Products saved.");
-      loadCatalog().catch((e) => onError(e instanceof Error ? e.message : String(e)));
+      // Await both refreshes so the UI reflects the saved state before re-enabling.
+      await Promise.all([
+        loadCatalog().catch((e) => onError(e instanceof Error ? e.message : String(e))),
+        onCatalogChanged?.(),
+      ]);
       refreshConfig().catch(() => {});
-      Promise.resolve(onCatalogChanged?.()).catch(() => {});
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -157,21 +160,20 @@ export function AdminProductsSection({
     setBusy(true);
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      // Stamp each nozzle with the current global product price so that
-      // saving nozzle assignments never silently overrides a price change.
-      const nozzles = (positionNozzles[fpId] ?? []).map((n) => ({
-        ...n,
-        price: productPriceMap[n.product_id] ?? n.price,
-      }));
+      const nozzles = positionNozzles[fpId] ?? [];
       await invoke("admin_save_position_nozzles", {
         token,
         fpId,
         nozzles,
       });
       onMessage(`Nozzles saved for ${fpId}.`);
-      loadCatalog().catch((e) => onError(e instanceof Error ? e.message : String(e)));
+      // Await both refreshes so the nozzle table and Prices section both reflect
+      // the saved state before re-enabling the button.
+      await Promise.all([
+        loadCatalog().catch((e) => onError(e instanceof Error ? e.message : String(e))),
+        onCatalogChanged?.(),
+      ]);
       refreshConfig().catch(() => {});
-      Promise.resolve(onCatalogChanged?.()).catch(() => {});
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -187,7 +189,18 @@ export function AdminProductsSection({
     setPositionNozzles((prev) => {
       const list = [...(prev[selectedFp] ?? [])];
       const i = list.findIndex((n) => n.index === idx);
-      if (i >= 0) list[i] = { ...list[i]!, ...patch };
+      if (i < 0) return prev;
+      const current = list[i]!;
+      // When product changes, auto-suggest price from the global product map
+      // if the user hasn't set a custom price for this nozzle yet (price still
+      // matches the old product's global price).
+      if (patch.product_id !== undefined && patch.product_id !== current.product_id) {
+        const suggested = productPriceMap[patch.product_id];
+        if (suggested && patch.price === undefined) {
+          patch = { ...patch, price: suggested };
+        }
+      }
+      list[i] = { ...current, ...patch };
       return { ...prev, [selectedFp]: list };
     });
   };
@@ -226,37 +239,37 @@ export function AdminProductsSection({
     });
   };
 
-  const inputCls = "rounded border border-border-primary bg-bg-input px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-border-focus";
+  const inputCls = "rounded-lg border border-border-primary/80 bg-bg-secondary/60 px-3 py-2 text-sm font-medium text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 transition-all shadow-inner placeholder:text-text-muted";
 
   return (
-    <section className="mb-8">
-      <h2 className="mb-3 text-lg font-medium text-amber-400">
+    <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm mb-6">
+      <h2 className="mb-4 text-lg font-bold text-text-primary">
         Products &amp; nozzles
       </h2>
 
-      <h3 className="mb-2 text-sm font-medium text-slate-300">Fuel products</h3>
-      <p className="mb-2 text-xs text-slate-500">
+      <h3 className="mb-1 text-sm font-bold text-text-primary">Fuel products</h3>
+      <p className="mb-4 text-xs font-medium text-text-muted">
         Define grades available at the station. Assign them to nozzles per
         dispenser side below.
       </p>
-      <div className="mb-3 overflow-x-auto rounded-lg border border-border-primary">
+      <div className="mb-5 overflow-x-auto rounded-xl border border-border-primary/60 shadow-sm">
         <table className="w-full min-w-[560px] text-left text-sm">
-          <thead className="bg-bg-secondary text-text-muted">
+          <thead className="bg-bg-secondary/95 text-[10px] font-bold uppercase tracking-wider text-text-muted backdrop-blur-sm">
             <tr>
-              <th className="px-3 py-2">ID</th>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Color</th>
-              <th className="px-3 py-2">Unit</th>
-              <th className="px-3 py-2" />
+              <th className="px-4 py-3">ID</th>
+              <th className="px-4 py-3">Name</th>
+              <th className="px-4 py-3">Color</th>
+              <th className="px-4 py-3">Unit</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border-secondary/60 bg-bg-card/40">
             {products.map((p, i) => (
-              <tr key={p._key} className="border-t border-border-primary">
-                <td className="px-3 py-2 font-mono text-text-muted">
+              <tr key={p._key} className="transition-colors hover:bg-bg-tertiary/40">
+                <td className="px-4 py-3 font-mono text-text-muted font-medium">
                   {p.id ?? "auto"}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-4 py-3">
                   <input
                     value={p.name}
                     onChange={(e) => {
@@ -267,7 +280,7 @@ export function AdminProductsSection({
                     className={`w-full ${inputCls}`}
                   />
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-4 py-3">
                   <input
                     type="color"
                     value={p.color.startsWith("#") ? p.color : "#888888"}
@@ -276,10 +289,10 @@ export function AdminProductsSection({
                       next[i] = { ...p, color: e.target.value };
                       setProducts(next);
                     }}
-                    className="h-8 w-12 cursor-pointer rounded border border-border-primary"
+                    className="h-9 w-14 cursor-pointer rounded-lg border border-border-primary/60 bg-bg-secondary/40 p-0.5"
                   />
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-4 py-3">
                   <input
                     value={p.unit}
                     onChange={(e) => {
@@ -287,13 +300,13 @@ export function AdminProductsSection({
                       next[i] = { ...p, unit: e.target.value };
                       setProducts(next);
                     }}
-                    className={`w-20 ${inputCls}`}
+                    className={`w-24 ${inputCls}`}
                   />
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-4 py-3">
                   <button
                     type="button"
-                    className="text-xs text-red-400 hover:underline"
+                    className="text-xs font-bold text-accent-red transition-colors hover:text-accent-red-light disabled:opacity-50"
                     disabled={busy || products.length <= 1}
                     onClick={() =>
                       setProducts(products.filter((_, j) => j !== i))
@@ -307,12 +320,12 @@ export function AdminProductsSection({
           </tbody>
         </table>
       </div>
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-8 flex flex-wrap gap-3">
         <button
           type="button"
           disabled={busy}
           onClick={() => setProducts([...products, newProductDraft()])}
-          className="rounded-lg border border-border-primary px-3 py-1.5 text-sm text-text-primary hover:bg-bg-secondary"
+          className="rounded-xl border border-border-primary bg-bg-primary px-5 py-2 text-sm font-bold text-text-primary shadow-sm hover:bg-bg-tertiary transition-all"
         >
           Add product
         </button>
@@ -320,16 +333,16 @@ export function AdminProductsSection({
           type="button"
           disabled={busy}
           onClick={saveProducts}
-          className="rounded-lg bg-amber-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-amber-500"
+          className="rounded-xl border border-accent-amber/40 bg-accent-amber/15 px-5 py-2 text-sm font-bold tracking-wide text-accent-amber shadow-button transition-all hover:bg-accent-amber/25 hover:shadow-button-hover disabled:opacity-50"
         >
           Save products
         </button>
       </div>
 
-      <h3 className="mb-2 text-sm font-medium text-slate-300">
+      <h3 className="mb-3 text-sm font-bold text-text-primary">
         Nozzles per dispenser side
       </h3>
-      <div className="mb-2 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         {catalog?.positions.map((pos) => {
           const hasLift = liftedNozzles.some((l) => l.fpId === pos.fp_id);
           return (
@@ -338,17 +351,17 @@ export function AdminProductsSection({
               type="button"
               onClick={() => setSelectedFp(pos.fp_id)}
               className={[
-                "relative rounded-lg px-3 py-1.5 text-sm",
+                "relative rounded-xl px-4 py-2 text-sm font-bold transition-all",
                 selectedFp === pos.fp_id
-                  ? "bg-sky-700 text-white"
-                  : "border border-border-primary text-text-secondary hover:bg-bg-secondary",
+                  ? "bg-accent-blue text-text-inverse shadow-button"
+                  : "border border-border-primary/60 bg-bg-secondary/40 text-text-secondary hover:bg-bg-tertiary/40 hover:text-text-primary",
               ].join(" ")}
             >
               {pos.fp_id}
               {hasLift && (
                 <span className="absolute -right-1 -top-1 flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-emerald opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent-emerald" />
                 </span>
               )}
             </button>
@@ -358,7 +371,7 @@ export function AdminProductsSection({
 
       {currentPos && (
         <div>
-          <p className="mb-2 text-sm text-text-secondary">{currentPos.label}</p>
+          <p className="mb-3 text-sm font-medium text-text-muted">{currentPos.label}</p>
 
           {liftedNozzles
             .filter((l) => l.fpId === selectedFp)
@@ -374,27 +387,27 @@ export function AdminProductsSection({
               return (
                 <div
                   key={l.nozzleIndex}
-                  className="mb-3 flex items-start gap-2 rounded-lg border border-emerald-700/60 bg-emerald-950/30 px-3 py-2 text-sm"
+                  className="mb-4 flex items-start gap-3 rounded-xl border border-accent-emerald/40 bg-accent-emerald/10 px-4 py-3 text-sm shadow-sm"
                 >
-                  <span className="mt-0.5 flex h-2 w-2 shrink-0">
-                    <span className="inline-flex h-2 w-2 animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="mt-1 flex h-2.5 w-2.5 shrink-0">
+                    <span className="inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-accent-emerald opacity-75" />
                   </span>
                   <div>
-                    <span className="font-medium text-emerald-300">
+                    <span className="font-bold text-accent-emerald-dark dark:text-accent-emerald-light">
                       Nozzle #{l.nozzleIndex} is lifted
                     </span>
                     {l.productName && (
-                      <span className="text-text-secondary">
+                      <span className="text-text-secondary font-medium">
                         {" "}— hardware reports <span className="font-mono">{l.productName}</span>
                       </span>
                     )}
                     {mismatch && (
-                      <span className="ml-1 font-medium text-amber-400">
+                      <span className="ml-1 font-bold text-accent-amber">
                         (configured as {configuredProduct!.name} — edit the row below to correct)
                       </span>
                     )}
                     {!mismatch && configuredProduct && (
-                      <span className="ml-1 text-text-muted">
+                      <span className="ml-1 text-text-muted font-medium">
                         — matches configured product
                       </span>
                     )}
@@ -403,27 +416,32 @@ export function AdminProductsSection({
               );
             })}
 
-          <div className="mb-3 overflow-x-auto rounded-lg border border-border-primary">
-            <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="bg-bg-secondary text-text-muted">
+          <div className="mb-5 overflow-x-auto rounded-xl border border-border-primary/60 shadow-sm">
+            <table className="w-full min-w-[960px] text-left text-sm">
+              <thead className="bg-bg-secondary/95 text-[10px] font-bold uppercase tracking-wider text-text-muted backdrop-blur-sm">
                 <tr>
-                  <th className="px-3 py-2">#</th>
-                  <th className="px-3 py-2">Product</th>
-                  <th className="px-3 py-2">Active</th>
-                  <th className="px-3 py-2">
+                  <th className="px-4 py-3">#</th>
+                  <th className="px-4 py-3">Product</th>
+                  <th className="px-4 py-3">
+                    <span title="Price per litre for this nozzle (sum). Independent of other nozzles even if they dispense the same product.">
+                      Price
+                    </span>
+                  </th>
+                  <th className="px-4 py-3">Active</th>
+                  <th className="px-4 py-3">
                     <span title="Wayne hardware nozzle byte sent in NozzleUp frame. 0 = auto-match by slot position.">
                       HW Code
                     </span>
                   </th>
-                  <th className="px-3 py-2">
+                  <th className="px-4 py-3">
                     <span title="Wayne product byte (PP) in CONFIG frame — identifies the fuel grade to the pump.">
                       PP Code
                     </span>
                   </th>
-                  <th className="px-3 py-2" />
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-border-secondary/60 bg-bg-card/40">
                 {[...currentNozzles].sort((a, b) => a.index - b.index).map((n, _i, sorted) => {
                   const isLifted = liftedNozzles.some(
                     (l) => l.fpId === selectedFp && l.nozzleIndex === n.index,
@@ -434,20 +452,20 @@ export function AdminProductsSection({
                   <tr
                     key={n.index}
                     className={[
-                      "border-t border-border-primary",
+                      "transition-colors",
                       isLifted
-                        ? "bg-emerald-950/40 ring-1 ring-inset ring-emerald-500/40"
-                        : "",
+                        ? "bg-accent-emerald/10 ring-1 ring-inset ring-accent-emerald/40"
+                        : "hover:bg-bg-tertiary/40",
                     ].join(" ")}
                   >
-                    <td className="px-3 py-2 font-mono text-text-primary">
-                      <span className="flex items-center gap-1.5">
+                    <td className="px-4 py-3 font-mono text-text-primary font-bold">
+                      <span className="flex items-center gap-2">
                         <span className="flex flex-col gap-0.5">
                           <button
                             type="button"
                             disabled={busy || isFirst}
                             onClick={() => moveNozzle(n.index, "up")}
-                            className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:text-text-primary disabled:opacity-20"
+                            className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:text-accent-blue disabled:opacity-20"
                             title="Move up"
                           >
                             ▲
@@ -456,21 +474,21 @@ export function AdminProductsSection({
                             type="button"
                             disabled={busy || isLast}
                             onClick={() => moveNozzle(n.index, "down")}
-                            className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:text-text-primary disabled:opacity-20"
+                            className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:text-accent-blue disabled:opacity-20"
                             title="Move down"
                           >
                             ▼
                           </button>
                         </span>
-                        {n.index}
+                        <span className="w-4 text-center">{n.index}</span>
                         {isLifted && (
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-600/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white animate-pulse">
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-accent-emerald px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white animate-pulse">
                             LIFTED
                           </span>
                         )}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       <select
                         value={n.product_id}
                         onChange={(e) =>
@@ -489,16 +507,31 @@ export function AdminProductsSection({
                           ))}
                       </select>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
+                      <input
+                        type="number"
+                        min={1}
+                        value={n.price}
+                        onChange={(e) =>
+                          updateNozzle(n.index, {
+                            price: Math.max(1, parseInt(e.target.value, 10) || 1),
+                          })
+                        }
+                        className={`w-28 font-mono ${inputCls}`}
+                        title="Price per litre for this nozzle"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
                       <input
                         type="checkbox"
                         checked={n.active}
                         onChange={(e) =>
                           updateNozzle(n.index, { active: e.target.checked })
                         }
+                        className="h-4 w-4 rounded border-border-primary bg-bg-secondary text-accent-blue focus:ring-accent-blue/50 focus:ring-2 focus:ring-offset-1 focus:ring-offset-bg-primary cursor-pointer"
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       <input
                         type="number"
                         min={0}
@@ -511,10 +544,10 @@ export function AdminProductsSection({
                         }
                         placeholder="0"
                         title="0 = auto-match by slot position"
-                        className={`w-16 font-mono ${inputCls}`}
+                        className={`w-20 font-mono ${inputCls}`}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       <input
                         type="number"
                         min={0}
@@ -527,13 +560,13 @@ export function AdminProductsSection({
                         }
                         placeholder="0"
                         title="Wayne PP byte in CONFIG frame — identifies the fuel grade to the pump."
-                        className={`w-16 font-mono ${inputCls}`}
+                        className={`w-20 font-mono ${inputCls}`}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       <button
                         type="button"
-                        className="text-xs text-red-400 hover:underline"
+                        className="text-xs font-bold text-accent-red transition-colors hover:text-accent-red-light disabled:opacity-50"
                         disabled={busy || currentNozzles.length <= 1}
                         onClick={() => removeNozzle(n.index)}
                       >
@@ -546,12 +579,12 @@ export function AdminProductsSection({
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             <button
               type="button"
               disabled={busy}
               onClick={addNozzle}
-              className="rounded-lg border border-border-primary px-3 py-1.5 text-sm text-text-primary hover:bg-bg-secondary"
+              className="rounded-xl border border-border-primary bg-bg-primary px-5 py-2 text-sm font-bold text-text-primary shadow-sm hover:bg-bg-tertiary transition-all"
             >
               Add nozzle
             </button>
@@ -559,7 +592,7 @@ export function AdminProductsSection({
               type="button"
               disabled={busy}
               onClick={() => saveNozzlesForFp(selectedFp)}
-              className="rounded-lg bg-amber-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-amber-500"
+              className="rounded-xl border border-accent-amber/40 bg-accent-amber/15 px-5 py-2 text-sm font-bold tracking-wide text-accent-amber shadow-button transition-all hover:bg-accent-amber/25 hover:shadow-button-hover disabled:opacity-50"
             >
               Save nozzles for {selectedFp}
             </button>

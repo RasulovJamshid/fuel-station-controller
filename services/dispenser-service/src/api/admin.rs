@@ -6,6 +6,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use site_config::{NozzleConfig, ProductConfig, ShiftMode, SiteConfig};
+use std::collections::HashMap;
 use types::{
     AdminApplyPricesCmd, AdminAuthCmd, AdminAuthResponse, AdminCatalog, AdminChangePinCmd,
     AdminConfigEntry, AdminNozzleInput, AdminNozzleRow, AdminPositionCatalog, AdminPriceEntry,
@@ -55,9 +56,16 @@ pub fn router() -> Router<AppState> {
         .route("/admin/change-pin", post(admin_change_pin))
 }
 
-fn catalog_from_cfg(cfg: &SiteConfig) -> AdminCatalog {
-    let products: Vec<ProductSnapshot> = cfg
-        .products
+
+/// Build catalog from DB-loaded products/nozzles, using cfg only for FP metadata (label, address, active).
+fn catalog_from_db(
+    cfg: &SiteConfig,
+    products: Vec<ProductConfig>,
+    nozzles_map: HashMap<String, Vec<NozzleConfig>>,
+) -> AdminCatalog {
+    let product_lookup: HashMap<u8, &ProductConfig> =
+        products.iter().map(|p| (p.id, p)).collect();
+    let product_snapshots: Vec<ProductSnapshot> = products
         .iter()
         .map(|p| ProductSnapshot {
             id: p.id,
@@ -70,14 +78,17 @@ fn catalog_from_cfg(cfg: &SiteConfig) -> AdminCatalog {
         .fueling_positions
         .iter()
         .map(|fp| {
-            let nozzles: Vec<AdminNozzleRow> = fp
-                .nozzles
+            // Prefer DB nozzles; fall back to cfg nozzles for FPs not yet in DB.
+            let nozzles: Vec<AdminNozzleRow> = nozzles_map
+                .get(&fp.id)
+                .map(|ns| ns.as_slice())
+                .unwrap_or(&fp.nozzles)
                 .iter()
                 .map(|n| AdminNozzleRow {
                     index: n.index,
                     product_id: n.product_id,
-                    product_name: cfg
-                        .product(n.product_id)
+                    product_name: product_lookup
+                        .get(&n.product_id)
                         .map(|p| p.name.clone())
                         .unwrap_or_else(|| "?".into()),
                     price: n.price,
@@ -96,7 +107,7 @@ fn catalog_from_cfg(cfg: &SiteConfig) -> AdminCatalog {
         })
         .collect();
     AdminCatalog {
-        products,
+        products: product_snapshots,
         positions,
     }
 }
@@ -109,28 +120,23 @@ async fn persist_site_config(
     snapshot
         .validate()
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    // Pre-flight: check the config file is writable before attempting the save.
+    // Pre-flight: verify the config file can actually be opened for writing by
+    // this process (accounts for POSIX effective UID/GID, not just the mode bits).
     {
-        let meta = std::fs::metadata(&st.config_path);
-        let writable = match meta {
-            Ok(m) => !m.permissions().readonly(),
-            // File doesn't exist yet — parent directory writability will be checked on save.
-            Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => true,
+        match std::fs::OpenOptions::new().write(true).open(&st.config_path) {
+            Ok(_) => {} // writable — proceed
+            Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {} // new file, parent dir checked on write
             Err(e) => {
                 return Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Cannot stat config file: {e}"),
-                ))
+                    StatusCode::FORBIDDEN,
+                    format!(
+                        "Config file is not writable ({}): {}. Run `chmod u+w {}` to allow editing.",
+                        st.config_path.display(),
+                        e,
+                        st.config_path.display(),
+                    ),
+                ));
             }
-        };
-        if !writable {
-            return Err((
-                StatusCode::FORBIDDEN,
-                format!(
-                    "Config file is read-only: {}. Run `chmod u+w` on it to allow editing.",
-                    st.config_path.display()
-                ),
-            ));
         }
     }
     let config_path = st.config_path.clone();
@@ -342,7 +348,7 @@ async fn admin_post_prices(
         }
     }
 
-    // Price history is non-critical. Do not make the admin UI wait on SQLite.
+    // Price history and nozzle price sync are non-critical — don't block the UI.
     if !db_records.is_empty() {
         let pool = st.pool.clone();
         tokio::spawn(async move {
@@ -360,6 +366,17 @@ async fn admin_post_prices(
                 .await
                 {
                     tracing::warn!(?e, "price history insert failed");
+                }
+                if let Err(e) = admin_queries::update_nozzle_price_in_db(
+                    &pool,
+                    &c.fp_id,
+                    c.nozzle_index,
+                    c.new_price,
+                    &who,
+                )
+                .await
+                {
+                    tracing::warn!(?e, "fp_nozzles price update failed");
                 }
             }
         });
@@ -635,8 +652,14 @@ async fn admin_get_catalog(
     headers: HeaderMap,
 ) -> Result<Json<AdminCatalog>, (StatusCode, String)> {
     let _who = require_admin(&st, &headers).await?;
+    let products = admin_queries::load_products_from_db(&st.pool)
+        .await
+        .map_err(internal)?;
+    let nozzles_map = admin_queries::load_fp_nozzles_from_db(&st.pool)
+        .await
+        .map_err(internal)?;
     let cfg = st.cfg.read().await;
-    Ok(Json(catalog_from_cfg(&cfg)))
+    Ok(Json(catalog_from_db(&cfg, products, nozzles_map)))
 }
 
 async fn admin_save_products(
@@ -644,13 +667,14 @@ async fn admin_save_products(
     headers: HeaderMap,
     Json(cmd): Json<SaveProductsCmd>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let _who = require_admin(&st, &headers).await?;
+    let who = require_admin(&st, &headers).await?;
     if cmd.products.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
             "at least one product is required".into(),
         ));
     }
+    tracing::info!(count = cmd.products.len(), "admin_save_products: building list");
     let mut products: Vec<ProductConfig> = Vec::new();
     let mut used_ids = std::collections::HashSet::new();
     {
@@ -693,6 +717,7 @@ async fn admin_save_products(
             });
         }
     }
+    let products_for_db = products.clone();
     let cfg_snapshot = {
         let cfg = st.cfg.read().await;
         let mut snap = cfg.clone();
@@ -700,7 +725,16 @@ async fn admin_save_products(
             .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
         snap
     };
+    tracing::info!("admin_save_products: persisting to JSON");
     persist_site_config(&st, cfg_snapshot).await?;
+    tracing::info!("admin_save_products: persisting to DB");
+    admin_queries::save_products_to_db(&st.pool, &products_for_db, &who)
+        .await
+        .map_err(|e| {
+            tracing::error!(?e, "save_products_to_db failed");
+            internal(e)
+        })?;
+    tracing::info!("admin_save_products: done");
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -757,7 +791,7 @@ async fn admin_save_position_nozzles(
     Path(fp_id): Path<String>,
     Json(cmd): Json<SavePositionNozzlesCmd>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let _who = require_admin(&st, &headers).await?;
+    let who = require_admin(&st, &headers).await?;
     let nozzles = {
         let cfg = st.cfg.read().await;
         if cfg.position_by_id(&fp_id).is_none() {
@@ -765,6 +799,7 @@ async fn admin_save_position_nozzles(
         }
         nozzles_from_input(cmd.nozzles, &cfg)?
     };
+    let nozzles_for_db = nozzles.clone();
     let cfg_snapshot = {
         let cfg = st.cfg.read().await;
         let mut snap = cfg.clone();
@@ -773,6 +808,9 @@ async fn admin_save_position_nozzles(
         snap
     };
     persist_site_config(&st, cfg_snapshot).await?;
+    admin_queries::save_fp_nozzles_to_db(&st.pool, &fp_id, &nozzles_for_db, &who)
+        .await
+        .map_err(internal)?;
     Ok(Json(serde_json::json!({ "ok": true, "fp_id": fp_id })))
 }
 

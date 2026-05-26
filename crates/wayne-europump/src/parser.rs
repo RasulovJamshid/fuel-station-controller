@@ -101,7 +101,7 @@ fn find_fill_data_offset(inner: &[u8]) -> Option<(usize, bool)> {
     None
 }
 
-/// Hose status from `03 04 01 PP 00 HH`, or holster derived from CONFIG echo before `02 08`.
+/// Hose status from `03 04 01 PP 00 HH` / `03 04 00 PP 00 HH`, or holster derived from CONFIG echo before `02 08`.
 fn embedded_hose_from_fill(inner: &[u8], off: usize, config_echo: bool) -> (Option<u8>, Option<u8>) {
     if let Some((p, h)) = scan_embedded_hose_status(inner) {
         return (Some(p), Some(h));
@@ -142,7 +142,9 @@ fn parse_fill_data_block(inner: &[u8]) -> Option<FillDataFields> {
 ///
 /// Two variants observed in the wild:
 /// - Standard: `03 04 01 [PP] 00 [HH]` — product at [i+3], hose at [i+5].
-/// - Type-B:   `03 04 00 [??] [PP] [HH]` — product at [i+4], hose at [i+5].
+/// - Type-B:   `03 04 00 [PP] 00 [HH]` — same layout, 0x00 at [i+2] instead of 0x01.
+///   An older sub-variant placed an unknown byte at [i+3] and product at [i+4];
+///   detect by checking whether [i+4] is the 0x00 filler or a real product code.
 pub fn scan_embedded_hose_status(body: &[u8]) -> Option<(u8, u8)> {
     if body.len() < 6 {
         return None;
@@ -154,9 +156,10 @@ pub fn scan_embedded_hose_status(body: &[u8]) -> Option<(u8, u8)> {
                 return Some((body[i + 3], body[i + 5]));
             }
             if body[i + 2] == 0x00 && Frame::is_nozzle_holster_code(body[i + 5]) {
-                // Type-B variant: 03 04 00 [??] PP HH — only for holster codes.
-                // Lift codes here are config-echo prefixes; let the caller handle them.
-                return Some((body[i + 4], body[i + 5]));
+                // Type-B: 03 04 00 PP 00 HH — only match holster codes here.
+                // Lift codes in this position are config-echo prefixes handled elsewhere.
+                let product = if body[i + 4] == 0x00 { body[i + 3] } else { body[i + 4] };
+                return Some((product, body[i + 5]));
             }
         }
     }
@@ -278,12 +281,13 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
                 hose_code: data.hose_code,
             };
         }
-        // Variant firmware: `03 04 00 [?] PP HH` — NozzleUp without a meter block.
-        // Some Wayne hardware uses 0x00 at position[4] instead of 0x01; product is
-        // at position[6] and nozzle code at position[7].  The fill-data check above
-        // already handles the case where this prefix is followed by a `02 08` block.
+        // Variant firmware: `03 04 00 PP 00 HH` — NozzleUp without a meter block.
+        // Real hardware sends the same layout as type-A but with 0x00 at position[4]
+        // instead of 0x01; product is at position[5] (inner[5]) and hose at position[7].
+        // An older sub-variant placed product at inner[6] with a garbage byte at inner[5];
+        // detect which by checking whether inner[6] is the filler zero or a real product.
         if inner.len() >= 8 && inner[2] == 0x03 && inner[3] == 0x04 && inner[4] == 0x00 {
-            let product = inner[6];
+            let product = if inner[6] == 0x00 { inner[5] } else { inner[6] };
             let nozzle = inner[7];
             if Frame::is_nozzle_holster_code(nozzle) {
                 return Frame::NozzleReturned { addr, seq, product, hose: nozzle };
@@ -642,10 +646,44 @@ mod tests {
         }
     }
 
-    /// Some Wayne hardware sends `03 04 00 [?] PP HH` instead of `03 04 01 PP 00 HH`.
-    /// Real log: 53 3F 03 04 00 01 24 13 70 D4 03 FA — diesel nozzle 3 lifted on pump 4.
+    /// Real hardware (pump 4) sends `03 04 00 PP 00 HH` — identical to type-A but
+    /// with 0x00 at position[4] instead of 0x01.  Product is at the same offset as
+    /// type-A (inner[5]).  Frame from serial log: 53 38 03 04 00 24 00 13 0C DF 03 FA.
     #[test]
-    fn nozzle_up_variant_type_b() {
+    fn nozzle_up_variant_type_b_real_hw() {
+        let raw = &[
+            0x53u8, 0x38, 0x03, 0x04, 0x00, 0x24, 0x00, 0x13, 0x0C, 0xDF, 0x03, 0xFA,
+        ];
+        match parse_frame(raw) {
+            Frame::NozzleUp { addr, seq, product, nozzle } => {
+                assert_eq!(addr, 0x53);
+                assert_eq!(seq, 0x38);
+                assert_eq!(product, 0x24);
+                assert_eq!(nozzle, 0x13);
+            }
+            f => panic!("expected NozzleUp, got {:?}", f),
+        }
+    }
+
+    /// AI80 nozzle lift on pump 4: 53 35 03 04 00 05 00 12 41 D5 03 FA.
+    #[test]
+    fn nozzle_up_variant_type_b_ai80() {
+        let raw = &[
+            0x53u8, 0x35, 0x03, 0x04, 0x00, 0x05, 0x00, 0x12, 0x41, 0xD5, 0x03, 0xFA,
+        ];
+        match parse_frame(raw) {
+            Frame::NozzleUp { product, nozzle, .. } => {
+                assert_eq!(product, 0x05);
+                assert_eq!(nozzle, 0x12);
+            }
+            f => panic!("expected NozzleUp, got {:?}", f),
+        }
+    }
+
+    /// Older sub-variant: `03 04 00 [??] PP HH` with product at inner[6].
+    /// Still handled correctly when inner[6] != 0x00.
+    #[test]
+    fn nozzle_up_variant_type_b_old_subvariant() {
         let raw = &[
             0x53u8, 0x3F, 0x03, 0x04, 0x00, 0x01, 0x24, 0x13, 0x70, 0xD4, 0x03, 0xFA,
         ];
@@ -662,7 +700,25 @@ mod tests {
 
     #[test]
     fn nozzle_holster_variant_type_b() {
-        // Same format but with holster code (< 0x10)
+        // Real hardware holster: 53 37 03 04 00 05 00 02 (from serial log).
+        let body = &[0x53u8, 0x37, 0x03, 0x04, 0x00, 0x05, 0x00, 0x02];
+        let crc = crc16(body);
+        let mut raw = body.to_vec();
+        raw.push((crc & 0xFF) as u8);
+        raw.push((crc >> 8) as u8);
+        raw.extend([0x03, 0xFA]);
+        match parse_frame(&raw) {
+            Frame::NozzleReturned { product, hose, .. } => {
+                assert_eq!(product, 0x05);
+                assert_eq!(hose, 0x02);
+            }
+            f => panic!("expected NozzleReturned, got {:?}", f),
+        }
+    }
+
+    #[test]
+    fn nozzle_holster_variant_type_b_old_subvariant() {
+        // Old sub-variant with product at inner[6].
         let body = &[0x53u8, 0x3F, 0x03, 0x04, 0x00, 0x01, 0x24, 0x03];
         let crc = crc16(body);
         let mut raw = body.to_vec();

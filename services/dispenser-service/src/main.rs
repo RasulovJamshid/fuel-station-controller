@@ -99,8 +99,35 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
         .await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
     db::repair::ensure_price_history_columns(&pool).await?;
+    db::repair::ensure_fp_nozzles_schema(&pool).await?;
 
     admin::ensure_admin_defaults(&pool).await?;
+
+    // DB is the source of truth for products and nozzle configs.
+    // Seed from JSON on first run so DB is always populated.
+    {
+        use crate::db::admin_queries;
+        let products_db = admin_queries::load_products_from_db(&pool).await?;
+        if products_db.is_empty() {
+            let cfg_r = cfg.read().await;
+            admin_queries::save_products_to_db(&pool, &cfg_r.products, "system").await?;
+            for fp in &cfg_r.fueling_positions {
+                admin_queries::save_fp_nozzles_to_db(&pool, &fp.id, &fp.nozzles, "system")
+                    .await?;
+            }
+            tracing::info!("seeded {} products from JSON config into DB", cfg_r.products.len());
+        } else {
+            let nozzles_db = admin_queries::load_fp_nozzles_from_db(&pool).await?;
+            let mut w = cfg.write().await;
+            tracing::info!(count = products_db.len(), "loaded products from DB");
+            w.products = products_db;
+            for fp in &mut w.fueling_positions {
+                if let Some(nozzles) = nozzles_db.get(&fp.id) {
+                    fp.nozzles = nozzles.clone();
+                }
+            }
+        }
+    }
 
     let runtimes = Arc::new(RwLock::new(initial_runtimes(&*cfg.read().await)));
     let disp_by_byte: HashMap<u8, _> = cfg
@@ -160,6 +187,7 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
         .await;
     });
 
+    tracing::info!(config = %config_path_buf.display(), "config file");
     let state = AppState {
         cfg,
         config_path: config_path_buf,
@@ -174,7 +202,7 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
 
     let app = router(state);
     let addr = format!("127.0.0.1:{}", port);
-    tracing::info!("listening on http://{}", addr);
+    tracing::info!("listening on http://{addr}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;
     Ok(())

@@ -1,6 +1,6 @@
 use anyhow::Result;
-use sqlx::SqlitePool;
-use types::{Transaction, TxStatus};
+use sqlx::{QueryBuilder, SqlitePool};
+use types::{Transaction, TxStatus, TxSummary};
 
 /// SQL fragment: statuses that count toward revenue / shift totals.
 #[allow(dead_code)]
@@ -120,55 +120,78 @@ pub async fn list_transactions(
     limit: i64,
     offset: i64,
     fp_id: Option<&str>,
-    status: Option<&str>,
+    statuses: &[&str],
+    from_ms: Option<i64>,
+    until_ms: Option<i64>,
 ) -> Result<Vec<Transaction>> {
-    let rows = match (fp_id, status) {
-        (Some(fp), Some(st)) => {
-            sqlx::query_as::<_, TxRow>(
-                r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, parent_tx_id, combined_volume, combined_amount
-                   FROM transactions WHERE fp_id = ? AND status = ? ORDER BY started_at DESC LIMIT ? OFFSET ?"#,
-            )
-            .bind(fp)
-            .bind(st)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(pool)
-            .await?
+    let select = r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, parent_tx_id, combined_volume, combined_amount FROM transactions WHERE 1=1"#;
+    let mut qb: QueryBuilder<sqlx::Sqlite> = QueryBuilder::new(select);
+    if let Some(fp) = fp_id {
+        qb.push(" AND fp_id = ").push_bind(fp);
+    }
+    if !statuses.is_empty() {
+        qb.push(" AND status IN (");
+        {
+            let mut sep = qb.separated(", ");
+            for s in statuses {
+                sep.push_bind(*s);
+            }
         }
-        (Some(fp), None) => {
-            sqlx::query_as::<_, TxRow>(
-                r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, parent_tx_id, combined_volume, combined_amount
-                   FROM transactions WHERE fp_id = ? ORDER BY started_at DESC LIMIT ? OFFSET ?"#,
-            )
-            .bind(fp)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(pool)
-            .await?
-        }
-        (None, Some(st)) => {
-            sqlx::query_as::<_, TxRow>(
-                r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, parent_tx_id, combined_volume, combined_amount
-                   FROM transactions WHERE status = ? ORDER BY started_at DESC LIMIT ? OFFSET ?"#,
-            )
-            .bind(st)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(pool)
-            .await?
-        }
-        (None, None) => {
-            sqlx::query_as::<_, TxRow>(
-                r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, parent_tx_id, combined_volume, combined_amount
-                   FROM transactions ORDER BY started_at DESC LIMIT ? OFFSET ?"#,
-            )
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(pool)
-            .await?
-        }
-    };
+        qb.push(")");
+    }
+    if let Some(from) = from_ms {
+        qb.push(" AND started_at >= ").push_bind(from);
+    }
+    if let Some(until) = until_ms {
+        qb.push(" AND started_at < ").push_bind(until);
+    }
+    qb.push(" ORDER BY started_at DESC LIMIT ").push_bind(limit);
+    qb.push(" OFFSET ").push_bind(offset);
+    let rows = qb.build_query_as::<TxRow>().fetch_all(pool).await?;
     Ok(rows.into_iter().map(|r| r.into_transaction()).collect())
+}
+
+pub async fn summarize_transactions(
+    pool: &SqlitePool,
+    fp_id: Option<&str>,
+    statuses: &[&str],
+    from_ms: Option<i64>,
+    until_ms: Option<i64>,
+) -> Result<TxSummary> {
+    #[derive(sqlx::FromRow)]
+    struct SummaryRow {
+        count: i64,
+        total_volume: f64,
+        total_amount: i64,
+    }
+    let mut qb: QueryBuilder<sqlx::Sqlite> = QueryBuilder::new(
+        "SELECT COUNT(*) as count, COALESCE(SUM(volume), 0.0) as total_volume, COALESCE(SUM(amount), 0) as total_amount FROM transactions WHERE 1=1",
+    );
+    if let Some(fp) = fp_id {
+        qb.push(" AND fp_id = ").push_bind(fp);
+    }
+    if !statuses.is_empty() {
+        qb.push(" AND status IN (");
+        {
+            let mut sep = qb.separated(", ");
+            for s in statuses {
+                sep.push_bind(*s);
+            }
+        }
+        qb.push(")");
+    }
+    if let Some(from) = from_ms {
+        qb.push(" AND started_at >= ").push_bind(from);
+    }
+    if let Some(until) = until_ms {
+        qb.push(" AND started_at < ").push_bind(until);
+    }
+    let row = qb.build_query_as::<SummaryRow>().fetch_one(pool).await?;
+    Ok(TxSummary {
+        count: row.count,
+        total_volume: row.total_volume,
+        total_amount: row.total_amount,
+    })
 }
 
 pub async fn get_transaction(pool: &SqlitePool, id: &str) -> Result<Option<Transaction>> {

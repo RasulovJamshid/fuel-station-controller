@@ -30,6 +30,7 @@ pub fn run() {
             commands::reset_all_lanes,
             commands::update_prices,
             commands::get_transactions,
+            commands::get_transactions_summary,
             commands::get_current_shift,
             commands::start_shift,
             commands::end_shift,

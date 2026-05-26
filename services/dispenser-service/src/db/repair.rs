@@ -3,6 +3,24 @@
 use anyhow::Result;
 use sqlx::SqlitePool;
 
+/// Ensures `fp_nozzles` has `wayne_product_code` (migration 006).
+/// Safe to call on every startup — no-op when column already exists.
+pub async fn ensure_fp_nozzles_schema(pool: &SqlitePool) -> Result<()> {
+    let cols: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM pragma_table_info('fp_nozzles')")
+            .fetch_all(pool)
+            .await?;
+    if !cols.iter().any(|c| c == "wayne_product_code") {
+        sqlx::query(
+            "ALTER TABLE fp_nozzles ADD COLUMN wayne_product_code INTEGER NOT NULL DEFAULT 0",
+        )
+        .execute(pool)
+        .await?;
+        tracing::info!("repaired fp_nozzles: added wayne_product_code column");
+    }
+    Ok(())
+}
+
 /// Ensures `price_history` has admin audit columns (migration 005).
 /// Safe to call on every startup — no-op when columns already exist.
 pub async fn ensure_price_history_columns(pool: &SqlitePool) -> Result<()> {

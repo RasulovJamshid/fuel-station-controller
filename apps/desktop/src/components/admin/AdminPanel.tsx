@@ -69,7 +69,7 @@ function formatPrice(n: number): string {
 
 // Shared input/select class — adapts to both light and dark themes via CSS vars.
 const inputCls =
-  "rounded border border-border-primary bg-bg-input px-2 py-1 text-sm text-text-primary focus:outline-none focus:border-border-focus";
+  "rounded-lg border border-border-primary/80 bg-bg-secondary/60 px-3 py-2 text-sm font-medium text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 transition-all shadow-inner placeholder:text-text-muted";
 
 interface Props {
   token: string;
@@ -345,378 +345,394 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 text-text-primary">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-text-primary">Station admin</h1>
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-5 text-text-primary gap-6 bg-bg-primary">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Station Admin</h1>
         <button
           type="button"
           onClick={() => {
             setAdminToken(null);
             onLogout();
           }}
-          className="rounded-lg border border-border-primary px-3 py-1.5 text-sm text-text-primary hover:bg-bg-secondary"
+          className="rounded-xl border border-border-primary/80 bg-bg-secondary/80 px-4 py-2 text-sm font-bold text-text-primary shadow-sm transition-all hover:bg-bg-tertiary hover:shadow-button"
         >
           Lock admin
         </button>
       </div>
 
       {mustChangePin && (
-        <p className="mb-4 rounded-lg border border-amber-700/50 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
+        <div className="rounded-xl border border-accent-amber/40 bg-accent-amber/10 px-4 py-3 text-sm font-semibold text-accent-amber-dark dark:text-accent-amber-light shadow-sm">
           Change the default admin PIN (0000) below before leaving this panel.
-        </p>
+        </div>
       )}
       {msg && (
-        <p className="mb-4 rounded-lg border border-emerald-800/50 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-300">
+        <div className="rounded-xl border border-accent-emerald/40 bg-accent-emerald/10 px-4 py-3 text-sm font-semibold text-accent-emerald-dark dark:text-accent-emerald-light shadow-sm">
           {msg}
-        </p>
+        </div>
       )}
 
-      <AdminProductsSection
-        token={token}
-        onMessage={setMsg}
-        onError={handleProductsError}
-        onCatalogChanged={loadAll}
-        liftedNozzles={liftedNozzles}
-        productPriceMap={productPriceMap}
-      />
-
-      <section className="mb-8">
-        <h2 className="mb-3 text-lg font-medium text-amber-400">Prices</h2>
-        <p className="mb-2 text-xs text-text-muted">
-          One price per product — applies to all nozzles dispensing that product across every dispenser.
-        </p>
-        <div className="overflow-x-auto rounded-lg border border-border-primary">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-bg-secondary text-text-muted">
-              <tr>
-                <th className="px-3 py-2">Product</th>
-                <th className="px-3 py-2">Current price</th>
-                <th className="px-3 py-2">New price</th>
-              </tr>
-            </thead>
-            <tbody>
-              {productPrices.map((row) => {
-                const key = String(row.product_id);
-                return (
-                  <tr key={key} className="border-t border-border-primary">
-                    <td className="px-3 py-2 font-medium text-text-primary">{row.product_name}</td>
-                    <td className="px-3 py-2 font-mono text-text-muted">{formatPrice(row.price)}</td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        className={`w-36 font-mono ${inputCls}`}
-                        value={draft[key] ?? ""}
-                        onChange={(e) =>
-                          setDraft((d) => ({ ...d, [key]: e.target.value }))
-                        }
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={savePrices}
-          className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
-        >
-          Save prices
-        </button>
-
-        <h3 className="mb-2 mt-6 text-sm font-medium text-text-muted">Price history</h3>
-        <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-text-muted">
-          {history.map((h) => (
-            <li key={h.id}>
-              {new Date(h.changed_at).toLocaleString()} — {h.fp_id} #{h.nozzle_index}{" "}
-              {h.product_name}: {formatPrice(h.old_price)} → {formatPrice(h.new_price)} (
-              {h.changed_by})
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="mb-8">
-        <h2 className="mb-3 text-lg font-medium text-amber-400">Operators</h2>
-        <ul className="mb-3 space-y-2">
-          {operators.map((op) => (
-            <li
-              key={op.id}
-              className="flex flex-wrap items-center gap-2 rounded border border-border-primary px-3 py-2 text-sm"
-            >
-              <span className="font-medium text-text-primary">{op.name}</span>
-              <span className="text-text-muted">{op.has_pin ? "PIN set" : "No PIN"}</span>
-              <span className={op.active ? "text-emerald-400" : "text-text-muted"}>
-                {op.active ? "Active" : "Inactive"}
-              </span>
-              <button
-                type="button"
-                disabled={busy}
-                className="text-xs text-sky-400 hover:underline"
-                onClick={async () => {
-                  const { invoke } = await import("@tauri-apps/api/core");
-                  await invoke("admin_update_operator", {
-                    token,
-                    id: op.id,
-                    active: !op.active,
-                    pin: null,
-                  });
-                  await loadAll();
-                }}
-              >
-                {op.active ? "Deactivate" : "Reactivate"}
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                className="text-xs text-sky-400 hover:underline"
-                onClick={async () => {
-                  const p = window.prompt("New PIN for operator (leave empty to skip):");
-                  if (p === null) return;
-                  const { invoke } = await import("@tauri-apps/api/core");
-                  await invoke("admin_update_operator", {
-                    token,
-                    id: op.id,
-                    active: null,
-                    pin: p.trim() || null,
-                  });
-                  await loadAll();
-                }}
-              >
-                Reset PIN
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="flex flex-wrap gap-2">
-          <input
-            placeholder="Name"
-            value={newOpName}
-            onChange={(e) => setNewOpName(e.target.value)}
-            className={inputCls}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+        <div className="xl:col-span-8 flex flex-col gap-6">
+          <AdminProductsSection
+            token={token}
+            onMessage={setMsg}
+            onError={handleProductsError}
+            onCatalogChanged={loadAll}
+            liftedNozzles={liftedNozzles}
+            productPriceMap={productPriceMap}
           />
-          <input
-            placeholder="PIN (optional)"
-            type="password"
-            value={newOpPin}
-            onChange={(e) => setNewOpPin(e.target.value)}
-            className={inputCls}
-          />
+
+        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+          <h2 className="text-lg font-bold text-text-primary">Prices</h2>
+          <p className="mt-1 mb-4 text-sm font-medium text-text-secondary">
+            Batch-update: sets the same price for every nozzle dispensing a product across all dispensers.
+            To set a different price per nozzle, edit the Price column in the Products &amp; nozzles section above.
+          </p>
+          <div className="overflow-x-auto rounded-xl border border-border-primary/60 shadow-sm">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-bg-secondary/95 text-[10px] font-bold uppercase tracking-wider text-text-muted backdrop-blur-sm">
+                <tr>
+                  <th className="px-4 py-3">Product</th>
+                  <th className="px-4 py-3">Current price</th>
+                  <th className="px-4 py-3">New price</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-secondary/60 bg-bg-card/40">
+                {productPrices.map((row) => {
+                  const key = String(row.product_id);
+                  return (
+                    <tr key={key} className="transition-colors hover:bg-bg-tertiary/40">
+                      <td className="px-4 py-3 font-semibold text-text-primary">{row.product_name}</td>
+                      <td className="px-4 py-3 font-mono font-medium text-text-secondary">{formatPrice(row.price)}</td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          className={`w-40 font-mono ${inputCls}`}
+                          value={draft[key] ?? ""}
+                          onChange={(e) =>
+                            setDraft((d) => ({ ...d, [key]: e.target.value }))
+                          }
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           <button
             type="button"
             disabled={busy}
-            onClick={addOperator}
-            className="rounded-lg border border-border-primary px-3 py-1 text-sm text-text-primary hover:bg-bg-secondary"
+            onClick={savePrices}
+            className="mt-4 rounded-xl border border-accent-amber/40 bg-accent-amber/15 px-5 py-2.5 text-sm font-bold tracking-wide text-accent-amber shadow-button transition-all hover:bg-accent-amber/25 hover:shadow-button-hover disabled:opacity-50"
           >
-            Add operator
+            Save prices
           </button>
-        </div>
-      </section>
 
-      <section className="mb-8">
-        <h2 className="mb-3 text-lg font-medium text-amber-400">Shift schedule</h2>
-        <select
-          value={shiftMode}
-          onChange={(e) => setShiftMode(e.target.value as ShiftMode)}
-          className={`mb-2 ${inputCls}`}
-        >
-          <option value="disabled">Disabled</option>
-          <option value="manual">Manual</option>
-          <option value="scheduled">Scheduled</option>
-        </select>
-        {shiftMode === "scheduled" && (
-          <div className="mb-2 space-y-2">
-            {shiftSlots.map((slot, i) => (
-              <div key={i} className="flex flex-wrap gap-2">
-                <input
-                  placeholder="Name"
-                  value={slot.name}
-                  onChange={(e) => {
-                    const next = [...shiftSlots];
-                    next[i] = { ...slot, name: e.target.value };
-                    setShiftSlots(next);
-                  }}
-                  className={inputCls}
-                />
-                <input
-                  placeholder="Start HH:MM"
-                  value={slot.start}
-                  onChange={(e) => {
-                    const next = [...shiftSlots];
-                    next[i] = { ...slot, start: e.target.value };
-                    setShiftSlots(next);
-                  }}
-                  className={`w-24 ${inputCls}`}
-                />
-                <input
-                  placeholder="End HH:MM"
-                  value={slot.end}
-                  onChange={(e) => {
-                    const next = [...shiftSlots];
-                    next[i] = { ...slot, end: e.target.value };
-                    setShiftSlots(next);
-                  }}
-                  className={`w-24 ${inputCls}`}
-                />
-              </div>
+          <h3 className="mb-2 mt-6 text-[10px] font-bold uppercase tracking-wider text-text-muted">Price history</h3>
+          <ul className="max-h-40 space-y-1.5 overflow-y-auto pr-2">
+            {history.map((h) => (
+              <li key={h.id} className="flex flex-wrap items-center justify-between rounded-lg border border-border-primary/40 bg-bg-secondary/30 px-3 py-2 text-xs transition-colors hover:bg-bg-secondary/60">
+                <span className="font-mono font-medium text-text-tertiary">{new Date(h.changed_at).toLocaleString()}</span>
+                <span className="font-semibold text-text-primary">{h.fp_id} #{h.nozzle_index} <span className="text-text-muted">·</span> {h.product_name}</span>
+                <span className="font-mono font-bold text-accent-blue">{formatPrice(h.old_price)} <span className="text-text-muted font-normal">→</span> {formatPrice(h.new_price)}</span>
+                <span className="text-text-secondary font-medium">({h.changed_by})</span>
+              </li>
             ))}
+          </ul>
+        </section>
+      </div>
+
+      <div className="xl:col-span-4 flex flex-col gap-6">
+
+        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+          <h2 className="mb-4 text-lg font-bold text-text-primary">Operators</h2>
+          <ul className="mb-4 grid gap-3 grid-cols-1">
+            {operators.map((op) => (
+              <li
+                key={op.id}
+                className="flex flex-col gap-3 rounded-xl border border-border-primary/60 bg-bg-secondary/40 p-4 shadow-sm transition-colors hover:bg-bg-tertiary/40"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-text-primary">{op.name}</span>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${op.active ? "border-accent-emerald/40 bg-accent-emerald/15 text-accent-emerald" : "border-border-secondary bg-bg-secondary text-text-secondary"}`}>
+                    {op.active ? "Active" : "Inactive"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-medium">
+                  <span className="text-text-muted">{op.has_pin ? "🔐 PIN set" : "No PIN"}</span>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="font-bold text-accent-blue transition-colors hover:text-accent-blue-light disabled:opacity-50"
+                      onClick={async () => {
+                        const { invoke } = await import("@tauri-apps/api/core");
+                        await invoke("admin_update_operator", {
+                          token,
+                          id: op.id,
+                          active: !op.active,
+                          pin: null,
+                        });
+                        await loadAll();
+                      }}
+                    >
+                      {op.active ? "Deactivate" : "Reactivate"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="font-bold text-text-secondary transition-colors hover:text-text-primary disabled:opacity-50"
+                      onClick={async () => {
+                        const p = window.prompt("New PIN for operator (leave empty to skip):");
+                        if (p === null) return;
+                        const { invoke } = await import("@tauri-apps/api/core");
+                        await invoke("admin_update_operator", {
+                          token,
+                          id: op.id,
+                          active: null,
+                          pin: p.trim() || null,
+                        });
+                        await loadAll();
+                      }}
+                    >
+                      Reset PIN
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-col gap-3 rounded-xl border border-border-primary/40 bg-bg-secondary/20 p-4">
+            <input
+              placeholder="Name"
+              value={newOpName}
+              onChange={(e) => setNewOpName(e.target.value)}
+              className={`w-full ${inputCls}`}
+            />
+            <input
+              placeholder="PIN (optional)"
+              type="password"
+              value={newOpPin}
+              onChange={(e) => setNewOpPin(e.target.value)}
+              className={`w-full ${inputCls}`}
+            />
             <button
               type="button"
-              className="text-xs text-sky-400"
-              onClick={() =>
-                setShiftSlots([...shiftSlots, { name: "Shift", start: "06:00", end: "14:00" }])
-              }
+              disabled={busy}
+              onClick={addOperator}
+              className="mt-1 w-full rounded-xl bg-bg-primary px-5 py-2.5 text-sm font-bold text-text-primary border border-border-primary shadow-sm hover:bg-bg-tertiary transition-all disabled:opacity-50"
             >
-              + Add slot
+              Add operator
             </button>
           </div>
-        )}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={saveShiftSchedule}
-          className="rounded-lg border border-border-primary px-4 py-2 text-sm text-text-primary hover:bg-bg-secondary"
-        >
-          Save shift schedule
-        </button>
-      </section>
+        </section>
 
-      {settings && (
-        <section className="mb-8">
-          <h2 className="mb-3 text-lg font-medium text-amber-400">Settings</h2>
-          <div className="grid max-w-md gap-3 text-sm">
-            <label className="flex flex-col gap-1 text-text-secondary">
-              Polling interval (ms)
-              <input
-                type="number"
-                value={settings.polling_interval_ms}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    polling_interval_ms: Number(e.target.value),
-                  })
+
+        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+          <h2 className="mb-4 text-lg font-bold text-text-primary">Shift schedule</h2>
+          <select
+            value={shiftMode}
+            onChange={(e) => setShiftMode(e.target.value as ShiftMode)}
+            className={`mb-4 w-full ${inputCls}`}
+          >
+            <option value="disabled">Disabled</option>
+            <option value="manual">Manual</option>
+            <option value="scheduled">Scheduled</option>
+          </select>
+          {shiftMode === "scheduled" && (
+            <div className="mb-4 space-y-3">
+              {shiftSlots.map((slot, i) => (
+                <div key={i} className="flex flex-wrap gap-2 rounded-xl border border-border-primary/40 bg-bg-secondary/20 p-3">
+                  <input
+                    placeholder="Name"
+                    value={slot.name}
+                    onChange={(e) => {
+                      const next = [...shiftSlots];
+                      next[i] = { ...slot, name: e.target.value };
+                      setShiftSlots(next);
+                    }}
+                    className={`flex-1 ${inputCls}`}
+                  />
+                  <input
+                    placeholder="Start HH:MM"
+                    value={slot.start}
+                    onChange={(e) => {
+                      const next = [...shiftSlots];
+                      next[i] = { ...slot, start: e.target.value };
+                      setShiftSlots(next);
+                    }}
+                    className={`w-24 ${inputCls}`}
+                  />
+                  <input
+                    placeholder="End HH:MM"
+                    value={slot.end}
+                    onChange={(e) => {
+                      const next = [...shiftSlots];
+                      next[i] = { ...slot, end: e.target.value };
+                      setShiftSlots(next);
+                    }}
+                    className={`w-24 ${inputCls}`}
+                  />
+                </div>
+              ))}
+              <button
+                type="button"
+                className="text-xs font-bold text-accent-blue transition-colors hover:text-accent-blue-light"
+                onClick={() =>
+                  setShiftSlots([...shiftSlots, { name: "Shift", start: "06:00", end: "14:00" }])
                 }
-                className={inputCls}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-text-secondary">
-              Offline threshold (polls)
-              <input
-                type="number"
-                value={settings.polling_offline_threshold_polls}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    polling_offline_threshold_polls: Number(e.target.value),
-                  })
-                }
-                className={inputCls}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-text-secondary">
-              Pre-auth timeout (seconds)
-              <input
-                type="number"
-                value={settings.preauth_timeout_seconds}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    preauth_timeout_seconds: Number(e.target.value),
-                  })
-                }
-                className={inputCls}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-text-secondary">
-              Shift warn before end (minutes)
-              <input
-                type="number"
-                value={settings.shifts_warn_before_end_minutes}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    shifts_warn_before_end_minutes: Number(e.target.value),
-                  })
-                }
-                className={inputCls}
-              />
-            </label>
-          </div>
+              >
+                + Add slot
+              </button>
+            </div>
+          )}
           <button
             type="button"
             disabled={busy}
-            onClick={saveSettings}
-            className="mt-3 rounded-lg border border-border-primary px-4 py-2 text-sm text-text-primary hover:bg-bg-secondary"
+            onClick={saveShiftSchedule}
+            className="rounded-xl border border-border-primary bg-bg-primary px-5 py-2.5 text-sm font-bold text-text-primary shadow-sm hover:bg-bg-tertiary transition-all"
           >
-            Save settings
+            Save schedule
           </button>
         </section>
-      )}
 
-      <section className="mb-8">
-        <h2 className="mb-1 text-lg font-medium text-amber-400">Display</h2>
-        <p className="mb-4 text-sm text-text-muted">
-          Adjust the interface appearance and layout for this station.
-        </p>
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between rounded-lg border border-border-primary bg-bg-secondary px-4 py-3">
-            <div>
-              <p className="text-sm font-medium text-text-primary">Light mode</p>
-              <p className="mt-0.5 text-xs text-text-muted">
-                Switch to a light colour scheme (warm off-white background)
-              </p>
+        {settings && (
+          <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+            <h2 className="mb-4 text-lg font-bold text-text-primary">Settings</h2>
+            <div className="grid gap-4 text-sm font-medium">
+              <label className="flex flex-col gap-1.5 text-text-secondary">
+                Polling interval (ms)
+                <input
+                  type="number"
+                  value={settings.polling_interval_ms}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      polling_interval_ms: Number(e.target.value),
+                    })
+                  }
+                  className={inputCls}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-text-secondary">
+                Offline threshold (polls)
+                <input
+                  type="number"
+                  value={settings.polling_offline_threshold_polls}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      polling_offline_threshold_polls: Number(e.target.value),
+                    })
+                  }
+                  className={inputCls}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-text-secondary">
+                Pre-auth timeout (seconds)
+                <input
+                  type="number"
+                  value={settings.preauth_timeout_seconds}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      preauth_timeout_seconds: Number(e.target.value),
+                    })
+                  }
+                  className={inputCls}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-text-secondary">
+                Shift warn before end (minutes)
+                <input
+                  type="number"
+                  value={settings.shifts_warn_before_end_minutes}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      shifts_warn_before_end_minutes: Number(e.target.value),
+                    })
+                  }
+                  className={inputCls}
+                />
+              </label>
             </div>
-            <ToggleSwitch
-              id="theme-toggle"
-              checked={theme === "light"}
-              onChange={(v) => setTheme(v ? "light" : "dark")}
-            />
-          </div>
-          <div className="flex items-center justify-between rounded-lg border border-border-primary bg-bg-secondary px-4 py-3">
-            <div>
-              <p className="text-sm font-medium text-text-primary">Small-screen mode</p>
-              <p className="mt-0.5 text-xs text-text-muted">
-                Compact layout optimised for smaller displays
-              </p>
-            </div>
-            <ToggleSwitch
-              id="small-screen-toggle"
-              checked={smallScreen}
-              onChange={setSmallScreen}
-            />
-          </div>
-        </div>
-      </section>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={saveSettings}
+              className="mt-5 rounded-xl border border-border-primary bg-bg-primary px-5 py-2.5 text-sm font-bold text-text-primary shadow-sm hover:bg-bg-tertiary transition-all"
+            >
+              Save settings
+            </button>
+          </section>
+        )}
 
-      <section>
-        <h2 className="mb-3 text-lg font-medium text-amber-400">Change admin PIN</h2>
-        <div className="flex max-w-sm flex-col gap-2">
-          <input
-            type="password"
-            placeholder="Current PIN"
-            value={pinCurrent}
-            onChange={(e) => setPinCurrent(e.target.value)}
-            className={inputCls}
-          />
-          <input
-            type="password"
-            placeholder="New PIN"
-            value={pinNew}
-            onChange={(e) => setPinNew(e.target.value)}
-            className={inputCls}
-          />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={changePin}
-            className="rounded-lg bg-amber-600 px-4 py-2 text-sm text-white hover:bg-amber-500"
-          >
-            Update PIN
-          </button>
-        </div>
-      </section>
+        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+          <h2 className="mb-1 text-lg font-bold text-text-primary">Display</h2>
+          <p className="mb-5 text-sm font-medium text-text-muted">
+            Adjust the interface appearance and layout for this station.
+          </p>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between rounded-xl border border-border-primary/60 bg-bg-secondary/60 px-5 py-4 transition-colors hover:bg-bg-tertiary/40">
+              <div>
+                <p className="text-sm font-bold text-text-primary">Light mode</p>
+                <p className="mt-0.5 text-xs font-medium text-text-muted">
+                  Switch to a light colour scheme (warm off-white background)
+                </p>
+              </div>
+              <ToggleSwitch
+                id="theme-toggle"
+                checked={theme === "light"}
+                onChange={(v) => setTheme(v ? "light" : "dark")}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-xl border border-border-primary/60 bg-bg-secondary/60 px-5 py-4 transition-colors hover:bg-bg-tertiary/40">
+              <div>
+                <p className="text-sm font-bold text-text-primary">Small-screen mode</p>
+                <p className="mt-0.5 text-xs font-medium text-text-muted">
+                  Compact layout optimised for smaller displays
+                </p>
+              </div>
+              <ToggleSwitch
+                id="small-screen-toggle"
+                checked={smallScreen}
+                onChange={setSmallScreen}
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+          <h2 className="mb-4 text-lg font-bold text-text-primary">Change admin PIN</h2>
+          <div className="flex flex-col gap-3">
+            <input
+              type="password"
+              placeholder="Current PIN"
+              value={pinCurrent}
+              onChange={(e) => setPinCurrent(e.target.value)}
+              className={inputCls}
+            />
+            <input
+              type="password"
+              placeholder="New PIN"
+              value={pinNew}
+              onChange={(e) => setPinNew(e.target.value)}
+              className={inputCls}
+            />
+            <button
+              type="button"
+              disabled={busy}
+              onClick={changePin}
+              className="mt-2 rounded-xl bg-accent-amber px-5 py-2.5 text-sm font-bold text-text-inverse shadow-button transition-all hover:brightness-110 hover:shadow-button-hover"
+            >
+              Update PIN
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
     </div>
   );
 }

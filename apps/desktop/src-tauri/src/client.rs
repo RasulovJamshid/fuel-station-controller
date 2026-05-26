@@ -1,17 +1,35 @@
 use reqwest::Url;
 use serde::Serialize;
+
+const DEFAULT_HTTP_TIMEOUT_SECS: u64 = 15;
+const DEFAULT_CONNECT_TIMEOUT_SECS: u64 = 5;
+const ADMIN_WRITE_TIMEOUT_SECS: u64 = 60;
+
+fn fmt_err(e: impl std::error::Error) -> String {
+    use std::error::Error;
+    let mut s = e.to_string();
+    let mut src: Option<&(dyn Error + 'static)> = e.source();
+    while let Some(cause) = src {
+        s.push_str(": ");
+        s.push_str(&cause.to_string());
+        src = cause.source();
+    }
+    s
+}
 use types::{
     AdminApplyPricesCmd, AdminAuthCmd, AdminAuthResponse, AdminCatalog, AdminChangePinCmd,
     AdminPriceEntry, AdminSettingsSnapshot, AdminShiftScheduleCmd, AdminUpdateOperatorCmd,
     AuthorizeCmd, CloseStoppedTxCmd, ContinueFillCmd, CreateOperatorCmd, EndShiftCmd, FpState,
     HandoverCmd, Operator, PriceChange, ResumeFillCmd, SavePositionNozzlesCmd, SaveProductsCmd,
-    Shift, SiteSnapshot, StartShiftCmd, StopCmd, Transaction, UpdateAllPricesCmd, UpdatePriceCmd,
+    Shift, SiteSnapshot, StartShiftCmd, StopCmd, Transaction, TxSummary, UpdateAllPricesCmd,
+    UpdatePriceCmd,
 };
 
 #[derive(Clone)]
 pub struct ServiceClient {
     base: Url,
     http: reqwest::Client,
+    admin_http: reqwest::Client,
 }
 
 impl ServiceClient {
@@ -33,7 +51,17 @@ impl ServiceClient {
             .unwrap_or_else(|_| Url::parse("http://127.0.0.1:3001").expect("default url"));
         Self {
             base,
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(DEFAULT_HTTP_TIMEOUT_SECS))
+                .connect_timeout(std::time::Duration::from_secs(DEFAULT_CONNECT_TIMEOUT_SECS))
+                .pool_max_idle_per_host(0)
+                .build()
+                .expect("reqwest client"),
+            admin_http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(DEFAULT_HTTP_TIMEOUT_SECS))
+                .connect_timeout(std::time::Duration::from_secs(DEFAULT_CONNECT_TIMEOUT_SECS))
+                .build()
+                .expect("reqwest admin client"),
         }
     }
 
@@ -46,86 +74,86 @@ impl ServiceClient {
     }
 
     pub async fn health(&self) -> Result<serde_json::Value, String> {
-        let url = self.base.join("health").map_err(|e| e.to_string())?;
+        let url = self.base.join("health").map_err(fmt_err)?;
         self.http
             .get(url)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn get_all_status(&self) -> Result<Vec<FpState>, String> {
-        let url = self.base.join("status").map_err(|e| e.to_string())?;
+        let url = self.base.join("status").map_err(fmt_err)?;
         self.http
             .get(url)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn get_site_config(&self) -> Result<SiteSnapshot, String> {
-        let url = self.base.join("config").map_err(|e| e.to_string())?;
+        let url = self.base.join("config").map_err(fmt_err)?;
         self.http
             .get(url)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn authorize(&self, cmd: AuthorizeCmd) -> Result<(), String> {
-        let url = self.base.join("authorize").map_err(|e| e.to_string())?;
+        let url = self.base.join("authorize").map_err(fmt_err)?;
         self.http
             .post(url)
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
     pub async fn preauthorize(&self, cmd: AuthorizeCmd) -> Result<(), String> {
         let path = format!("dispenser/{}/preauthorize", cmd.fp_id);
-        let url = self.base.join(&path).map_err(|e| e.to_string())?;
+        let url = self.base.join(&path).map_err(fmt_err)?;
         self.http
             .post(url)
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
     pub async fn cancel_preauth(&self, fp_id: String) -> Result<(), String> {
         let path = format!("dispenser/{fp_id}/cancel-preauth");
-        let url = self.base.join(&path).map_err(|e| e.to_string())?;
+        let url = self.base.join(&path).map_err(fmt_err)?;
         self.http
             .post(url)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
     pub async fn continue_fill(&self, fp_id: String, stopped_tx_id: String) -> Result<(), String> {
         let path = format!("dispenser/{fp_id}/continue");
-        let url = self.base.join(&path).map_err(|e| e.to_string())?;
+        let url = self.base.join(&path).map_err(fmt_err)?;
         let body = ContinueFillCmd { stopped_tx_id };
         let resp = self
             .http
@@ -133,7 +161,7 @@ impl ServiceClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         if resp.status().is_success() {
             return Ok(());
         }
@@ -144,7 +172,7 @@ impl ServiceClient {
 
     pub async fn resume_fill(&self, fp_id: String, stopped_tx_id: String) -> Result<(), String> {
         let path = format!("dispenser/{fp_id}/resume");
-        let url = self.base.join(&path).map_err(|e| e.to_string())?;
+        let url = self.base.join(&path).map_err(fmt_err)?;
         let body = ResumeFillCmd { stopped_tx_id };
         let resp = self
             .http
@@ -152,7 +180,7 @@ impl ServiceClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         if resp.status().is_success() {
             return Ok(());
         }
@@ -167,83 +195,83 @@ impl ServiceClient {
         stopped_tx_id: String,
     ) -> Result<(), String> {
         let path = format!("dispenser/{fp_id}/close");
-        let url = self.base.join(&path).map_err(|e| e.to_string())?;
+        let url = self.base.join(&path).map_err(fmt_err)?;
         let body = CloseStoppedTxCmd { stopped_tx_id };
         self.http
             .post(url)
             .json(&body)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
     pub async fn stop_dispenser(&self, fp_id: String) -> Result<(), String> {
-        let url = self.base.join("stop").map_err(|e| e.to_string())?;
+        let url = self.base.join("stop").map_err(fmt_err)?;
         let body = StopCmd { fp_id };
         self.http
             .post(url)
             .json(&body)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
     pub async fn emergency_stop_all(&self) -> Result<(), String> {
-        let url = self.base.join("estop").map_err(|e| e.to_string())?;
+        let url = self.base.join("estop").map_err(fmt_err)?;
         self.http
             .post(url)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
     pub async fn reset_all(&self) -> Result<(), String> {
-        let url = self.base.join("reset").map_err(|e| e.to_string())?;
+        let url = self.base.join("reset").map_err(fmt_err)?;
         self.http
             .post(url)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
     pub async fn dismiss_sale(&self, fp_id: String) -> Result<types::FpState, String> {
         let path = format!("dispenser/{fp_id}/dismiss");
-        let url = self.base.join(&path).map_err(|e| e.to_string())?;
+        let url = self.base.join(&path).map_err(fmt_err)?;
         self.http
             .post(url)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn update_prices(&self, updates: Vec<UpdatePriceCmd>) -> Result<(), String> {
-        let url = self.base.join("prices").map_err(|e| e.to_string())?;
+        let url = self.base.join("prices").map_err(fmt_err)?;
         let body = UpdateAllPricesCmd { updates };
         self.http
             .post(url)
             .json(&body)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
@@ -252,8 +280,11 @@ impl ServiceClient {
         limit: Option<i64>,
         offset: Option<i64>,
         fp_id: Option<String>,
+        statuses: Option<String>,
+        from_ms: Option<i64>,
+        until_ms: Option<i64>,
     ) -> Result<Vec<Transaction>, String> {
-        let url = self.base.join("transactions").map_err(|e| e.to_string())?;
+        let url = self.base.join("transactions").map_err(fmt_err)?;
         let mut req = self.http.get(url);
         if let Some(l) = limit {
             req = req.query(&[("limit", l)]);
@@ -264,77 +295,115 @@ impl ServiceClient {
         if let Some(ref id) = fp_id {
             req = req.query(&[("fp_id", id.as_str())]);
         }
+        if let Some(ref s) = statuses {
+            req = req.query(&[("statuses", s.as_str())]);
+        }
+        if let Some(from) = from_ms {
+            req = req.query(&[("from_ms", from)]);
+        }
+        if let Some(until) = until_ms {
+            req = req.query(&[("until_ms", until)]);
+        }
         req.send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
+    }
+
+    pub async fn get_transactions_summary(
+        &self,
+        fp_id: Option<String>,
+        statuses: Option<String>,
+        from_ms: Option<i64>,
+        until_ms: Option<i64>,
+    ) -> Result<TxSummary, String> {
+        let url = self.base.join("transactions/summary").map_err(fmt_err)?;
+        let mut req = self.http.get(url);
+        if let Some(ref id) = fp_id {
+            req = req.query(&[("fp_id", id.as_str())]);
+        }
+        if let Some(ref s) = statuses {
+            req = req.query(&[("statuses", s.as_str())]);
+        }
+        if let Some(from) = from_ms {
+            req = req.query(&[("from_ms", from)]);
+        }
+        if let Some(until) = until_ms {
+            req = req.query(&[("until_ms", until)]);
+        }
+        req.send()
+            .await
+            .map_err(fmt_err)?
+            .json()
+            .await
+            .map_err(fmt_err)
     }
 
     pub async fn get_current_shift(&self) -> Result<Option<Shift>, String> {
         let url = self
             .base
             .join("shifts/current")
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         self.http
             .get(url)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn start_shift(&self, cmd: StartShiftCmd) -> Result<Shift, String> {
-        let url = self.base.join("shifts/start").map_err(|e| e.to_string())?;
+        let url = self.base.join("shifts/start").map_err(fmt_err)?;
         self.http
             .post(url)
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn end_shift(&self, cmd: EndShiftCmd) -> Result<Shift, String> {
-        let url = self.base.join("shifts/end").map_err(|e| e.to_string())?;
+        let url = self.base.join("shifts/end").map_err(fmt_err)?;
         self.http
             .post(url)
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn handover_shift(&self, cmd: HandoverCmd) -> Result<serde_json::Value, String> {
         let url = self
             .base
             .join("shifts/handover")
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         self.http
             .post(url)
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn list_shifts(
@@ -343,7 +412,7 @@ impl ServiceClient {
         offset: Option<i64>,
         status: Option<String>,
     ) -> Result<Vec<Shift>, String> {
-        let url = self.base.join("shifts").map_err(|e| e.to_string())?;
+        let url = self.base.join("shifts").map_err(fmt_err)?;
         let mut req = self.http.get(url);
         if let Some(l) = limit {
             req = req.query(&[("limit", l)]);
@@ -356,10 +425,10 @@ impl ServiceClient {
         }
         req.send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     fn auth_headers(token: &str) -> reqwest::header::HeaderMap {
@@ -374,33 +443,33 @@ impl ServiceClient {
     }
 
     pub async fn admin_login(&self, pin: String) -> Result<AdminAuthResponse, String> {
-        let url = self.base.join("admin/auth").map_err(|e| e.to_string())?;
-        self.http
+        let url = self.base.join("admin/auth").map_err(fmt_err)?;
+        self.admin_http
             .post(url)
             .json(&AdminAuthCmd { pin })
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn admin_get_prices(&self, token: String) -> Result<Vec<AdminPriceEntry>, String> {
-        let url = self.base.join("admin/prices").map_err(|e| e.to_string())?;
-        self.http
+        let url = self.base.join("admin/prices").map_err(fmt_err)?;
+        self.admin_http
             .get(url)
             .headers(Self::auth_headers(&token))
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn admin_update_prices(
@@ -408,35 +477,36 @@ impl ServiceClient {
         token: String,
         updates: Vec<UpdatePriceCmd>,
     ) -> Result<serde_json::Value, String> {
-        let url = self.base.join("admin/prices").map_err(|e| e.to_string())?;
-        self.http
+        let url = self.base.join("admin/prices").map_err(fmt_err)?;
+        self.admin_http
             .post(url)
+            .timeout(std::time::Duration::from_secs(ADMIN_WRITE_TIMEOUT_SECS))
             .headers(Self::auth_headers(&token))
             .json(&UpdateAllPricesCmd { updates })
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn admin_apply_prices_now(&self, token: String, fp_id: String) -> Result<(), String> {
         let url = self
             .base
             .join("admin/prices/apply-now")
-            .map_err(|e| e.to_string())?;
-        self.http
+            .map_err(fmt_err)?;
+        self.admin_http
             .post(url)
             .headers(Self::auth_headers(&token))
             .json(&AdminApplyPricesCmd { fp_id })
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
@@ -448,37 +518,37 @@ impl ServiceClient {
         let url = self
             .base
             .join("admin/prices/history")
-            .map_err(|e| e.to_string())?;
-        let mut req = self.http.get(url).headers(Self::auth_headers(&token));
+            .map_err(fmt_err)?;
+        let mut req = self.admin_http.get(url).headers(Self::auth_headers(&token));
         if let Some(l) = limit {
             req = req.query(&[("limit", l)]);
         }
         req.send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn admin_list_operators(&self, token: String) -> Result<Vec<Operator>, String> {
         let url = self
             .base
             .join("admin/operators")
-            .map_err(|e| e.to_string())?;
-        self.http
+            .map_err(fmt_err)?;
+        self.admin_http
             .get(url)
             .headers(Self::auth_headers(&token))
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn admin_create_operator(
@@ -489,19 +559,20 @@ impl ServiceClient {
         let url = self
             .base
             .join("admin/operators")
-            .map_err(|e| e.to_string())?;
-        self.http
+            .map_err(fmt_err)?;
+        self.admin_http
             .post(url)
+            .timeout(std::time::Duration::from_secs(ADMIN_WRITE_TIMEOUT_SECS))
             .headers(Self::auth_headers(&token))
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn admin_update_operator(
@@ -513,34 +584,35 @@ impl ServiceClient {
         let url = self
             .base
             .join(&format!("admin/operators/{id}"))
-            .map_err(|e| e.to_string())?;
-        self.http
+            .map_err(fmt_err)?;
+        self.admin_http
             .post(url)
+            .timeout(std::time::Duration::from_secs(ADMIN_WRITE_TIMEOUT_SECS))
             .headers(Self::auth_headers(&token))
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn admin_delete_operator(&self, token: String, id: String) -> Result<(), String> {
         let url = self
             .base
             .join(&format!("admin/operators/{id}"))
-            .map_err(|e| e.to_string())?;
-        self.http
+            .map_err(fmt_err)?;
+        self.admin_http
             .delete(url)
             .headers(Self::auth_headers(&token))
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
@@ -548,18 +620,18 @@ impl ServiceClient {
         let url = self
             .base
             .join("admin/settings")
-            .map_err(|e| e.to_string())?;
-        self.http
+            .map_err(fmt_err)?;
+        self.admin_http
             .get(url)
             .headers(Self::auth_headers(&token))
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn admin_save_settings(
@@ -570,16 +642,17 @@ impl ServiceClient {
         let url = self
             .base
             .join("admin/settings")
-            .map_err(|e| e.to_string())?;
-        self.http
+            .map_err(fmt_err)?;
+        self.admin_http
             .post(url)
+            .timeout(std::time::Duration::from_secs(ADMIN_WRITE_TIMEOUT_SECS))
             .headers(Self::auth_headers(&token))
             .json(&body)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
@@ -591,32 +664,32 @@ impl ServiceClient {
         let url = self
             .base
             .join("admin/shift-schedule")
-            .map_err(|e| e.to_string())?;
-        self.http
+            .map_err(fmt_err)?;
+        self.admin_http
             .post(url)
             .headers(Self::auth_headers(&token))
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
     pub async fn admin_get_catalog(&self, token: String) -> Result<AdminCatalog, String> {
-        let url = self.base.join("admin/catalog").map_err(|e| e.to_string())?;
-        self.http
+        let url = self.base.join("admin/catalog").map_err(fmt_err)?;
+        self.admin_http
             .get(url)
             .headers(Self::auth_headers(&token))
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 
     pub async fn admin_save_products(
@@ -627,15 +700,16 @@ impl ServiceClient {
         let url = self
             .base
             .join("admin/products")
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         let resp = self
-            .http
+            .admin_http
             .post(url)
+            .timeout(std::time::Duration::from_secs(ADMIN_WRITE_TIMEOUT_SECS))
             .headers(Self::auth_headers(&token))
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         if resp.status().is_success() {
             Ok(())
         } else {
@@ -652,15 +726,16 @@ impl ServiceClient {
         let url = self
             .base
             .join(&format!("admin/positions/{fp_id}/nozzles"))
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         let resp = self
-            .http
+            .admin_http
             .post(url)
+            .timeout(std::time::Duration::from_secs(ADMIN_WRITE_TIMEOUT_SECS))
             .headers(Self::auth_headers(&token))
             .json(&cmd)
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         if resp.status().is_success() {
             Ok(())
         } else {
@@ -676,16 +751,16 @@ impl ServiceClient {
         let url = self
             .base
             .join("admin/change-pin")
-            .map_err(|e| e.to_string())?;
-        let mut req = self.http.post(url).json(&cmd);
+            .map_err(fmt_err)?;
+        let mut req = self.admin_http.post(url).json(&cmd);
         if let Some(t) = token {
             req = req.headers(Self::auth_headers(&t));
         }
         req.send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
@@ -693,17 +768,17 @@ impl ServiceClient {
         let url = self
             .base
             .join(&format!("shifts/{id}/report"))
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         self.http
             .get(url)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .json()
             .await
-            .map_err(|e| e.to_string())
+            .map_err(fmt_err)
     }
 }
 
@@ -778,7 +853,7 @@ impl SimClient {
         product: Option<u8>,
         product_name: Option<String>,
     ) -> Result<(), String> {
-        let url = self.base.join("sim/nozzle-up").map_err(|e| e.to_string())?;
+        let url = self.base.join("sim/nozzle-up").map_err(fmt_err)?;
         let body = SimNozzleUpBody {
             fp_id,
             nozzle,
@@ -791,7 +866,7 @@ impl SimClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         if resp.status().is_success() {
             return Ok(());
         }
@@ -815,7 +890,7 @@ impl SimClient {
         let url = self
             .base
             .join("sim/preauth-expectation")
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         let body = SimPreauthExpectationBody {
             fp_id,
             nozzle,
@@ -827,9 +902,9 @@ impl SimClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
@@ -843,7 +918,7 @@ impl SimClient {
         let url = self
             .base
             .join("sim/prepare-preauth")
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         let body = SimPreauthExpectationBody {
             fp_id,
             nozzle,
@@ -855,9 +930,9 @@ impl SimClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
@@ -865,29 +940,29 @@ impl SimClient {
         let url = self
             .base
             .join("sim/nozzle-down")
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         let body = SimFpBody { fp_id };
         self.http
             .post(url)
             .json(&body)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 
     /// Matches `POST /sim/reset` on wayne-sim (clears all simulated lanes).
     pub async fn reset_all(&self) -> Result<(), String> {
-        let url = self.base.join("sim/reset").map_err(|e| e.to_string())?;
+        let url = self.base.join("sim/reset").map_err(fmt_err)?;
         self.http
             .post(url)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(fmt_err)?
             .error_for_status()
-            .map_err(|e| e.to_string())?;
+            .map_err(fmt_err)?;
         Ok(())
     }
 }

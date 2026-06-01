@@ -6,6 +6,7 @@ export interface SimDispenserInfo {
   volume: number;
   amount: number;
   respond: boolean;
+  fill_rate_lps: number;
 }
 
 export interface NozzleSnapshot {

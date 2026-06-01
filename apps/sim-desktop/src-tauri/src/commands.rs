@@ -68,6 +68,15 @@ pub async fn sim_prepare_preauth(
 }
 
 #[tauri::command]
+pub async fn sim_set_fill_rate(
+    sim: tauri::State<'_, SimClient>,
+    fp_id: String,
+    fill_rate_lps: f64,
+) -> Result<(), String> {
+    sim.set_fill_rate(fp_id, fill_rate_lps).await
+}
+
+#[tauri::command]
 pub async fn sim_estop_all(sim: tauri::State<'_, SimClient>) -> Result<(), String> {
     sim.estop_all().await
 }

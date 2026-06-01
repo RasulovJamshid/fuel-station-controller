@@ -411,6 +411,11 @@ html.light .bg-amber-950\/50 {
   background: rgb(var(--color-accent-blue) / 0.18);
 }
 
+.pump-auth-badge--idle {
+  color: rgb(var(--color-text-muted));
+  background: rgb(var(--color-text-muted) / 0.12);
+}
+
 .pump-mode-pill {
   display: inline-flex;
   align-items: center;

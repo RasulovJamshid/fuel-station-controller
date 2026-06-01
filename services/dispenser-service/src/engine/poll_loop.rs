@@ -980,31 +980,25 @@ async fn apply_command(
             };
 
             if nozzle_already_up {
-                let auth_resp = send_auth_pair(
-                    backend,
-                    byte,
-                    &fp_cfg,
-                    &preset,
-                    lifted_nozzle,
-                    price,
-                    &cfg.connection.protocol,
-                );
+                // Pump is in data-frame mode (armed). It ACKs CONFIG but does NOT start
+                // delivery unless it is in IDLE state. Stop sending BUSY so the pump exits
+                // data-frame mode within a few polls, then send CONFIG+BUSY on the first
+                // IDLE response via apply_idle_response → SendAuthorizeConfig.
                 {
                     let mut map = runtimes.write().await;
                     if let Some(rt) = map.get_mut(&byte) {
                         rt.state.price = price;
                         rt.set_last_preset(preset);
-                        rt.apply_nozzle_lift_config_sent();
+                        rt.apply_nozzle_lift_deferred_config();
                     }
                 }
-                ack_frames_in_response(backend, byte, &auth_resp);
-                let _ = write_serial(backend, &busy(byte));
                 info!(
                     addr = format_args!("0x{byte:02X}"),
                     label = %fp_cfg.label,
                     nozzle = lifted_nozzle,
-                    "Authorize (nozzle already up) → full CONFIG + BUSY"
+                    "Authorize (nozzle already up) → deferred CONFIG on next IDLE"
                 );
+                broadcast_status(byte, runtimes, events).await;
             } else {
                 let auth = authorize_initial(byte);
                 if exchange_serial(backend, &auth).is_ok() {
@@ -1238,10 +1232,35 @@ async fn apply_command(
                 }
             };
             if lift_confirmed {
-                let mut map = runtimes.write().await;
-                if let Some(rt) = map.get_mut(&byte) {
-                    rt.start_delivery_from_pre_auth(&fp_cfg, cfg);
+                // Nozzle was already up when the operator pressed preauthorize.
+                // Send CONFIG immediately (same as the reactive NozzleUp path) so the
+                // dispenser starts delivering without waiting for a Data frame trigger.
+                let auth_resp = send_auth_pair(
+                    backend,
+                    byte,
+                    &fp_cfg,
+                    &preset,
+                    nozzle_index,
+                    price,
+                    &cfg.connection.protocol,
+                );
+                {
+                    let mut map = runtimes.write().await;
+                    if let Some(rt) = map.get_mut(&byte) {
+                        // Mark before start_delivery_from_pre_auth so it skips
+                        // the deferred-CONFIG path (pending_authorize_config).
+                        rt.mark_preauth_config_on_wire();
+                        rt.start_delivery_from_pre_auth(&fp_cfg, cfg);
+                    }
                 }
+                ack_frames_in_response(backend, byte, &auth_resp);
+                let _ = write_serial(backend, &busy(byte));
+                info!(
+                    addr = format_args!("0x{byte:02X}"),
+                    label = %fp_cfg.label,
+                    nozzle = nozzle_index,
+                    "Preauthorize (nozzle already up) → full CONFIG + BUSY"
+                );
             } else {
                 // Holstered preauth: CONFIG sent before lift; StatusTransition arrives
                 // during a later POLL when the nozzle is lifted, handled normally then.

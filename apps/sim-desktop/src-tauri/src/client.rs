@@ -50,6 +50,12 @@ struct PreauthBody {
     product_name: Option<String>,
 }
 
+#[derive(Serialize)]
+struct SetFillRateBody {
+    fp_id: String,
+    fill_rate_lps: f64,
+}
+
 #[derive(Deserialize)]
 struct ApiResponse {
     #[serde(default)]
@@ -66,6 +72,7 @@ pub struct SimDispenserInfo {
     pub volume: f64,
     pub amount: u64,
     pub respond: bool,
+    pub fill_rate_lps: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -214,6 +221,11 @@ impl SimClient {
             },
         )
         .await
+    }
+
+    pub async fn set_fill_rate(&self, fp_id: String, fill_rate_lps: f64) -> Result<(), String> {
+        self.post_json("sim/set-fill-rate", &SetFillRateBody { fp_id, fill_rate_lps })
+            .await
     }
 
     pub async fn estop_all(&self) -> Result<(), String> {

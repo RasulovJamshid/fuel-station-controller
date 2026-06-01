@@ -12,6 +12,62 @@ function statusClass(status: string): string {
   return "bg-sky-500/15 text-sky-300";
 }
 
+const FLOW_PRESETS = [
+  { label: "Slow", lps: 0.2 },
+  { label: "Normal", lps: 1.2 },
+  { label: "Fast", lps: 3.0 },
+] as const;
+
+function FlowRateControl({
+  fp,
+  busy,
+  onAction,
+}: {
+  fp: SimDispenserInfo;
+  busy: string | null;
+  onAction: (fn: () => Promise<void>, key: string) => void;
+}) {
+  const rate = fp.fill_rate_lps;
+  const activePreset = FLOW_PRESETS.find((p) => Math.abs(p.lps - rate) < 0.01);
+
+  return (
+    <div className="mt-3 border-t border-slate-800 pt-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          Flow rate
+        </p>
+        <span className="font-mono text-[10px] text-slate-400">{rate.toFixed(2)} L/s</span>
+      </div>
+      <div className="mt-1.5 flex gap-1">
+        {FLOW_PRESETS.map((p) => {
+          const isActive = activePreset?.lps === p.lps;
+          return (
+            <button
+              key={p.label}
+              type="button"
+              disabled={!!busy}
+              title={`${p.lps} L/s`}
+              className={`flex-1 rounded-md py-1 text-xs font-medium transition-colors disabled:opacity-40 ${
+                isActive
+                  ? "bg-sky-600 text-white"
+                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+              }`}
+              onClick={() =>
+                onAction(
+                  () => invoke("sim_set_fill_rate", { fpId: fp.fp_id, fillRateLps: p.lps }),
+                  `flow-${p.label}`,
+                )
+              }
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function LaneCard({
   fp,
   layout,
@@ -156,6 +212,8 @@ function LaneCard({
           Nozzle up (default)
         </button>
       )}
+
+      <FlowRateControl fp={fp} busy={busy} onAction={onAction} />
     </article>
   );
 }

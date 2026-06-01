@@ -17,6 +17,7 @@ pub fn run() {
             commands::sim_go_offline,
             commands::sim_go_online,
             commands::sim_prepare_preauth,
+            commands::sim_set_fill_rate,
             commands::sim_estop_all,
             commands::sim_reset_all,
             commands::sim_run_scenario,

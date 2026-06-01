@@ -20,6 +20,7 @@ pub fn router(dispensers: SharedDispensers) -> Router {
         .route("/sim/scenario", post(run_scenario))
         .route("/sim/preauth-expectation", post(preauth_expectation))
         .route("/sim/prepare-preauth", post(prepare_preauth))
+        .route("/sim/set-fill-rate", post(set_fill_rate))
         .with_state(dispensers)
 }
 
@@ -67,6 +68,13 @@ pub struct ScenarioCmd {
     pub name: String,
 }
 
+#[derive(Deserialize)]
+pub struct SetFillRateCmd {
+    #[serde(flatten)]
+    pub target: FpCmd,
+    pub fill_rate_lps: f64,
+}
+
 #[derive(Serialize)]
 pub struct ApiResponse {
     pub ok: bool,
@@ -82,6 +90,7 @@ pub struct DispenserInfo {
     pub volume: f64,
     pub amount: u64,
     pub respond: bool,
+    pub fill_rate_lps: f64,
 }
 
 fn resolve_addr(disps: &[crate::dispenser::SimDispenser], cmd: &FpCmd) -> Option<u8> {
@@ -121,6 +130,7 @@ async fn get_state(State(disps): State<SharedDispensers>) -> Json<Vec<DispenserI
             volume: d.volume,
             amount: d.amount,
             respond: d.respond,
+            fill_rate_lps: d.fill_rate,
         })
         .collect();
     Json(info)
@@ -359,6 +369,44 @@ async fn reset_all(State(disps): State<SharedDispensers>) -> Json<ApiResponse> {
         ok: true,
         message: None,
     })
+}
+
+async fn set_fill_rate(
+    State(disps): State<SharedDispensers>,
+    Json(cmd): Json<SetFillRateCmd>,
+) -> (StatusCode, Json<ApiResponse>) {
+    let disps_guard = disps.lock().unwrap();
+    let Some(byte) = resolve_addr(&disps_guard, &cmd.target) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse {
+                ok: false,
+                message: Some("fp_id or addr required".into()),
+            }),
+        );
+    };
+    drop(disps_guard);
+    let rate = cmd.fill_rate_lps.clamp(0.0, 20.0);
+    let mut disps = disps.lock().unwrap();
+    match disps.iter_mut().find(|d| d.addr == byte) {
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse {
+                ok: false,
+                message: Some(format!("position for 0x{:02X} not found", byte)),
+            }),
+        ),
+        Some(d) => {
+            d.fill_rate = rate;
+            (
+                StatusCode::OK,
+                Json(ApiResponse {
+                    ok: true,
+                    message: None,
+                }),
+            )
+        }
+    }
 }
 
 async fn run_scenario(

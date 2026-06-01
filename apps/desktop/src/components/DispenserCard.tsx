@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import banIcon from "@/assets/icons/ban.svg";
 import checkIcon from "@/assets/icons/check.svg";
 import dangerIcon from "@/assets/icons/danger.svg";
@@ -83,6 +83,15 @@ function parseVolumeTargetLiters(preset: string | null | undefined): number | nu
   const m = preset.match(/([\d.,]+)\s*L/i);
   if (!m) return null;
   const v = Number.parseFloat(m[1].replace(",", "."));
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/** Parse an amount target (SUM) from pre_auth_preset for progress display. */
+function parseAmountTargetSum(preset: string | null | undefined): number | null {
+  if (!preset) return null;
+  const m = preset.match(/([\d.,\s]+)\s*sum/i);
+  if (!m) return null;
+  const v = Number.parseFloat(m[1].replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(v) && v > 0 ? v : null;
 }
 
@@ -251,6 +260,15 @@ export function DispenserCard({
   const isIdle = tag === "IDLE";
   const isNozzleUp = tag === "NOZZLE_UP";
   const isAuthorizing = tag === "AUTHORIZING";
+
+  const prevTagRef = useRef(tag);
+  const [formResetKey, setFormResetKey] = useState(0);
+  useEffect(() => {
+    if (prevTagRef.current === "NOZZLE_UP" && tag === "IDLE") {
+      setFormResetKey((k) => k + 1);
+    }
+    prevTagRef.current = tag;
+  }, [tag]);
   const hasDeliveryPlan =
     state.pre_auth_preset != null && (isDelivering || isAuthorizing);
   const deliveryLimit = useMemo(
@@ -258,8 +276,23 @@ export function DispenserCard({
     [state.pre_auth_preset],
   );
   const isDone = tag === "DONE";
+
   const holsterEndedSale = isDone && lastSaleOutcome === "holster_ended";
   const abortedSale = isDone && lastSaleOutcome === "aborted";
+  // Auto-dismiss only when the nozzle is confirmed back in the holster.
+  // "completed" means the delivery limit was reached but the nozzle may still be
+  // in the customer's tank — dismissing immediately would reset the backend while
+  // the pump is still physically active, causing flicker and offline flashes.
+  const shouldAutoDismiss = holsterEndedSale || abortedSale;
+
+  const onDismissSaleRef = useRef(onDismissSale);
+  useEffect(() => { onDismissSaleRef.current = onDismissSale; });
+
+  useEffect(() => {
+    if (!shouldAutoDismiss) return;
+    onDismissSaleRef.current?.(state.fp_id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldAutoDismiss, state.fp_id]);
   const isPaused = paused != null;
   const isAppPause = paused?.stop_source === "APP";
   const isExternalPause = paused?.stop_source === "EXTERNAL";
@@ -272,17 +305,21 @@ export function DispenserCard({
     hasContinuationBase &&
     (tag === "DELIVERING" || tag === "AUTHORIZING");
   const usePreAuth = defaultAuthMode === "preauth";
+  // Preauth can start from idle OR from a lift-first state (nozzle already up).
   const canOpenPreAuthSetup =
-    isIdle && usePreAuth && !isPaused && !isContinuing && !hasActivePreAuth;
+    (isIdle || isNozzleUp) && usePreAuth && !isPaused && !isContinuing && !hasActivePreAuth;
   const canOpenReactiveSetup =
     isNozzleUp && !usePreAuth && !isPaused && !isContinuing && !hasActivePreAuth;
-  const showUnplannedLift =
-    isNozzleUp && usePreAuth && !hasActivePreAuth && !isPaused;
+  // No longer shown: the form is now available instead of blocking the operator.
+  const showUnplannedLift = false;
   const isOffline = tag === "OFFLINE";
   const handleFormStart = (req: AuthorizeRequest) => {
     if (!positionActive) return;
-    if (canOpenPreAuthSetup) onPreAuthorize?.(req);
-    else if (canOpenReactiveSetup) onAuthorize(req);
+    // Lift-first (nozzle already up) must use the reactive authorize path — the
+    // backend skips PRE_AUTHORIZED and goes straight to AUTHORIZING, so calling
+    // onPreAuthorize would time out waiting for a PRE_AUTHORIZED state that never arrives.
+    if (canOpenPreAuthSetup && !isNozzleUp) onPreAuthorize?.(req);
+    else onAuthorize(req);
   };
 
   const showPumpForm =
@@ -381,6 +418,7 @@ export function DispenserCard({
 
   const displayVolume = isPaused ? (paused?.stopped_volume ?? 0) : state.volume;
   const progressTarget = parseVolumeTargetLiters(state.pre_auth_preset);
+  const amountTarget = parseAmountTargetSum(state.pre_auth_preset);
 
   return (
     <>
@@ -424,10 +462,10 @@ export function DispenserCard({
               </span>
             )}
             <span
-              className={`pump-auth-badge ${usePreAuth ? "pump-auth-badge--preauth" : "pump-auth-badge--reactive"}`}
-              title={usePreAuth ? "Pre-authorize mode" : "Reactive mode"}
+              className={`pump-auth-badge ${isIdle ? "pump-auth-badge--idle" : usePreAuth ? "pump-auth-badge--preauth" : "pump-auth-badge--reactive"}`}
+              title={isIdle ? "Idle" : usePreAuth ? "Pre-authorize mode" : "Reactive mode"}
             >
-              {usePreAuth ? "PRE" : "R"}
+              {isIdle ? "IDLE" : usePreAuth ? "PRE" : "R"}
             </span>
             <span
               className={`h-2.5 w-2.5 shrink-0 rounded-full ${isOnline ? "bg-accent-emerald online-dot-glow" : "bg-text-muted"}`}
@@ -446,8 +484,8 @@ export function DispenserCard({
         </div>
 
         <div className="flex flex-1 min-w-0 flex-col gap-2">
-          {/* Status chip when not showing setup form */}
-          {!showPumpForm && !hasActivePreAuth && (
+          {/* Status chip — always visible when idle, otherwise only when form is hidden */}
+          {(!showPumpForm || isIdle) && !hasActivePreAuth && (
             <div
               className={`pump-status-chip flex items-center gap-2 rounded-lg border px-2.5 py-1.5 ${compact ? "text-[10px]" : "text-xs"}`}
             >
@@ -526,6 +564,7 @@ export function DispenserCard({
           {showPumpForm ? (
             <div className="flex flex-1 min-w-0">
               <PumpCardForm
+                key={formResetKey}
                 fpId={state.fp_id}
                 activeNozzles={activeNozzles}
                 initialNozzle={effectiveNozzle}
@@ -572,7 +611,9 @@ export function DispenserCard({
           {(isDelivering || isPaused || (hasActivePreAuth && displayVolume > 0)) && !showPumpForm && (
             <PumpCardProgress
               volume={displayVolume}
+              amount={state.amount}
               targetLiters={progressTarget}
+              targetAmount={amountTarget}
               compact={compact}
             />
           )}
@@ -701,12 +742,10 @@ export function DispenserCard({
             </p>
           ) : isContinuing && !isDelivering ? (
             <p className="text-center text-xs text-accent-blue/90">Resuming fill…</p>
-          ) : isDone ? (
+          ) : isDone && !shouldAutoDismiss ? (
             <button
               type="button"
-              className={`btn-start-glow w-full rounded-lg py-2.5 font-bold uppercase text-text-inverse ${
-                holsterEndedSale ? "bg-accent-amber hover:bg-accent-amber-light" : "bg-accent-emerald hover:bg-accent-emerald-light"
-              } ${compact ? "text-xs" : "text-sm"}`}
+              className={`btn-start-glow w-full rounded-lg py-2.5 font-bold uppercase text-text-inverse bg-accent-emerald hover:bg-accent-emerald-light ${compact ? "text-xs" : "text-sm"}`}
               onClick={() => onDismissSale?.(state.fp_id)}
             >
               {compact ? "Keyingi mijoz" : "Keyingi mijozga tayyor"}

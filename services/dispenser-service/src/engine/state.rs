@@ -631,6 +631,21 @@ impl RuntimeFp {
         self.touch();
     }
 
+    /// Called for lift-first authorization: nozzle was already up when operator authorized.
+    /// Defers CONFIG until the pump returns to IDLE (pump must be in IDLE to accept CONFIG).
+    /// Sets pending_authorize_config_repeat=true so apply_idle_response sends CONFIG+BUSY.
+    /// With preauth_config_on_wire=false, send_busy_keepalive skips BUSY so pump exits
+    /// data-frame mode and returns to IDLE within a few poll cycles.
+    pub fn apply_nozzle_lift_deferred_config(&mut self) {
+        self.zero_delivery_meters();
+        self.auth_session_started_at = Some(Utc::now().timestamp_millis());
+        self.pending_authorize_config = false;
+        self.pending_authorize_config_repeat = true;
+        self.preauth_config_on_wire = false;
+        self.state.status = FpStatus::Authorizing;
+        self.touch();
+    }
+
     /// Cancel a zero-volume authorization on the app side and enter ghost recovery
     /// so stray NozzleUp frames do not re-trigger AUTH.
     fn cancel_zero_volume_session(&mut self) {
@@ -783,6 +798,8 @@ impl RuntimeFp {
             }
             Authorizing => {
                 if self.pending_authorize_config_repeat {
+                    self.pending_authorize_config_repeat = false;
+                    self.preauth_config_on_wire = true;
                     self.touch();
                     return FrameEffect::SendAuthorizeConfig;
                 }
@@ -1477,6 +1494,17 @@ impl RuntimeFp {
                             self.touch();
                             return FrameEffect::StatusChanged;
                         }
+                        // CONFIG was just sent and no fuel has flowed yet — the pump
+                        // emits holster codes in compound arm frames as firmware artifact.
+                        if self.preauth_config_on_wire
+                            && self.state.status == FpStatus::Authorizing
+                        {
+                            let (v, a) = self.combined_totals();
+                            if v < 0.01 && a == 0 {
+                                self.touch();
+                                return FrameEffect::StatusChanged;
+                            }
+                        }
                         return self.apply_nozzle_holstered(fp_cfg, site, active_shift_id);
                     }
                     self.note_wire_hose(*hh);
@@ -1490,6 +1518,15 @@ impl RuntimeFp {
                     if self.state.pre_auth_preset.is_none() {
                         self.state.pre_auth_preset = Some(preset_label(&self.last_preset));
                     }
+                }
+
+                // Pump reconnected while nozzle was lifted (service restarted mid-session).
+                // The pump sends data frames but never re-sends the NozzleUp event frame, so
+                // without this the status stays Offline even though the pump is responding.
+                if self.state.status == FpStatus::Offline && raw_vol < 0.01 && raw_amt == 0 {
+                    self.state.status = FpStatus::NozzleUp;
+                    self.touch();
+                    return FrameEffect::Online;
                 }
 
                 if self.state.status == FpStatus::Authorizing
@@ -1558,18 +1595,29 @@ impl RuntimeFp {
                             }
                         }
 
+                        // Pump may keep streaming meter data for a few frames after a stop
+                        // command is sent, before it physically halts.  Don't revert STOPPED
+                        // back to DELIVERING — the operator must choose Resume/Continue/Close.
+                        if self.state.status.is_stopped() {
+                            self.touch();
+                            return FrameEffect::StatusChanged;
+                        }
+
                         // Already recorded this sale — wait for operator dismiss.
-                        // Volume match is sufficient; raw_amt from the pump uses the truncated
-                        // displayed price and no longer equals latch.amount (our computed value).
+                        // The pump continues to emit data frames during deceleration after
+                        // reporting sale_complete, so volume keeps climbing slightly above
+                        // what was recorded.  Stay in DONE regardless of the delta — DONE is
+                        // only exited by the operator dismissing the sale or holstering.
                         if self.state.status == FpStatus::Done {
                             if let Some(latch) = &self.completed_sale {
                                 let nozzle = wire_nozzle.unwrap_or(latch.nozzle_index);
-                                if nozzle == latch.nozzle_index
-                                    && (raw_vol - latch.volume).abs() < 0.02
-                                {
+                                if nozzle == latch.nozzle_index {
                                     self.touch();
                                     return FrameEffect::StatusChanged;
                                 }
+                            } else {
+                                self.touch();
+                                return FrameEffect::StatusChanged;
                             }
                         }
 
@@ -1669,6 +1717,16 @@ impl RuntimeFp {
                     self.state.status,
                     FpStatus::Delivering | FpStatus::Authorizing
                 ) {
+                    // If CONFIG was just sent and no fuel has flowed, this Stopped frame
+                    // is the pump completing its previous transaction state, not aborting
+                    // the current authorization. Ignore it so delivery can start normally.
+                    if self.state.status == FpStatus::Authorizing && self.preauth_config_on_wire {
+                        let (vol, amt) = self.combined_totals();
+                        if vol < 0.01 && amt == 0 {
+                            self.touch();
+                            return FrameEffect::StatusChanged;
+                        }
+                    }
                     let preset = self.last_preset.clone();
                     return self.enter_stopped_state(
                         fp_cfg,

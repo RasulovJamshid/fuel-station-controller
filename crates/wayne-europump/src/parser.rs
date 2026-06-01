@@ -224,6 +224,26 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
     if n >= 4 && raw[n - 2] == 0x03 && raw[n - 1] == 0xFA {
         // CRC is verified over the raw bytes (including high-bit address if present).
         if !verify_crc(raw) {
+            // CRC failed. Some real-world Wayne firmware variants send incorrect CRC bytes
+            // on fill-data frames (observed: pump computes different CRC than IBM-16).
+            // For fill-data (02 08 block), meter values are non-critical and do not trigger
+            // irreversible state changes, so we accept structurally valid fill-data frames.
+            let inner_fb = &raw[..n - 4];
+            if inner_fb.len() >= 2 && (0x31..=0x3F).contains(&inner_fb[1]) {
+                let seq_fb = inner_fb[1];
+                if let Some(data) = parse_fill_data_block(inner_fb) {
+                    return Frame::Data {
+                        addr,
+                        seq: seq_fb,
+                        volume_l: data.volume_l,
+                        volume_h: data.volume_h,
+                        amount: data.amount,
+                        sale_complete: data.sale_complete,
+                        hose_product: data.hose_product,
+                        hose_code: data.hose_code,
+                    };
+                }
+            }
             return Frame::Unknown(raw.to_vec());
         }
         let inner = &raw[..n - 4];
@@ -873,6 +893,33 @@ mod tests {
                 assert_eq!(decode_volume(volume_l, volume_h), 23.0);
             }
             f => panic!("expected Data, got {:?}", f),
+        }
+    }
+
+    /// Real hardware pump 0x52 sends a composite data frame with wrong CRC bytes.
+    /// CRC-16/IBM of the 22-byte payload = 0x00FA, but the pump sends 0x10 0xFA.
+    /// The fill-data structural fallback must accept this as Frame::Data.
+    #[test]
+    fn crc_fail_data_frame_accepted_via_structural_fallback() {
+        let raw = &[
+            0x52u8, 0x33, 0x02, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04,
+            0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x05, 0x00, 0x10, 0xFA, 0x03, 0xFA,
+        ];
+        match parse_frame(raw) {
+            Frame::Data {
+                addr,
+                seq,
+                volume_l,
+                volume_h,
+                amount,
+                ..
+            } => {
+                assert_eq!(addr, 0x52);
+                assert_eq!(seq, 0x33);
+                assert_eq!(decode_volume(volume_l, volume_h), 0.0);
+                assert_eq!(decode_amount(amount[0], amount[1], amount[2]), 0);
+            }
+            f => panic!("expected Data (CRC-fail fallback), got {:?}", f),
         }
     }
 }

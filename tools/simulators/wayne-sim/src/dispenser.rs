@@ -10,6 +10,8 @@ use wayne_europump::build_frame;
 pub enum SimStatus {
     Idle,
     NozzleUp,
+    /// Transient: emits one NozzleReturned frame then falls to Idle.
+    NozzleDown,
     Authorized,
     Delivering,
     Done,
@@ -156,6 +158,16 @@ impl SimDispenser {
         match &self.status {
             SimStatus::Idle => Some(vec![self.addr, 0x70, 0xFA]),
             SimStatus::NozzleUp => Some(self.nozzle_up_frame()),
+            SimStatus::NozzleDown => {
+                let frame = self.nozzle_returned_frame();
+                self.status = SimStatus::Idle;
+                self.volume = 0.0;
+                self.amount = 0;
+                self.last_tick = None;
+                self.authorized_from_idle = false;
+                self.clear_preauth_expectation();
+                Some(frame)
+            }
             // Pre-auth while holstered: stay idle on the wire until the nozzle is lifted.
             SimStatus::Authorized if self.authorized_from_idle => Some(vec![self.addr, 0x70, 0xFA]),
             SimStatus::Authorized | SimStatus::Delivering => Some(self.data_frame()),
@@ -201,7 +213,12 @@ impl SimDispenser {
                     }
                     Some(ack())
                 } else if inner.len() > 8 {
-                    if self.status == SimStatus::Authorized && !self.authorized_from_idle {
+                    // Large frame = full CONFIG+AUTHORISE from service.
+                    // Accept from Authorized (normal path) or NozzleUp (operator
+                    // authorized while nozzle was already lifted).
+                    if (self.status == SimStatus::Authorized && !self.authorized_from_idle)
+                        || self.status == SimStatus::NozzleUp
+                    {
                         self.volume = 0.0;
                         self.amount = 0;
                         self.last_tick = Some(Instant::now());
@@ -226,9 +243,9 @@ impl SimDispenser {
                         self.status = SimStatus::Authorized;
                         self.authorized_from_idle = true;
                     } else if self.status == SimStatus::NozzleUp {
-                        // Pre-auth while sim still shows nozzle up (desync) — holster logically.
+                        // Nozzle already lifted — authorize starts delivery on next poll.
                         self.status = SimStatus::Authorized;
-                        self.authorized_from_idle = true;
+                        self.authorized_from_idle = false;
                     } else if self.status == SimStatus::Stopped {
                         // Re-authorize after pause: segment counter resets; poll or lift starts delivery.
                         self.volume = 0.0;
@@ -295,6 +312,11 @@ impl SimDispenser {
                 Ok(())
             }
             SimStatus::NozzleUp => Ok(()),
+            // Nozzle went down but NozzleReturned hasn't been sent yet — re-lift cancels it.
+            SimStatus::NozzleDown => {
+                self.status = SimStatus::NozzleUp;
+                Ok(())
+            }
             SimStatus::Delivering => Ok(()),
             SimStatus::Done => {
                 self.volume = 0.0;
@@ -334,7 +356,12 @@ impl SimDispenser {
                 self.last_tick = None;
                 Ok(())
             }
-            SimStatus::NozzleUp | SimStatus::Authorized => {
+            SimStatus::NozzleUp => {
+                // Emit one NozzleReturned frame on the next poll before going idle.
+                self.status = SimStatus::NozzleDown;
+                Ok(())
+            }
+            SimStatus::Authorized => {
                 self.status = SimStatus::Idle;
                 self.volume = 0.0;
                 self.amount = 0;
@@ -347,6 +374,7 @@ impl SimDispenser {
                 self.status = SimStatus::Done;
                 Ok(())
             }
+            SimStatus::NozzleDown => Ok(()), // already going to Idle
             SimStatus::Done | SimStatus::Stopped => {
                 self.status = SimStatus::Idle;
                 self.volume = 0.0;
@@ -409,6 +437,8 @@ impl SimDispenser {
 
     fn nozzle_up_frame(&mut self) -> Vec<u8> {
         let seq = self.next_seq();
+        // Wayne protocol: lift codes are nozzle_index + 0x10 (0x11=nozzle1, 0x12=nozzle2, …).
+        let hose_lift_code = self.nozzle + 0x10;
         let frame = build_frame(&[
             self.addr,
             seq,
@@ -417,7 +447,7 @@ impl SimDispenser {
             0x01,
             self.product,
             0x00,
-            self.nozzle,
+            hose_lift_code,
         ]);
         // Pre-auth: after emitting one NozzleUp for the service to verify the grade,
         // transition to Authorized (non-pre-auth). The next poll will start delivery.
@@ -426,6 +456,21 @@ impl SimDispenser {
             self.status = SimStatus::Authorized;
         }
         frame
+    }
+
+    fn nozzle_returned_frame(&mut self) -> Vec<u8> {
+        let seq = self.next_seq();
+        // Holster code = nozzle_index (1, 2, 3 — all < 0x10).
+        build_frame(&[
+            self.addr,
+            seq,
+            0x03,
+            0x04,
+            0x01,
+            self.product,
+            0x00,
+            self.nozzle,
+        ])
     }
 
     fn data_frame(&mut self) -> Vec<u8> {

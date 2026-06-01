@@ -505,38 +505,83 @@ export function PumpCardForm({
   );
 }
 
-/** Progress block matching style-ref bottom section. */
+/** Progress block — three modes: volume-limit bar, amount-limit bar, full-fill live counter. */
 export function PumpCardProgress({
   volume,
+  amount,
   targetLiters,
+  targetAmount,
   compact,
 }: {
   volume: number;
+  amount?: number;
   targetLiters: number | null;
+  targetAmount?: number | null;
   compact?: boolean;
 }) {
-  const max = targetLiters ?? 60;
-  const pct = max > 0 ? Math.min(100, Math.round((volume / max) * 100)) : 0;
+  // ── Volume-limit mode ──────────────────────────────────────────────────────
+  if (targetLiters != null && targetLiters > 0) {
+    const pct = Math.min(100, (volume / targetLiters) * 100);
+    return (
+      <div className={`shrink-0 ${compact ? "mt-2" : "mt-3"}`}>
+        <div className="mb-1 flex items-center justify-between">
+          <span className={`font-medium text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>Quyildi</span>
+          <span className={`font-bold tabular-nums text-accent-amber ${compact ? "text-xs" : "text-sm"}`}>
+            {volume.toFixed(2)} L
+          </span>
+        </div>
+        <div className="progress-track h-2.5 overflow-hidden rounded-full">
+          <div className="progress-fill h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+        </div>
+        <div className={`mt-0.5 flex justify-between font-mono tabular-nums text-text-muted ${compact ? "text-[9px]" : "text-[10px]"}`}>
+          <span>0</span>
+          <span>{Math.round(pct)}%</span>
+          <span>{targetLiters} L</span>
+        </div>
+      </div>
+    );
+  }
 
+  // ── Amount-limit mode ──────────────────────────────────────────────────────
+  if (targetAmount != null && targetAmount > 0 && amount != null) {
+    const pct = Math.min(100, (amount / targetAmount) * 100);
+    return (
+      <div className={`shrink-0 ${compact ? "mt-2" : "mt-3"}`}>
+        <div className="mb-1 flex items-center justify-between">
+          <span className={`font-medium text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>Quyildi</span>
+          <span className={`font-bold tabular-nums text-accent-amber ${compact ? "text-xs" : "text-sm"}`}>
+            {volume.toFixed(2)} L
+          </span>
+        </div>
+        <div className="progress-track h-2.5 overflow-hidden rounded-full">
+          <div className="progress-fill h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+        </div>
+        <div className={`mt-0.5 flex justify-between font-mono tabular-nums text-text-muted ${compact ? "text-[9px]" : "text-[10px]"}`}>
+          <span>0</span>
+          <span>{Math.round(pct)}%</span>
+          <span>{fmtSum.format(targetAmount)} so'm</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Full-fill / no-limit: live counter ────────────────────────────────────
   return (
-    <div className={`shrink-0 ${compact ? "mt-2" : "mt-3"}`}>
+    <div className={`shrink-0 rounded-lg border border-border-primary/60 bg-bg-input/45 px-3 py-2 ${compact ? "mt-2" : "mt-3"}`}>
       <div className="mb-1 flex items-center justify-between">
-        <span className={`font-medium text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>Quyildi</span>
-        <span
-          className={`font-bold tabular-nums text-accent-amber ${compact ? "text-xs" : "text-sm"}`}
-        >
-          {volume.toFixed(0)}L
+        <span className={`font-bold uppercase tracking-wide text-text-muted ${compact ? "text-[9px]" : "text-[10px]"}`}>Quyilmoqda</span>
+        <span className="text-[10px] text-accent-emerald animate-pulse">●</span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className={`font-mono font-bold tabular-nums text-accent-amber ${compact ? "text-xl" : "text-2xl"}`}>
+          {volume.toFixed(2)}
         </span>
-      </div>
-      <div className="progress-track h-2.5 overflow-hidden rounded-full">
-        <div className="progress-fill h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
-      </div>
-      <div
-        className={`mt-0.5 flex justify-between font-mono tabular-nums text-text-muted ${compact ? "text-[9px]" : "text-[10px]"}`}
-      >
-        <span>0</span>
-        <span>50%</span>
-        <span>{max}L</span>
+        <span className={`font-semibold text-text-muted ${compact ? "text-xs" : "text-sm"}`}>L</span>
+        {amount != null && amount > 0 && (
+          <span className={`ml-auto font-mono tabular-nums text-text-secondary ${compact ? "text-xs" : "text-sm"}`}>
+            {fmtSum.format(amount)} so'm
+          </span>
+        )}
       </div>
     </div>
   );

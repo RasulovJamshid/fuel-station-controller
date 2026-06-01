@@ -4,6 +4,7 @@ import logoIcon from "@/assets/logo.png";
 import { useAppStore } from "../store";
 import { ShiftWarningBanner } from "./shift/ShiftWarningBanner";
 import { ThemeToggleCompact } from "./ThemeToggle";
+import { statusTag } from "../types/api";
 import type { FpState, Shift, ShiftMode } from "../types/api";
 import type { WorkspaceTabId } from "./WorkspaceNav";
 
@@ -36,8 +37,26 @@ export function Header({ shift, onOpenWorkspace }: HeaderProps) {
     const { invoke } = await import("@tauri-apps/api/core");
     try {
       setInvokeError(null);
+      const currentStates = useAppStore.getState().states;
+      const wasActive = new Set(
+        currentStates
+          .filter((s) => { const t = statusTag(s.status); return t === "DELIVERING" || t === "AUTHORIZING"; })
+          .map((s) => s.fp_id),
+      );
       await invoke("emergency_stop_all");
-      const rows = await invoke<FpState[]>("get_all_status");
+      // Poll until all previously-delivering lanes have left DELIVERING/AUTHORIZING.
+      const deadline = Date.now() + 3000;
+      let rows: FpState[] = [];
+      while (Date.now() < deadline) {
+        rows = await invoke<FpState[]>("get_all_status");
+        const stillActive = rows.some((s) => {
+          if (!wasActive.has(s.fp_id)) return false;
+          const t = statusTag(s.status);
+          return t === "DELIVERING" || t === "AUTHORIZING";
+        });
+        if (!stillActive) break;
+        await new Promise<void>((r) => window.setTimeout(r, 200));
+      }
       setStates(rows);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

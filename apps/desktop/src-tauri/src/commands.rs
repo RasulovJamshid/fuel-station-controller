@@ -277,12 +277,14 @@ pub async fn start_shift(
     operator_name: String,
     pin: Option<String>,
     notes: Option<String>,
+    started_at_ms: Option<i64>,
 ) -> Result<types::Shift, String> {
     client
         .start_shift(types::StartShiftCmd {
             operator_name,
             pin,
             notes,
+            started_at_override: started_at_ms,
         })
         .await
 }

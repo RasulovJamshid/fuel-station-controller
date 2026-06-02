@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Header } from "./components/Header";
 import { WorkspaceNav, type WorkspaceTabId } from "./components/WorkspaceNav";
 import { DispenserCard, type AuthorizeRequest } from "./components/DispenserCard";
-import { StatsPanel } from "./components/StatsPanel";
+import { DispenserRow } from "./components/DispenserRow";
 import { ReservoirsPanel } from "./components/ReservoirsPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { ShiftWorkspace } from "./components/shift/ShiftWorkspace";
@@ -29,16 +30,21 @@ function statusTag(raw: FpState["status"]): string {
   return String(raw);
 }
 
-const WORKSPACE_TABS: { id: WorkspaceTabId; label: string; shortLabel?: string; primary?: boolean }[] = [
-  { id: "dispensers", label: "Dashboard", shortLabel: "Home", primary: true },
-  { id: "shift", label: "Shift", shortLabel: "Shift" },
-  { id: "reservoirs", label: "Tanks", shortLabel: "Tanks" },
-  { id: "history", label: "History", shortLabel: "Hist." },
-  { id: "today", label: "Today", shortLabel: "Today" },
-  { id: "admin", label: "Admin" },
-];
+const WORKSPACE_TAB_IDS: WorkspaceTabId[] = ["dispensers", "shift", "reservoirs", "history", "admin"];
 
 export default function App() {
+  const { t } = useTranslation();
+
+  const WORKSPACE_TABS = useMemo(
+    () => WORKSPACE_TAB_IDS.map((id) => ({
+      id,
+      label: t(`nav.${id}`),
+      shortLabel: t(`nav.${id}_short`),
+    })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t, /* re-compute when language changes */ t("nav.dispensers")],
+  );
+
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTabId>("dispensers");
   const [adminToken, setAdminTokenState] = useState<string | null>(() => getAdminToken());
   const [adminPinOpen, setAdminPinOpen] = useState(false);
@@ -57,7 +63,6 @@ export default function App() {
   const setInvokeError = useAppStore((s) => s.setInvokeError);
   const smallScreen = useAppStore((s) => s.smallScreen);
   const theme = useAppStore((s) => s.theme);
-  const setPreAuthNozzleMismatch = useAppStore((s) => s.setPreAuthNozzleMismatch);
   const clearPreAuthNozzleMismatch = useAppStore((s) => s.clearPreAuthNozzleMismatch);
   const setStates = useAppStore((s) => s.setStates);
 
@@ -133,30 +138,6 @@ export default function App() {
     return invoke<FpState[]>("get_all_status");
   }, []);
 
-  const syncSimPreauthExpectation = useCallback(
-    async (fpId: string) => {
-      if (!simOnline) return;
-      const fp = useAppStore.getState().states.find((s) => s.fp_id === fpId);
-      if (
-        !fp ||
-        (statusTag(fp.status) !== "PRE_AUTHORIZED" && fp.pre_auth_preset == null) ||
-        fp.nozzle_index == null ||
-        fp.product_id == null
-      ) {
-        return;
-      }
-      const nozzles = nozzlesByFp.get(fpId) ?? [];
-      const n = nozzles.find((nz) => nz.index === fp.nozzle_index);
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("sim_set_preauth_expectation", {
-        fpId,
-        nozzle: fp.nozzle_index,
-        product: fp.product_id,
-        productName: fp.product_name ?? n?.product_name ?? null,
-      });
-    },
-    [simOnline, nozzlesByFp],
-  );
 
   const onPreAuthorize = useCallback(
     async (req: AuthorizeRequest) => {
@@ -339,37 +320,37 @@ export default function App() {
     [setInvokeError, clearSaleDisplay, setStates],
   );
 
-  const stats = useMemo(() => {
-    const liters = sorted.reduce((a, s) => a + (s.volume || 0), 0);
-    const sumApprox = sorted.reduce((a, s) => a + (s.amount || 0), 0);
-    return { lanes: sorted.length, liters: Math.round(liters), sumM: sumApprox / 1_000_000 };
-  }, [sorted]);
-
   const dispenserLayout = useMemo(() => {
     const n = visibleSorted.length;
     if (smallScreen) {
-      if (n <= 2) return { gridClass: "grid-cols-1", compact: true };
-      if (n <= 4) return { gridClass: "grid-cols-2", compact: true };
-      return { gridClass: "grid-cols-2 sm:grid-cols-3", compact: true };
+      if (n <= 2) return { gridClass: "grid-cols-1", gridStyle: undefined, compact: true };
+      if (n <= 4) return { gridClass: "grid-cols-2", gridStyle: undefined, compact: true };
+      return { gridClass: "grid-cols-2 sm:grid-cols-3", gridStyle: undefined, compact: true };
     }
+    // Desktop: auto-fit columns with a fixed min/max so cards keep their natural
+    // size. Empty tracks collapse (auto-fit), leftover space is distributed evenly
+    // (justify-evenly). max-w on the container prevents extreme spreading on
+    // ultra-wide monitors.
     if (n <= 4) {
       return {
-        gridClass:
-          "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 [&>*]:max-w-[22rem] [&>*]:xl:max-w-none [&>*]:sm:mx-auto",
+        gridClass: "max-w-[90rem] justify-evenly",
+        gridStyle: { gridTemplateColumns: "repeat(auto-fit, minmax(20rem, 26rem))" },
         compact: false,
       };
     }
-    if (n <= 6) {
+    if (n <= 8) {
       return {
-        gridClass: "max-w-[1600px] grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+        gridClass: "max-w-[90rem] justify-evenly",
+        gridStyle: { gridTemplateColumns: "repeat(auto-fit, minmax(17rem, 22rem))" },
         compact: true,
       };
     }
     return {
-      gridClass: "max-w-[1800px] grid-cols-2 lg:grid-cols-4",
+      gridClass: "max-w-[110rem] justify-evenly",
+      gridStyle: { gridTemplateColumns: "repeat(auto-fit, minmax(14rem, 18rem))" },
       compact: true,
     };
-  }, [sorted.length, smallScreen]);
+  }, [visibleSorted.length, smallScreen]);
 
   const openEnd = useCallback(() => {
     if (shift.currentShift) shift.setShowEndModal(true);
@@ -429,67 +410,92 @@ export default function App() {
         onClose={() => shift.setShowHandoverModal(false)}
         onConfirm={shift.handover}
       />
-      <div className={`flex min-h-0 flex-1 overflow-hidden ${smallScreen ? "flex-col" : "lg:flex-row"}`}>
-        <main className={`flex min-h-0 flex-1 flex-col overflow-hidden bg-bg-primary ${smallScreen ? "pb-[2.75rem]" : ""}`}>
+      <div className={`flex min-h-0 flex-1 overflow-hidden ${smallScreen ? "flex-row" : "lg:flex-row"}`}>
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg-primary">
           {workspaceTab === "dispensers" ? (
             <div
-              className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${smallScreen ? "p-1.5" : "p-2 md:p-3"}`}
+              className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${smallScreen ? "p-2" : "p-2 md:p-3"}`}
             >
-              {hiddenSorted.length > 0 && (
-                <div className={`flex flex-wrap ${smallScreen ? "gap-1 pb-1.5" : "gap-1.5 pb-2"}`}>
-                  {hiddenSorted.map((s) => {
-                    const isOffline = statusTag(s.status) === "OFFLINE";
-                    const title =
-                      s.label?.trim() ||
-                      (s.fp_id.match(/\d+/)?.[0]
-                        ? `${s.fp_id.match(/\d+/)![0]}-KOLONKA`
-                        : s.fp_id);
-                    return (
-                      <button
-                        key={s.fp_id}
-                        type="button"
-                        onClick={() => toggleHideFp(s.fp_id)}
-                        className="flex items-center gap-1.5 rounded-lg border border-border-primary bg-bg-card px-2.5 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
-                      >
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${!isOffline ? "bg-accent-emerald" : "bg-text-muted"}`} />
-                        {title}
-                      </button>
-                    );
-                  })}
+              {smallScreen ? (
+                /* ── Compact list: one row per dispenser, fits 4-8 without scroll ── */
+                <div className="mx-auto flex w-full max-w-5xl flex-col gap-2">
+                  {visibleSorted.map((s) => (
+                    <DispenserRow
+                      key={s.fp_id}
+                      state={s}
+                      fpNozzles={nozzlesByFp.get(s.fp_id) ?? []}
+                      positionActive={positionActiveByFp.get(s.fp_id) ?? true}
+                      defaultAuthMode={defaultAuthMode}
+                      compact
+                      onAuthorize={onAuthorize}
+                      onPreAuthorize={onPreAuthorize}
+                      onCancelPreAuth={onCancelPreAuth}
+                      onStop={onStop}
+                      onResumeFill={onResumeFill}
+                      onContinueFill={onContinueFill}
+                      onCloseStopped={onCloseStopped}
+                      onDismissSale={onDismissSale}
+                    />
+                  ))}
                 </div>
+              ) : (
+                /* ── Standard card grid ── */
+                <>
+                  {hiddenSorted.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pb-2">
+                      {hiddenSorted.map((s) => {
+                        const isOffline = statusTag(s.status) === "OFFLINE";
+                        const title =
+                          s.label?.trim() ||
+                          (s.fp_id.match(/\d+/)?.[0]
+                            ? `${s.fp_id.match(/\d+/)![0]}-KOLONKA`
+                            : s.fp_id);
+                        return (
+                          <button
+                            key={s.fp_id}
+                            type="button"
+                            onClick={() => toggleHideFp(s.fp_id)}
+                            className="flex items-center gap-1.5 rounded-lg border border-border-primary bg-bg-card px-2.5 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
+                          >
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${!isOffline ? "bg-accent-emerald" : "bg-text-muted"}`} />
+                            {title}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div
+                    className={`mx-auto grid w-full items-stretch gap-2 md:gap-3 ${dispenserLayout.gridClass}`}
+                    style={dispenserLayout.gridStyle}
+                  >
+                    {visibleSorted.map((s) => (
+                      <DispenserCard
+                        key={s.fp_id}
+                        state={s}
+                        fpNozzles={nozzlesByFp.get(s.fp_id) ?? []}
+                        positionActive={positionActiveByFp.get(s.fp_id) ?? true}
+                        defaultAuthMode={defaultAuthMode}
+                        compact={dispenserLayout.compact}
+                        onHide={() => toggleHideFp(s.fp_id)}
+                        onAuthorize={onAuthorize}
+                        onPreAuthorize={onPreAuthorize}
+                        onCancelPreAuth={onCancelPreAuth}
+                        onStop={onStop}
+                        onResumeFill={onResumeFill}
+                        onContinueFill={onContinueFill}
+                        onCloseStopped={onCloseStopped}
+                        onDismissSale={onDismissSale}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
-              <div
-                className={`mx-auto grid w-full items-stretch ${smallScreen ? "gap-1.5" : "gap-2 md:gap-3"} ${dispenserLayout.gridClass}`}
-              >
-                {visibleSorted.map((s) => (
-                  <DispenserCard
-                    key={s.fp_id}
-                    state={s}
-                    fpNozzles={nozzlesByFp.get(s.fp_id) ?? []}
-                    positionActive={positionActiveByFp.get(s.fp_id) ?? true}
-                    defaultAuthMode={defaultAuthMode}
-                    compact={dispenserLayout.compact}
-                    onHide={() => toggleHideFp(s.fp_id)}
-                    onAuthorize={onAuthorize}
-                    onPreAuthorize={onPreAuthorize}
-                    onCancelPreAuth={onCancelPreAuth}
-                    onStop={onStop}
-                    onResumeFill={onResumeFill}
-                    onContinueFill={onContinueFill}
-                    onCloseStopped={onCloseStopped}
-                    onDismissSale={onDismissSale}
-                  />
-                ))}
-              </div>
             </div>
           ) : (
             <div className={`flex h-full min-h-0 flex-1 flex-col overflow-hidden ${smallScreen ? "p-2" : "p-4 md:p-6"}`}>
               {workspaceTab === "reservoirs" ? <ReservoirsPanel /> : null}
-              {workspaceTab === "history" ? <HistoryPanel visible currentShift={shift.currentShift} /> : null}
-              {workspaceTab === "today" ? (
-                <StatsPanel lanes={stats.lanes} liters={stats.liters} sumM={stats.sumM} />
-              ) : null}
-              {workspaceTab === "shift" ? (
+              {workspaceTab === "history" ? <HistoryPanel visible compact={smallScreen} currentShift={shift.currentShift} /> : null}
+{workspaceTab === "shift" ? (
                 <ShiftWorkspace
                   mode={shift.mode}
                   schedule={shift.schedule}
@@ -513,19 +519,16 @@ export default function App() {
                     }}
                   />
                 ) : (
-                  <p className="text-sm text-slate-400">Enter the admin PIN to unlock this panel.</p>
+                  <p className="text-sm text-slate-400">{t("adminPin.unlockPrompt")}</p>
                 )
               ) : null}
             </div>
           )}
         </main>
-        {!smallScreen && (
-          <aside className="hidden shrink-0 items-start px-4 py-6 lg:flex">
-            <WorkspaceNav variant="desktop" {...workspaceNavProps} />
-          </aside>
-        )}
+        <aside className={`shrink-0 flex ${smallScreen ? "px-2" : "hidden px-4 lg:flex"}`}>
+          <WorkspaceNav variant="desktop" {...workspaceNavProps} />
+        </aside>
       </div>
-      {smallScreen ? <WorkspaceNav variant="mobile" {...workspaceNavProps} /> : null}
       <AdminPinModal
         open={adminPinOpen}
         forceChange={mustChangePin}

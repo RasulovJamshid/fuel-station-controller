@@ -1,7 +1,7 @@
 {
   "site": {
-    "id": "azs-001",
-    "name": "AZS Station",
+    "id": "Bostonliq-AZS",
+    "name": "Bostonliquid AZS",
     "timezone": "Asia/Tashkent",
     "address": null
   },
@@ -55,7 +55,7 @@
   "fueling_positions": [
     {
       "id": "FP1",
-      "label": "Pump 1",
+      "label": "1",
       "address_byte": 80,
       "active": true,
       "nozzles": [
@@ -95,7 +95,7 @@
     },
     {
       "id": "FP2",
-      "label": "Pump 2",
+      "label": "2",
       "address_byte": 81,
       "active": true,
       "nozzles": [
@@ -135,7 +135,7 @@
     },
     {
       "id": "FP3",
-      "label": "Pump 3",
+      "label": "3",
       "address_byte": 82,
       "active": true,
       "nozzles": [
@@ -159,7 +159,7 @@
           "index": 3,
           "product_id": 3,
           "price": 12400,
-          "active": true,
+          "active": false,
           "wayne_code": 19,
           "wayne_product_code": 36
         },
@@ -175,7 +175,7 @@
     },
     {
       "id": "FP4",
-      "label": "Pump 4",
+      "label": "4",
       "address_byte": 83,
       "active": true,
       "nozzles": [
@@ -183,7 +183,7 @@
           "index": 1,
           "product_id": 2,
           "price": 14300,
-          "active": true,
+          "active": false,
           "wayne_code": 17,
           "wayne_product_code": 67
         },
@@ -207,7 +207,7 @@
           "index": 4,
           "product_id": 4,
           "price": 10500,
-          "active": true,
+          "active": false,
           "wayne_code": 20,
           "wayne_product_code": 5
         }

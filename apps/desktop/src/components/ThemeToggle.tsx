@@ -1,4 +1,5 @@
 import { Sun, Moon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../contexts/ThemeContext";
 
 interface ThemeToggleProps {
@@ -13,6 +14,7 @@ export function ThemeToggle({
   className = "",
 }: ThemeToggleProps) {
   const { theme, toggleTheme, isDark } = useTheme();
+  const { t } = useTranslation();
 
   const sizeClasses = {
     sm: "p-1.5",
@@ -33,8 +35,8 @@ export function ThemeToggle({
         className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent-amber focus:ring-offset-2 focus:ring-offset-bg-primary ${
           isDark ? "bg-bg-tertiary" : "bg-accent-amber"
         } ${className}`}
-        aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
-        title={`Current theme: ${theme}`}
+        aria-label={isDark ? t("theme.switchToLight") : t("theme.switchToDark")}
+        title={isDark ? t("theme.dark") : t("theme.light")}
       >
         <span
           className={`inline-block h-5 w-5 transform rounded-full bg-text-primary shadow-lg transition-transform ${
@@ -56,18 +58,18 @@ export function ThemeToggle({
       <button
         onClick={toggleTheme}
         className={`inline-flex items-center gap-2 rounded-md border-2 border-border-primary bg-bg-secondary px-3 py-2 text-sm font-semibold text-text-secondary transition-all hover:bg-bg-tertiary hover:text-text-primary hover:shadow-button-hover active:scale-95 ${className}`}
-        aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
-        title={`Current theme: ${theme}`}
+        aria-label={isDark ? t("theme.switchToLight") : t("theme.switchToDark")}
+        title={isDark ? t("theme.dark") : t("theme.light")}
       >
         {isDark ? (
           <>
             <Sun className={iconSizes[size]} />
-            <span>Light mode</span>
+            <span>{t("theme.switchToLight")}</span>
           </>
         ) : (
           <>
             <Moon className={iconSizes[size]} />
-            <span>Dark mode</span>
+            <span>{t("theme.switchToDark")}</span>
           </>
         )}
       </button>
@@ -94,13 +96,14 @@ export function ThemeToggle({
 // Compact version for toolbar/header usage
 export function ThemeToggleCompact({ className = "" }: { className?: string }) {
   const { toggleTheme, isDark } = useTheme();
+  const { t } = useTranslation();
 
   return (
     <button
       onClick={toggleTheme}
       className={`rounded-md border border-border-primary bg-bg-secondary p-1.5 text-text-secondary transition-all hover:bg-bg-tertiary hover:text-text-primary hover:border-border-focus ${className}`}
-      aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
-      title={`Theme: ${isDark ? "Dark" : "Light"}`}
+      aria-label={isDark ? t("theme.switchToLight") : t("theme.switchToDark")}
+      title={isDark ? t("theme.dark") : t("theme.light")}
     >
       {isDark ? (
         <Sun className="h-4 w-4 text-accent-amber" />

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type {
   AdminCatalog,
   AdminNozzleInput,
@@ -50,6 +51,7 @@ export function AdminProductsSection({
   liftedNozzles = [],
   productPriceMap = {},
 }: Props) {
+  const { t } = useTranslation();
   const setSiteSnapshot = useAppStore((s) => s.setSiteSnapshot);
   const [catalog, setCatalog] = useState<AdminCatalog | null>(null);
   const [products, setProducts] = useState<ProductDraft[]>([]);
@@ -133,7 +135,7 @@ export function AdminProductsSection({
       const payload: AdminProductInput[] = products.map((p) => {
         const name = p.name.trim();
         if (!name) {
-          throw new Error("Every product must have a name.");
+          throw new Error(t("admin.products.productRequiresName"));
         }
         const row: AdminProductInput = { name, color: p.color, unit: p.unit };
         if (p.id != null) {
@@ -142,7 +144,7 @@ export function AdminProductsSection({
         return row;
       });
       await invoke("admin_save_products", { token, products: payload });
-      onMessage("Products saved.");
+      onMessage(t("admin.products.savedMsg"));
       // Await both refreshes so the UI reflects the saved state before re-enabling.
       await Promise.all([
         loadCatalog().catch((e) => onError(e instanceof Error ? e.message : String(e))),
@@ -166,7 +168,7 @@ export function AdminProductsSection({
         fpId,
         nozzles,
       });
-      onMessage(`Nozzles saved for ${fpId}.`);
+      onMessage(t("admin.products.nozzlesSavedMsg", { fpId }));
       // Await both refreshes so the nozzle table and Prices section both reflect
       // the saved state before re-enabling the button.
       await Promise.all([
@@ -244,22 +246,21 @@ export function AdminProductsSection({
   return (
     <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm mb-6">
       <h2 className="mb-4 text-lg font-bold text-text-primary">
-        Products &amp; nozzles
+        {t("admin.products.title")}
       </h2>
 
-      <h3 className="mb-1 text-sm font-bold text-text-primary">Fuel products</h3>
+      <h3 className="mb-1 text-sm font-bold text-text-primary">{t("admin.products.fuelProducts")}</h3>
       <p className="mb-4 text-xs font-medium text-text-muted">
-        Define grades available at the station. Assign them to nozzles per
-        dispenser side below.
+        {t("admin.products.fuelProductsDesc")}
       </p>
       <div className="mb-5 overflow-x-auto rounded-xl border border-border-primary/60 shadow-sm">
         <table className="w-full min-w-[560px] text-left text-sm">
           <thead className="bg-bg-secondary/95 text-[10px] font-bold uppercase tracking-wider text-text-muted backdrop-blur-sm">
             <tr>
-              <th className="px-4 py-3">ID</th>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Color</th>
-              <th className="px-4 py-3">Unit</th>
+              <th className="px-4 py-3">{t("admin.products.colId")}</th>
+              <th className="px-4 py-3">{t("admin.products.colName")}</th>
+              <th className="px-4 py-3">{t("admin.products.colColor")}</th>
+              <th className="px-4 py-3">{t("admin.products.colUnit")}</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -312,7 +313,7 @@ export function AdminProductsSection({
                       setProducts(products.filter((_, j) => j !== i))
                     }
                   >
-                    Remove
+                    {t("admin.products.remove")}
                   </button>
                 </td>
               </tr>
@@ -327,7 +328,7 @@ export function AdminProductsSection({
           onClick={() => setProducts([...products, newProductDraft()])}
           className="rounded-xl border border-border-primary bg-bg-primary px-5 py-2 text-sm font-bold text-text-primary shadow-sm hover:bg-bg-tertiary transition-all"
         >
-          Add product
+          {t("admin.products.addProduct")}
         </button>
         <button
           type="button"
@@ -335,12 +336,12 @@ export function AdminProductsSection({
           onClick={saveProducts}
           className="rounded-xl border border-accent-amber/40 bg-accent-amber/15 px-5 py-2 text-sm font-bold tracking-wide text-accent-amber shadow-button transition-all hover:bg-accent-amber/25 hover:shadow-button-hover disabled:opacity-50"
         >
-          Save products
+          {t("admin.products.saveProducts")}
         </button>
       </div>
 
       <h3 className="mb-3 text-sm font-bold text-text-primary">
-        Nozzles per dispenser side
+        {t("admin.products.nozzlesTitle")}
       </h3>
       <div className="mb-4 flex flex-wrap gap-2">
         {catalog?.positions.map((pos) => {
@@ -394,21 +395,21 @@ export function AdminProductsSection({
                   </span>
                   <div>
                     <span className="font-bold text-accent-emerald-dark dark:text-accent-emerald-light">
-                      Nozzle #{l.nozzleIndex} is lifted
+                      {t("admin.products.nozzleLifted", { n: l.nozzleIndex })}
                     </span>
                     {l.productName && (
                       <span className="text-text-secondary font-medium">
-                        {" "}— hardware reports <span className="font-mono">{l.productName}</span>
+                        {" "}— {t("admin.products.hardwareReports", { name: l.productName })}
                       </span>
                     )}
                     {mismatch && (
                       <span className="ml-1 font-bold text-accent-amber">
-                        (configured as {configuredProduct!.name} — edit the row below to correct)
+                        ({t("admin.products.configuredAs", { configured: configuredProduct!.name })})
                       </span>
                     )}
                     {!mismatch && configuredProduct && (
                       <span className="ml-1 text-text-muted font-medium">
-                        — matches configured product
+                        — {t("admin.products.matchesConfigured")}
                       </span>
                     )}
                   </div>
@@ -420,24 +421,12 @@ export function AdminProductsSection({
             <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="bg-bg-secondary/95 text-[10px] font-bold uppercase tracking-wider text-text-muted backdrop-blur-sm">
                 <tr>
-                  <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Product</th>
-                  <th className="px-4 py-3">
-                    <span title="Price per litre for this nozzle (sum). Independent of other nozzles even if they dispense the same product.">
-                      Price
-                    </span>
-                  </th>
-                  <th className="px-4 py-3">Active</th>
-                  <th className="px-4 py-3">
-                    <span title="Wayne hardware nozzle byte sent in NozzleUp frame. 0 = auto-match by slot position.">
-                      HW Code
-                    </span>
-                  </th>
-                  <th className="px-4 py-3">
-                    <span title="Wayne product byte (PP) in CONFIG frame — identifies the fuel grade to the pump.">
-                      PP Code
-                    </span>
-                  </th>
+                  <th className="px-4 py-3">{t("admin.products.colNo")}</th>
+                  <th className="px-4 py-3">{t("admin.products.colProduct")}</th>
+                  <th className="px-4 py-3">{t("admin.products.colPrice")}</th>
+                  <th className="px-4 py-3">{t("admin.products.colActive")}</th>
+                  <th className="px-4 py-3">{t("admin.products.colHwCode")}</th>
+                  <th className="px-4 py-3">{t("admin.products.colPpCode")}</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -483,7 +472,7 @@ export function AdminProductsSection({
                         <span className="w-4 text-center">{n.index}</span>
                         {isLifted && (
                           <span className="inline-flex items-center gap-0.5 rounded-full bg-accent-emerald px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white animate-pulse">
-                            LIFTED
+                            {t("admin.products.lifted")}
                           </span>
                         )}
                       </span>
@@ -570,7 +559,7 @@ export function AdminProductsSection({
                         disabled={busy || currentNozzles.length <= 1}
                         onClick={() => removeNozzle(n.index)}
                       >
-                        Remove
+                        {t("admin.products.remove")}
                       </button>
                     </td>
                   </tr>
@@ -586,7 +575,7 @@ export function AdminProductsSection({
               onClick={addNozzle}
               className="rounded-xl border border-border-primary bg-bg-primary px-5 py-2 text-sm font-bold text-text-primary shadow-sm hover:bg-bg-tertiary transition-all"
             >
-              Add nozzle
+              {t("admin.products.addNozzle")}
             </button>
             <button
               type="button"
@@ -594,7 +583,7 @@ export function AdminProductsSection({
               onClick={() => saveNozzlesForFp(selectedFp)}
               className="rounded-xl border border-accent-amber/40 bg-accent-amber/15 px-5 py-2 text-sm font-bold tracking-wide text-accent-amber shadow-button transition-all hover:bg-accent-amber/25 hover:shadow-button-hover disabled:opacity-50"
             >
-              Save nozzles for {selectedFp}
+              {t("admin.products.saveNozzles", { fpId: selectedFp })}
             </button>
           </div>
         </div>

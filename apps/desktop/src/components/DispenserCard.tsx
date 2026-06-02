@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import banIcon from "@/assets/icons/ban.svg";
 import checkIcon from "@/assets/icons/check.svg";
 import dangerIcon from "@/assets/icons/danger.svg";
@@ -60,16 +61,16 @@ function ContinuationMeterColumn({
 }) {
   return (
     <div className="flex min-w-0 flex-col items-center gap-0.5 px-0.5">
-      <span className="w-full truncate text-center text-[10px] font-bold uppercase tracking-wide text-text-muted">
+      <span className="w-full truncate text-center text-xs font-bold uppercase tracking-wide text-text-muted">
         {label}
       </span>
       <span
-        className={`w-full truncate text-center font-mono text-sm font-bold tabular-nums leading-none sm:text-base ${volumeClass}`}
+        className={`w-full truncate text-center font-mono text-base font-bold tabular-nums leading-none sm:text-lg ${volumeClass}`}
       >
         {volume.toFixed(2)} L
       </span>
       <span
-        className={`w-full truncate text-center font-mono text-xs tabular-nums leading-tight ${amountClass}`}
+        className={`w-full truncate text-center font-mono text-sm tabular-nums leading-tight ${amountClass}`}
       >
         {fmtSum.format(amount)}
       </span>
@@ -95,22 +96,24 @@ function parseAmountTargetSum(preset: string | null | undefined): number | null 
   return Number.isFinite(v) && v > 0 ? v : null;
 }
 
-function preAuthLimitDisplay(preset: string | null | undefined): {
-  kindLabel: string;
-  value: string;
-} {
+type LimitDisplay = { kindLabel: string; value: string };
+
+function preAuthLimitDisplay(
+  preset: string | null | undefined,
+  t: (k: string) => string,
+): LimitDisplay {
   const raw = (preset ?? "Full tank").trim();
   const lower = raw.toLowerCase();
   if (lower === "full" || lower === "full tank") {
-    return { kindLabel: "Fill mode", value: "Full tank" };
+    return { kindLabel: t("dispenser.limitFillMode"), value: t("pumpForm.fullTank") };
   }
   if (/\d/.test(raw) && (raw.includes(" L") || raw.endsWith("L") || lower.endsWith(" l"))) {
-    return { kindLabel: "Volume limit", value: raw };
+    return { kindLabel: t("dispenser.limitVolumeLimit"), value: raw };
   }
   if (lower.includes("sum")) {
-    return { kindLabel: "Amount limit", value: raw.replace(/\s*sum\s*/gi, " SUM") };
+    return { kindLabel: t("dispenser.limitAmountLimit"), value: raw.replace(/\s*sum\s*/gi, " SUM") };
   }
-  return { kindLabel: "Authorized limit", value: raw };
+  return { kindLabel: t("dispenser.limitAuthorizedLimit"), value: raw };
 }
 
 const STATUS_ICON_MAP: Partial<Record<FpStatusTag, { src: string; animated?: boolean }>> = {
@@ -172,6 +175,7 @@ export function DispenserCard({
   onCloseStopped,
   onDismissSale,
 }: DispenserCardProps) {
+  const { t } = useTranslation();
   const [formStart, setFormStart] = useState<{ disabled: boolean; onStart: () => void }>({
     disabled: true,
     onStart: () => {},
@@ -242,9 +246,9 @@ export function DispenserCard({
   const liftedNozzleCaption = useMemo(() => {
     const idx = state.nozzle_index ?? effectiveNozzle;
     if (idx == null) return null;
-    const grade = productLabel ?? `Grade ${idx}`;
-    return `Nozzle ${idx} · ${grade}`;
-  }, [state.nozzle_index, effectiveNozzle, productLabel]);
+    const grade = productLabel ?? t("dispenser.gradeN", { n: idx });
+    return t("dispenser.nozzleNGrade", { n: idx, grade });
+  }, [state.nozzle_index, effectiveNozzle, productLabel, t]);
 
   const tag = statusTag(state.status as FpStatus);
   const paused = pausedInfo(state);
@@ -272,8 +276,9 @@ export function DispenserCard({
   const hasDeliveryPlan =
     state.pre_auth_preset != null && (isDelivering || isAuthorizing);
   const deliveryLimit = useMemo(
-    () => preAuthLimitDisplay(state.pre_auth_preset),
-    [state.pre_auth_preset],
+    () => preAuthLimitDisplay(state.pre_auth_preset, t),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.pre_auth_preset, t],
   );
   const isDone = tag === "DONE";
 
@@ -360,36 +365,36 @@ export function DispenserCard({
       subtitle = `${productLabel ?? "—"} · ${deliveryLimit.kindLabel}`;
       rightMeta = deliveryLimit.value;
     } else if (isDelivering) {
-      subtitle = productLabel ? `${productLabel} — fueling` : "Delivering fuel";
+      subtitle = productLabel ? `${productLabel} — ${t("dispenser.statusDelivering")}` : t("dispenser.statusDelivering");
     } else if (isAuthorizing && hasDeliveryPlan) {
-      subtitle = `Authorizing · ${deliveryLimit.kindLabel}`;
+      subtitle = t("dispenser.statusAuthorizingWith", { limitKind: deliveryLimit.kindLabel });
       rightMeta = deliveryLimit.value;
     } else if (isDone && holsterEndedSale) {
-      subtitle = "Nozzle holstered — partial sale closed";
+      subtitle = t("dispenser.statusDoneHolstered");
       rightMeta = `${state.volume.toFixed(2)} L · ${fmtSum.format(state.amount)} SUM`;
     } else if (isDone && abortedSale) {
-      subtitle = "Holstered before delivery started";
+      subtitle = t("dispenser.statusDoneAborted");
     } else if (isDone) {
-      subtitle = "Sale complete — saved to shift";
+      subtitle = t("dispenser.statusDone");
       rightMeta = `${state.volume.toFixed(2)} L · ${fmtSum.format(state.amount)} SUM`;
     } else if (isExternalPause) {
-      subtitle = "Lift nozzle to resume this fill";
+      subtitle = t("dispenser.statusExternalPause");
     } else if (isAppPause) {
-      subtitle = "Hose in tank — resume or close";
+      subtitle = t("dispenser.statusAppPause");
     } else if (hasActivePreAuth) {
       subtitle = isNozzleUp
-        ? (liftedNozzleCaption ?? "Lift the authorized grade to start")
-        : "Awaiting customer to lift nozzle";
+        ? (liftedNozzleCaption ?? t("dispenser.preAuthAwaitingLift"))
+        : t("dispenser.preAuthAwaitingCustomer");
     } else if (isNozzleUp) {
       subtitle = usePreAuth && !hasActivePreAuth
-        ? "Cannot start — nozzle lifted without pre-authorization"
-        : (liftedNozzleCaption ?? "Nozzle lifted");
+        ? t("dispenser.statusNozzleUpPreauth")
+        : (liftedNozzleCaption ?? t("dispenser.statusNozzleUp"));
     } else if (isIdle) {
       subtitle = usePreAuth
-        ? "Holstered — ready to pre-authorize"
-        : "Holstered — awaiting customer";
+        ? t("dispenser.statusIdlePreauth")
+        : t("dispenser.statusIdle");
     } else if (isOffline) {
-      subtitle = "Waiting for pump connection";
+      subtitle = t("dispenser.statusOffline");
     }
 
     return { statusLabel, subtitle, rightMeta };
@@ -445,38 +450,38 @@ export function DispenserCard({
           <div className="flex shrink-0 items-center gap-2">
             {isNozzleUp && showPumpForm && (
               <span
-                className="flex items-center gap-1 rounded-full bg-accent-emerald/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-emerald"
-                title={liftedNozzleCaption ?? "Nozzle lifted"}
+                className="flex items-center gap-1 rounded-full bg-accent-emerald/15 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-accent-emerald"
+                title={liftedNozzleCaption ?? t("dispenser.nozzleUp")}
               >
                 <InlineIcon src={dropletIcon} className="h-3 w-3" animated />
-                {compact ? "" : "Nozzle up"}
+                {compact ? "" : t("dispenser.nozzleUp")}
               </span>
             )}
             {showUnplannedLift && (
               <span
-                className="flex items-center gap-1 rounded-full bg-accent-red/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-red"
-                title="Nozzle lifted without pre-authorization"
+                className="flex items-center gap-1 rounded-full bg-accent-red/15 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-accent-red"
+                title={t("dispenser.nozzleLiftedNoPreAuth")}
               >
                 <InlineIcon src={dangerIcon} className="h-3 w-3" />
-                {compact ? "" : "No pre-auth"}
+                {compact ? "" : t("dispenser.noPreAuth")}
               </span>
             )}
             <span
               className={`pump-auth-badge ${isIdle ? "pump-auth-badge--idle" : usePreAuth ? "pump-auth-badge--preauth" : "pump-auth-badge--reactive"}`}
-              title={isIdle ? "Idle" : usePreAuth ? "Pre-authorize mode" : "Reactive mode"}
+              title={isIdle ? t("dispenser.badgeIdleTitle") : usePreAuth ? t("dispenser.badgePreTitle") : t("dispenser.badgeReactiveTitle")}
             >
-              {isIdle ? "IDLE" : usePreAuth ? "PRE" : "R"}
+              {isIdle ? t("dispenser.badgeIdle") : usePreAuth ? t("dispenser.badgePre") : t("dispenser.badgeR")}
             </span>
             <span
               className={`h-2.5 w-2.5 shrink-0 rounded-full ${isOnline ? "bg-accent-emerald online-dot-glow" : "bg-text-muted"}`}
-              title={isOnline ? "Online" : "Offline"}
-              aria-label={isOnline ? "Online" : "Offline"}
+              title={isOnline ? t("dispenser.online") : t("dispenser.offline")}
+              aria-label={isOnline ? t("dispenser.online") : t("dispenser.offline")}
             />
             <button
               type="button"
               onClick={onHide}
               className="shrink-0 text-text-muted opacity-40 hover:opacity-100 hover:text-text-secondary transition-opacity"
-              title="Hide card"
+              title={t("dispenser.hideCard")}
             >
               <InlineIcon src={eyeOffIcon} className="h-3.5 w-3.5" />
             </button>
@@ -487,17 +492,17 @@ export function DispenserCard({
           {/* Status chip — always visible when idle, otherwise only when form is hidden */}
           {(!showPumpForm || isIdle) && !hasActivePreAuth && (
             <div
-              className={`pump-status-chip flex items-center gap-2 rounded-lg border px-2.5 py-1.5 ${compact ? "text-[10px]" : "text-xs"}`}
+              className={`pump-status-chip flex items-center gap-2 rounded-lg border px-2.5 py-1.5 ${compact ? "text-xs" : "text-sm"}`}
             >
-              <StatusIcon tag={tag} className="h-3.5 w-3.5 shrink-0 text-text-tertiary" />
+              <StatusIcon tag={tag} className="h-4 w-4 shrink-0 text-text-tertiary" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                <p className="truncate text-xs font-bold uppercase tracking-wide text-text-muted">
                   {statusHeader.statusLabel}
                 </p>
-                <p className="truncate text-text-secondary">{statusHeader.subtitle}</p>
+                <p className="truncate text-sm text-text-secondary">{statusHeader.subtitle}</p>
               </div>
               {statusHeader.rightMeta ? (
-                <span className="shrink-0 font-mono tabular-nums text-text-muted">{statusHeader.rightMeta}</span>
+                <span className="shrink-0 font-mono text-sm tabular-nums text-text-muted">{statusHeader.rightMeta}</span>
               ) : null}
             </div>
           )}
@@ -507,9 +512,9 @@ export function DispenserCard({
               <div className="flex items-start gap-2">
                 <InlineIcon src={dangerIcon} className="mt-0.5 h-4 w-4 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-accent-red">Pre-authorization required</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-text-secondary">
-                    Filling cannot start. Ask customer to replace the nozzle, then pre-authorize before lifting.
+                  <p className="text-sm font-bold text-accent-red">{t("dispenser.preAuthRequired")}</p>
+                  <p className="mt-0.5 text-xs leading-snug text-text-secondary">
+                    {t("dispenser.preAuthRequiredDesc")}
                   </p>
                 </div>
               </div>
@@ -528,16 +533,16 @@ export function DispenserCard({
                   aria-hidden
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-text-primary">
+                  <p className="truncate text-base font-semibold text-text-primary">
                     {productLabel ?? "—"}
                   </p>
-                  <p className="font-mono text-xs tabular-nums text-accent-amber">
-                    {preAuthLimitDisplay(state.pre_auth_preset).value}
+                  <p className="font-mono text-sm tabular-nums text-accent-amber">
+                    {preAuthLimitDisplay(state.pre_auth_preset, t).value}
                   </p>
                 </div>
               </div>
-              <p className="mt-1 text-[10px] text-text-tertiary">
-                {isNozzleUp ? "Lift nozzle to start" : "Awaiting customer nozzle"}
+              <p className="mt-1 text-xs text-text-tertiary">
+                {isNozzleUp ? t("dispenser.preAuthAwaitingLift") : t("dispenser.preAuthAwaitingCustomer")}
               </p>
             </div>
           )}
@@ -545,16 +550,16 @@ export function DispenserCard({
           {!showPumpForm && (
             <div className="grid grid-cols-3 gap-1 rounded-lg border border-border-primary/60 bg-bg-input/45 px-2.5 py-1.5">
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-text-muted">Grade</p>
-                <p className="truncate text-xs font-semibold text-text-primary">{productLabel ?? "—"}</p>
+                <p className="text-xs uppercase tracking-wide text-text-muted">{t("dispenser.grade")}</p>
+                <p className="truncate text-sm font-semibold text-text-primary">{productLabel ?? "—"}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-text-muted">Nozzle</p>
-                <p className="truncate text-xs font-semibold text-text-primary">{effectiveNozzle ?? "—"}</p>
+                <p className="text-xs uppercase tracking-wide text-text-muted">{t("dispenser.nozzle")}</p>
+                <p className="truncate text-sm font-semibold text-text-primary">{effectiveNozzle ?? "—"}</p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] uppercase tracking-wide text-text-muted">Price</p>
-                <p className="truncate font-mono text-xs font-semibold tabular-nums text-accent-blue">
+                <p className="text-xs uppercase tracking-wide text-text-muted">{t("dispenser.price")}</p>
+                <p className="truncate font-mono text-sm font-semibold tabular-nums text-accent-blue">
                   {displayPrice > 0 ? fmtSum.format(displayPrice) : "—"}
                 </p>
               </div>
@@ -588,18 +593,18 @@ export function DispenserCard({
           {isContinuing && !showPumpForm && (
             <div className="grid grid-cols-3 gap-1 rounded-lg border border-border-primary bg-bg-input/50 p-2">
               <ContinuationMeterColumn
-                label="Base"
+                label={t("dispenser.base")}
                 volume={state.base_volume ?? 0}
                 amount={state.base_amount ?? 0}
               />
               <ContinuationMeterColumn
-                label="+ Now"
+                label={t("dispenser.now")}
                 volume={state.segment_volume ?? 0}
                 amount={state.segment_amount ?? 0}
                 volumeClass="text-accent-emerald"
               />
               <ContinuationMeterColumn
-                label="Total"
+                label={t("dispenser.total")}
                 volume={state.volume}
                 amount={state.amount}
                 volumeClass="text-text-primary"
@@ -628,65 +633,54 @@ export function DispenserCard({
               type="button"
               disabled={formStart.disabled}
               onClick={formStart.onStart}
-              className={`btn-start-glow pump-start-button flex items-center justify-center gap-2 rounded-lg font-bold uppercase text-white transition disabled:cursor-not-allowed disabled:opacity-70 ${compact ? "py-2 text-xs" : "py-2.5 text-sm"}`}
+              className={`btn-start-glow pump-start-button flex items-center justify-center gap-1.5 rounded-lg font-bold uppercase tracking-wide leading-tight text-white transition disabled:cursor-not-allowed disabled:opacity-70 ${compact ? "py-2 text-xs" : "py-2.5 text-sm"}`}
             >
-              <InlineIcon src={playIcon} className="h-4 w-4" />
-              Start
+              <InlineIcon src={playIcon} className="h-4 w-4 shrink-0" />
+              {t("dispenser.start")}
             </button>
           ) : isDelivering ? (
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                disabled
-                className={`btn-start-glow pump-start-button flex items-center justify-center gap-1.5 rounded-lg font-bold uppercase text-white/70 ${compact ? "py-2 text-xs" : "py-2.5 text-sm"}`}
-              >
-                <InlineIcon src={playIcon} className="h-4 w-4" />
-                Start
-              </button>
-              <button
-                type="button"
-                title="Pause / stop fill"
-                className={`flex items-center justify-center gap-1.5 rounded-lg border border-amber-900/50 bg-amber-950/40 font-bold uppercase text-accent-amber hover:bg-amber-950/60 ${compact ? "py-2 text-xs" : "py-2.5 text-sm"}`}
-                onClick={() => onStop(state.fp_id)}
-              >
-                <InlineIcon src={pauseIcon} className="h-4 w-4" />
-                Pauza
-              </button>
-            </div>
+            <button
+              type="button"
+              className={`flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-900/50 bg-amber-950/40 font-bold uppercase tracking-wide leading-tight text-accent-amber hover:bg-amber-950/60 ${compact ? "py-2 text-xs" : "py-2.5 text-sm"}`}
+              onClick={() => onStop(state.fp_id)}
+            >
+              <InlineIcon src={pauseIcon} className="h-4 w-4 shrink-0" />
+              {t("dispenser.pause")}
+            </button>
           ) : showNozzleRemovedBanner ? (
-            <p className="text-center text-sm font-semibold text-accent-amber-light">
-              Nozzle removed — fill closed
+            <p className={`text-center font-semibold text-accent-amber-light ${compact ? "text-xs" : "text-sm"}`}>
+              {t("dispenser.nozzleRemoved")}
             </p>
           ) : isAppPause && paused ? (
             <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
               {!compact && (
                 <>
                   <p className="text-center text-sm font-medium text-text-secondary">
-                    Hose still in the customer&apos;s tank
+                    {t("dispenser.hoseInTank")}
                   </p>
                   <p className="text-center text-xs text-text-tertiary">
-                    Partial fill saved. Resume without removing the nozzle.
+                    {t("dispenser.partialSaved")}
                   </p>
                 </>
               )}
               <button
                 type="button"
-                className={`btn-start-glow pump-start-button w-full rounded-lg py-2.5 font-bold uppercase text-white ${compact ? "text-xs" : "text-sm"}`}
+                className={`btn-start-glow pump-start-button w-full rounded-lg font-bold uppercase tracking-wide leading-tight text-white ${compact ? "py-2 text-xs" : "py-2.5 text-sm"}`}
                 onClick={() => onResumeFill(state.fp_id, paused.stopped_tx_id)}
               >
-                <span className="flex items-center justify-center gap-2">
-                  <InlineIcon src={playIcon} className={compact ? "h-4 w-4" : "h-5 w-5"} />
-                  RESUME FILL
+                <span className="flex items-center justify-center gap-1.5">
+                  <InlineIcon src={playIcon} className={`shrink-0 ${compact ? "h-3.5 w-3.5" : "h-5 w-5"}`} />
+                  {t("dispenser.resumeFill")}
                 </span>
               </button>
               <button
                 type="button"
-                className={`w-full text-center font-semibold text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline ${compact ? "text-[11px]" : "text-sm"}`}
+                className={`w-full text-center font-semibold leading-tight text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline ${compact ? "text-xs" : "text-sm"}`}
                 onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
               >
-                <span className="flex items-center justify-center gap-1.5">
-                  <InlineIcon src={xCircleIcon} className={compact ? "h-3 w-3" : "h-4 w-4"} />
-                  Close transaction
+                <span className="flex items-center justify-center gap-1">
+                  <InlineIcon src={xCircleIcon} className={`shrink-0 ${compact ? "h-3 w-3" : "h-4 w-4"}`} />
+                  {t("dispenser.closeTransaction")}
                 </span>
               </button>
             </div>
@@ -694,27 +688,27 @@ export function DispenserCard({
             <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
               {!compact && (
                 <p className="text-center text-xs font-medium text-accent-amber-light/90">
-                  Fill paused — lift the nozzle, then continue the sale.
+                  {t("dispenser.fillPaused")}
                 </p>
               )}
               <button
                 type="button"
-                className={`w-full rounded-xl bg-accent-emerald font-black uppercase tracking-widest text-text-inverse shadow-lg hover:bg-accent-emerald-light active:scale-95 ${compact ? "py-2.5 text-sm" : "px-4 py-4 text-lg"}`}
+                className={`w-full rounded-xl bg-accent-emerald font-black uppercase leading-tight text-text-inverse shadow-lg hover:bg-accent-emerald-light active:scale-95 ${compact ? "py-2.5 text-xs tracking-wide" : "px-4 py-4 text-lg tracking-wider"}`}
                 onClick={() => onContinueFill(state.fp_id, paused.stopped_tx_id)}
               >
-                <span className="flex items-center justify-center gap-2">
-                  <InlineIcon src={playIcon} className={compact ? "h-4 w-4" : "h-5 w-5"} />
-                  Continue fill
+                <span className="flex items-center justify-center gap-1.5">
+                  <InlineIcon src={playIcon} className={`shrink-0 ${compact ? "h-3.5 w-3.5" : "h-5 w-5"}`} />
+                  {t("dispenser.continueFill")}
                 </span>
               </button>
               <button
                 type="button"
-                className={`w-full rounded-xl bg-bg-secondary font-bold uppercase tracking-wider text-text-secondary ring-1 ring-border-primary hover:bg-bg-tertiary ${compact ? "py-1.5 text-xs" : "px-4 py-3 text-sm"}`}
+                className={`w-full rounded-xl bg-bg-secondary font-bold uppercase tracking-wide leading-tight text-text-secondary ring-1 ring-border-primary hover:bg-bg-tertiary ${compact ? "py-1.5 text-xs" : "px-4 py-3 text-sm"}`}
                 onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
               >
-                <span className="flex items-center justify-center gap-2">
-                  <InlineIcon src={xCircleIcon} className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
-                  Close transaction
+                <span className="flex items-center justify-center gap-1.5">
+                  <InlineIcon src={xCircleIcon} className={`shrink-0 ${compact ? "h-3 w-3" : "h-4 w-4"}`} />
+                  {t("dispenser.closeTransaction")}
                 </span>
               </button>
             </div>
@@ -722,33 +716,33 @@ export function DispenserCard({
             <>
               {showPreAuthTimeoutBanner && (
                 <p className="text-center text-xs font-medium text-accent-amber">
-                  Pre-authorization timed out
+                  {t("dispenser.preAuthTimeout")}
                 </p>
               )}
               <button
                 type="button"
-                className="w-full rounded-lg border border-border-primary bg-bg-secondary py-2 text-xs font-bold uppercase tracking-wide text-text-secondary hover:bg-bg-tertiary"
+                className={`w-full rounded-lg border border-border-primary bg-bg-secondary font-bold uppercase tracking-wide leading-tight text-text-secondary hover:bg-bg-tertiary ${compact ? "py-2 text-xs" : "py-2 text-sm"}`}
                 onClick={() => onCancelPreAuth?.(state.fp_id)}
               >
-                <span className="flex items-center justify-center gap-2">
-                  <InlineIcon src={banIcon} className="h-4 w-4" />
-                  Bekor qilish
+                <span className="flex items-center justify-center gap-1.5">
+                  <InlineIcon src={banIcon} className="h-3.5 w-3.5 shrink-0" />
+                  {t("dispenser.cancelPreAuth")}
                 </span>
               </button>
             </>
           ) : showUnplannedLift ? (
             <p className="text-center text-xs font-semibold text-accent-red/80">
-              Replace nozzle — then pre-authorize
+              {t("dispenser.replaceNozzle")}
             </p>
           ) : isContinuing && !isDelivering ? (
-            <p className="text-center text-xs text-accent-blue/90">Resuming fill…</p>
+            <p className="text-center text-xs text-accent-blue/90">{t("dispenser.resumingFill")}</p>
           ) : isDone && !shouldAutoDismiss ? (
             <button
               type="button"
-              className={`btn-start-glow w-full rounded-lg py-2.5 font-bold uppercase text-text-inverse bg-accent-emerald hover:bg-accent-emerald-light ${compact ? "text-xs" : "text-sm"}`}
+              className={`btn-start-glow w-full rounded-lg font-bold uppercase tracking-wide leading-tight text-text-inverse bg-accent-emerald hover:bg-accent-emerald-light ${compact ? "py-2.5 text-xs" : "py-2.5 text-sm"}`}
               onClick={() => onDismissSale?.(state.fp_id)}
             >
-              {compact ? "Keyingi mijoz" : "Keyingi mijozga tayyor"}
+              {compact ? t("dispenser.nextCustomer") : t("dispenser.nextCustomerReady")}
             </button>
           ) : null}
         </div>

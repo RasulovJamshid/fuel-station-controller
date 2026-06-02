@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 type Theme = "dark" | "light";
 
@@ -30,35 +30,15 @@ export function ThemeProvider({ children, defaultTheme = "dark" }: ThemeProvider
     return defaultTheme;
   });
 
-  const [mounted, setMounted] = useState(false);
-
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-
     const root = document.documentElement;
-
-    // Remove both theme classes first
-    root.classList.remove("dark", "light");
-
-    // Add the current theme class
-    root.classList.add(theme);
-
-    // Store in localStorage
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-
-    // Update meta theme-color for mobile browsers
-    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-    if (metaThemeColor) {
-      metaThemeColor.setAttribute(
-        "content",
-        theme === "dark" ? "#0f172a" : "#f8fafc"
-      );
+    if (theme === "light") {
+      root.classList.add("light");
+    } else {
+      root.classList.remove("light");
     }
-  }, [theme, mounted]);
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
@@ -75,16 +55,9 @@ export function ThemeProvider({ children, defaultTheme = "dark" }: ThemeProvider
     isDark: theme === "dark",
   };
 
-  // Prevent flash of wrong theme by hiding content until mounted
-  const content = mounted ? children : (
-    <div style={{ visibility: "hidden" }}>
-      {children}
-    </div>
-  );
-
   return (
     <ThemeContext.Provider value={value}>
-      {content}
+      {children}
     </ThemeContext.Provider>
   );
 }

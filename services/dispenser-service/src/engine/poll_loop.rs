@@ -36,17 +36,19 @@ fn wayne_pp_byte(n: &site_config::NozzleConfig) -> u8 {
 }
 
 fn wayne_product_codes(fp: &FuelingPositionConfig) -> Vec<u8> {
-    let mut nozzles: Vec<_> = fp.nozzles.iter().filter(|n| n.active).collect();
-    // Sort by wayne_code (physical channel on the pump), NOT by nozzle index.
-    // The pump maps lifted hose to channel via the low nibble of the hose byte
-    // (e.g. 0x12 → channel 2). The CONFIG product table must follow this order.
+    // Include ALL nozzles (active and inactive) sorted by wayne_code so that
+    // CONFIG channel positions match the pump's physical channel numbers.
+    // Filtering to active-only shifts positions: e.g. if physical channel 1 is
+    // inactive and channel 2 is AI92, filtering produces CONFIG position 1=AI92
+    // but the pump maps HH=0x12 to CONFIG position 2 → wrong product/price.
+    let mut nozzles: Vec<_> = fp.nozzles.iter().collect();
     nozzles.sort_by_key(|n| n.wayne_code);
     nozzles.into_iter().map(wayne_pp_byte).collect()
 }
 
 /// Per-nozzle prices for the Wayne CONFIG frame, sorted by wayne_code (same order as product codes).
 fn wayne_nozzle_prices(fp: &FuelingPositionConfig) -> Vec<u32> {
-    let mut nozzles: Vec<_> = fp.nozzles.iter().filter(|n| n.active).collect();
+    let mut nozzles: Vec<_> = fp.nozzles.iter().collect();
     nozzles.sort_by_key(|n| n.wayne_code);
     nozzles.into_iter().map(|n| n.price).collect()
 }
@@ -797,15 +799,6 @@ async fn process_parsed_frame(
                         rt.apply_done_ack();
                     }
                 }
-                TxCompleteAction::HaltPump => {
-                    // Do NOT send stop_frame here. The pump already has a matching
-                    // hardware volume limit (set via CONFIG) and is decelerating to
-                    // hit it precisely. Sending STOP mid-deceleration triggers a C1 FA
-                    // handshake that we never complete, leaving the pump waiting for ACK
-                    // and ignoring polls — causing spurious offline transitions.
-                    // The pump will finish naturally and send sale_complete / NozzleReturned,
-                    // both of which are handled gracefully in Done state.
-                }
             }
             broadcast_status(byte, runtimes, events).await;
         }
@@ -938,6 +931,17 @@ async fn process_parsed_frame(
             );
             broadcast_status(byte, runtimes, events).await;
         }
+        FrameEffect::SendDoneAwaitHolster => {
+            // Pump reported end-of-sale while nozzle is still physically in the tank.
+            // Send GO_IDLE with write_serial (no read) so the pump's NozzleReturned
+            // response stays in the serial buffer for the next poll to process through
+            // apply_frame → apply_nozzle_holstered → close with true final volume.
+            // Using exchange_serial here would consume and discard the NozzleReturned,
+            // leaving status stuck in Delivering until the 4-second timestamp timeout.
+            let done_f = done(byte);
+            let _ = write_serial(backend, &done_f);
+            broadcast_status(byte, runtimes, events).await;
+        }
         FrameEffect::StatusChanged => {
             broadcast_status(byte, runtimes, events).await;
         }
@@ -1038,19 +1042,32 @@ async fn apply_command(
         }
         DispatchCommand::Stop { byte } => {
             // §8.2: mid-delivery stop requires the 0x31 pre-command first.
-            let is_delivering = {
+            let (is_delivering, has_active_session) = {
                 let map = runtimes.read().await;
-                map.get(&byte)
-                    .map(|rt| rt.state.status == FpStatus::Delivering)
-                    .unwrap_or(false)
+                let rt = map.get(&byte);
+                (
+                    rt.map_or(false, |r| r.state.status == FpStatus::Delivering),
+                    rt.map_or(false, |r| matches!(
+                        r.state.status,
+                        FpStatus::Delivering
+                            | FpStatus::Authorizing
+                            | FpStatus::NozzleUp
+                            | FpStatus::PreAuthorized
+                    ) || r.current_tx.is_some()),
+                )
             };
-            if is_delivering {
-                let pre = stop_pre_frame(byte);
-                let _ = exchange_serial(backend, &pre); // dispenser replies C1 FA
-                let _ = write_serial(backend, &ack(byte)); // PC ACKs the C1 FA
+            // Only send the wire stop when there is an active session.
+            // Sending stop_frame in Done/Idle state makes the pump emit a response
+            // that ends up buffered on the bus and can corrupt the next poll parse.
+            if has_active_session {
+                if is_delivering {
+                    let pre = stop_pre_frame(byte);
+                    let _ = exchange_serial(backend, &pre); // dispenser replies C1 FA
+                    let _ = write_serial(backend, &ack(byte)); // PC ACKs the C1 FA
+                }
+                let f = stop_frame(byte);
+                let _ = exchange_serial(backend, &f);
             }
-            let f = stop_frame(byte);
-            let _ = exchange_serial(backend, &f);
             let fp_cfg = match cfg.position_by_address(byte) {
                 Some(p) => p.clone(),
                 None => return,

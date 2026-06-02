@@ -104,6 +104,8 @@ export interface StartShiftCmd {
   operator_name: string;
   pin?: string;
   notes?: string;
+  /** Unix ms override for shift start. Absent = server uses now(). */
+  started_at_override?: number;
 }
 
 export interface EndShiftCmd {

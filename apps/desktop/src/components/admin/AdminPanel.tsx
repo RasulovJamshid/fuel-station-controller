@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type {
   AdminPriceEntry,
   AdminSettingsSnapshot,
@@ -79,6 +80,7 @@ interface Props {
 }
 
 export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Props) {
+  const { t } = useTranslation();
   const setSiteSnapshot = useAppStore((s) => s.setSiteSnapshot);
   const setInvokeError = useAppStore((s) => s.setInvokeError);
   const smallScreen = useAppStore((s) => s.smallScreen);
@@ -202,7 +204,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
     setMsg(null);
     try {
       if (productPrices.length === 0) {
-        setMsg("No products with active nozzles — add products and nozzles first.");
+        setMsg(t("admin.prices.noProducts"));
         return;
       }
       const updates: UpdatePriceCmd[] = [];
@@ -212,7 +214,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
         if (raw === undefined || raw.trim() === "") continue;
         const newPrice = parseInt(raw.trim(), 10);
         if (Number.isNaN(newPrice) || newPrice <= 0) {
-          setMsg(`Enter a valid price for ${prod.product_name}.`);
+          setMsg(t("admin.prices.invalidPrice", { name: prod.product_name }));
           return;
         }
         if (newPrice === prod.price) continue;
@@ -227,7 +229,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
         }
       }
       if (updates.length === 0) {
-        setMsg("No price changes to save.");
+        setMsg(t("admin.prices.noChanges"));
         return;
       }
       const { invoke } = await import("@tauri-apps/api/core");
@@ -248,7 +250,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
         setDraft(nextDraft);
         return next;
       });
-      setMsg(`Prices saved (${updates.length} nozzle update${updates.length === 1 ? "" : "s"}).`);
+      setMsg(t("admin.prices.savedMsg", { count: updates.length }));
       // Refresh history and config in the background (errors don't undo the save).
       invoke<PriceChange[]>("admin_get_price_history", { token, limit: 50 })
         .then(setHistory)
@@ -275,7 +277,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
           shifts_warn_before_end_minutes: settings.shifts_warn_before_end_minutes,
         },
       });
-      setMsg("Settings saved to site.config.json.");
+      setMsg(t("admin.settings.savedMsg"));
     } catch (e) {
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -289,7 +291,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("admin_shift_schedule", { token, mode: shiftMode, scheduled: shiftSlots });
       await refreshConfig();
-      setMsg("Shift schedule saved.");
+      setMsg(t("admin.shiftSchedule.savedMsg"));
     } catch (e) {
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -329,7 +331,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
       setPinCurrent("");
       setPinNew("");
       onPinChanged?.();
-      setMsg("Admin PIN updated.");
+      setMsg(t("admin.changePin.updatedMsg"));
     } catch (e) {
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -347,7 +349,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto p-5 text-text-primary gap-6 bg-bg-primary">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-text-primary">Station Admin</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-text-primary">{t("admin.title")}</h1>
         <button
           type="button"
           onClick={() => {
@@ -356,13 +358,13 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
           }}
           className="rounded-xl border border-border-primary/80 bg-bg-secondary/80 px-4 py-2 text-sm font-bold text-text-primary shadow-sm transition-all hover:bg-bg-tertiary hover:shadow-button"
         >
-          Lock admin
+          {t("admin.lockAdmin")}
         </button>
       </div>
 
       {mustChangePin && (
         <div className="rounded-xl border border-accent-amber/40 bg-accent-amber/10 px-4 py-3 text-sm font-semibold text-accent-amber-dark dark:text-accent-amber-light shadow-sm">
-          Change the default admin PIN (0000) below before leaving this panel.
+          {t("admin.mustChangePinWarning")}
         </div>
       )}
       {msg && (
@@ -383,18 +385,17 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
           />
 
         <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
-          <h2 className="text-lg font-bold text-text-primary">Prices</h2>
+          <h2 className="text-lg font-bold text-text-primary">{t("admin.prices.title")}</h2>
           <p className="mt-1 mb-4 text-sm font-medium text-text-secondary">
-            Batch-update: sets the same price for every nozzle dispensing a product across all dispensers.
-            To set a different price per nozzle, edit the Price column in the Products &amp; nozzles section above.
+            {t("admin.prices.description")}
           </p>
           <div className="overflow-x-auto rounded-xl border border-border-primary/60 shadow-sm">
             <table className="w-full text-left text-sm">
               <thead className="bg-bg-secondary/95 text-[10px] font-bold uppercase tracking-wider text-text-muted backdrop-blur-sm">
                 <tr>
-                  <th className="px-4 py-3">Product</th>
-                  <th className="px-4 py-3">Current price</th>
-                  <th className="px-4 py-3">New price</th>
+                  <th className="px-4 py-3">{t("admin.prices.colProduct")}</th>
+                  <th className="px-4 py-3">{t("admin.prices.colCurrentPrice")}</th>
+                  <th className="px-4 py-3">{t("admin.prices.colNewPrice")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-secondary/60 bg-bg-card/40">
@@ -426,10 +427,10 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
             onClick={savePrices}
             className="mt-4 rounded-xl border border-accent-amber/40 bg-accent-amber/15 px-5 py-2.5 text-sm font-bold tracking-wide text-accent-amber shadow-button transition-all hover:bg-accent-amber/25 hover:shadow-button-hover disabled:opacity-50"
           >
-            Save prices
+            {t("admin.prices.save")}
           </button>
 
-          <h3 className="mb-2 mt-6 text-[10px] font-bold uppercase tracking-wider text-text-muted">Price history</h3>
+          <h3 className="mb-2 mt-6 text-[10px] font-bold uppercase tracking-wider text-text-muted">{t("admin.prices.historyTitle")}</h3>
           <ul className="max-h-40 space-y-1.5 overflow-y-auto pr-2">
             {history.map((h) => (
               <li key={h.id} className="flex flex-wrap items-center justify-between rounded-lg border border-border-primary/40 bg-bg-secondary/30 px-3 py-2 text-xs transition-colors hover:bg-bg-secondary/60">
@@ -446,7 +447,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
       <div className="xl:col-span-4 flex flex-col gap-6">
 
         <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
-          <h2 className="mb-4 text-lg font-bold text-text-primary">Operators</h2>
+          <h2 className="mb-4 text-lg font-bold text-text-primary">{t("admin.operators.title")}</h2>
           <ul className="mb-4 grid gap-3 grid-cols-1">
             {operators.map((op) => (
               <li
@@ -456,11 +457,11 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-text-primary">{op.name}</span>
                   <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${op.active ? "border-accent-emerald/40 bg-accent-emerald/15 text-accent-emerald" : "border-border-secondary bg-bg-secondary text-text-secondary"}`}>
-                    {op.active ? "Active" : "Inactive"}
+                    {op.active ? t("admin.operators.active") : t("admin.operators.inactive")}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs font-medium">
-                  <span className="text-text-muted">{op.has_pin ? "🔐 PIN set" : "No PIN"}</span>
+                  <span className="text-text-muted">{op.has_pin ? t("admin.operators.pinSet") : t("admin.operators.noPin")}</span>
                   <div className="flex gap-3">
                     <button
                       type="button"
@@ -477,14 +478,14 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                         await loadAll();
                       }}
                     >
-                      {op.active ? "Deactivate" : "Reactivate"}
+                      {op.active ? t("admin.operators.deactivate") : t("admin.operators.reactivate")}
                     </button>
                     <button
                       type="button"
                       disabled={busy}
                       className="font-bold text-text-secondary transition-colors hover:text-text-primary disabled:opacity-50"
                       onClick={async () => {
-                        const p = window.prompt("New PIN for operator (leave empty to skip):");
+                        const p = window.prompt(t("admin.operators.newPinPrompt"));
                         if (p === null) return;
                         const { invoke } = await import("@tauri-apps/api/core");
                         await invoke("admin_update_operator", {
@@ -496,7 +497,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                         await loadAll();
                       }}
                     >
-                      Reset PIN
+                      {t("admin.operators.resetPin")}
                     </button>
                   </div>
                 </div>
@@ -505,13 +506,13 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
           </ul>
           <div className="flex flex-col gap-3 rounded-xl border border-border-primary/40 bg-bg-secondary/20 p-4">
             <input
-              placeholder="Name"
+              placeholder={t("admin.operators.namePlaceholder")}
               value={newOpName}
               onChange={(e) => setNewOpName(e.target.value)}
               className={`w-full ${inputCls}`}
             />
             <input
-              placeholder="PIN (optional)"
+              placeholder={t("admin.operators.pinPlaceholder")}
               type="password"
               value={newOpPin}
               onChange={(e) => setNewOpPin(e.target.value)}
@@ -523,29 +524,29 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
               onClick={addOperator}
               className="mt-1 w-full rounded-xl bg-bg-primary px-5 py-2.5 text-sm font-bold text-text-primary border border-border-primary shadow-sm hover:bg-bg-tertiary transition-all disabled:opacity-50"
             >
-              Add operator
+              {t("admin.operators.add")}
             </button>
           </div>
         </section>
 
 
         <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
-          <h2 className="mb-4 text-lg font-bold text-text-primary">Shift schedule</h2>
+          <h2 className="mb-4 text-lg font-bold text-text-primary">{t("admin.shiftSchedule.title")}</h2>
           <select
             value={shiftMode}
             onChange={(e) => setShiftMode(e.target.value as ShiftMode)}
             className={`mb-4 w-full ${inputCls}`}
           >
-            <option value="disabled">Disabled</option>
-            <option value="manual">Manual</option>
-            <option value="scheduled">Scheduled</option>
+            <option value="disabled">{t("admin.shiftSchedule.disabled")}</option>
+            <option value="manual">{t("admin.shiftSchedule.manual")}</option>
+            <option value="scheduled">{t("admin.shiftSchedule.scheduled")}</option>
           </select>
           {shiftMode === "scheduled" && (
             <div className="mb-4 space-y-3">
               {shiftSlots.map((slot, i) => (
                 <div key={i} className="flex flex-wrap gap-2 rounded-xl border border-border-primary/40 bg-bg-secondary/20 p-3">
                   <input
-                    placeholder="Name"
+                    placeholder={t("admin.shiftSchedule.namePlaceholder")}
                     value={slot.name}
                     onChange={(e) => {
                       const next = [...shiftSlots];
@@ -555,7 +556,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                     className={`flex-1 ${inputCls}`}
                   />
                   <input
-                    placeholder="Start HH:MM"
+                    placeholder={t("admin.shiftSchedule.startPlaceholder")}
                     value={slot.start}
                     onChange={(e) => {
                       const next = [...shiftSlots];
@@ -565,7 +566,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                     className={`w-24 ${inputCls}`}
                   />
                   <input
-                    placeholder="End HH:MM"
+                    placeholder={t("admin.shiftSchedule.endPlaceholder")}
                     value={slot.end}
                     onChange={(e) => {
                       const next = [...shiftSlots];
@@ -580,10 +581,10 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                 type="button"
                 className="text-xs font-bold text-accent-blue transition-colors hover:text-accent-blue-light"
                 onClick={() =>
-                  setShiftSlots([...shiftSlots, { name: "Shift", start: "06:00", end: "14:00" }])
+                  setShiftSlots([...shiftSlots, { name: t("admin.shiftSchedule.slotDefault"), start: "06:00", end: "14:00" }])
                 }
               >
-                + Add slot
+                {t("admin.shiftSchedule.addSlot")}
               </button>
             </div>
           )}
@@ -593,16 +594,16 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
             onClick={saveShiftSchedule}
             className="rounded-xl border border-border-primary bg-bg-primary px-5 py-2.5 text-sm font-bold text-text-primary shadow-sm hover:bg-bg-tertiary transition-all"
           >
-            Save schedule
+            {t("admin.shiftSchedule.save")}
           </button>
         </section>
 
         {settings && (
           <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
-            <h2 className="mb-4 text-lg font-bold text-text-primary">Settings</h2>
+            <h2 className="mb-4 text-lg font-bold text-text-primary">{t("admin.settings.title")}</h2>
             <div className="grid gap-4 text-sm font-medium">
               <label className="flex flex-col gap-1.5 text-text-secondary">
-                Polling interval (ms)
+                {t("admin.settings.pollingInterval")}
                 <input
                   type="number"
                   value={settings.polling_interval_ms}
@@ -616,7 +617,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                 />
               </label>
               <label className="flex flex-col gap-1.5 text-text-secondary">
-                Offline threshold (polls)
+                {t("admin.settings.offlineThreshold")}
                 <input
                   type="number"
                   value={settings.polling_offline_threshold_polls}
@@ -630,7 +631,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                 />
               </label>
               <label className="flex flex-col gap-1.5 text-text-secondary">
-                Pre-auth timeout (seconds)
+                {t("admin.settings.preauthTimeout")}
                 <input
                   type="number"
                   value={settings.preauth_timeout_seconds}
@@ -644,7 +645,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
                 />
               </label>
               <label className="flex flex-col gap-1.5 text-text-secondary">
-                Shift warn before end (minutes)
+                {t("admin.settings.shiftWarn")}
                 <input
                   type="number"
                   value={settings.shifts_warn_before_end_minutes}
@@ -664,22 +665,22 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
               onClick={saveSettings}
               className="mt-5 rounded-xl border border-border-primary bg-bg-primary px-5 py-2.5 text-sm font-bold text-text-primary shadow-sm hover:bg-bg-tertiary transition-all"
             >
-              Save settings
+              {t("admin.settings.save")}
             </button>
           </section>
         )}
 
         <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
-          <h2 className="mb-1 text-lg font-bold text-text-primary">Display</h2>
+          <h2 className="mb-1 text-lg font-bold text-text-primary">{t("admin.display.title")}</h2>
           <p className="mb-5 text-sm font-medium text-text-muted">
-            Adjust the interface appearance and layout for this station.
+            {t("admin.display.description")}
           </p>
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between rounded-xl border border-border-primary/60 bg-bg-secondary/60 px-5 py-4 transition-colors hover:bg-bg-tertiary/40">
               <div>
-                <p className="text-sm font-bold text-text-primary">Light mode</p>
+                <p className="text-sm font-bold text-text-primary">{t("admin.display.lightMode")}</p>
                 <p className="mt-0.5 text-xs font-medium text-text-muted">
-                  Switch to a light colour scheme (warm off-white background)
+                  {t("admin.display.lightModeDesc")}
                 </p>
               </div>
               <ToggleSwitch
@@ -690,9 +691,9 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
             </div>
             <div className="flex items-center justify-between rounded-xl border border-border-primary/60 bg-bg-secondary/60 px-5 py-4 transition-colors hover:bg-bg-tertiary/40">
               <div>
-                <p className="text-sm font-bold text-text-primary">Small-screen mode</p>
+                <p className="text-sm font-bold text-text-primary">{t("admin.display.smallScreenMode")}</p>
                 <p className="mt-0.5 text-xs font-medium text-text-muted">
-                  Compact layout optimised for smaller displays
+                  {t("admin.display.smallScreenModeDesc")}
                 </p>
               </div>
               <ToggleSwitch
@@ -705,18 +706,18 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
         </section>
 
         <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
-          <h2 className="mb-4 text-lg font-bold text-text-primary">Change admin PIN</h2>
+          <h2 className="mb-4 text-lg font-bold text-text-primary">{t("admin.changePin.title")}</h2>
           <div className="flex flex-col gap-3">
             <input
               type="password"
-              placeholder="Current PIN"
+              placeholder={t("admin.changePin.currentPin")}
               value={pinCurrent}
               onChange={(e) => setPinCurrent(e.target.value)}
               className={inputCls}
             />
             <input
               type="password"
-              placeholder="New PIN"
+              placeholder={t("admin.changePin.newPin")}
               value={pinNew}
               onChange={(e) => setPinNew(e.target.value)}
               className={inputCls}
@@ -727,7 +728,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
               onClick={changePin}
               className="mt-2 rounded-xl bg-accent-amber px-5 py-2.5 text-sm font-bold text-text-inverse shadow-button transition-all hover:brightness-110 hover:shadow-button-hover"
             >
-              Update PIN
+              {t("admin.changePin.update")}
             </button>
           </div>
         </section>

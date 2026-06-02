@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { FpState, NozzleSnapshot } from "../types/api";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 import { SaleSetupPanel } from "./SaleSetupPanel";
@@ -23,11 +24,13 @@ export function AuthorizeModal({
   onClose,
   onConfirm,
 }: Props) {
+  const { t } = useTranslation();
+
   if (!open) return null;
 
   const activeNozzles = fpNozzles.filter((n) => n.active);
-  const confirmLabel = mode === "preauth" ? "Pre-authorize" : "Authorize";
-  const title = mode === "preauth" ? "Pre-authorize" : "Authorize";
+  const confirmLabel = mode === "preauth" ? t("authorize.preauthorize") : t("authorize.authorize");
+  const title = confirmLabel;
 
   return (
     <div
@@ -42,7 +45,7 @@ export function AuthorizeModal({
         onClick={(e) => e.stopPropagation()}
       >
         <p id="authorize-modal-title" className="sr-only">
-          {title} — Pump {state.fp_id}
+          {title} — {t("authorize.pumpLabel", { id: state.fp_id })}
         </p>
         <SaleSetupPanel
           key={`${state.fp_id}-${initialNozzle ?? "none"}-${initialFillMode ?? "full"}`}
@@ -51,7 +54,7 @@ export function AuthorizeModal({
           initialNozzle={initialNozzle}
           initialFillMode={initialFillMode}
           title={title}
-          subtitle="Choose product and fill limit"
+          subtitle={t("authorize.chooseProduct")}
           theme={mode === "preauth" ? "amber" : "emerald"}
           confirmLabel={confirmLabel}
           onConfirm={(req) => {

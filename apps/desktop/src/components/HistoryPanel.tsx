@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { Shift, Transaction, TxStatus } from "../types/api";
 import { txStatusLabel, txStatusParentId } from "../types/api";
 
@@ -54,6 +55,7 @@ function buildPrintInnerHtml(
   filterLabel: string,
   dateLabel: string,
   productLabel: string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
 ): string {
   const now = new Date().toLocaleString(undefined, {
     day: "2-digit", month: "2-digit", year: "numeric",
@@ -73,6 +75,8 @@ function buildPrintInnerHtml(
   const cnt = summary?.count ?? rows.length;
   const vol = summary?.total_volume ?? totalVol;
   const amt = summary?.total_amount ?? totalAmt;
+  const cu = t("history.currency");
+  const printAllFuel = t("history.printAllFuel");
 
   const rowsHtml = rows.map((r, i) => `
     <tr class="${i % 2 === 1 ? "alt" : ""}">
@@ -88,46 +92,46 @@ function buildPrintInnerHtml(
   return `
     <style>${INNER_CSS}</style>
     <div class="ph">
-      <h1>Realizatsiya hisoboti</h1>
+      <h1>${t("history.printTitle")}</h1>
       <div class="meta">
-        <span><b>Davr:</b> ${dateLabel}</span>
-        <span><b>Status:</b> ${filterLabel}</span>
-        ${productLabel !== "Barcha" ? `<span><b>Yoqilg'i:</b> ${productLabel}</span>` : ""}
-        <span><b>Chop etildi:</b> ${now}</span>
+        <span><b>${t("history.printPeriodLabel")}:</b> ${dateLabel}</span>
+        <span><b>${t("history.printStatusLabel")}:</b> ${filterLabel}</span>
+        ${productLabel !== printAllFuel ? `<span><b>${t("history.printFuelLabel")}:</b> ${productLabel}</span>` : ""}
+        <span><b>${t("history.printPrintedAt")}:</b> ${now}</span>
       </div>
     </div>
     <div class="ps">
-      <div class="c"><div class="l">Tranzaksiyalar</div><div class="v">${cnt} ta</div></div>
+      <div class="c"><div class="l">${t("history.printCount")}</div><div class="v">${cnt} ${t("history.countSuffix")}</div></div>
       <div class="c">
-        <div class="l">Jami litr</div>
+        <div class="l">${t("history.printTotalLiters")}</div>
         <div class="v">${fmtV(vol)} L</div>
-        ${cnt > 0 ? `<div class="s">o'rtacha ${fmtV(vol / cnt)} L</div>` : ""}
+        ${cnt > 0 ? `<div class="s">${t("history.printAvg")} ${fmtV(vol / cnt)} L</div>` : ""}
       </div>
       <div class="c">
-        <div class="l">Jami summa</div>
-        <div class="v">${fmtA(amt)} so'm</div>
-        ${cnt > 0 ? `<div class="s">o'rtacha ${fmtA(Math.round(amt / cnt))} so'm</div>` : ""}
+        <div class="l">${t("history.printTotalAmount")}</div>
+        <div class="v">${fmtA(amt)} ${cu}</div>
+        ${cnt > 0 ? `<div class="s">${t("history.printAvg")} ${fmtA(Math.round(amt / cnt))} ${cu}</div>` : ""}
       </div>
     </div>
     <table>
       <thead><tr>
-        <th class="c">T/R</th>
-        <th>Yoqilg'i</th>
-        <th class="r">Litr</th>
-        <th class="r">Summa</th>
-        <th>Sana / vaqt</th>
-        <th>Kolonka</th>
-        <th class="c">Status</th>
+        <th class="c">${t("history.printColNo")}</th>
+        <th>${t("history.printColFuel")}</th>
+        <th class="r">${t("history.printColLiters")}</th>
+        <th class="r">${t("history.printColAmount")}</th>
+        <th>${t("history.printColDateTime")}</th>
+        <th>${t("history.printColDispenser")}</th>
+        <th class="c">${t("history.printColStatus")}</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
       <tfoot><tr>
-        <td colspan="2" class="r">Jami:</td>
+        <td colspan="2" class="r">${t("history.printTotal")}</td>
         <td class="r m">${fmtV(totalVol)} L</td>
-        <td class="r m">${fmtA(totalAmt)} so'm</td>
+        <td class="r m">${fmtA(totalAmt)} ${cu}</td>
         <td colspan="3"></td>
       </tr></tfoot>
     </table>
-    <div class="foot">Jami ${rows.length} ta yozuv chop etildi</div>
+    <div class="foot">${rows.length} ${t("history.countSuffix")} ${t("history.printRecords")}</div>
   `;
 }
 
@@ -184,10 +188,10 @@ function toDateInputVal(ms: number) {
 // ── status config ─────────────────────────────────────────────────────────────
 
 const STATUS_FILTERS = [
-  { id: "main",     label: "Asosiy",          statuses: "COMPLETED,CONTINUED_FROM" },
-  { id: "all",      label: "Hammasi",         statuses: "" },
-  { id: "aborted",  label: "Bekor qilingan",  statuses: "ABORTED" },
-  { id: "stopped",  label: "To'xtatilgan",    statuses: "STOPPED" },
+  { id: "main",     labelKey: "history.statusMain",    statuses: "COMPLETED,CONTINUED_FROM" },
+  { id: "all",      labelKey: "history.statusAll",     statuses: "" },
+  { id: "aborted",  labelKey: "history.statusAborted", statuses: "ABORTED" },
+  { id: "stopped",  labelKey: "history.statusStopped", statuses: "STOPPED" },
 ] as const;
 
 type StatusFilterId = typeof STATUS_FILTERS[number]["id"];
@@ -195,14 +199,14 @@ type StatusFilterId = typeof STATUS_FILTERS[number]["id"];
 // ── date preset config ────────────────────────────────────────────────────────
 
 const DATE_PRESETS = [
-  { id: "shift",     label: "Joriy shift" },
-  { id: "today",     label: "Bugun"       },
-  { id: "yesterday", label: "Kecha"       },
-  { id: "last7",     label: "7 kun"       },
-  { id: "last30",    label: "30 kun"      },
-  { id: "thisMonth", label: "Bu oy"       },
-  { id: "all",       label: "Hammasi"     },
-  { id: "custom",    label: "Sana…"       },
+  { id: "shift",     labelKey: "history.dateShift"     },
+  { id: "today",     labelKey: "history.dateToday"     },
+  { id: "yesterday", labelKey: "history.dateYesterday" },
+  { id: "last7",     labelKey: "history.dateLast7"     },
+  { id: "last30",    labelKey: "history.dateLast30"    },
+  { id: "thisMonth", labelKey: "history.dateThisMonth" },
+  { id: "all",       labelKey: "history.dateAll"       },
+  { id: "custom",    labelKey: "history.dateCustom"    },
 ] as const;
 
 // ── pill helpers ──────────────────────────────────────────────────────────────
@@ -216,11 +220,11 @@ function productPill(name: string) {
     colors = "bg-accent-emerald/20 text-accent-emerald-light ring-accent-emerald/40";
   else if (lower.includes("dt") || lower.includes("diesel"))
     colors = "bg-accent-blue/20 text-accent-blue ring-accent-blue/40";
-  return `inline-flex max-w-full truncate rounded-md px-2 py-0.5 text-[11px] font-bold ring-1 ${colors}`;
+  return `inline-flex max-w-full truncate rounded-md px-2 py-0.5 text-xs font-bold ring-1 ${colors}`;
 }
 
 function statusPill(s: TxStatus) {
-  const base = "inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider";
+  const base = "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-wider";
   switch (txStatusLabel(s)) {
     case "COMPLETED":      return `${base} bg-accent-emerald/15 text-accent-emerald ring-1 ring-accent-emerald/30`;
     case "ABORTED":        return `${base} bg-accent-amber/15 text-accent-amber ring-1 ring-accent-amber/30`;
@@ -239,7 +243,7 @@ function QuickBtn({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors border whitespace-nowrap
+      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors border whitespace-nowrap
         ${active
           ? "bg-accent-blue text-white border-accent-blue shadow-sm"
           : "bg-bg-primary/80 text-text-secondary border-border-primary/50 hover:bg-bg-tertiary hover:text-text-primary"
@@ -264,6 +268,7 @@ export function HistoryPanel(props: {
   compact?: boolean;
   currentShift?: Shift | null;
 }) {
+  const { t } = useTranslation();
   const [rows, setRows]           = useState<Transaction[]>([]);
   const [loading, setLoading]     = useState(false);
   const [err, setErr]             = useState<string | null>(null);
@@ -371,18 +376,18 @@ export function HistoryPanel(props: {
         untilMs:  untilMs ?? null,
       });
 
-      const statusLabel = STATUS_FILTERS.find((f) => f.id === statusFilter)?.label ?? statusFilter;
+      const statusLabel = t(STATUS_FILTERS.find((f) => f.id === statusFilter)?.labelKey ?? "history.statusAll");
       const dateLabel = (() => {
         const p = DATE_PRESETS.find((d) => d.id === datePreset);
-        if (datePreset === "custom") return `${customFrom || "—"} → ${customUntil || "bugun"}`;
-        if (datePreset === "all")   return "Barcha vaqt";
+        if (datePreset === "custom") return `${customFrom || "—"} → ${customUntil || t("history.dateToday")}`;
+        if (datePreset === "all")   return t("history.printAllTime");
         if (datePreset === "shift" && fromMs)
-          return `Joriy shift (${new Date(fromMs).toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} → hozir)`;
+          return `${t("history.printCurrentShift")} (${new Date(fromMs).toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} ${t("history.toNow")})`;
         if (fromMs) {
           const f = toDateInputVal(fromMs);
-          return `${p?.label ?? ""} (${f}${untilMs ? " → " + toDateInputVal(untilMs - 1) : " → bugun"})`;
+          return `${p ? t(p.labelKey) : ""} (${f}${untilMs ? " → " + toDateInputVal(untilMs - 1) : " " + t("history.toToday")})`;
         }
-        return p?.label ?? datePreset;
+        return p ? t(p.labelKey) : datePreset;
       })();
 
       const innerHtml = buildPrintInnerHtml(
@@ -390,7 +395,8 @@ export function HistoryPanel(props: {
         summary,
         statusLabel,
         dateLabel,
-        filterProduct === "all" ? "Barcha" : filterProduct,
+        filterProduct === "all" ? t("history.printAllFuel") : filterProduct,
+        t,
       );
 
       // Inject print root div
@@ -422,7 +428,7 @@ export function HistoryPanel(props: {
     } finally {
       setPrintLoading(false);
     }
-  }, [statusesParam, fromMs, untilMs, statusFilter, datePreset, customFrom, customUntil, filterProduct, summary]);
+  }, [statusesParam, fromMs, untilMs, statusFilter, datePreset, customFrom, customUntil, filterProduct, summary, t]);
 
   if (!props.visible) return null;
 
@@ -460,62 +466,62 @@ export function HistoryPanel(props: {
 
   const SortIcon = ({ col }: { col: typeof sortCol }) =>
     sortCol !== col
-      ? <span className="opacity-30 text-[9px] ml-1">↕</span>
-      : <span className="text-[10px] ml-1 text-accent-blue">{sortDesc ? "↓" : "↑"}</span>;
+      ? <span className="opacity-30 text-xs ml-1">↕</span>
+      : <span className="text-xs ml-1 text-accent-blue">{sortDesc ? "↓" : "↑"}</span>;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border-primary/80 bg-bg-card/80 shadow-card backdrop-blur-sm print:border-none print:shadow-none print:bg-white">
 
       {/* ── header ── */}
       <div className={`flex flex-wrap shrink-0 items-center justify-between gap-3 border-b border-border-primary/60 bg-gradient-to-r from-bg-secondary/80 to-bg-tertiary/50 px-4 ${compact ? "py-2.5" : "py-3"} print:hidden`}>
-        <h2 className={`font-bold uppercase tracking-wider text-text-primary ${compact ? "text-xs" : "text-sm"}`}>
-          Realizatsiya tarixi
+        <h2 className={`font-bold uppercase tracking-wider text-text-primary ${compact ? "text-sm" : "text-base"}`}>
+          {t("history.title")}
         </h2>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={filterProduct}
             onChange={(e) => setFilterProduct(e.target.value)}
-            className={`rounded-lg border border-border-primary/50 bg-bg-secondary px-2 py-1 text-text-primary outline-none focus:border-accent-blue ${compact ? "text-[10px]" : "text-xs"}`}
+            className={`rounded-lg border border-border-primary/50 bg-bg-secondary px-2 py-1 text-text-primary outline-none focus:border-accent-blue ${compact ? "text-xs" : "text-sm"}`}
           >
-            <option value="all">Barcha yoqilg&apos;i</option>
+            <option value="all">{t("history.allFuel")}</option>
             {products.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
           <button
             type="button"
             disabled={printLoading}
             onClick={() => void handlePrint()}
-            className="rounded-lg border border-border-primary bg-bg-primary/90 px-3 py-1 text-xs font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 shadow-sm transition-colors"
+            className="rounded-lg border border-border-primary bg-bg-primary/90 px-3 py-1.5 text-sm font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 shadow-sm transition-colors"
           >
-            {printLoading ? "Yuklanmoqda…" : "Chop etish"}
+            {printLoading ? t("history.loading") : t("history.print")}
           </button>
           <button
             type="button"
             disabled={loading}
             onClick={() => { setPage(0); void load(0); }}
-            className="rounded-lg border border-border-primary bg-bg-primary/90 px-3 py-1 text-xs font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 shadow-sm transition-colors"
+            className="rounded-lg border border-border-primary bg-bg-primary/90 px-3 py-1.5 text-sm font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 shadow-sm transition-colors"
           >
-            {loading ? "…" : "Yangilash"}
+            {loading ? "…" : t("history.refresh")}
           </button>
         </div>
       </div>
 
       {/* ── status filter ── */}
-      <div className="shrink-0 border-b border-border-primary/40 bg-bg-secondary/50 px-4 py-2 print:hidden">
+      <div className={`shrink-0 border-b border-border-primary/40 bg-bg-secondary/50 print:hidden ${compact ? "px-3 py-1" : "px-4 py-2"}`}>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">Status:</span>
-          {STATUS_FILTERS.map(({ id, label }) => (
+          <span className="mr-1 text-xs font-bold uppercase tracking-wider text-text-muted">{t("history.statusLabel")}</span>
+          {STATUS_FILTERS.map(({ id, labelKey }) => (
             <QuickBtn key={id} active={statusFilter === id} onClick={() => setStatusFilter(id as StatusFilterId)}>
-              {label}
+              {t(labelKey)}
             </QuickBtn>
           ))}
         </div>
       </div>
 
       {/* ── date-range toolbar ── */}
-      <div className="shrink-0 border-b border-border-primary/40 bg-bg-secondary/40 px-4 py-2 print:hidden">
+      <div className={`shrink-0 border-b border-border-primary/40 bg-bg-secondary/40 print:hidden ${compact ? "px-3 py-1" : "px-4 py-2"}`}>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">Davr:</span>
-          {DATE_PRESETS.map(({ id, label }) => {
+          <span className="mr-1 text-xs font-bold uppercase tracking-wider text-text-muted">{t("history.periodLabel")}</span>
+          {DATE_PRESETS.map(({ id, labelKey }) => {
             const isShift   = id === "shift";
             const disabled  = isShift && !props.currentShift;
             const shiftTime = isShift && props.currentShift
@@ -527,8 +533,8 @@ export function HistoryPanel(props: {
                 type="button"
                 disabled={disabled}
                 onClick={() => !disabled && setDatePreset(id)}
-                title={disabled ? "Faol shift yo'q" : undefined}
-                className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors border whitespace-nowrap
+                title={disabled ? t("history.noActiveShift") : undefined}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors border whitespace-nowrap
                   ${datePreset === id
                     ? "bg-accent-blue text-white border-accent-blue shadow-sm"
                     : disabled
@@ -536,9 +542,9 @@ export function HistoryPanel(props: {
                       : "bg-bg-primary/80 text-text-secondary border-border-primary/50 hover:bg-bg-tertiary hover:text-text-primary"
                   }`}
               >
-                {label}
+                {t(labelKey)}
                 {shiftTime && (
-                  <span className={`ml-1 text-[9px] font-normal ${datePreset === id ? "opacity-80" : "text-text-muted"}`}>
+                  <span className={`ml-1 text-[10px] font-normal ${datePreset === id ? "opacity-80" : "text-text-muted"}`}>
                     {shiftTime}
                   </span>
                 )}
@@ -552,23 +558,23 @@ export function HistoryPanel(props: {
                 type="date"
                 value={customFrom}
                 onChange={(e) => setCustomFrom(e.target.value)}
-                className="rounded-lg border border-border-primary/50 bg-bg-primary px-2 py-1 text-[11px] text-text-primary outline-none focus:border-accent-blue"
+                className="rounded-lg border border-border-primary/50 bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent-blue"
               />
-              <span className="text-text-muted text-xs">—</span>
+              <span className="text-text-muted text-sm">—</span>
               <input
                 type="date"
                 value={customUntil}
                 onChange={(e) => setCustomUntil(e.target.value)}
-                className="rounded-lg border border-border-primary/50 bg-bg-primary px-2 py-1 text-[11px] text-text-primary outline-none focus:border-accent-blue"
+                className="rounded-lg border border-border-primary/50 bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent-blue"
               />
             </div>
           )}
 
           {datePreset !== "all" && datePreset !== "custom" && fromMs && (
-            <span className="ml-auto font-mono text-[10px] text-text-muted">
+            <span className="ml-auto font-mono text-xs text-text-muted">
               {datePreset === "shift"
-                ? new Date(fromMs).toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) + " → hozir"
-                : toDateInputVal(fromMs) + (untilMs ? ` → ${toDateInputVal(untilMs - 1)}` : " → bugun")
+                ? new Date(fromMs).toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) + " " + t("history.toNow")
+                : toDateInputVal(fromMs) + (untilMs ? ` → ${toDateInputVal(untilMs - 1)}` : " " + t("history.toToday"))
               }
             </span>
           )}
@@ -576,34 +582,39 @@ export function HistoryPanel(props: {
       </div>
 
       {/* ── full-filter summary cards ── */}
-      <div className="shrink-0 grid grid-cols-3 gap-3 border-b border-border-primary/40 bg-bg-secondary/30 px-4 py-3 print:hidden">
+      <div className={`shrink-0 grid grid-cols-3 border-b border-border-primary/40 bg-bg-secondary/30 print:hidden ${compact ? "gap-1.5 px-3 py-2" : "gap-3 px-4 py-3"}`}>
         {(["count", "vol", "amt"] as const).map((card) => {
           const isLoading = summaryLoading || !summary;
-          const label     = card === "count" ? "Jami tranzaksiya" : card === "vol" ? "Jami litr" : "Jami summa";
+          const label     = card === "count" ? t("history.totalTransactions") : card === "vol" ? t("history.totalLiters") : t("history.totalAmount");
           const value     = isLoading ? "—"
             : card === "count" ? `${summary.count}`
             : card === "vol"   ? fmtVol(summary.total_volume)
             : fmtInt.format(summary.total_amount);
-          const unit      = card === "count" ? "ta" : card === "vol" ? "L" : "so'm";
-          const avg       = !isLoading && summary.count > 0
+          const unit      = card === "count" ? t("history.countSuffix") : card === "vol" ? "L" : t("history.currency");
+          const avg       = !isLoading && summary.count > 0 && !compact
             ? card === "vol"
-              ? `o'rtacha ${fmtVol(summary.total_volume / summary.count)} L`
+              ? `${t("history.average")} ${fmtVol(summary.total_volume / summary.count)} L`
               : card === "amt"
-                ? `o'rtacha ${fmtInt.format(Math.round(summary.total_amount / summary.count))} so'm`
+                ? `${t("history.average")} ${fmtInt.format(Math.round(summary.total_amount / summary.count))} ${t("history.currency")}`
                 : null
             : null;
           const color     = card === "vol" ? "text-accent-blue" : card === "amt" ? "text-accent-amber" : "text-text-primary";
           return (
-            <div key={card} className="rounded-xl border border-border-primary/50 bg-bg-primary/70 px-3 py-2.5 shadow-sm">
-              <div className="flex items-center justify-between mb-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">{label}</div>
-                <div className="text-[9px] font-semibold uppercase tracking-wider text-text-muted/60 bg-bg-tertiary/60 rounded px-1 py-0.5">Davr</div>
-              </div>
-              <div className={`font-mono text-lg font-bold tabular-nums ${color} ${isLoading ? "opacity-40" : ""}`}>
+            <div key={card} className={`rounded-xl border border-border-primary/50 bg-bg-primary/70 shadow-sm ${compact ? "px-2 py-1.5" : "px-3 py-2.5"}`}>
+              {!compact && (
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-xs font-bold uppercase tracking-wider text-text-muted">{label}</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted/60 bg-bg-tertiary/60 rounded px-1 py-0.5">{t("history.periodBadge")}</div>
+                </div>
+              )}
+              {compact && (
+                <div className="text-xs font-bold uppercase tracking-wider text-text-muted truncate mb-0.5">{label}</div>
+              )}
+              <div className={`font-mono font-bold tabular-nums ${color} ${isLoading ? "opacity-40" : ""} ${compact ? "text-base" : "text-xl"}`}>
                 {value}
-                <span className="ml-1 text-[11px] font-normal text-text-tertiary">{unit}</span>
+                <span className={`ml-1 font-normal text-text-tertiary ${compact ? "text-xs" : "text-xs"}`}>{unit}</span>
               </div>
-              {avg && <div className="text-[10px] text-text-muted mt-0.5">{avg}</div>}
+              {avg && <div className="text-xs text-text-muted mt-0.5">{avg}</div>}
             </div>
           );
         })}
@@ -618,13 +629,13 @@ export function HistoryPanel(props: {
       {/* ── table / empty state ── */}
       {loading && rows.length === 0 ? (
         <div className="flex flex-1 items-center justify-center p-8 text-sm font-semibold text-text-muted">
-          Yuklanmoqda…
+          {t("history.loading")}
         </div>
       ) : processedRows.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
           <div className="text-3xl opacity-20">📋</div>
           <p className="text-sm font-medium text-text-muted">
-            {rows.length === 0 ? "Tranzaksiyalar yo'q." : "Tanlangan filtr bo'yicha natija yo'q."}
+            {rows.length === 0 ? t("history.noTransactions") : t("history.noResults")}
           </p>
           {rows.length > 0 && (
             <button
@@ -632,59 +643,59 @@ export function HistoryPanel(props: {
               onClick={() => { setStatusFilter("all"); setDatePreset("all"); }}
               className="mt-1 text-xs text-accent-blue underline underline-offset-2 hover:no-underline"
             >
-              Barcha filtrlarni olib tashlash
+              {t("history.clearFilters")}
             </button>
           )}
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-hidden">
           <div className="h-full overflow-auto overscroll-contain">
-            <table className={`w-full border-collapse text-left text-text-primary ${compact ? "min-w-[36rem] text-xs" : "min-w-[44rem] text-sm"}`}>
-              <thead className="sticky top-0 z-[1] border-b border-border-primary bg-bg-secondary/95 text-[10px] font-bold uppercase tracking-wider text-text-muted backdrop-blur-md shadow-sm print:bg-transparent print:text-black print:border-gray-300">
+            <table className={`w-full border-collapse text-left text-text-primary ${compact ? "min-w-[36rem] text-sm" : "min-w-[44rem] text-base"}`}>
+              <thead className="sticky top-0 z-[1] border-b border-border-primary bg-bg-secondary/95 text-xs font-bold uppercase tracking-wider text-text-muted backdrop-blur-md shadow-sm print:bg-transparent print:text-black print:border-gray-300">
                 <tr>
-                  <th className="whitespace-nowrap px-4 py-3">T/R</th>
-                  <th className="px-3 py-3">Yoqilg&apos;i</th>
+                  <th className="whitespace-nowrap px-4 py-3">{t("history.colNo")}</th>
+                  <th className="px-3 py-3">{t("history.colFuel")}</th>
                   <th className="whitespace-nowrap px-3 py-3 text-right cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("volume")}>
-                    Litr <SortIcon col="volume" />
+                    {t("history.colLiters")} <SortIcon col="volume" />
                   </th>
                   <th className="whitespace-nowrap px-3 py-3 text-right cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("amount")}>
-                    Summa <SortIcon col="amount" />
+                    {t("history.colAmount")} <SortIcon col="amount" />
                   </th>
                   <th className="whitespace-nowrap px-3 py-3 cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("time")}>
-                    Sana / vaqt <SortIcon col="time" />
+                    {t("history.colDateTime")} <SortIcon col="time" />
                   </th>
                   <th className="px-3 py-3 cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("pump")}>
-                    Kolonka <SortIcon col="pump" />
+                    {t("history.colDispenser")} <SortIcon col="pump" />
                   </th>
                   <th className="px-4 py-3 cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("status")}>
-                    Status <SortIcon col="status" />
+                    {t("history.colStatus")} <SortIcon col="status" />
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-secondary/50 print:divide-gray-200">
                 {processedRows.map((r, i) => (
                   <tr key={r.id} className="hover:bg-bg-tertiary/40 transition-colors print:text-black">
-                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-[11px] font-semibold tabular-nums text-text-muted print:text-gray-600">
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-semibold tabular-nums text-text-muted print:text-gray-600">
                       {page * PAGE_SIZE + i + 1}
                     </td>
-                    <td className="max-w-[8rem] px-3 py-2.5" title={r.product_name}>
+                    <td className="max-w-[8rem] px-3 py-3" title={r.product_name}>
                       <span className={`${productPill(r.product_name)} print:border print:border-gray-300 print:text-black print:bg-transparent`}>
                         {r.product_name}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-[11px] font-bold tabular-nums text-text-primary print:text-black">
+                    <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold tabular-nums text-text-primary print:text-black">
                       {fmtVol(r.volume)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-[11px] font-bold tabular-nums text-text-secondary print:text-gray-800">
+                    <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold tabular-nums text-text-secondary print:text-gray-800">
                       {fmtInt.format(r.amount)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[10px] font-medium text-text-tertiary print:text-gray-700">
+                    <td className="whitespace-nowrap px-3 py-3 font-mono text-xs font-medium text-text-tertiary print:text-gray-700">
                       {fmtTime(r.started_at)}
                     </td>
-                    <td className="px-3 py-2.5 text-xs font-bold text-text-primary print:text-black" title={r.fp_id}>
+                    <td className="px-3 py-3 text-sm font-bold text-text-primary print:text-black" title={r.fp_id}>
                       {r.label || r.fp_id}
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-3">
                       <span
                         className={`${statusPill(r.status)} print:border print:border-gray-300 print:text-black print:bg-transparent`}
                         title={txStatusParentId(r.status) ?? undefined}
@@ -697,17 +708,17 @@ export function HistoryPanel(props: {
               </tbody>
               <tfoot className="sticky bottom-0 z-[1] border-t border-border-primary bg-bg-secondary/95 text-xs font-bold text-text-primary backdrop-blur-md shadow-[0_-4px_10px_rgba(0,0,0,0.1)] print:bg-transparent print:border-gray-400 print:text-black">
                 <tr>
-                  <td colSpan={2} className="px-4 py-2.5 text-right text-text-muted print:text-gray-700">
-                    <span className="text-[9px] font-semibold uppercase tracking-wider bg-bg-tertiary/60 rounded px-1 py-0.5 mr-1">Sahifa</span>
-                    <span className="text-[10px] uppercase tracking-wider">jami:</span>
+                  <td colSpan={2} className="px-4 py-3 text-right text-text-muted print:text-gray-700">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider bg-bg-tertiary/60 rounded px-1 py-0.5 mr-1">{t("history.page")}</span>
+                    <span className="text-xs uppercase tracking-wider">{t("history.pageTotal")}</span>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-[13px] text-accent-blue print:text-black">
+                  <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold text-accent-blue print:text-black">
                     {fmtVol(pageVol)} L
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-[13px] text-accent-amber print:text-black">
+                  <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold text-accent-amber print:text-black">
                     {fmtInt.format(pageAmt)}
                   </td>
-                  <td colSpan={3} className="px-3 py-2.5" />
+                  <td colSpan={3} className="px-3 py-3" />
                 </tr>
               </tfoot>
             </table>
@@ -722,15 +733,15 @@ export function HistoryPanel(props: {
             type="button"
             disabled={page === 0 || loading}
             onClick={() => setPage((p) => Math.max(0, p - 1))}
-            className="rounded-lg border border-border-primary/50 bg-bg-primary/80 px-3 py-1 text-xs font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-30 transition-colors"
+            className="rounded-lg border border-border-primary/50 bg-bg-primary/80 px-3 py-1.5 text-sm font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-30 transition-colors"
           >
-            ← Oldingi
+            {t("history.previous")}
           </button>
 
-          <span className="font-mono text-[11px] text-text-muted">
+          <span className="font-mono text-xs text-text-muted">
             {loading
-              ? "Yuklanmoqda…"
-              : `${page * PAGE_SIZE + 1}–${page * PAGE_SIZE + processedRows.length} ta`
+              ? t("history.loading")
+              : `${page * PAGE_SIZE + 1}–${page * PAGE_SIZE + processedRows.length} ${t("history.countSuffix")}`
             }
           </span>
 
@@ -738,9 +749,9 @@ export function HistoryPanel(props: {
             type="button"
             disabled={!hasMore || loading}
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-lg border border-border-primary/50 bg-bg-primary/80 px-3 py-1 text-xs font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-30 transition-colors"
+            className="rounded-lg border border-border-primary/50 bg-bg-primary/80 px-3 py-1.5 text-sm font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-30 transition-colors"
           >
-            Keyingi →
+            {t("history.next")}
           </button>
         </div>
       )}

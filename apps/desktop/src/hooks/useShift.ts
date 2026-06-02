@@ -59,6 +59,7 @@ export function useShift() {
           operatorName: cmd.operator_name,
           pin: cmd.pin ?? null,
           notes: cmd.notes ?? null,
+          startedAtMs: cmd.started_at_override ?? null,
         });
         setCurrentShift(shift);
         setShowStartModal(false);

@@ -404,6 +404,9 @@ pub struct StartShiftCmd {
     pub pin: Option<String>,
     #[serde(default)]
     pub notes: Option<String>,
+    /// Override the shift start timestamp (Unix ms). When absent the service uses now().
+    #[serde(default)]
+    pub started_at_override: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

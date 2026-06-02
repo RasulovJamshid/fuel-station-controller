@@ -197,7 +197,7 @@
           "index": 4,
           "product_id": 5,
           "price": 13500,
-          "active": true,
+          "active": false,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -237,7 +237,7 @@
           "index": 4,
           "product_id": 7,
           "price": 6500,
-          "active": true,
+          "active": false,
           "wayne_code": 0,
           "wayne_product_code": 0
         }

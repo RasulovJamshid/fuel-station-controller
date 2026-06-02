@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import chevronDownIcon from "@/assets/icons/chevron-down.svg";
 import fuelTypeIcon from "@/assets/icons/fuel.svg";
 import dropletIcon from "@/assets/icons/fuel.svg";
@@ -38,7 +39,7 @@ function FieldLabel({
 }) {
   return (
     <div
-      className={`flex items-center gap-1.5 font-medium text-accent-blue/90 ${compact ? "text-[10px]" : "text-xs"}`}
+      className={`flex items-center gap-1.5 font-medium text-accent-blue/90 ${compact ? "text-xs" : "text-sm"}`}
     >
       {icon}
       <span>{children}</span>
@@ -234,10 +235,12 @@ export function PumpCardForm({
   const volStep = compact ? 1 : 5;
   const amtStep = compact ? 10000 : 25000;
 
+  const { t } = useTranslation();
+
   if (activeNozzles.length === 0) {
     return (
       <p className="rounded-lg border border-border-primary bg-bg-input/50 px-3 py-4 text-center text-xs text-text-muted">
-        No active products on this pump.
+        {t("pumpForm.noActiveProducts")}
       </p>
     );
   }
@@ -253,18 +256,18 @@ export function PumpCardForm({
               icon={<img src={fuelTypeIcon} alt="" aria-hidden className="h-3.5 w-3.5" draggable={false} />}
               compact={compact}
             >
-              Yoqilg&apos;i turi
+              {t("pumpForm.fuelType")}
             </FieldLabel>
             {showResetSelection ? (
               <button
                 type="button"
                 disabled={disabled}
                 onClick={handleResetSelection}
-                className={`group inline-flex items-center gap-1 rounded-full bg-text-tertiary/15 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary transition hover:bg-text-tertiary/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${
+                className={`group inline-flex items-center gap-1 rounded-full bg-text-tertiary/15 text-xs font-semibold uppercase tracking-wide text-text-tertiary transition hover:bg-text-tertiary/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${
                   compact ? "px-2 py-0.5" : "px-3 py-0.5"
                 }`}
               >
-                Tanlovni tozalash
+                {t("pumpForm.clearSelection")}
               </button>
             ) : null}
           </div>
@@ -306,16 +309,20 @@ export function PumpCardForm({
         <div className="rounded-lg border border-border-primary/70 bg-bg-input/60 px-2.5 py-2">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className={`truncate font-semibold text-text-primary ${compact ? "text-xs" : "text-sm"}`}>
-                {selectedSnap?.product_name ?? "Mahsulot tanlang"}
+              <p className={`truncate font-semibold text-text-primary ${compact ? "text-sm" : "text-base"}`}>
+                {selectedSnap?.product_name ?? t("pumpForm.selectProductPlaceholder")}
               </p>
-              <p className={`text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>Nozzle #{effectiveNozzle ?? "—"}</p>
+              <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>
+                {effectiveNozzle != null ? t("pumpForm.nozzleLabel", { n: effectiveNozzle }) : "—"}
+              </p>
             </div>
             <div className="text-right">
-              <p className={`font-mono font-bold tabular-nums text-accent-blue ${compact ? "text-xs" : "text-sm"}`}>
-                {price > 0 ? `${fmtSum.format(price)} so'm` : "—"}
+              <p className={`font-mono font-bold tabular-nums text-accent-blue ${compact ? "text-sm" : "text-base"}`}>
+                {price > 0 ? `${fmtSum.format(price)} ${t("pumpForm.amountUnit")}` : "—"}
               </p>
-              <p className={`text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>1 litr</p>
+              {price > 0 && (
+                <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.perLiter")}</p>
+              )}
             </div>
           </div>
         </div>
@@ -329,49 +336,58 @@ export function PumpCardForm({
                   type="button"
                   disabled={disabled}
                   data-active={fillMode === "full"}
-                  className={`pump-mode-pill ${compact ? "px-2 py-1.5 text-[10px]" : "px-2 py-2 text-xs"}`}
+                  title={t("pumpForm.fullTank")}
+                  className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-xs" : "px-2 py-2 text-sm"}`}
                   onClick={() => setFillMode("full")}
                 >
                   <img
                     src={fullTankIcon}
                     alt=""
                     aria-hidden
-                    className={compact ? "h-3 w-3" : "h-3.5 w-3.5"}
+                    className={compact ? "h-3.5 w-3.5 shrink-0" : "h-3.5 w-3.5 shrink-0"}
                     draggable={false}
                   />
-                  To&apos;la bak
+                  {compact
+                    ? <span className="truncate">{t("pumpForm.fillModeFull")}</span>
+                    : t("pumpForm.fullTank")}
                 </button>
                 <button
                   type="button"
                   disabled={disabled}
                   data-active={fillMode === "volume"}
-                  className={`pump-mode-pill ${compact ? "px-2 py-1.5 text-[10px]" : "px-2 py-2 text-xs"}`}
+                  title={t("pumpForm.fuelVolume")}
+                  className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-xs" : "px-2 py-2 text-sm"}`}
                   onClick={() => setFillMode("volume")}
                 >
                   <img
                     src={dropletIcon}
                     alt=""
                     aria-hidden
-                    className={compact ? "h-3 w-3" : "h-3.5 w-3.5"}
+                    className={compact ? "h-3.5 w-3.5 shrink-0" : "h-3.5 w-3.5 shrink-0"}
                     draggable={false}
                   />
-                  Litr
+                  {compact
+                    ? <span className="truncate">{t("pumpForm.fillModeVol")}</span>
+                    : t("pumpForm.liters")}
                 </button>
                 <button
                   type="button"
                   disabled={disabled}
                   data-active={fillMode === "amount"}
-                  className={`pump-mode-pill ${compact ? "px-2 py-1.5 text-[10px]" : "px-2 py-2 text-xs"}`}
+                  title={t("pumpForm.amount")}
+                  className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-xs" : "px-2 py-2 text-sm"}`}
                   onClick={() => setFillMode("amount")}
                 >
                   <img
                     src={moneyIcon}
                     alt=""
                     aria-hidden
-                    className={compact ? "h-3 w-3" : "h-3.5 w-3.5"}
+                    className={compact ? "h-3.5 w-3.5 shrink-0" : "h-3.5 w-3.5 shrink-0"}
                     draggable={false}
                   />
-                  Summa
+                  {compact
+                    ? <span className="truncate">{t("pumpForm.fillModeAmt")}</span>
+                    : t("pumpForm.amount")}
                 </button>
               </div>
             </div>
@@ -390,7 +406,7 @@ export function PumpCardForm({
                   }
                   compact={compact}
                 >
-                  Yoqilg&apos;i hajmi (litr)
+                  {t("pumpForm.fuelVolume")}
                 </FieldLabel>
                 <StepperRow
                   autoFocus
@@ -424,12 +440,12 @@ export function PumpCardForm({
                   icon={<img src={moneyIcon} alt="" aria-hidden className="h-3.5 w-3.5" draggable={false} />}
                   compact={compact}
                 >
-                  Yoqilg&apos;i summasi
+                  {t("pumpForm.fuelAmount")}
                 </FieldLabel>
                 <StepperRow
                   autoFocus
                   value={amtSum}
-                  unit="so'm"
+                  unit={t("pumpForm.amountUnit")}
                   disabled={disabled}
                   compact={compact}
                   onChange={(v) => {
@@ -456,7 +472,7 @@ export function PumpCardForm({
               <div className="rounded-lg border border-accent-blue/40 bg-accent-blue/10 px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className={`font-semibold text-accent-blue ${compact ? "text-xs" : "text-sm"}`}>
-                    To&apos;la bak rejimi
+                    {t("pumpForm.fullTankMode")}
                   </span>
                   <img
                     src={fullTankIcon}
@@ -466,8 +482,8 @@ export function PumpCardForm({
                     draggable={false}
                   />
                 </div>
-                <p className={`mt-0.5 text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>
-                  Limit o&apos;rnatilmaydi. Nasos toʼliq quyishda davom etadi.
+                <p className={`mt-0.5 text-text-muted ${compact ? "text-xs" : "text-sm"}`}>
+                  {t("pumpForm.fullTankDesc")}
                 </p>
               </div>
             )}
@@ -476,21 +492,21 @@ export function PumpCardForm({
             {fillMode !== "full" && (
               <div className="grid grid-cols-2 gap-2 rounded-lg border border-border-primary/70 bg-bg-input/45 p-2">
                 <div>
-                  <p className={`text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>Tanlangan rejim</p>
-                  <p className={`font-semibold text-text-primary ${compact ? "text-xs" : "text-sm"}`}>
-                    {fillMode === "volume" ? "Litr bo'yicha" : "Summa bo'yicha"}
+                  <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.selectedMode")}</p>
+                  <p className={`font-semibold text-text-primary ${compact ? "text-sm" : "text-base"}`}>
+                    {fillMode === "volume" ? t("pumpForm.byVolume") : t("pumpForm.byAmount")}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className={`text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>Litr</p>
-                  <p className={`font-mono font-semibold tabular-nums text-text-primary ${compact ? "text-xs" : "text-sm"}`}>
+                  <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.liters")}</p>
+                  <p className={`font-mono font-semibold tabular-nums text-text-primary ${compact ? "text-sm" : "text-base"}`}>
                     {projectedLiters != null ? `${projectedLiters.toFixed(1)} L` : "—"}
                   </p>
                 </div>
                 <div className="col-span-2">
-                  <p className={`text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>Summa</p>
-                  <p className={`font-mono font-bold tabular-nums text-accent-amber ${compact ? "text-xs" : "text-sm"}`}>
-                    {projectedAmount != null ? `${fmtSum.format(projectedAmount)} so'm` : "—"}
+                  <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.amount")}</p>
+                  <p className={`font-mono font-bold tabular-nums text-accent-amber ${compact ? "text-sm" : "text-base"}`}>
+                    {projectedAmount != null ? `${fmtSum.format(projectedAmount)} ${t("pumpForm.amountUnit")}` : "—"}
                   </p>
                 </div>
               </div>
@@ -498,7 +514,7 @@ export function PumpCardForm({
           </>
         ) : (
           <p className="rounded-lg border border-dashed border-border-primary/70 bg-bg-input/40 px-3 py-4 text-center text-sm font-medium text-text-secondary">
-            Mahsulot tanlang.
+            {t("pumpForm.selectProductPrompt")}
           </p>
         )}
     </div>
@@ -519,21 +535,23 @@ export function PumpCardProgress({
   targetAmount?: number | null;
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
+
   // ── Volume-limit mode ──────────────────────────────────────────────────────
   if (targetLiters != null && targetLiters > 0) {
     const pct = Math.min(100, (volume / targetLiters) * 100);
     return (
       <div className={`shrink-0 ${compact ? "mt-2" : "mt-3"}`}>
         <div className="mb-1 flex items-center justify-between">
-          <span className={`font-medium text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>Quyildi</span>
-          <span className={`font-bold tabular-nums text-accent-amber ${compact ? "text-xs" : "text-sm"}`}>
+          <span className={`font-medium text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.filled")}</span>
+          <span className={`font-bold tabular-nums text-accent-amber ${compact ? "text-sm" : "text-base"}`}>
             {volume.toFixed(2)} L
           </span>
         </div>
         <div className="progress-track h-2.5 overflow-hidden rounded-full">
           <div className="progress-fill h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
         </div>
-        <div className={`mt-0.5 flex justify-between font-mono tabular-nums text-text-muted ${compact ? "text-[9px]" : "text-[10px]"}`}>
+        <div className={`mt-0.5 flex justify-between font-mono tabular-nums text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>
           <span>0</span>
           <span>{Math.round(pct)}%</span>
           <span>{targetLiters} L</span>
@@ -548,18 +566,18 @@ export function PumpCardProgress({
     return (
       <div className={`shrink-0 ${compact ? "mt-2" : "mt-3"}`}>
         <div className="mb-1 flex items-center justify-between">
-          <span className={`font-medium text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>Quyildi</span>
-          <span className={`font-bold tabular-nums text-accent-amber ${compact ? "text-xs" : "text-sm"}`}>
+          <span className={`font-medium text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.filled")}</span>
+          <span className={`font-bold tabular-nums text-accent-amber ${compact ? "text-sm" : "text-base"}`}>
             {volume.toFixed(2)} L
           </span>
         </div>
         <div className="progress-track h-2.5 overflow-hidden rounded-full">
           <div className="progress-fill h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
         </div>
-        <div className={`mt-0.5 flex justify-between font-mono tabular-nums text-text-muted ${compact ? "text-[9px]" : "text-[10px]"}`}>
+        <div className={`mt-0.5 flex justify-between font-mono tabular-nums text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>
           <span>0</span>
           <span>{Math.round(pct)}%</span>
-          <span>{fmtSum.format(targetAmount)} so'm</span>
+          <span>{fmtSum.format(targetAmount)} {t("pumpForm.amountUnit")}</span>
         </div>
       </div>
     );
@@ -569,7 +587,7 @@ export function PumpCardProgress({
   return (
     <div className={`shrink-0 rounded-lg border border-border-primary/60 bg-bg-input/45 px-3 py-2 ${compact ? "mt-2" : "mt-3"}`}>
       <div className="mb-1 flex items-center justify-between">
-        <span className={`font-bold uppercase tracking-wide text-text-muted ${compact ? "text-[9px]" : "text-[10px]"}`}>Quyilmoqda</span>
+        <span className={`font-bold uppercase tracking-wide text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>{t("pumpForm.filling")}</span>
         <span className="text-[10px] text-accent-emerald animate-pulse">●</span>
       </div>
       <div className="flex items-baseline gap-1.5">
@@ -579,7 +597,7 @@ export function PumpCardProgress({
         <span className={`font-semibold text-text-muted ${compact ? "text-xs" : "text-sm"}`}>L</span>
         {amount != null && amount > 0 && (
           <span className={`ml-auto font-mono tabular-nums text-text-secondary ${compact ? "text-xs" : "text-sm"}`}>
-            {fmtSum.format(amount)} so'm
+            {fmtSum.format(amount)} {t("pumpForm.amountUnit")}
           </span>
         )}
       </div>

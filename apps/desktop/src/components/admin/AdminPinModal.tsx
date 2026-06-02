@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   open: boolean;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function AdminPinModal({ open, forceChange, onSuccess, onCancel }: Props) {
+  const { t } = useTranslation();
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -44,19 +46,17 @@ export function AdminPinModal({ open, forceChange, onSuccess, onCancel }: Props)
         className="w-full max-w-sm rounded-xl border border-slate-600 bg-slate-900 p-6 shadow-xl"
       >
         <h2 id="admin-pin-title" className="text-lg font-semibold text-white">
-          Admin access
+          {t("adminPin.title")}
         </h2>
         <p className="mt-1 text-sm text-slate-400">
-          {forceChange
-            ? "Default PIN detected — enter 0000, then change your PIN in Admin settings."
-            : "Enter the station admin PIN. Operators cannot access this area."}
+          {forceChange ? t("adminPin.forceChange") : t("adminPin.desc")}
         </p>
         <input
           type="password"
           inputMode="numeric"
           autoComplete="off"
           className="mt-4 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white"
-          placeholder="Admin PIN"
+          placeholder={t("adminPin.placeholder")}
           value={pin}
           onChange={(e) => setPin(e.target.value)}
           autoFocus
@@ -68,14 +68,14 @@ export function AdminPinModal({ open, forceChange, onSuccess, onCancel }: Props)
             onClick={onCancel}
             className="rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
           >
-            Cancel
+            {t("adminPin.cancel")}
           </button>
           <button
             type="submit"
             disabled={loading || pin.length < 4}
             className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
           >
-            {loading ? "Checking…" : "Unlock"}
+            {loading ? t("adminPin.checking") : t("adminPin.unlock")}
           </button>
         </div>
       </form>

@@ -7,16 +7,16 @@
 @layer base {
   :root {
     /* ── Light Theme ─────────────────────────────────────────────────────────
-       All foreground colors target ≥ 4.5 : 1 contrast on the bg-primary surface.
-       Accent colours are dark-saturated so they stay legible on light cards.
+       Page bg is a distinct cool-grey so pure-white cards create clear depth.
+       All foreground colors target ≥ 4.5 : 1 contrast on their surface.
     ──────────────────────────────────────────────────────────────────────── */
-    --color-bg-primary:   242 243 247;   /* warm off-white */
-    --color-bg-secondary: 230 232 240;   /* soft slate-100 */
-    --color-bg-tertiary:  215 218 228;   /* slightly deeper */
-    --color-bg-card:      252 252 255;   /* near white card surface */
-    --color-bg-header:    237 239 247;
-    --color-bg-meter:     248 249 253;
-    --color-bg-input:     255 255 255;
+    --color-bg-primary:   220 224 236;   /* cool grey page — distinct from cards */
+    --color-bg-secondary: 200 207 223;   /* header/nav surface */
+    --color-bg-tertiary:  178 188 210;   /* active/pressed states, deep panels */
+    --color-bg-card:      255 255 255;   /* pure white — pops off page bg */
+    --color-bg-header:    215 220 234;   /* top bar */
+    --color-bg-meter:     238 242 250;   /* meter track on card */
+    --color-bg-input:     252 254 255;   /* near-white inputs */
 
     /* Text — all pass WCAG AA (≥ 4.5:1) on bg-primary */
     --color-text-primary:   28  32  48;   /* near-black navy   ~14:1 */
@@ -25,8 +25,8 @@
     --color-text-muted:    112 118 140;   /* soft grey         ~4.6:1 */
     --color-text-inverse:  248 249 252;   /* for text on dark bg */
 
-    --color-border-primary:   188 192 208;
-    --color-border-secondary: 210 213 226;
+    --color-border-primary:   168 178 200;   /* clearly visible borders */
+    --color-border-secondary: 192 200 218;   /* lighter dividers */
     --color-border-focus:      50 100 200;
 
     /* Accents — dark enough to read as text/icons on light surfaces */
@@ -47,10 +47,10 @@
     --color-status-offline:    112 118 140;
     --color-status-error:      185  28  28;
 
-    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.10), 0 1px 2px -1px rgb(0 0 0 / 0.08);
-    --shadow-card-hover: 0 4px 8px -2px rgb(0 0 0 / 0.12), 0 2px 4px -2px rgb(0 0 0 / 0.08);
+    --shadow-card: 0 1px 4px 0 rgb(0 0 0 / 0.11), 0 3px 8px -1px rgb(0 0 0 / 0.09);
+    --shadow-card-hover: 0 6px 18px -4px rgb(0 0 0 / 0.16), 0 3px 6px -2px rgb(0 0 0 / 0.11);
     --shadow-button: 0 1px 2px 0 rgb(0 0 0 / 0.08);
-    --shadow-button-hover: 0 3px 6px -1px rgb(0 0 0 / 0.10);
+    --shadow-button-hover: 0 3px 8px -1px rgb(0 0 0 / 0.12);
   }
 
   .dark {
@@ -508,4 +508,137 @@ html.light .bg-amber-950\/50 {
 
 .online-dot-glow {
   box-shadow: 0 0 8px rgb(var(--color-accent-emerald) / 0.9);
+}
+
+/* ── Light-mode: dark-class overrides ────────────────────────────────────────
+   Components authored against the dark palette (modals, SaleSetupPanel,
+   ProductGradeTiles, PreAuthNozzleMismatchAlert) use hardcoded bg-slate-* /
+   text-slate-* / border-slate-* utilities. These selectors remap them to
+   light-theme CSS-variable tokens so they read correctly in light mode.
+────────────────────────────────────────────────────────────────────────────── */
+
+/* ── Backgrounds ── */
+html.light .bg-slate-900 { background-color: rgb(var(--color-bg-card)) !important; }
+html.light .bg-slate-800 { background-color: rgb(var(--color-bg-secondary)) !important; }
+html.light .bg-slate-750 { background-color: rgb(var(--color-bg-card)) !important; }
+html.light .bg-slate-700 { background-color: rgb(var(--color-bg-tertiary)) !important; }
+html.light .bg-slate-600 { background-color: rgb(var(--color-bg-tertiary)) !important; }
+html.light .bg-slate-500 { background-color: rgb(var(--color-border-primary) / 0.9) !important; }
+html.light .bg-slate-800\/50 { background-color: rgb(var(--color-bg-secondary) / 0.55) !important; }
+html.light .bg-amber-950\/30 { background-color: rgb(255 243 205) !important; }
+
+/* Hover/focus/active states */
+html.light .hover\:bg-slate-800:hover { background-color: rgb(var(--color-bg-tertiary)) !important; }
+html.light .hover\:bg-slate-700:hover { background-color: rgb(var(--color-bg-tertiary)) !important; }
+html.light .hover\:bg-slate-600:hover { background-color: rgb(var(--color-border-secondary)) !important; }
+html.light .hover\:bg-slate-500:hover { background-color: rgb(var(--color-border-primary)) !important; }
+html.light .focus\:bg-slate-700:focus  { background-color: rgb(var(--color-bg-input)) !important; }
+html.light .active\:bg-slate-500:active { background-color: rgb(var(--color-border-primary)) !important; }
+
+/* ── Borders ── */
+html.light .border-slate-900,
+html.light .border-slate-800 { border-color: rgb(var(--color-border-secondary)) !important; }
+html.light .border-slate-700,
+html.light .border-slate-600,
+html.light .border-slate-500 { border-color: rgb(var(--color-border-primary)) !important; }
+
+html.light .hover\:border-slate-400:hover { border-color: rgb(var(--color-accent-blue) / 0.55) !important; }
+html.light .hover\:border-slate-500:hover { border-color: rgb(var(--color-border-primary)) !important; }
+html.light .active\:border-slate-300:active { border-color: rgb(var(--color-accent-blue)) !important; }
+
+/* ── Text ── */
+html.light .text-slate-100,
+html.light .text-slate-200 { color: rgb(var(--color-text-primary)) !important; }
+html.light .text-slate-300  { color: rgb(var(--color-text-secondary)) !important; }
+html.light .text-slate-400  { color: rgb(var(--color-text-tertiary)) !important; }
+html.light .text-slate-500  { color: rgb(var(--color-text-muted)) !important; }
+
+/* group-hover text (ProductGradeTiles hover effects) */
+html.light .group:hover .group-hover\:text-white       { color: rgb(var(--color-text-primary)) !important; }
+html.light .group:hover .group-hover\:text-slate-200   { color: rgb(var(--color-text-primary)) !important; }
+html.light .group:hover .group-hover\:text-slate-300   { color: rgb(var(--color-text-secondary)) !important; }
+
+/* ── Dialog inputs/textareas (bg is now light, text must be dark) ── */
+html.light [role="dialog"] input,
+html.light [role="dialog"] textarea {
+  color: rgb(var(--color-text-primary)) !important;
+  background-color: rgb(var(--color-bg-input)) !important;
+  border-color: rgb(var(--color-border-primary)) !important;
+}
+html.light [role="dialog"] input:focus,
+html.light [role="dialog"] textarea:focus {
+  border-color: rgb(var(--color-border-focus)) !important;
+  background-color: rgb(var(--color-bg-card)) !important;
+}
+
+/* ── Amber/emerald accent text on now-light surfaces in dialogs ── */
+html.light [role="dialog"] .text-emerald-400 { color: rgb(var(--color-accent-emerald)) !important; }
+html.light [role="dialog"] .text-amber-400,
+html.light [role="dialog"] .text-amber-300,
+html.light [role="dialog"] .text-amber-100   { color: rgb(var(--color-accent-amber)) !important; }
+
+/* PreAuthNozzleMismatchAlert — renders inside .pump-card, not a dialog */
+html.light .pump-card .text-emerald-400 { color: rgb(var(--color-accent-emerald)) !important; }
+
+/* Header amber badge (ShiftBadge) */
+html.light header .text-amber-300 { color: rgb(var(--color-accent-amber)) !important; }
+
+/* ── Pump card depth on the now-grey page ── */
+html.light .pump-card {
+  box-shadow:
+    0 0 0 1px rgb(var(--color-border-primary) / 0.65),
+    0 4px 16px -2px rgb(0 0 0 / 0.11);
+}
+html.light .pump-card:hover {
+  box-shadow:
+    0 0 0 1px rgb(var(--color-border-primary) / 0.80),
+    0 8px 24px -4px rgb(0 0 0 / 0.14);
+}
+html.light .pump-card::after {
+  opacity: 0.15;
+}
+
+/* ── Pump chrome — glass effects need opaque bg on light surface ── */
+html.light .pump-status-chip {
+  background: rgb(var(--color-bg-secondary));
+  border-color: rgb(var(--color-border-primary) / 0.7);
+}
+html.light .pump-mode-pill {
+  background: rgb(var(--color-bg-secondary));
+}
+html.light .pump-mode-pill[data-active="true"] {
+  background: linear-gradient(
+    145deg,
+    rgb(var(--color-accent-blue) / 0.14),
+    rgb(var(--color-accent-emerald) / 0.08)
+  );
+}
+html.light .pump-quick-chip {
+  background: rgb(var(--color-bg-secondary) / 0.85);
+}
+
+/* Disabled start button — dark green is unreadable on light bg */
+html.light .pump-start-button:disabled {
+  background-image: linear-gradient(120deg, #d1fae5, #a7f3d0) !important;
+  color: rgb(var(--color-text-muted)) !important;
+  text-shadow: none !important;
+  box-shadow:
+    0 0 0 1px #6ee7b7,
+    inset 0 1px 0 rgb(255 255 255 / 0.5) !important;
+}
+
+/* Progress bar glow — tone down on light surface */
+html.light .progress-fill {
+  box-shadow: 0 0 8px rgb(var(--color-accent-emerald) / 0.30);
+}
+
+/* ── Brand logo Y-axis spin (rotates around vertical symmetry line) ── */
+@keyframes logo-spin-y {
+  0%   { transform: perspective(200px) rotateY(0deg); animation-timing-function: ease-in-out; }
+  10%  { transform: perspective(200px) rotateY(360deg); }
+  100% { transform: perspective(200px) rotateY(360deg); }
+}
+
+.animate-logo-spin-y {
+  animation: logo-spin-y 10s linear infinite;
 }

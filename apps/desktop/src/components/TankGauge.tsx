@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 const fmtL = new Intl.NumberFormat("uz-UZ");
 const gaugeTicks = [100, 75, 50, 25, 0];
 
@@ -55,6 +57,7 @@ export function TankGauge(props: {
   vertical?: boolean;
   probe?: string;
 }) {
+  const { t } = useTranslation();
   const pct    = Math.max(0, Math.min(100, props.levelPct));
   const tone   = props.tone ?? "blue";
   const styles = toneMap[tone];
@@ -71,27 +74,27 @@ export function TankGauge(props: {
         : null;
 
   const statusLabel =
-    state === "critical" ? "Kritik" : state === "low" ? "Kam" : null;
+    state === "critical" ? t("tankGauge.critical") : state === "low" ? t("tankGauge.low") : null;
 
   return (
     <article className={`relative flex flex-col overflow-hidden rounded-[32px] border border-border-primary/60 bg-gradient-to-br from-bg-card/95 via-bg-card/75 to-bg-primary/60 shadow-[0_25px_45px_rgba(5,10,20,0.45)] ${props.className ?? ""}`}>
       <div className={`pointer-events-none absolute inset-x-6 top-4 h-24 rounded-full bg-gradient-to-b ${styles.glow} to-transparent blur-2xl`} aria-hidden />
       <header className="flex items-start justify-between gap-3 px-5 pt-4 pb-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.35em] text-text-tertiary">
-            <span>Tank</span>
+          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-text-tertiary">
+            <span>{t("tankGauge.tank")}</span>
             <span className="h-1 w-1 rounded-full bg-text-tertiary/50" aria-hidden />
             <span>{props.probe ?? "ATG"}</span>
           </div>
           <p className="text-xl font-black text-text-primary leading-tight">{props.label}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold">
             <span className={`rounded-full px-2.5 py-0.5 ${styles.chip}`}>{props.label}</span>
             {props.subtitle ? <span className="text-text-muted/80">{props.subtitle}</span> : null}
           </div>
         </div>
         <div className="flex flex-col items-end gap-1 text-right">
           {statusBadge && (
-            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${statusBadge}`}>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${statusBadge}`}>
               {statusLabel}
             </span>
           )}
@@ -104,7 +107,7 @@ export function TankGauge(props: {
 
       <div className="flex flex-col gap-4 px-4 pb-4">
         <div className="flex gap-4">
-          <div className="flex w-7 shrink-0 flex-col items-end justify-between pr-0.5 text-[9px] font-semibold tabular-nums text-text-muted/80">
+          <div className="flex w-8 shrink-0 flex-col items-end justify-between pr-0.5 text-[10px] font-semibold tabular-nums text-text-muted/80">
             {gaugeTicks.map((tick) => (
               <span key={tick}>{tick}</span>
             ))}
@@ -125,40 +128,40 @@ export function TankGauge(props: {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" aria-hidden />
               </div>
             </div>
-            <span className="mt-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-text-secondary">Level</span>
+            <span className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-text-secondary">{t("tankGauge.level")}</span>
           </div>
 
           <div className="flex flex-1 flex-col gap-3">
-            <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border-primary/40 bg-bg-primary/50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">
+            <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border-primary/40 bg-bg-primary/50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-text-tertiary">
               <div>
-                <p>Capacity</p>
+                <p>{t("tankGauge.capacity")}</p>
                 <p className="text-base font-black text-text-primary tracking-tight">
-                  {capacity != null ? fmtL.format(capacity) : "—"} <span className="text-[11px] font-semibold text-text-secondary">L</span>
+                  {capacity != null ? fmtL.format(capacity) : "—"} <span className="text-xs font-semibold text-text-secondary">L</span>
                 </p>
               </div>
               <div>
-                <p>Available</p>
+                <p>{t("tankGauge.available")}</p>
                 <p className={`text-base font-black tracking-tight ${free != null && free < (capacity ?? 0) * 0.25 ? "text-accent-amber" : "text-text-primary"}`}>
-                  {free != null ? fmtL.format(free) : "—"} <span className="text-[11px] font-semibold text-text-secondary">L</span>
+                  {free != null ? fmtL.format(free) : "—"} <span className="text-xs font-semibold text-text-secondary">L</span>
                 </p>
               </div>
             </div>
 
             <div className="rounded-2xl border border-dashed border-border-primary/50 bg-bg-secondary/30 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-text-tertiary">Current stock</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-text-tertiary">{t("tankGauge.currentStock")}</p>
               <p className="font-mono text-xl font-black tabular-nums text-text-primary">
                 {current != null ? fmtL.format(current) : "—"} <span className="text-xs font-semibold text-text-secondary">L</span>
               </p>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-bg-tertiary/70">
                 <div className={`h-full rounded-full transition-all duration-700 ${styles.bar}`} style={{ width: `${pct}%` }} />
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-text-muted">
+              <div className="mt-2 grid grid-cols-2 gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-text-muted">
                 <div>
-                  <p>Temp</p>
+                  <p>{t("tankGauge.temp")}</p>
                   <p className="text-sm font-black text-text-primary">{props.subtitle?.match(/(\d+°C)/)?.[0] ?? "24°C"}</p>
                 </div>
                 <div className="text-right">
-                  <p>Probe</p>
+                  <p>{t("tankGauge.probe")}</p>
                   <p className="text-sm font-black text-text-primary">{props.probe ?? "ATG"}</p>
                 </div>
               </div>
@@ -167,8 +170,8 @@ export function TankGauge(props: {
         </div>
 
         {(current == null || capacity == null) && (
-          <div className="rounded-2xl border border-border-primary/40 bg-bg-primary/40 px-3 py-2 text-[11px] text-center text-text-muted">
-            Zaxira ma'lumotlari ATG orqali yangilanadi.
+          <div className="rounded-2xl border border-border-primary/40 bg-bg-primary/40 px-3 py-2 text-xs text-center text-text-muted">
+            {t("tankGauge.atgUpdate")}
           </div>
         )}
       </div>

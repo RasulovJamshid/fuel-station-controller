@@ -1,15 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, X } from "lucide-react";
 import type { NozzleSnapshot } from "../types/api";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 import { ProductGradeTiles } from "./ProductGradeTiles";
 
 const fmtSum = new Intl.NumberFormat("uz-UZ");
-
-function formatPricePerLiter(price: number): string {
-  if (price <= 0) return "—";
-  return `${fmtSum.format(price)} SUM/L`;
-}
 
 export type SaleSetupPanelProps = {
   fpId: string;
@@ -29,13 +25,20 @@ export function SaleSetupPanel({
   activeNozzles,
   initialNozzle = null,
   initialFillMode,
-  title = "Pre-authorize",
-  subtitle = "Choose product and fill limit for this sale",
+  title,
+  subtitle,
   confirmLabel,
   theme = "amber",
   onConfirm,
   onCancel,
 }: SaleSetupPanelProps) {
+  const { t } = useTranslation();
+  const formatPricePerLiter = (price: number) =>
+    price <= 0 ? "—" : `${fmtSum.format(price)} ${t("product.perLiter")}`;
+  const resolvedTitle = title ?? t("authorize.preauthorize");
+  const resolvedSubtitle = subtitle ?? t("authorize.chooseProduct");
+  const volInputRef = useRef<HTMLInputElement>(null);
+  const amtInputRef = useRef<HTMLInputElement>(null);
   const shellClass =
     theme === "emerald"
       ? "border-2 border-emerald-600 bg-slate-750"
@@ -114,17 +117,9 @@ export function SaleSetupPanel({
   // Auto-focus input when mode changes
   useEffect(() => {
     if (fillMode === "volume") {
-      // Focus volume input after a short delay
-      setTimeout(() => {
-        const volumeInput = document.querySelector('input[placeholder="LITERS"]') as HTMLInputElement;
-        volumeInput?.focus();
-      }, 100);
+      setTimeout(() => volInputRef.current?.focus(), 100);
     } else if (fillMode === "amount") {
-      // Focus amount input after a short delay
-      setTimeout(() => {
-        const amountInput = document.querySelector('input[placeholder="SUM AMOUNT"]') as HTMLInputElement;
-        amountInput?.focus();
-      }, 100);
+      setTimeout(() => amtInputRef.current?.focus(), 100);
     }
   }, [fillMode]);
 
@@ -160,14 +155,14 @@ export function SaleSetupPanel({
   return (
     <div className={`flex flex-col gap-4 p-4 ${shellClass}`}>
       <div>
-        <h3 className={`text-sm font-bold uppercase tracking-widest ${headingClass}`}>{title}</h3>
-        <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>
+        <h3 className={`text-sm font-bold uppercase tracking-widest ${headingClass}`}>{resolvedTitle}</h3>
+        <p className="mt-0.5 text-xs text-slate-400">{resolvedSubtitle}</p>
       </div>
 
       {multipleProducts ? (
         <div>
           <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-            PRODUCT SELECTION
+            {t("saleSetup.productSelection")}
           </div>
           <ProductGradeTiles
             nozzles={activeNozzles}
@@ -181,11 +176,11 @@ export function SaleSetupPanel({
           <div className="h-2 w-full border-b border-slate-600" style={{ backgroundColor: selectedSnap.product_color ?? "#888" }} />
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">SELECTED PRODUCT</div>
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{t("saleSetup.selectedProduct")}</div>
               <span className="font-bold text-slate-100">{selectedSnap.product_name}</span>
             </div>
             <div className="shrink-0 text-right">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">RATE</div>
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{t("saleSetup.rate")}</div>
               <span className="font-mono text-sm font-bold text-amber-300 tabular-nums">
                 {formatPricePerLiter(displayPrice)}
               </span>
@@ -193,18 +188,18 @@ export function SaleSetupPanel({
           </div>
         </div>
       ) : (
-        <p className="text-sm text-amber-400 border-2 border-amber-600/50 bg-amber-950/30 px-3 py-2 rounded-md">No active products on this pump.</p>
+        <p className="text-sm text-amber-400 border-2 border-amber-600/50 bg-amber-950/30 px-3 py-2 rounded-md">{t("saleSetup.noProducts")}</p>
       )}
 
       <div>
         {!productReady && multipleProducts && (
-          <p className="mb-2 text-xs text-amber-400">Select a product above, then choose fill mode.</p>
+          <p className="mb-2 text-xs text-amber-400">{t("saleSetup.selectProduct")}</p>
         )}
-        <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">FILL MODE</div>
+        <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">{t("saleSetup.fillMode")}</div>
         <div className="mb-3 flex gap-2">
-          {modeBtn("full", "FULL TANK")}
-          {modeBtn("volume", "VOLUME")}
-          {modeBtn("amount", "AMOUNT")}
+          {modeBtn("full", t("saleSetup.fullTank"))}
+          {modeBtn("volume", t("saleSetup.volume"))}
+          {modeBtn("amount", t("saleSetup.amount"))}
         </div>
 
         {fillMode === "volume" && (
@@ -227,12 +222,13 @@ export function SaleSetupPanel({
             </div>
             <div className="relative">
               <input
+                ref={volInputRef}
                 type="text"
                 inputMode="decimal"
                 value={volLiters}
                 onChange={(e) => setVolLiters(e.target.value)}
                 className="w-full rounded-md border-2 border-slate-600 bg-slate-800 px-4 py-3 pr-12 text-center text-xl font-black text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:bg-slate-700 transition-colors"
-                placeholder="LITERS"
+                placeholder={t("saleSetup.litersPlaceholder")}
               />
               {volLiters && Number.parseFloat(volLiters) > 0 && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -265,12 +261,13 @@ export function SaleSetupPanel({
             </div>
             <div className="relative">
               <input
+                ref={amtInputRef}
                 type="text"
                 inputMode="numeric"
                 value={amtSum}
                 onChange={(e) => setAmtSum(e.target.value)}
                 className="w-full rounded-md border-2 border-slate-600 bg-slate-800 px-4 py-3 pr-12 text-center text-xl font-black text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:bg-slate-700 transition-colors"
-                placeholder="SUM AMOUNT"
+                placeholder={t("saleSetup.amountPlaceholder")}
               />
               {amtSum && Number.parseFloat(amtSum.replace(/\s/g, "")) > 0 && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -285,7 +282,7 @@ export function SaleSetupPanel({
 
         {fillMode === "full" && (
           <p className="rounded-md border-2 border-slate-600 bg-slate-750 px-3 py-4 text-center text-xs font-medium text-slate-400">
-            FILL UNTIL PUMP STOPS AUTOMATICALLY (FULL TANK)
+            {t("saleSetup.fullTankDesc")}
           </p>
         )}
       </div>
@@ -298,7 +295,7 @@ export function SaleSetupPanel({
         >
           <span className="flex items-center justify-center gap-2">
             <X className="h-5 w-5" />
-            Cancel
+            {t("saleSetup.cancel")}
           </span>
         </button>
         <button
@@ -309,7 +306,7 @@ export function SaleSetupPanel({
         >
           <span className="flex items-center justify-center gap-2">
             <Check className="h-5 w-5" />
-            {productReady ? confirmLabel : "SELECT PRODUCT"}
+            {productReady ? confirmLabel : t("saleSetup.selectProductBtn")}
           </span>
         </button>
       </div>

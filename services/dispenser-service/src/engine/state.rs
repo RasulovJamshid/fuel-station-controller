@@ -8,6 +8,7 @@ use wayne_europump::{decode_amount, decode_volume, Frame};
 /// Idle polls required before accepting another reactive nozzle lift after ghost fill.
 const GHOST_RECOVERY_IDLE_POLLS: u8 = 4;
 
+
 #[derive(Debug, Clone)]
 pub struct StoppedContext {
     pub stopped_tx_id: String,
@@ -93,12 +94,10 @@ pub struct CurrentTx {
 #[derive(Debug, Clone)]
 pub struct CompletedSaleLatch {
     pub nozzle_index: u8,
-    pub volume: f64,
-    pub amount: u64,
 }
 
 impl RuntimeFp {
-    pub fn new(fp: &FuelingPositionConfig, _cfg: &SiteConfig) -> Self {
+    pub fn new(fp: &FuelingPositionConfig, cfg: &SiteConfig) -> Self {
         let now = Utc::now().timestamp_millis();
         let price = fp.default_price().unwrap_or(0);
         let nozzle_count = fp.nozzle_count().min(u8::MAX as usize) as u8;
@@ -108,7 +107,7 @@ impl RuntimeFp {
         }
         Self {
             missed: 0,
-            settle_after_reconnect: 0,
+            settle_after_reconnect: cfg.polling.reconnect_settle_rounds,
             current_tx: None,
             nozzle_prices,
             cap_volume_liters: None,
@@ -687,11 +686,8 @@ impl RuntimeFp {
                     FrameEffect::CompleteGhostFill
                 } else if self.holster_ends_sale_early() {
                     self.end_sale_from_holster_early(fp_cfg, site, active_shift_id)
-                } else if self.current_tx.is_some() {
-                    self.complete_sale_from_holster(fp_cfg, site, active_shift_id)
                 } else {
-                    self.touch();
-                    FrameEffect::StatusChanged
+                    self.complete_sale_from_holster(fp_cfg, site, active_shift_id)
                 }
             }
             FpStatus::PreAuthorized => {
@@ -715,6 +711,14 @@ impl RuntimeFp {
                     self.touch();
                     FrameEffect::NozzleHolstered
                 }
+            }
+            FpStatus::Done => {
+                // Sale is already recorded. Stay in Done so the operator (or
+                // the frontend auto-dismiss) can close the screen cleanly.
+                // reset_to_idle here would clear nozzle_index and let stray
+                // post-holster data frames restart a ghost delivery.
+                self.touch();
+                FrameEffect::StatusChanged
             }
             FpStatus::NozzleUp => {
                 self.reset_to_idle();
@@ -813,6 +817,10 @@ impl RuntimeFp {
                     self.touch();
                     return FrameEffect::ResendAuthorize;
                 }
+                if self.nozzle_physically_up() {
+                    self.touch();
+                    return FrameEffect::None;
+                }
                 if self.holster_ends_sale_early() {
                     return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
                 }
@@ -834,6 +842,10 @@ impl RuntimeFp {
                     self.cancel_zero_volume_session();
                     self.touch();
                     return FrameEffect::CompleteGhostFill;
+                }
+                if self.nozzle_physically_up() {
+                    self.touch();
+                    return FrameEffect::None;
                 }
                 if self.holster_ends_sale_early() {
                     return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
@@ -942,6 +954,10 @@ impl RuntimeFp {
                 self.touch();
                 return FrameEffect::CompleteGhostFill;
             }
+            if self.nozzle_physically_up() {
+                self.touch();
+                return FrameEffect::SendDoneAwaitHolster;
+            }
         }
         if matches!(self.state.status, FpStatus::Idle | FpStatus::PreAuthorized) {
             if self.ghost_recovery_active() {
@@ -993,6 +1009,14 @@ impl RuntimeFp {
                 self.cancel_zero_volume_session();
                 self.touch();
                 return FrameEffect::CompleteGhostFill;
+            }
+            // Nozzle still physically in the tank — pump sent a completion frame
+            // (TransactionComplete / DispenserIdle) but the customer hasn't holstered
+            // yet.  Send GO_IDLE so the pump can send NozzleReturned, then wait for
+            // that physical holster event to record the transaction.
+            if self.nozzle_physically_up() {
+                self.touch();
+                return FrameEffect::SendDoneAwaitHolster;
             }
             if self.holster_ends_sale_early() {
                 return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
@@ -1329,6 +1353,10 @@ impl RuntimeFp {
                         .is_some_and(|l| l.nozzle_index == cfg_idx);
                     if same_completed_nozzle {
                         self.reset_to_idle();
+                        // reset_to_idle clears last_wire_hose_code/at_ms; restore the
+                        // lift code so nozzle_physically_up() stays true and spurious
+                        // DispenserIdle frames don't trigger a ghost-fill reset to Idle.
+                        self.note_wire_hose(*nozzle);
                     } else {
                         // Another hose lifted while a completed sale awaits dismiss.
                         self.state.status = FpStatus::NozzleUp;
@@ -1483,17 +1511,35 @@ impl RuntimeFp {
                     if Frame::is_nozzle_holster_code(*hh)
                         && self.embedded_holster_is_customer_event()
                     {
-                        self.note_wire_hose(*hh);
+                        // During active delivery (vol > 0) embedded holster codes inside
+                        // Data frames are always firmware deceleration artifacts — the pump
+                        // emits them for several seconds while fuel is still flowing slowly.
+                        // Real customer holsters arrive as standalone NozzleReturned /
+                        // NozzleHolstered frames.  Refresh the lift timestamp so that
+                        // nozzle_physically_up() stays true for all downstream guards.
+                        let (embedded_vol, _) = self.combined_totals();
+                        if embedded_vol > 0.01
+                            && matches!(
+                                self.state.status,
+                                FpStatus::Authorizing | FpStatus::Delivering
+                            )
+                        {
+                            self.last_wire_hose_at_ms = Utc::now().timestamp_millis();
+                            self.touch();
+                            return FrameEffect::StatusChanged;
+                        }
+                        // Zero-volume arm phase: use the staleness guard as before.
                         if self.nozzle_physically_up()
                             && matches!(
                                 self.state.status,
                                 FpStatus::Authorizing | FpStatus::Delivering
                             )
                         {
-                            // Lift code still fresh — embedded holster is dispenser-internal.
+                            self.last_wire_hose_at_ms = Utc::now().timestamp_millis();
                             self.touch();
                             return FrameEffect::StatusChanged;
                         }
+                        self.note_wire_hose(*hh);
                         // CONFIG was just sent and no fuel has flowed yet — the pump
                         // emits holster codes in compound arm frames as firmware artifact.
                         if self.preauth_config_on_wire
@@ -1608,17 +1654,14 @@ impl RuntimeFp {
                         // reporting sale_complete, so volume keeps climbing slightly above
                         // what was recorded.  Stay in DONE regardless of the delta — DONE is
                         // only exited by the operator dismissing the sale or holstering.
-                        if self.state.status == FpStatus::Done {
-                            if let Some(latch) = &self.completed_sale {
-                                let nozzle = wire_nozzle.unwrap_or(latch.nozzle_index);
-                                if nozzle == latch.nozzle_index {
-                                    self.touch();
-                                    return FrameEffect::StatusChanged;
-                                }
-                            } else {
-                                self.touch();
-                                return FrameEffect::StatusChanged;
-                            }
+                        //
+                        // Also guard when completed_sale is set but status has been reset to
+                        // Idle (e.g. by a stray holster frame): without this a data frame
+                        // arriving after the reset would bypass the Done check above and
+                        // create a ghost delivery with the fallback nozzle (wrong product).
+                        if self.state.status == FpStatus::Done || self.completed_sale.is_some() {
+                            self.touch();
+                            return FrameEffect::StatusChanged;
                         }
 
                         let nozzle_index = wire_nozzle
@@ -1673,24 +1716,29 @@ impl RuntimeFp {
                         .map_or(false, |cap| vol + 1e-6 >= cap);
                     let hit_a = self.cap_amount.map_or(false, |cap| amt >= cap);
                     if hit_v || hit_a {
+                        // Software preset cap reached. Clear the caps so this doesn't
+                        // re-trigger on subsequent data frames, but do NOT close the
+                        // transaction yet. The pump decelerates to its matching hardware
+                        // limit and fires sale_complete; after that the customer holsters
+                        // the nozzle and the holster event closes with the actual final volume.
                         self.clear_deliver_caps();
-                        self.state.status = FpStatus::Done;
-                        let tx =
-                            self.close_transaction(true, fp_cfg, site, active_shift_id.clone());
-                        return FrameEffect::TransactionDone {
-                            tx,
-                            action: TxCompleteAction::HaltPump,
-                        };
+                        self.touch();
+                        return FrameEffect::StatusChanged;
                     }
                 }
                 if *sale_complete {
-                    // Done is excluded: software-cap already closed the transaction;
-                    // the pump's own hardware-limit completion arrives shortly after
-                    // and must not re-close an already-recorded sale.
                     if matches!(
                         self.state.status,
                         FpStatus::Delivering | FpStatus::Authorizing
                     ) {
+                        if self.nozzle_physically_up() {
+                            // Pump signalled end-of-sale but the nozzle is still in the tank.
+                            // Wait for the physical holster event — it gives us the true final
+                            // volume and prevents recording a premature or stale total.
+                            self.touch();
+                            return FrameEffect::StatusChanged;
+                        }
+                        // Nozzle is already holstered — close immediately.
                         if self.holster_ends_sale_early() {
                             return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
                         }
@@ -1802,11 +1850,7 @@ impl RuntimeFp {
         };
         self.continuation = None;
         if combined_volume > 0.01 && !matches!(status, TxStatus::Stopped) {
-            self.completed_sale = Some(CompletedSaleLatch {
-                nozzle_index,
-                volume: combined_volume,
-                amount: combined_amount,
-            });
+            self.completed_sale = Some(CompletedSaleLatch { nozzle_index });
         }
         Transaction {
             id,
@@ -1947,13 +1991,16 @@ impl RuntimeFp {
 pub enum TxCompleteAction {
     /// Pump reported end-of-sale; send DONE (0x05) and return the lane to idle.
     AcknowledgeIdle,
-    /// Software preset limit reached while still delivering; send STOP (0x08) to halt the pump.
-    HaltPump,
 }
 
 pub enum FrameEffect {
     None,
     StatusChanged,
+    /// Pump signalled end-of-sale (TransactionComplete / DispenserIdle) while the nozzle
+    /// is physically still in the tank.  Send GO_IDLE on the wire so the pump advances to
+    /// NozzleReturned state, but do NOT record the transaction yet — wait for the physical
+    /// holster event which will call complete_sale_from_holster with the true final volume.
+    SendDoneAwaitHolster,
     PreAuthCancelled,
     PreAuthNozzleMismatch {
         expected_nozzle_index: u8,

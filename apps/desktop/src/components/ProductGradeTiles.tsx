@@ -1,11 +1,7 @@
+import { useTranslation } from "react-i18next";
 import type { NozzleSnapshot } from "../types/api";
 
 const fmtSum = new Intl.NumberFormat("uz-UZ");
-
-function formatPricePerLiter(price: number): string {
-  if (price <= 0) return "—";
-  return `${fmtSum.format(price)} SUM/L`;
-}
 
 type Props = {
   nozzles: NozzleSnapshot[];
@@ -21,6 +17,10 @@ export function ProductGradeTiles({
   onSelect,
   layout = "stack",
 }: Props) {
+  const { t } = useTranslation();
+  const formatPricePerLiter = (price: number) =>
+    price <= 0 ? "—" : `${fmtSum.format(price)} ${t("product.perLiter")}`;
+
   const containerClass =
     layout === "grid"
       ? "grid grid-cols-2 gap-2"
@@ -55,7 +55,7 @@ export function ProductGradeTiles({
                   {n.product_name}
                 </div>
                 <div className={`text-xs font-medium mt-1 ${selected ? "text-amber-300" : "text-slate-400 group-hover:text-slate-300"}`}>
-                  GRADE {n.index}
+                  {t("product.grade")} {n.index}
                 </div>
               </div>
               <div className="shrink-0 text-right">
@@ -67,7 +67,7 @@ export function ProductGradeTiles({
                   {formatPricePerLiter(n.price)}
                 </div>
                 <div className={`text-xs font-medium mt-1 ${selected ? "text-amber-400" : "text-slate-500"}`}>
-                  NOZZLE {n.index}
+                  {t("product.nozzle")} {n.index}
                 </div>
               </div>
             </div>

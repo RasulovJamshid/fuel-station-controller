@@ -87,7 +87,8 @@ impl ShiftCoordinator {
             _ => (None, None, None),
         };
         let id = Uuid::new_v4().to_string();
-        let started_at = chrono::Utc::now().timestamp_millis();
+        let started_at = cmd.started_at_override
+            .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
         let shift = Shift {
             id,
             operator_id: None,
@@ -151,6 +152,7 @@ impl ShiftCoordinator {
                 operator_name: cmd.incoming_operator.clone(),
                 pin: cmd.incoming_pin.clone(),
                 notes: cmd.notes.clone(),
+                started_at_override: None,
             })
             .await?;
         Ok((outgoing, incoming))

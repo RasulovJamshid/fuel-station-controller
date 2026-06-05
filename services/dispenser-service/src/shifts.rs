@@ -8,7 +8,7 @@ use chrono::{Local, Timelike};
 use site_config::{ShiftMode, SiteConfig};
 use sqlx::SqlitePool;
 use tokio::sync::RwLock;
-use types::{EndShiftCmd, HandoverCmd, Shift, ShiftStatus, StartShiftCmd, Transaction, WsEvent};
+use types::{EndShiftCmd, HandoverCmd, Shift, ShiftStatus, StartShiftCmd, Transaction, TxStatus, WsEvent};
 use uuid::Uuid;
 
 use crate::db::shift_queries;
@@ -56,8 +56,14 @@ impl ShiftCoordinator {
         self.active.read().await.clone()
     }
 
-    pub async fn active_id(&self) -> Option<String> {
-        self.active.read().await.as_ref().map(|s| s.id.clone())
+    /// Returns (shift_id, operator_name) for the currently active shift in a single lock acquire.
+    pub async fn active_info(&self) -> (Option<String>, Option<String>) {
+        let g = self.active.read().await;
+        if let Some(s) = g.as_ref() {
+            (Some(s.id.clone()), Some(s.operator_name.clone()))
+        } else {
+            (None, None)
+        }
     }
 
     pub async fn start(&self, cmd: StartShiftCmd) -> Result<Shift> {
@@ -91,7 +97,7 @@ impl ShiftCoordinator {
             .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
         let shift = Shift {
             id,
-            operator_id: None,
+            operator_id: cmd.operator_id.clone(),
             operator_name: cmd.operator_name.trim().to_string(),
             shift_name,
             scheduled_start,
@@ -106,6 +112,17 @@ impl ShiftCoordinator {
             position_totals: vec![],
         };
         shift_queries::persist_new_shift(&self.pool, &shift).await?;
+
+        // When a backdated start time is provided, pull in any completed/stopped
+        // transactions that happened after that time but have no shift yet.
+        if let Some(since_ms) = cmd.started_at_override {
+            shift_queries::backfill_unassigned_to_shift(&self.pool, &shift.id, since_ms).await?;
+            if let Some(updated) = shift_queries::get_shift(&self.pool, &shift.id).await? {
+                *self.active.write().await = Some(updated.clone());
+                return Ok(updated);
+            }
+        }
+
         *self.active.write().await = Some(shift.clone());
         Ok(shift)
     }
@@ -150,11 +167,34 @@ impl ShiftCoordinator {
         let incoming = self
             .start(StartShiftCmd {
                 operator_name: cmd.incoming_operator.clone(),
+                operator_id: cmd.incoming_operator_id.clone(),
                 pin: cmd.incoming_pin.clone(),
                 notes: cmd.notes.clone(),
-                started_at_override: None,
+                started_at_override: cmd.incoming_started_at_override,
             })
             .await?;
+
+        // When the handover is backdated, also move transactions that were
+        // already counted in the outgoing shift (because the old shift was
+        // still active at that time) into the incoming shift.
+        if let Some(since_ms) = cmd.incoming_started_at_override {
+            shift_queries::reassign_from_shift_since(
+                &self.pool,
+                &outgoing.id,
+                &incoming.id,
+                since_ms,
+            )
+            .await?;
+            let outgoing = shift_queries::get_shift(&self.pool, &outgoing.id)
+                .await?
+                .ok_or_else(|| anyhow!("outgoing shift not found after reassign"))?;
+            let incoming = shift_queries::get_shift(&self.pool, &incoming.id)
+                .await?
+                .ok_or_else(|| anyhow!("incoming shift not found after reassign"))?;
+            *self.active.write().await = Some(incoming.clone());
+            return Ok((outgoing, incoming));
+        }
+
         Ok((outgoing, incoming))
     }
 
@@ -163,21 +203,24 @@ impl ShiftCoordinator {
             return Ok(());
         }
         if let Some(ref sid) = tx.shift_id {
-            let vol = if tx.combined_volume > 0.0 {
-                tx.combined_volume
+            // ContinuedFrom: credit segment volume only — the STOPPED parent already
+            // counted the base. Do NOT increment total_transactions — the STOPPED row
+            // already counted this as one transaction.
+            let is_continuation = matches!(tx.status, TxStatus::ContinuedFrom(_));
+            let (vol, amt) = if is_continuation {
+                (tx.volume, tx.amount)
             } else {
-                tx.volume
+                let v = if tx.combined_volume > 0.0 { tx.combined_volume } else { tx.volume };
+                let a = if tx.combined_amount > 0 { tx.combined_amount } else { tx.amount };
+                (v, a)
             };
-            let amt = if tx.combined_amount > 0 {
-                tx.combined_amount
-            } else {
-                tx.amount
-            };
-            shift_queries::bump_shift_totals(&self.pool, sid, vol, amt).await?;
+            shift_queries::bump_shift_totals(&self.pool, sid, vol, amt, !is_continuation).await?;
             let mut g = self.active.write().await;
             if let Some(cur) = g.as_mut() {
                 if cur.id == *sid {
-                    cur.total_transactions = cur.total_transactions.saturating_add(1);
+                    if !is_continuation {
+                        cur.total_transactions = cur.total_transactions.saturating_add(1);
+                    }
                     cur.total_volume += vol;
                     cur.total_amount = cur.total_amount.saturating_add(amt);
                 }

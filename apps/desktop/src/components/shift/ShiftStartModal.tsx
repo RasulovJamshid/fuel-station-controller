@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { StartShiftCmd } from "../../types/api";
+import type { Operator, StartShiftCmd } from "../../types/api";
 
 type Props = {
   open: boolean;
@@ -9,45 +9,67 @@ type Props = {
   onConfirm: (cmd: StartShiftCmd) => Promise<void>;
 };
 
-/** Format a Date to the value required by <input type="datetime-local">. */
-function toDatetimeLocal(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    `T${pad(d.getHours())}:${pad(d.getMinutes())}`
-  );
+function floorTo5(m: number): number {
+  return Math.floor(m / 5) * 5;
 }
+
+const MANUAL_VALUE = "__manual__";
 
 export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props) {
   const { t } = useTranslation();
-  const [name, setName]           = useState("");
-  const [pin, setPin]             = useState("");
-  const [notes, setNotes]         = useState("");
+  const [operators, setOperators]   = useState<Operator[]>([]);
+  const [selectedId, setSelectedId] = useState<string>(MANUAL_VALUE);
+  const [name, setName]             = useState("");
+  const [pin, setPin]               = useState("");
+  const [notes, setNotes]           = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [startedAt, setStartedAt] = useState(() => toDatetimeLocal(new Date()));
-  const [busy, setBusy]           = useState(false);
-  const [err, setErr]             = useState<string | null>(null);
+  const [selHour, setSelHour]       = useState(() => new Date().getHours());
+  const [selMin, setSelMin]         = useState(() => floorTo5(new Date().getMinutes()));
+  const [busy, setBusy]             = useState(false);
+  const [err, setErr]               = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    import("@tauri-apps/api/core").then(({ invoke }) =>
+      invoke<Operator[]>("list_operators").then((ops) => {
+        setOperators(ops.filter((o) => o.active));
+        if (ops.filter((o) => o.active).length === 0) setSelectedId(MANUAL_VALUE);
+      }).catch(() => {})
+    );
+  }, [open]);
 
   if (!open) return null;
+
+  const nowH = new Date().getHours();
+  const nowM = new Date().getMinutes();
+  const maxMin = selHour < nowH ? 55 : floorTo5(nowM);
+
+  const isManual = selectedId === MANUAL_VALUE;
+  const selectedOp = operators.find((o) => o.id === selectedId);
+  const effectiveName = isManual ? name.trim() : (selectedOp?.name ?? "");
+  const needsPin = requirePin;
 
   const submit = async () => {
     setErr(null);
     setBusy(true);
     try {
-      const overrideMs = showAdvanced && startedAt
-        ? new Date(startedAt).getTime()
-        : undefined;
-
+      let overrideMs: number | undefined;
+      if (showAdvanced) {
+        const d = new Date();
+        d.setHours(selHour, selMin, 0, 0);
+        overrideMs = d.getTime();
+      }
       await onConfirm({
-        operator_name: name.trim(),
-        pin: requirePin ? pin : pin || undefined,
+        operator_name: effectiveName,
+        operator_id: isManual ? undefined : selectedId,
+        pin: needsPin ? pin : pin || undefined,
         notes: notes.trim() || undefined,
         started_at_override: overrideMs,
       });
-      setName("");
-      setPin("");
-      setNotes("");
-      setStartedAt(toDatetimeLocal(new Date()));
+      setName(""); setPin(""); setNotes("");
+      setSelectedId(operators.length > 0 ? operators[0]!.id : MANUAL_VALUE);
+      setSelHour(new Date().getHours());
+      setSelMin(floorTo5(new Date().getMinutes()));
       setShowAdvanced(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -58,31 +80,56 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
-        <h2 className="text-lg font-semibold text-white">{t("shiftStart.title")}</h2>
+      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-border-primary bg-bg-card p-6 shadow-xl">
+        <h2 className="text-lg font-semibold text-text-primary">{t("shiftStart.title")}</h2>
 
-        {/* Operator name */}
+        {/* Operator selector */}
         <div>
-          <label className="mb-1 block text-sm text-slate-400">{t("shiftStart.operatorName")}</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
-            placeholder={t("shiftStart.operatorNamePlaceholder")}
-            autoFocus
-            onKeyDown={(e) => e.key === "Enter" && !busy && name.trim() && void submit()}
-          />
+          <label className="mb-1 block text-sm text-text-secondary">{t("shiftStart.operatorName")}</label>
+          {operators.length > 0 ? (
+            <>
+              <select
+                value={selectedId}
+                onChange={(e) => { setSelectedId(e.target.value); setPin(""); }}
+                className="w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+              >
+                {operators.map((op) => (
+                  <option key={op.id} value={op.id}>{op.name}</option>
+                ))}
+                <option value={MANUAL_VALUE}>{t("shiftStart.enterManually")}</option>
+              </select>
+              {isManual && (
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="mt-2 w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                  placeholder={t("shiftStart.operatorNamePlaceholder")}
+                  autoFocus
+                  onKeyDown={(e) => e.key === "Enter" && !busy && effectiveName && void submit()}
+                />
+              )}
+            </>
+          ) : (
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+              placeholder={t("shiftStart.operatorNamePlaceholder")}
+              autoFocus
+              onKeyDown={(e) => e.key === "Enter" && !busy && effectiveName && void submit()}
+            />
+          )}
         </div>
 
         {/* PIN */}
-        {requirePin ? (
+        {needsPin ? (
           <div>
-            <label className="mb-1 block text-sm text-slate-400">{t("shiftStart.pin")}</label>
+            <label className="mb-1 block text-sm text-text-secondary">{t("shiftStart.pin")}</label>
             <input
               type="password"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+              className="w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
               placeholder="••••"
             />
           </div>
@@ -92,35 +139,51 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
         <button
           type="button"
           onClick={() => setShowAdvanced((v) => !v)}
-          className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+          className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-text-primary transition-colors"
         >
           <span className={`transition-transform duration-150 ${showAdvanced ? "rotate-90" : ""}`}>▶</span>
           {t("shiftStart.advanced")}
         </button>
 
         {showAdvanced && (
-          <div className="flex flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3">
-            {/* Backdated start time */}
+          <div className="flex flex-col gap-3 rounded-lg border border-border-secondary bg-bg-secondary/50 px-4 py-3">
             <div>
-              <label className="mb-1 block text-sm text-slate-400">{t("shiftStart.startedAt")}</label>
-              <input
-                type="datetime-local"
-                value={startedAt}
-                max={toDatetimeLocal(new Date())}
-                onChange={(e) => setStartedAt(e.target.value)}
-                className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
-              />
-              <p className="mt-1 text-xs text-slate-500">{t("shiftStart.startedAtHint")}</p>
+              <label className="mb-2 block text-sm text-text-secondary">{t("shiftStart.startedAt")}</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selHour}
+                  onChange={(e) => {
+                    const h = Number(e.target.value);
+                    const curMaxMin = h < nowH ? 55 : floorTo5(nowM);
+                    setSelHour(h);
+                    if (selMin > curMaxMin) setSelMin(curMaxMin);
+                  }}
+                  className="flex-1 rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                >
+                  {Array.from({ length: nowH + 1 }, (_, i) => (
+                    <option key={i} value={i}>{String(i).padStart(2, "0")}</option>
+                  ))}
+                </select>
+                <span className="font-mono text-lg font-bold text-text-muted">:</span>
+                <select
+                  value={selMin}
+                  onChange={(e) => setSelMin(Number(e.target.value))}
+                  className="flex-1 rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                >
+                  {Array.from({ length: Math.floor(maxMin / 5) + 1 }, (_, i) => i * 5).map((m) => (
+                    <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="mt-1 text-xs text-text-muted">{t("shiftStart.startedAtHint")}</p>
             </div>
-
-            {/* Notes */}
             <div>
-              <label className="mb-1 block text-sm text-slate-400">{t("shiftStart.notes")}</label>
+              <label className="mb-1 block text-sm text-text-secondary">{t("shiftStart.notes")}</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
-                className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none resize-none"
+                className="w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none resize-none"
                 placeholder={t("shiftStart.notesPlaceholder")}
               />
             </div>
@@ -128,7 +191,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
         )}
 
         {err && (
-          <p className="rounded-lg bg-red-900/40 px-3 py-2 text-sm text-red-300">{err}</p>
+          <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-sm text-accent-red-light">{err}</p>
         )}
 
         <div className="flex gap-3">
@@ -136,13 +199,13 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="flex-1 rounded-lg border border-slate-600 py-2 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+            className="flex-1 rounded-lg border border-border-primary py-2 text-sm text-text-secondary hover:bg-bg-secondary disabled:opacity-40"
           >
             {t("shiftStart.cancel")}
           </button>
           <button
             type="button"
-            disabled={!name.trim() || busy}
+            disabled={!effectiveName || busy}
             onClick={() => void submit()}
             className="flex-1 rounded-lg bg-emerald-700 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-40"
           >

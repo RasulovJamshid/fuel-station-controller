@@ -214,6 +214,12 @@
       ]
     }
   ],
+  "tanks": [
+    { "product_id": 1, "label": "AI-92", "capacity_l": 12640, "current_l": 3831 },
+    { "product_id": 2, "label": "AI-95", "capacity_l": 12640, "current_l": 6531 },
+    { "product_id": 3, "label": "Diesel", "capacity_l": 12640, "current_l": 951 },
+    { "product_id": 4, "label": "AI-91", "capacity_l": 12640, "current_l": 9120 }
+  ],
   "sync": {
     "enabled": false,
     "backend_url": "",

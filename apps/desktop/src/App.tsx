@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Header } from "./components/Header";
 import { WorkspaceNav, type WorkspaceTabId } from "./components/WorkspaceNav";
@@ -6,6 +6,8 @@ import { DispenserCard, type AuthorizeRequest } from "./components/DispenserCard
 import { DispenserRow } from "./components/DispenserRow";
 import { ReservoirsPanel } from "./components/ReservoirsPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
+import { DashboardRecentTransactions } from "./components/DashboardRecentTransactions";
+import { DashboardTanksMini } from "./components/DashboardTanksMini";
 import { ShiftWorkspace } from "./components/shift/ShiftWorkspace";
 import { ShiftStartModal } from "./components/shift/ShiftStartModal";
 import { ShiftEndModal } from "./components/shift/ShiftEndModal";
@@ -49,6 +51,7 @@ export default function App() {
   const [adminToken, setAdminTokenState] = useState<string | null>(() => getAdminToken());
   const [adminPinOpen, setAdminPinOpen] = useState(false);
   const [mustChangePin, setMustChangePin] = useState(false);
+  const [activeDispenserFpId, setActiveDispenserFpId] = useState<string | null>(null);
   const [hiddenFps, setHiddenFps] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem("hiddenFps");
@@ -90,6 +93,7 @@ export default function App() {
   );
   const visibleSorted = useMemo(() => sorted.filter((s) => !hiddenFps.has(s.fp_id)), [sorted, hiddenFps]);
   const hiddenSorted = useMemo(() => sorted.filter((s) => hiddenFps.has(s.fp_id)), [sorted, hiddenFps]);
+  const dispenserRefs = useRef(new Map<string, HTMLDivElement>());
 
   const nozzlesByFp = useMemo(() => {
     const m = new Map<string, NozzleSnapshot[]>();
@@ -111,8 +115,13 @@ export default function App() {
 
   const defaultAuthMode = siteSnapshot?.default_auth_mode ?? "preauth";
 
+  // Shift requirement: operators must start a shift before authorizing dispensers.
+  const shiftRequired = shift.mode !== "disabled" && !shift.currentShift;
+  const openStartShift = useCallback(() => shift.setShowStartModal(true), [shift]);
+
   const onAuthorize = useCallback(
     async (req: AuthorizeRequest) => {
+      if (shiftRequired) { shift.setShowStartModal(true); return; }
       const { invoke } = await import("@tauri-apps/api/core");
       try {
         setInvokeError(null);
@@ -130,7 +139,7 @@ export default function App() {
         console.error("authorize failed", e);
       }
     },
-    [setInvokeError],
+    [shiftRequired, shift, setInvokeError],
   );
 
   const fetchAllStatus = useCallback(async () => {
@@ -141,6 +150,7 @@ export default function App() {
 
   const onPreAuthorize = useCallback(
     async (req: AuthorizeRequest) => {
+      if (shiftRequired) { shift.setShowStartModal(true); return; }
       const { invoke } = await import("@tauri-apps/api/core");
       try {
         setInvokeError(null);
@@ -173,7 +183,7 @@ export default function App() {
         console.error("preauthorize failed", e);
       }
     },
-    [setInvokeError, simOnline, nozzlesByFp, fetchAllStatus, setStates],
+    [shiftRequired, shift, setInvokeError, simOnline, nozzlesByFp, fetchAllStatus, setStates],
   );
 
   const onCancelPreAuth = useCallback(
@@ -324,30 +334,14 @@ export default function App() {
     const n = visibleSorted.length;
     if (smallScreen) {
       if (n <= 2) return { gridClass: "grid-cols-1", gridStyle: undefined, compact: true };
-      if (n <= 4) return { gridClass: "grid-cols-2", gridStyle: undefined, compact: true };
-      return { gridClass: "grid-cols-2 sm:grid-cols-3", gridStyle: undefined, compact: true };
+      if (n <= 6) return { gridClass: "grid-cols-1 sm:grid-cols-2", gridStyle: undefined, compact: true };
+      return { gridClass: "grid-cols-1 sm:grid-cols-2 md:grid-cols-3", gridStyle: undefined, compact: true };
     }
-    // Desktop: auto-fit columns with a fixed min/max so cards keep their natural
-    // size. Empty tracks collapse (auto-fit), leftover space is distributed evenly
-    // (justify-evenly). max-w on the container prevents extreme spreading on
-    // ultra-wide monitors.
-    if (n <= 4) {
-      return {
-        gridClass: "max-w-[90rem] justify-evenly",
-        gridStyle: { gridTemplateColumns: "repeat(auto-fit, minmax(20rem, 26rem))" },
-        compact: false,
-      };
-    }
-    if (n <= 8) {
-      return {
-        gridClass: "max-w-[90rem] justify-evenly",
-        gridStyle: { gridTemplateColumns: "repeat(auto-fit, minmax(17rem, 22rem))" },
-        compact: true,
-      };
-    }
+    const desktopCols = Math.min(Math.max(n, 1), 6);
+    const minColWidth = desktopCols <= 2 ? "14rem" : desktopCols <= 4 ? "12rem" : "10rem";
     return {
-      gridClass: "max-w-[110rem] justify-evenly",
-      gridStyle: { gridTemplateColumns: "repeat(auto-fit, minmax(14rem, 18rem))" },
+      gridClass: "max-w-[112rem] justify-center",
+      gridStyle: { gridTemplateColumns: `repeat(${desktopCols}, minmax(${minColWidth}, 1fr))` },
       compact: true,
     };
   }, [visibleSorted.length, smallScreen]);
@@ -355,6 +349,98 @@ export default function App() {
   const openEnd = useCallback(() => {
     if (shift.currentShift) shift.setShowEndModal(true);
   }, [shift]);
+
+  useEffect(() => {
+    if (workspaceTab !== "dispensers") return;
+    if (visibleSorted.length === 0) {
+      setActiveDispenserFpId(null);
+      return;
+    }
+    const exists = activeDispenserFpId != null && visibleSorted.some((s) => s.fp_id === activeDispenserFpId);
+    if (!exists) setActiveDispenserFpId(visibleSorted[0].fp_id);
+  }, [workspaceTab, visibleSorted, activeDispenserFpId]);
+
+  const setDispenserRef = useCallback((fpId: string, el: HTMLDivElement | null) => {
+    if (el) dispenserRefs.current.set(fpId, el);
+    else dispenserRefs.current.delete(fpId);
+  }, []);
+
+  const focusDispenserByIndex = useCallback((index: number) => {
+    if (index < 0 || index >= visibleSorted.length) return;
+    const fpId = visibleSorted[index]?.fp_id;
+    if (!fpId) return;
+    setActiveDispenserFpId(fpId);
+    const el = dispenserRefs.current.get(fpId);
+    if (!el) return;
+    el.focus();
+    el.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [visibleSorted]);
+
+  const activatePrimaryAction = useCallback((fpId: string) => {
+    const el = dispenserRefs.current.get(fpId);
+    if (!el) return;
+    const actionZone = el.querySelector<HTMLElement>("[data-dispenser-action-zone='true']");
+    if (!actionZone) return;
+    // Click the first non-disabled, keyboard-eligible button.
+    // Pause and Cancel Pre-Auth carry data-no-keyboard and are mouse-only.
+    actionZone.querySelector<HTMLButtonElement>("button:not([disabled]):not([data-no-keyboard])")?.click();
+  }, []);
+
+  const onDispenserKeyDown = useCallback((fpId: string, e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (workspaceTab !== "dispensers") return;
+    if (document.querySelector("[data-fill-setup-modal='true']")) return;
+    const idx = visibleSorted.findIndex((s) => s.fp_id === fpId);
+    if (idx < 0) return;
+
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      focusDispenserByIndex((idx + 1) % visibleSorted.length);
+      return;
+    }
+
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      focusDispenserByIndex((idx - 1 + visibleSorted.length) % visibleSorted.length);
+      return;
+    }
+
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      activatePrimaryAction(fpId);
+    }
+  }, [workspaceTab, visibleSorted, focusDispenserByIndex, activatePrimaryAction]);
+
+  // Global keydown: lets the user start navigating with arrow keys immediately,
+  // without first having to click a dispenser card.
+  useEffect(() => {
+    if (workspaceTab !== "dispensers") return;
+    const handler = (e: KeyboardEvent) => {
+      const focused = document.activeElement as HTMLElement | null;
+      // Already inside a dispenser card — onKeyDown handles it.
+      if (focused?.closest("[data-dispenser-focusable]")) return;
+      // Inside any dialog — don't interfere.
+      if (focused?.closest("[role='dialog']")) return;
+      // Focus is on a real interactive element outside the dispenser grid — don't steal.
+      if (focused && focused !== document.body &&
+        ["BUTTON", "INPUT", "TEXTAREA", "SELECT", "A"].includes(focused.tagName)) return;
+
+      const isArrow = e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight";
+      const isActivate = e.key === "Enter" || e.key === " ";
+
+      if (isArrow) {
+        e.preventDefault();
+        const idx = activeDispenserFpId
+          ? Math.max(0, visibleSorted.findIndex((s) => s.fp_id === activeDispenserFpId))
+          : 0;
+        focusDispenserByIndex(idx);
+      } else if (isActivate && activeDispenserFpId) {
+        e.preventDefault();
+        activatePrimaryAction(activeDispenserFpId);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [workspaceTab, visibleSorted, activeDispenserFpId, focusDispenserByIndex, activatePrimaryAction]);
 
   const handleSelectTab = useCallback(
     (id: WorkspaceTabId) => {
@@ -413,70 +499,55 @@ export default function App() {
       <div className={`flex min-h-0 flex-1 overflow-hidden ${smallScreen ? "flex-row" : "lg:flex-row"}`}>
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg-primary">
           {workspaceTab === "dispensers" ? (
-            <div
-              className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${smallScreen ? "p-2" : "p-2 md:p-3"}`}
-            >
+            <div className={`min-h-0 flex-1 ${smallScreen ? "overflow-y-auto overscroll-contain p-2" : "overflow-hidden p-2 md:p-3"}`}>
               {smallScreen ? (
-                /* ── Compact list: one row per dispenser, fits 4-8 without scroll ── */
-                <div className="mx-auto flex w-full max-w-5xl flex-col gap-2">
+                /* ── Compact rows, always single column ── */
+                <div className="flex w-full flex-col gap-4 p-1.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {sorted.map((s) => {
+                      const hidden = hiddenFps.has(s.fp_id);
+                      const isOffline = statusTag(s.status) === "OFFLINE";
+                      const title = s.label?.trim() || (s.fp_id.match(/\d+/)?.[0] ? `${s.fp_id.match(/\d+/)![0]}-KOLONKA` : s.fp_id);
+                      return (
+                        <button
+                          key={s.fp_id}
+                          type="button"
+                          onClick={() => toggleHideFp(s.fp_id)}
+                          title={hidden ? t("dispenser.show") : t("dispenser.hideCard")}
+                          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                            hidden
+                              ? "border-border-primary/40 bg-bg-secondary/50 text-text-muted opacity-60 hover:opacity-100 hover:text-text-secondary"
+                              : "border-accent-emerald/40 bg-accent-emerald/8 text-text-secondary hover:border-border-primary hover:bg-bg-secondary"
+                          }`}
+                        >
+                          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${!isOffline ? "bg-accent-emerald" : "bg-text-muted"}`} />
+                          {title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="grid w-full grid-cols-1 gap-2">
                   {visibleSorted.map((s) => (
-                    <DispenserRow
+                    <div
                       key={s.fp_id}
-                      state={s}
-                      fpNozzles={nozzlesByFp.get(s.fp_id) ?? []}
-                      positionActive={positionActiveByFp.get(s.fp_id) ?? true}
-                      defaultAuthMode={defaultAuthMode}
-                      compact
-                      onAuthorize={onAuthorize}
-                      onPreAuthorize={onPreAuthorize}
-                      onCancelPreAuth={onCancelPreAuth}
-                      onStop={onStop}
-                      onResumeFill={onResumeFill}
-                      onContinueFill={onContinueFill}
-                      onCloseStopped={onCloseStopped}
-                      onDismissSale={onDismissSale}
-                    />
-                  ))}
-                </div>
-              ) : (
-                /* ── Standard card grid ── */
-                <>
-                  {hiddenSorted.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pb-2">
-                      {hiddenSorted.map((s) => {
-                        const isOffline = statusTag(s.status) === "OFFLINE";
-                        const title =
-                          s.label?.trim() ||
-                          (s.fp_id.match(/\d+/)?.[0]
-                            ? `${s.fp_id.match(/\d+/)![0]}-KOLONKA`
-                            : s.fp_id);
-                        return (
-                          <button
-                            key={s.fp_id}
-                            type="button"
-                            onClick={() => toggleHideFp(s.fp_id)}
-                            className="flex items-center gap-1.5 rounded-lg border border-border-primary bg-bg-card px-2.5 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
-                          >
-                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${!isOffline ? "bg-accent-emerald" : "bg-text-muted"}`} />
-                            {title}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <div
-                    className={`mx-auto grid w-full items-stretch gap-2 md:gap-3 ${dispenserLayout.gridClass}`}
-                    style={dispenserLayout.gridStyle}
-                  >
-                    {visibleSorted.map((s) => (
-                      <DispenserCard
-                        key={s.fp_id}
+                      ref={(el) => setDispenserRef(s.fp_id, el)}
+                      tabIndex={activeDispenserFpId === s.fp_id ? 0 : -1}
+                      data-dispenser-focusable="true"
+                      className={`rounded-xl outline-none transition-[box-shadow] duration-150 ${
+                        activeDispenserFpId === s.fp_id
+                          ? "ring-[3px] ring-accent-emerald ring-offset-[3px] ring-offset-bg-primary shadow-[0_0_0_6px_rgb(var(--color-accent-emerald)/0.12),0_0_24px_rgb(var(--color-accent-emerald)/0.22)]"
+                          : ""
+                      } focus-visible:ring-[3px] focus-visible:ring-accent-emerald focus-visible:ring-offset-[3px] focus-visible:ring-offset-bg-primary`}
+                      onFocus={() => setActiveDispenserFpId(s.fp_id)}
+                      onClick={() => setActiveDispenserFpId(s.fp_id)}
+                      onKeyDown={(e) => onDispenserKeyDown(s.fp_id, e)}
+                    >
+                      <DispenserRow
                         state={s}
                         fpNozzles={nozzlesByFp.get(s.fp_id) ?? []}
                         positionActive={positionActiveByFp.get(s.fp_id) ?? true}
                         defaultAuthMode={defaultAuthMode}
-                        compact={dispenserLayout.compact}
-                        onHide={() => toggleHideFp(s.fp_id)}
+                        compact
                         onAuthorize={onAuthorize}
                         onPreAuthorize={onPreAuthorize}
                         onCancelPreAuth={onCancelPreAuth}
@@ -485,10 +556,92 @@ export default function App() {
                         onContinueFill={onContinueFill}
                         onCloseStopped={onCloseStopped}
                         onDismissSale={onDismissSale}
+                        shiftRequired={shiftRequired}
+                        onStartShift={openStartShift}
                       />
-                    ))}
+                    </div>
+                  ))}
                   </div>
-                </>
+                </div>
+              ) : (
+                <div className="flex h-full min-h-0 flex-col gap-3">
+                  <section className="flex min-h-0 flex-[6] flex-col overflow-hidden rounded-2xl border border-border-primary/70 bg-bg-card/60 p-2 md:p-3">
+                    {hiddenSorted.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pb-2">
+                        {hiddenSorted.map((s) => {
+                          const isOffline = statusTag(s.status) === "OFFLINE";
+                          const title =
+                            s.label?.trim() ||
+                            (s.fp_id.match(/\d+/)?.[0]
+                              ? `${s.fp_id.match(/\d+/)![0]}-KOLONKA`
+                              : s.fp_id);
+                          return (
+                            <button
+                              key={s.fp_id}
+                              type="button"
+                              onClick={() => toggleHideFp(s.fp_id)}
+                              className="flex items-center gap-1.5 rounded-lg border border-border-primary bg-bg-card px-2.5 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
+                            >
+                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${!isOffline ? "bg-accent-emerald" : "bg-text-muted"}`} />
+                              {title}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="min-h-0 flex-1">
+                      <div
+                        className={`mx-auto grid h-full w-full auto-rows-fr items-stretch gap-2 p-1.5 md:gap-3 md:p-2 ${dispenserLayout.gridClass}`}
+                        style={dispenserLayout.gridStyle}
+                      >
+                        {visibleSorted.map((s) => (
+                          <div
+                            key={s.fp_id}
+                            ref={(el) => setDispenserRef(s.fp_id, el)}
+                            tabIndex={activeDispenserFpId === s.fp_id ? 0 : -1}
+                            data-dispenser-focusable="true"
+                            className={`min-h-0 rounded-xl outline-none transition-[box-shadow] duration-150 ${
+                              activeDispenserFpId === s.fp_id
+                                ? "ring-[3px] ring-accent-emerald ring-offset-[3px] ring-offset-bg-primary shadow-[0_0_0_6px_rgb(var(--color-accent-emerald)/0.12),0_0_24px_rgb(var(--color-accent-emerald)/0.22)]"
+                                : ""
+                            } focus-visible:ring-[3px] focus-visible:ring-accent-emerald focus-visible:ring-offset-[3px] focus-visible:ring-offset-bg-primary`}
+                            onFocus={() => setActiveDispenserFpId(s.fp_id)}
+                            onClick={() => setActiveDispenserFpId(s.fp_id)}
+                            onKeyDown={(e) => onDispenserKeyDown(s.fp_id, e)}
+                          >
+                            <DispenserCard
+                              state={s}
+                              fpNozzles={nozzlesByFp.get(s.fp_id) ?? []}
+                              positionActive={positionActiveByFp.get(s.fp_id) ?? true}
+                              defaultAuthMode={defaultAuthMode}
+                              compact={dispenserLayout.compact}
+                              onHide={() => toggleHideFp(s.fp_id)}
+                              onAuthorize={onAuthorize}
+                              onPreAuthorize={onPreAuthorize}
+                              onCancelPreAuth={onCancelPreAuth}
+                              onStop={onStop}
+                              onResumeFill={onResumeFill}
+                              onContinueFill={onContinueFill}
+                              onCloseStopped={onCloseStopped}
+                              onDismissSale={onDismissSale}
+                              shiftRequired={shiftRequired}
+                              onStartShift={openStartShift}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="grid min-h-[13rem] shrink-0 flex-[4] grid-cols-1 gap-3 overflow-hidden xl:grid-cols-12">
+                    <div className="min-h-0 xl:col-span-7">
+                      <DashboardRecentTransactions onOpenHistory={() => setWorkspaceTab("history")} />
+                    </div>
+                    <div className="min-h-0 xl:col-span-5">
+                      <DashboardTanksMini />
+                    </div>
+                  </section>
+                </div>
               )}
             </div>
           ) : (
@@ -504,6 +657,10 @@ export default function App() {
                   onStart={() => shift.setShowStartModal(true)}
                   onHandover={() => shift.setShowHandoverModal(true)}
                   onEnd={openEnd}
+                  onViewShiftTransactions={(shiftId) => {
+                    // TODO: pass shiftId filter to HistoryPanel
+                    setWorkspaceTab("history");
+                  }}
                 />
               ) : null}
               {workspaceTab === "admin" ? (
@@ -516,6 +673,11 @@ export default function App() {
                       setAdminToken(null);
                       setAdminTokenState(null);
                       setWorkspaceTab("dispensers");
+                    }}
+                    onSessionExpired={() => {
+                      setAdminToken(null);
+                      setAdminTokenState(null);
+                      setAdminPinOpen(true);
                     }}
                   />
                 ) : (

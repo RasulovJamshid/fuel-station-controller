@@ -13,14 +13,18 @@ export function ShiftEndModal({ open, shift, onClose, onConfirm }: Props) {
   const { t } = useTranslation();
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   if (!open || !shift) return null;
 
   const submit = async () => {
+    setErr(null);
     setBusy(true);
     try {
       await onConfirm(shift.id, notes.trim() || undefined);
       setNotes("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -32,25 +36,28 @@ export function ShiftEndModal({ open, shift, onClose, onConfirm }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
-        <h2 className="text-lg font-semibold text-white">{t("shiftEnd.title")}</h2>
-        <p className="text-sm text-slate-400">{closeDesc}</p>
+      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-border-primary bg-bg-card p-6 shadow-xl">
+        <h2 className="text-lg font-semibold text-text-primary">{t("shiftEnd.title")}</h2>
+        <p className="text-sm text-text-secondary">{closeDesc}</p>
         <div>
-          <label className="mb-1 block text-xs text-slate-400">{t("shiftEnd.notes")}</label>
+          <label className="mb-1 block text-xs text-text-secondary">{t("shiftEnd.notes")}</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
-            className="w-full resize-none rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+            className="w-full resize-none rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
             placeholder={t("shiftEnd.notesPlaceholder")}
           />
         </div>
+        {err && (
+          <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-sm text-accent-red-light">{err}</p>
+        )}
         <div className="flex gap-3">
           <button
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="flex-1 rounded-lg border border-slate-600 py-2 text-sm text-slate-300 hover:bg-slate-800"
+            className="flex-1 rounded-lg border border-border-primary py-2 text-sm text-text-secondary hover:bg-bg-secondary"
           >
             {t("shiftEnd.cancel")}
           </button>

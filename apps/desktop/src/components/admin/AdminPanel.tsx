@@ -72,14 +72,20 @@ function formatPrice(n: number): string {
 const inputCls =
   "rounded-lg border border-border-primary/80 bg-bg-secondary/60 px-3 py-2 text-sm font-medium text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 transition-all shadow-inner placeholder:text-text-muted";
 
+function is401(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /401|unauthorized/i.test(msg);
+}
+
 interface Props {
   token: string;
   mustChangePin?: boolean;
   onLogout: () => void;
   onPinChanged?: () => void;
+  onSessionExpired: () => void;
 }
 
-export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Props) {
+export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSessionExpired }: Props) {
   const { t } = useTranslation();
   const setSiteSnapshot = useAppStore((s) => s.setSiteSnapshot);
   const setInvokeError = useAppStore((s) => s.setInvokeError);
@@ -136,6 +142,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
       | PromiseRejectedResult
       | undefined;
     if (err) {
+      if (is401(err.reason)) { onSessionExpired(); return; }
       const msg =
         err.reason instanceof Error ? err.reason.message : String(err.reason);
       setInvokeError(msg);
@@ -257,6 +264,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
         .catch(() => {});
       refreshConfig().catch(() => {});
     } catch (e) {
+      if (is401(e)) { onSessionExpired(); return; }
       setMsg(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
@@ -279,6 +287,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
       });
       setMsg(t("admin.settings.savedMsg"));
     } catch (e) {
+      if (is401(e)) { onSessionExpired(); return; }
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -293,6 +302,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
       await refreshConfig();
       setMsg(t("admin.shiftSchedule.savedMsg"));
     } catch (e) {
+      if (is401(e)) { onSessionExpired(); return; }
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -313,6 +323,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
       setNewOpPin("");
       await loadAll();
     } catch (e) {
+      if (is401(e)) { onSessionExpired(); return; }
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -333,6 +344,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged }: Pro
       onPinChanged?.();
       setMsg(t("admin.changePin.updatedMsg"));
     } catch (e) {
+      if (is401(e)) { onSessionExpired(); return; }
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);

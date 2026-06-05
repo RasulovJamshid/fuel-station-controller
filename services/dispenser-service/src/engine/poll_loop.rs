@@ -4,19 +4,20 @@ use std::time::Duration;
 
 use crate::engine::serial::ReconnectingSerial;
 use anyhow::Result;
+use chrono::Utc;
 use site_config::{FuelingPositionConfig, SiteConfig};
 use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
 use site_config::Protocol;
-use types::{preset_label, FpStatus, Preset, UpdatePriceCmd, WsEvent};
+use types::{preset_label, FpStatus, Preset, StopSource, UpdatePriceCmd, WsEvent};
 use wayne_europump::{
     ack, authorise_cmd, authorize_config, authorize_initial, busy, done, encode_preset_limit_bcd,
     parse_frame, poll, pre_authorise_price, stop_frame, stop_pre_frame, Frame,
     FrameAccumulator,
 };
 
-use super::state::{FrameEffect, RuntimeFp, TxCompleteAction};
+use super::state::{FrameEffect, RuntimeFp, TxCompleteAction, DECEL_WINDOW_TIMEOUT_MS};
 use crate::shifts::ShiftCoordinator;
 
 /// RS-485 needs quiet time between polls to different addresses (ms).
@@ -607,6 +608,58 @@ pub async fn run_poll_loop(
                 }
             }
 
+            // Decel window wall-clock expiry: fire even if the device sends no frames.
+            {
+                let expired = {
+                    let map = runtimes.read().await;
+                    map.get(&byte).map_or(false, |rt| {
+                        rt.decel_stop_sent_at.map_or(false, |sent_at| {
+                            Utc::now().timestamp_millis() - sent_at >= DECEL_WINDOW_TIMEOUT_MS
+                        })
+                    })
+                };
+                if expired {
+                    let fp_cfg = disp_by_byte.get(&byte).cloned();
+                    if let Some(fp_cfg) = fp_cfg {
+                        let (active_shift_id, active_operator_name) = shifts.active_info().await;
+                        let effect = {
+                            let mut map = runtimes.write().await;
+                            map.get_mut(&byte).map(|rt| {
+                                let preset = rt.decel_pending_preset.take()
+                                    .unwrap_or_else(|| rt.last_preset.clone());
+                                let ss = rt.decel_pending_stop_source;
+                                rt.clear_decel_window();
+                                rt.enter_stopped_state(
+                                    &fp_cfg, &cfg,
+                                    active_shift_id.clone(), active_operator_name.clone(),
+                                    preset, ss,
+                                )
+                            })
+                        };
+                        if let Some(FrameEffect::Paused {
+                            tx, fp_id, stopped_volume, stopped_amount, stopped_tx_id, stop_source,
+                        }) = effect
+                        {
+                            let source_str = match stop_source {
+                                StopSource::App => "APP",
+                                StopSource::External => "EXTERNAL",
+                            };
+                            let _ = events.send(WsEvent::Paused {
+                                fp_id,
+                                stopped_volume,
+                                stopped_amount,
+                                stopped_tx_id,
+                                stop_source: source_str.to_string(),
+                            });
+                            if let Err(e) = crate::db::queries::insert_transaction(&pool, &tx).await {
+                                warn!(?e, "db insert decel-timeout paused tx");
+                            }
+                            broadcast_status(byte, &runtimes, &events).await;
+                        }
+                    }
+                }
+            }
+
             let send_busy_keepalive = {
                 let map = runtimes.read().await;
                 map.get(&byte).map_or(false, |rt| {
@@ -725,13 +778,13 @@ async fn process_parsed_frame(
         Some(x) => x.clone(),
         None => return,
     };
-    let active_shift_id = shifts.active_id().await;
+    let (active_shift_id, active_operator_name) = shifts.active_info().await;
     let effect = {
         let mut map = runtimes.write().await;
         let Some(rt) = map.get_mut(&byte) else {
             return;
         };
-        rt.apply_frame(&frame, &fp_cfg, site, active_shift_id)
+        rt.apply_frame(&frame, &fp_cfg, site, active_shift_id, active_operator_name)
     };
     match effect {
         FrameEffect::Online => {
@@ -1028,12 +1081,30 @@ async fn apply_command(
             };
             let auth = authorize_initial(byte);
             if exchange_serial(backend, &auth).is_ok() {
-                let mut map = runtimes.write().await;
-                if let Some(rt) = map.get_mut(&byte) {
-                    rt.state.price = price;
-                    rt.set_last_preset(preset);
-                    rt.apply_authorize_sent();
-                    rt.begin_continuation_segment(&fp_cfg, cfg);
+                let active_nozzle = {
+                    let map = runtimes.read().await;
+                    map.get(&byte).and_then(|rt| rt.state.nozzle_index).unwrap_or(1)
+                };
+                // Send CONFIG with the remaining limit immediately after AUTH so the pump
+                // uses the correct hardware limit when the customer lifts the nozzle.
+                let _ = send_auth_pair(
+                    backend,
+                    byte,
+                    &fp_cfg,
+                    &preset,
+                    active_nozzle,
+                    price,
+                    &cfg.connection.protocol,
+                );
+                {
+                    let mut map = runtimes.write().await;
+                    if let Some(rt) = map.get_mut(&byte) {
+                        rt.state.price = price;
+                        rt.last_preset = preset; // caps already set correctly by prepare_continue
+                        rt.mark_preauth_config_on_wire();
+                        rt.apply_authorize_sent();
+                        rt.begin_continuation_segment(&fp_cfg, cfg);
+                    }
                 }
                 broadcast_status(byte, runtimes, events).await;
             } else {
@@ -1072,11 +1143,11 @@ async fn apply_command(
                 Some(p) => p.clone(),
                 None => return,
             };
-            let active_shift_id = shifts.active_id().await;
+            let (active_shift_id, active_operator_name) = shifts.active_info().await;
             let effect = {
                 let mut map = runtimes.write().await;
                 map.get_mut(&byte)
-                    .and_then(|rt| rt.apply_stop(&fp_cfg, cfg, active_shift_id))
+                    .and_then(|rt| rt.apply_stop(&fp_cfg, cfg, active_shift_id, active_operator_name, cfg.ui.use_decel_window_on_stop))
             };
             if let Some(FrameEffect::Paused {
                 tx,
@@ -1116,15 +1187,34 @@ async fn apply_command(
             };
             let auth = authorize_initial(byte);
             if exchange_serial(backend, &auth).is_ok() {
-                let mut map = runtimes.write().await;
-                if let Some(rt) = map.get_mut(&byte) {
-                    rt.state.price = price;
-                    rt.set_last_preset(preset);
-                    rt.apply_authorize_sent();
-                    rt.begin_continuation_segment(&fp_cfg, cfg);
-                    rt.promote_continuation_delivering();
+                // Read nozzle index while we still hold no locks.
+                let active_nozzle = {
+                    let map = runtimes.read().await;
+                    map.get(&byte).and_then(|rt| rt.state.nozzle_index).unwrap_or(1)
+                };
+                // Send CONFIG with the *remaining* limit immediately after AUTH, before the
+                // first BUSY frame starts the pump counting.  The pump resets its internal
+                // counter on AUTH, so without this it would count against the old 2 L CONFIG.
+                let _ = send_auth_pair(
+                    backend,
+                    byte,
+                    &fp_cfg,
+                    &preset,
+                    active_nozzle,
+                    price,
+                    &cfg.connection.protocol,
+                );
+                {
+                    let mut map = runtimes.write().await;
+                    if let Some(rt) = map.get_mut(&byte) {
+                        rt.state.price = price;
+                        rt.last_preset = preset; // remaining — caps already set by prepare_continue
+                        rt.mark_preauth_config_on_wire(); // config already on wire; skip deferred path
+                        rt.apply_authorize_sent();
+                        rt.begin_continuation_segment(&fp_cfg, cfg);
+                        rt.promote_continuation_delivering();
+                    }
                 }
-                drop(map);
                 let disp_by_byte: HashMap<u8, FuelingPositionConfig> = cfg
                     .active_positions()
                     .into_iter()
@@ -1156,13 +1246,13 @@ async fn apply_command(
                 let f = stop_frame(addr);
                 let _ = exchange_serial(backend, &f);
             }
-            let active_shift_id = shifts.active_id().await;
+            let (active_shift_id, active_operator_name) = shifts.active_info().await;
             let mut stopped_effects = Vec::new();
             {
                 let mut map = runtimes.write().await;
                 for fp in cfg.active_positions() {
                     if let Some(rt) = map.get_mut(&fp.address_byte) {
-                        if let Some(effect) = rt.apply_stop(fp, cfg, active_shift_id.clone()) {
+                        if let Some(effect) = rt.apply_stop(fp, cfg, active_shift_id.clone(), active_operator_name.clone(), false) {
                             stopped_effects.push((fp.address_byte, fp.id.clone(), effect));
                         }
                     }

@@ -18,8 +18,8 @@ use tower_http::trace::TraceLayer;
 use types::{
     AuthorizeCmd, CloseStoppedTxCmd, ContinueFillCmd, CreateOperatorCmd, EndShiftCmd, FpSnapshot,
     FpState, FpStatus, HandoverCmd, NozzleSnapshot, Operator, Preset, ProductSnapshot,
-    ResumeFillCmd, Shift, ShiftSlot, SiteSnapshot, StartShiftCmd, StopCmd, StopSource, Transaction,
-    TxStatus, TxSummary, UpdateAllPricesCmd, WsEvent,
+    ResumeFillCmd, Shift, ShiftSlot, SiteSnapshot, StartShiftCmd, StopCmd, StopSource, TankSnapshot,
+    Transaction, TxStatus, TxSummary, UpdateAllPricesCmd, WsEvent,
 };
 
 use crate::admin::AdminSessions;
@@ -165,12 +165,23 @@ fn site_snapshot(cfg: &SiteConfig) -> SiteSnapshot {
             end: s.end.clone(),
         })
         .collect();
+    let tanks: Vec<TankSnapshot> = cfg
+        .tanks
+        .iter()
+        .map(|t| TankSnapshot {
+            product_id: t.product_id,
+            label: t.label.clone(),
+            capacity_l: t.capacity_l,
+            current_l: t.current_l,
+        })
+        .collect();
     SiteSnapshot {
         site_id: cfg.site.id.clone(),
         site_name: cfg.site.name.clone(),
         protocol: protocol_str(&cfg.connection.protocol),
         positions,
         products,
+        tanks,
         shift_mode,
         shift_schedule,
         require_operator_pin: cfg.shifts.require_operator_pin,
@@ -720,6 +731,11 @@ pub async fn close_stopped_tx(
             "transaction not found or not in STOPPED status".into(),
         ));
     }
+    // Emit fp.done so the UI shows the dispensed amount and populates lastSale for "oxirgi quyish".
+    // Must be sent before fp.status so holdDoneUntil prevents the IDLE status from clearing the DONE display.
+    if let Ok(Some(tx)) = queries::get_transaction(&st.pool, &cmd.stopped_tx_id).await {
+        let _ = st.events.send(WsEvent::Done(tx));
+    }
     let states: Vec<FpState> = {
         let map = st.runtimes.read().await;
         map.values().map(|r| r.state.clone()).collect()
@@ -810,6 +826,7 @@ pub struct TxQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
     pub fp_id: Option<String>,
+    pub shift_id: Option<String>,
     /// Comma-separated status values, e.g. "COMPLETED,CONTINUED_FROM". Empty = all.
     pub statuses: Option<String>,
     pub from_ms: Option<i64>,
@@ -833,6 +850,7 @@ pub async fn get_transactions(
         limit,
         offset,
         q.fp_id.as_deref(),
+        q.shift_id.as_deref(),
         &status_vec,
         q.from_ms,
         q.until_ms,
@@ -855,6 +873,7 @@ pub async fn get_transactions_summary(
     let summary = queries::summarize_transactions(
         &st.pool,
         q.fp_id.as_deref(),
+        q.shift_id.as_deref(),
         &status_vec,
         q.from_ms,
         q.until_ms,

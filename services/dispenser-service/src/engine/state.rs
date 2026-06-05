@@ -8,6 +8,11 @@ use wayne_europump::{decode_amount, decode_volume, Frame};
 /// Idle polls required before accepting another reactive nozzle lift after ghost fill.
 const GHOST_RECOVERY_IDLE_POLLS: u8 = 4;
 
+/// Consecutive frozen-counter Data frames before committing to STOPPED during decel window.
+const DECEL_FROZEN_FRAME_THRESHOLD: u8 = 6;
+/// Wall-clock fallback: commit to STOPPED if the decel window stays open this long (ms).
+pub(super) const DECEL_WINDOW_TIMEOUT_MS: i64 = 10_000;
+
 
 #[derive(Debug, Clone)]
 pub struct StoppedContext {
@@ -76,6 +81,18 @@ pub struct RuntimeFp {
     pub last_wire_hose_at_ms: i64,
     /// Completed sale awaiting operator dismiss — blocks duplicate history on other nozzles.
     pub completed_sale: Option<CompletedSaleLatch>,
+
+    // ── Decel window (old-app BUSY-after-stop) ──────────────────────────────
+    /// Wall-clock ms when the STOP command was sent; `None` = no decel window active.
+    pub decel_stop_sent_at: Option<i64>,
+    /// Volume snapshot at STOP time — used to detect whether the counter advances.
+    pub decel_vol_snapshot: f64,
+    /// Consecutive Data frames with a frozen counter since STOP was sent.
+    pub decel_frozen_count: u8,
+    /// Preset captured at STOP time for forwarding to enter_stopped_state on expiry.
+    pub decel_pending_preset: Option<Preset>,
+    /// Stop source captured at STOP time (always App for this path).
+    pub decel_pending_stop_source: StopSource,
 }
 
 /// Hose lift notifications older than this are ignored for "still up" guards.
@@ -128,6 +145,11 @@ impl RuntimeFp {
             last_wire_hose_code: None,
             last_wire_hose_at_ms: 0,
             completed_sale: None,
+            decel_stop_sent_at: None,
+            decel_vol_snapshot: 0.0,
+            decel_frozen_count: 0,
+            decel_pending_preset: None,
+            decel_pending_stop_source: StopSource::App,
             state: FpState {
                 fp_id: fp.id.clone(),
                 label: fp.label.clone(),
@@ -186,6 +208,17 @@ impl RuntimeFp {
     pub fn clear_deliver_caps(&mut self) {
         self.cap_volume_liters = None;
         self.cap_amount = None;
+    }
+
+    pub fn in_decel_window(&self) -> bool {
+        self.decel_stop_sent_at.is_some()
+    }
+
+    pub fn clear_decel_window(&mut self) {
+        self.decel_stop_sent_at = None;
+        self.decel_vol_snapshot = 0.0;
+        self.decel_frozen_count = 0;
+        self.decel_pending_preset = None;
     }
 
     pub fn set_deliver_caps_from_preset(&mut self, preset: &Preset) {
@@ -335,11 +368,12 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
     ) -> FrameEffect {
         self.stopped_context = None;
         self.clear_deliver_caps();
         self.state.status = FpStatus::Done;
-        let tx = self.close_transaction(false, fp_cfg, site, active_shift_id);
+        let tx = self.close_transaction(false, fp_cfg, site, active_shift_id, active_operator_name);
         self.touch();
         FrameEffect::TransactionDone {
             tx,
@@ -352,12 +386,13 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
     ) -> FrameEffect {
         let (vol, _) = self.combined_totals();
         self.clear_deliver_caps();
         self.state.status = FpStatus::Done;
         let completed = self.sale_target_met() || vol < 0.01;
-        let tx = self.close_transaction(completed, fp_cfg, site, active_shift_id);
+        let tx = self.close_transaction(completed, fp_cfg, site, active_shift_id, active_operator_name);
         self.touch();
         FrameEffect::TransactionDone {
             tx,
@@ -394,6 +429,7 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
         preset: Preset,
         stop_source: StopSource,
     ) -> FrameEffect {
@@ -404,6 +440,7 @@ impl RuntimeFp {
             fp_cfg,
             site,
             active_shift_id,
+            active_operator_name,
             combined_vol,
             combined_amt,
             None,
@@ -483,6 +520,23 @@ impl RuntimeFp {
             return Err("stopped_tx_id does not match this lane".into());
         }
         let preset = sc.preset.clone();
+
+        // Hardware CONFIG must use the *remaining* amount so the pump doesn't
+        // re-authorize for the full original limit again.  The software combined-
+        // volume cap (set below) still uses the original preset so it fires at
+        // the correct total (base + segment >= original limit).
+        let hardware_preset = match &preset {
+            Preset::Volume(v) => {
+                let rem = (v - sc.stopped_volume).max(0.0);
+                if rem > 0.01 { Preset::Volume(rem) } else { Preset::Str("full".into()) }
+            }
+            Preset::Amount(a) => {
+                let rem = a.saturating_sub(sc.stopped_amount);
+                if rem > 0 { Preset::Amount(rem) } else { Preset::Str("full".into()) }
+            }
+            Preset::Str(_) => preset.clone(),
+        };
+
         self.continuation = Some(ContinuationContext {
             parent_tx_id: sc.stopped_tx_id.clone(),
             base_volume: sc.stopped_volume,
@@ -499,10 +553,10 @@ impl RuntimeFp {
         self.state.segment_amount = Some(0);
         self.state.volume = sc.stopped_volume;
         self.state.amount = sc.stopped_amount;
-        self.set_deliver_caps_from_preset(&preset);
-        self.last_preset = preset.clone();
+        self.set_deliver_caps_from_preset(&preset); // original — guards combined total
+        self.last_preset = preset.clone();           // original — used for display & re-pause
         self.touch();
-        Ok(preset)
+        Ok(hardware_preset)
     }
 
     pub fn close_stopped(&mut self, stopped_tx_id: &str) -> Result<(), String> {
@@ -522,6 +576,8 @@ impl RuntimeFp {
         self.state.stop_source = None;
         self.state.volume = 0.0;
         self.state.amount = 0;
+        self.state.pre_auth_preset = None;
+        self.pre_auth = None;
         self.touch();
         Ok(())
     }
@@ -558,6 +614,7 @@ impl RuntimeFp {
         self.last_wire_hose_code = None;
         self.last_wire_hose_at_ms = 0;
         self.clear_deliver_caps();
+        self.clear_decel_window();
         self.clear_continuation_fields();
         self.state.status = FpStatus::Idle;
         self.state.stop_source = None;
@@ -668,10 +725,30 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
     ) -> FrameEffect {
         if self.ghost_recovery_active() {
             self.touch();
             return FrameEffect::None;
+        }
+        // Decel window: nozzle holstered while waiting for decel resolution → commit stopped.
+        if self.in_decel_window()
+            && matches!(self.state.status, FpStatus::Authorizing | FpStatus::Delivering)
+        {
+            let (vol, amt) = self.combined_totals();
+            if vol < 0.01 && amt == 0 {
+                self.clear_decel_window();
+                self.cancel_zero_volume_session();
+                self.touch();
+                return FrameEffect::CompleteGhostFill;
+            }
+            let preset = self.decel_pending_preset.take()
+                .unwrap_or_else(|| self.last_preset.clone());
+            let ss = self.decel_pending_stop_source;
+            self.clear_decel_window();
+            return self.enter_stopped_state(
+                fp_cfg, site, active_shift_id, active_operator_name, preset, ss,
+            );
         }
         match self.state.status {
             FpStatus::Authorizing | FpStatus::Delivering => {
@@ -685,9 +762,9 @@ impl RuntimeFp {
                     self.touch();
                     FrameEffect::CompleteGhostFill
                 } else if self.holster_ends_sale_early() {
-                    self.end_sale_from_holster_early(fp_cfg, site, active_shift_id)
+                    self.end_sale_from_holster_early(fp_cfg, site, active_shift_id, active_operator_name)
                 } else {
-                    self.complete_sale_from_holster(fp_cfg, site, active_shift_id)
+                    self.complete_sale_from_holster(fp_cfg, site, active_shift_id, active_operator_name)
                 }
             }
             FpStatus::PreAuthorized => {
@@ -739,6 +816,7 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
     ) -> FrameEffect {
         use FpStatus::*;
 
@@ -765,7 +843,7 @@ impl RuntimeFp {
                 ..
             } => {
                 let tx_id = stopped_tx_id.clone();
-                let tx = self.finalize_stopped_sale(fp_cfg, site, active_shift_id, false);
+                let tx = self.finalize_stopped_sale(fp_cfg, site, active_shift_id, active_operator_name, false);
                 FrameEffect::NozzleRemoved {
                     fp_id: self.state.fp_id.clone(),
                     stopped_tx_id: Some(tx_id),
@@ -776,7 +854,7 @@ impl RuntimeFp {
                 stop_source: StopSource::External,
                 ..
             } => {
-                let tx = self.finalize_stopped_sale(fp_cfg, site, active_shift_id, false);
+                let tx = self.finalize_stopped_sale(fp_cfg, site, active_shift_id, active_operator_name, false);
                 FrameEffect::TransactionDone {
                     tx,
                     action: TxCompleteAction::AcknowledgeIdle,
@@ -821,11 +899,19 @@ impl RuntimeFp {
                     self.touch();
                     return FrameEffect::None;
                 }
+                // During continuation re-authorization the lane has base volume > 0 but the
+                // nozzle is not yet physically up (customer hasn't lifted yet, or nozzle was
+                // holstered after an external stop).  The pump sends idle polls while waiting
+                // for the customer to lift — don't treat this as a premature holster event.
+                if self.continuation.is_some() {
+                    self.touch();
+                    return FrameEffect::None;
+                }
                 if self.holster_ends_sale_early() {
-                    return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
+                    return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id, active_operator_name);
                 }
                 if self.current_tx.is_some() {
-                    return self.complete_sale_from_holster(fp_cfg, site, active_shift_id);
+                    return self.complete_sale_from_holster(fp_cfg, site, active_shift_id, active_operator_name);
                 }
                 self.clear_deliver_caps();
                 self.reset_to_idle();
@@ -833,6 +919,22 @@ impl RuntimeFp {
                 FrameEffect::StatusChanged
             }
             Delivering => {
+                if self.in_decel_window() {
+                    let (vol, amt) = self.combined_totals();
+                    if vol < 0.01 && amt == 0 {
+                        self.clear_decel_window();
+                        self.cancel_zero_volume_session();
+                        self.touch();
+                        return FrameEffect::CompleteGhostFill;
+                    }
+                    let preset = self.decel_pending_preset.take()
+                        .unwrap_or_else(|| self.last_preset.clone());
+                    let ss = self.decel_pending_stop_source;
+                    self.clear_decel_window();
+                    return self.enter_stopped_state(
+                        fp_cfg, site, active_shift_id, active_operator_name, preset, ss,
+                    );
+                }
                 let (vol, amt) = self.combined_totals();
                 if vol < 0.01 && amt == 0 {
                     if self.nozzle_physically_up() || self.preauth_session_armed() {
@@ -848,9 +950,9 @@ impl RuntimeFp {
                     return FrameEffect::None;
                 }
                 if self.holster_ends_sale_early() {
-                    return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
+                    return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id, active_operator_name);
                 }
-                self.complete_sale_from_holster(fp_cfg, site, active_shift_id)
+                self.complete_sale_from_holster(fp_cfg, site, active_shift_id, active_operator_name)
             }
         }
     }
@@ -860,6 +962,7 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         _site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
         completed_normally: bool,
     ) -> Transaction {
         let fp_id = self.state.fp_id.clone();
@@ -926,7 +1029,7 @@ impl RuntimeFp {
             product_name,
             status,
             shift_id: active_shift_id,
-            operator_name: None,
+            operator_name: active_operator_name,
             parent_tx_id: None,
             combined_volume: vol,
             combined_amount: amt,
@@ -939,7 +1042,19 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
     ) -> FrameEffect {
+        if self.in_decel_window()
+            && matches!(self.state.status, FpStatus::Authorizing | FpStatus::Delivering)
+        {
+            let preset = self.decel_pending_preset.take()
+                .unwrap_or_else(|| self.last_preset.clone());
+            let ss = self.decel_pending_stop_source;
+            self.clear_decel_window();
+            return self.enter_stopped_state(
+                fp_cfg, site, active_shift_id, active_operator_name, preset, ss,
+            );
+        }
         if matches!(
             self.state.status,
             FpStatus::Authorizing | FpStatus::Delivering | FpStatus::NozzleUp
@@ -968,7 +1083,7 @@ impl RuntimeFp {
             self.touch();
             return FrameEffect::CompleteGhostFill;
         }
-        self.apply_done_response(fp_cfg, site, active_shift_id)
+        self.apply_done_response(fp_cfg, site, active_shift_id, active_operator_name)
     }
 
     /// Done frame (`01 01 05` legacy / composite tail) when not already handled by delivery.
@@ -977,6 +1092,7 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
     ) -> FrameEffect {
         if matches!(self.state.status, FpStatus::Done) {
             self.touch();
@@ -1019,9 +1135,9 @@ impl RuntimeFp {
                 return FrameEffect::SendDoneAwaitHolster;
             }
             if self.holster_ends_sale_early() {
-                return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
+                return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id, active_operator_name);
             }
-            return self.complete_sale_from_holster(fp_cfg, site, active_shift_id);
+            return self.complete_sale_from_holster(fp_cfg, site, active_shift_id, active_operator_name);
         }
         if matches!(self.state.status, FpStatus::Idle | FpStatus::NozzleUp) {
             let (vol, amt) = self.combined_totals();
@@ -1206,6 +1322,7 @@ impl RuntimeFp {
 
     pub fn reset_for_operator(&mut self, fp: &FuelingPositionConfig) {
         self.clear_deliver_caps();
+        self.clear_decel_window();
         self.current_tx = None;
         self.stopped_context = None;
         self.continuation = None;
@@ -1272,6 +1389,7 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
     ) -> FrameEffect {
         if self.settle_after_reconnect > 0 {
             return FrameEffect::None;
@@ -1279,7 +1397,7 @@ impl RuntimeFp {
         let b = fp_cfg.address_byte;
         match frame {
             Frame::Idle { addr } if *addr == b => {
-                self.apply_idle_response(fp_cfg, site, active_shift_id)
+                self.apply_idle_response(fp_cfg, site, active_shift_id, active_operator_name)
             }
             Frame::NozzleHolstered { addr, .. } if *addr == b => {
                 match self.state.status {
@@ -1295,8 +1413,12 @@ impl RuntimeFp {
                                 FrameEffect::CompleteGhostFill
                             }
                         } else {
-                            self.touch();
-                            FrameEffect::StatusChanged
+                            // Nozzle holstered mid-fill — close the transaction the
+                            // same way NozzleReturned does. NozzleHolstered carries no
+                            // hose code so note_wire_hose is not called, but
+                            // apply_nozzle_holstered does not check nozzle_physically_up()
+                            // on the vol > 0 path, so it is safe to delegate directly.
+                            self.apply_nozzle_holstered(fp_cfg, site, active_shift_id, active_operator_name.clone())
                         }
                     }
                     FpStatus::PreAuthorized => {
@@ -1323,7 +1445,7 @@ impl RuntimeFp {
                             FrameEffect::NozzleHolstered
                         }
                     }
-                    _ => self.apply_idle_response(fp_cfg, site, active_shift_id),
+                    _ => self.apply_idle_response(fp_cfg, site, active_shift_id, active_operator_name.clone()),
                 }
             }
             Frame::NozzleReturned { addr, hose, .. } if *addr == b => {
@@ -1334,7 +1456,7 @@ impl RuntimeFp {
                 // was less than WIRE_LIFT_STALE_MS old, leaving the preauth visible on
                 // the next lift.
                 self.note_wire_hose(*hose);
-                self.apply_nozzle_holstered(fp_cfg, site, active_shift_id)
+                self.apply_nozzle_holstered(fp_cfg, site, active_shift_id, active_operator_name)
             }
             Frame::NozzleUp {
                 addr,
@@ -1491,7 +1613,7 @@ impl RuntimeFp {
                 }
             }
             Frame::DispenserIdle { addr, .. } if *addr == b => {
-                self.apply_dispenser_idle(fp_cfg, site, active_shift_id)
+                self.apply_dispenser_idle(fp_cfg, site, active_shift_id, active_operator_name)
             }
             Frame::AckC0 { addr } if *addr == b => {
                 self.touch();
@@ -1500,6 +1622,8 @@ impl RuntimeFp {
             Frame::Data {
                 addr,
                 seq,
+                volume_x1,
+                volume_x2,
                 volume_l,
                 volume_h,
                 amount,
@@ -1551,12 +1675,12 @@ impl RuntimeFp {
                                 return FrameEffect::StatusChanged;
                             }
                         }
-                        return self.apply_nozzle_holstered(fp_cfg, site, active_shift_id);
+                        return self.apply_nozzle_holstered(fp_cfg, site, active_shift_id, active_operator_name.clone());
                     }
                     self.note_wire_hose(*hh);
                 }
                 self.state.seq = *seq;
-                let raw_vol = decode_volume(*volume_l, *volume_h);
+                let raw_vol = decode_volume(*volume_x1, *volume_x2, *volume_l, *volume_h);
                 let raw_amt = decode_amount(amount[0], amount[1], amount[2]);
 
                 if self.state.status == FpStatus::Offline && self.pre_auth.is_some() {
@@ -1690,6 +1814,46 @@ impl RuntimeFp {
                     self.touch();
                     return FrameEffect::StatusChanged;
                 }
+                // Decel window: STOP was sent but we deferred the commit to watch what
+                // the pump does.  FpStatus stays Delivering so BUSY keeps flowing.
+                if self.in_decel_window() {
+                    if *sale_complete {
+                        // Device closed the transaction — commit to STOPPED now.
+                        let preset = self.decel_pending_preset.take()
+                            .unwrap_or_else(|| self.last_preset.clone());
+                        let ss = self.decel_pending_stop_source;
+                        self.clear_decel_window();
+                        return self.enter_stopped_state(
+                            fp_cfg, site, active_shift_id, active_operator_name, preset, ss,
+                        );
+                    }
+                    if raw_vol > self.decel_vol_snapshot + 0.005 {
+                        // Counter advanced — pump accepted our BUSY and is delivering again.
+                        // Restore caps and fall through to normal metering.
+                        self.set_deliver_caps_from_preset(&self.last_preset.clone());
+                        self.clear_decel_window();
+                    } else {
+                        // Counter frozen — pump still decelerating.
+                        self.decel_frozen_count = self.decel_frozen_count.saturating_add(1);
+                        let elapsed = Utc::now().timestamp_millis()
+                            - self.decel_stop_sent_at.unwrap_or(0);
+                        if self.decel_frozen_count >= DECEL_FROZEN_FRAME_THRESHOLD
+                            || elapsed >= DECEL_WINDOW_TIMEOUT_MS
+                        {
+                            let preset = self.decel_pending_preset.take()
+                                .unwrap_or_else(|| self.last_preset.clone());
+                            let ss = self.decel_pending_stop_source;
+                            self.clear_decel_window();
+                            return self.enter_stopped_state(
+                                fp_cfg, site, active_shift_id, active_operator_name, preset, ss,
+                            );
+                        }
+                        // Still within window — update display with frozen value, wait.
+                        self.apply_metering(raw_vol, self.amount_from_volume(raw_vol));
+                        self.touch();
+                        return FrameEffect::StatusChanged;
+                    }
+                }
                 self.apply_metering(raw_vol, self.amount_from_volume(raw_vol));
                 let vol = self.state.volume;
                 let amt = self.state.amount;
@@ -1740,16 +1904,16 @@ impl RuntimeFp {
                         }
                         // Nozzle is already holstered — close immediately.
                         if self.holster_ends_sale_early() {
-                            return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id);
+                            return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id, active_operator_name.clone());
                         }
-                        return self.complete_sale_from_holster(fp_cfg, site, active_shift_id);
+                        return self.complete_sale_from_holster(fp_cfg, site, active_shift_id, active_operator_name.clone());
                     }
                 }
                 self.touch();
                 FrameEffect::StatusChanged
             }
             Frame::TransactionComplete { addr, .. } if *addr == b => {
-                self.apply_done_response(fp_cfg, site, active_shift_id)
+                self.apply_done_response(fp_cfg, site, active_shift_id, active_operator_name)
             }
             Frame::Stopped { addr, .. } if *addr == b => {
                 if self.state.status == FpStatus::Done {
@@ -1760,6 +1924,18 @@ impl RuntimeFp {
                 if self.continuation.is_some() {
                     self.touch();
                     return FrameEffect::StatusChanged;
+                }
+                // Decel window: device sent an explicit STOPPED frame — commit now.
+                if self.in_decel_window()
+                    && matches!(self.state.status, FpStatus::Delivering | FpStatus::Authorizing)
+                {
+                    let preset = self.decel_pending_preset.take()
+                        .unwrap_or_else(|| self.last_preset.clone());
+                    let ss = self.decel_pending_stop_source;
+                    self.clear_decel_window();
+                    return self.enter_stopped_state(
+                        fp_cfg, site, active_shift_id, active_operator_name, preset, ss,
+                    );
                 }
                 if matches!(
                     self.state.status,
@@ -1780,6 +1956,7 @@ impl RuntimeFp {
                         fp_cfg,
                         site,
                         active_shift_id,
+                        active_operator_name,
                         preset,
                         StopSource::External,
                     );
@@ -1802,6 +1979,7 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
     ) -> Transaction {
         let (combined_vol, combined_amt) = self.combined_totals();
         let parent = self.continuation.as_ref().map(|c| c.parent_tx_id.clone());
@@ -1816,6 +1994,7 @@ impl RuntimeFp {
             fp_cfg,
             site,
             active_shift_id,
+            active_operator_name,
             combined_vol,
             combined_amt,
             parent,
@@ -1828,6 +2007,7 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
         combined_volume: f64,
         combined_amount: u64,
         parent_tx_id: Option<String>,
@@ -1867,7 +2047,7 @@ impl RuntimeFp {
             product_name,
             status,
             shift_id: active_shift_id,
-            operator_name: None,
+            operator_name: active_operator_name,
             parent_tx_id,
             combined_volume,
             combined_amount,
@@ -1936,6 +2116,8 @@ impl RuntimeFp {
         fp_cfg: &FuelingPositionConfig,
         site: &SiteConfig,
         active_shift_id: Option<String>,
+        active_operator_name: Option<String>,
+        use_decel_window: bool,
     ) -> Option<FrameEffect> {
         if self.state.status == FpStatus::PreAuthorized {
             self.cancel_pre_auth();
@@ -1949,10 +2131,28 @@ impl RuntimeFp {
             FpStatus::Delivering | FpStatus::Authorizing
         ) || self.current_tx.is_some()
         {
+            if use_decel_window {
+                if self.in_decel_window() {
+                    // Second Stop while decel window is already open — ignore.
+                    return None;
+                }
+                // Enter decel window: keep FpStatus::Delivering so BUSY frames keep
+                // flowing, defer the DB write until we see whether the pump accepts.
+                let (snapshot_vol, _) = self.combined_totals();
+                self.decel_stop_sent_at = Some(Utc::now().timestamp_millis());
+                self.decel_vol_snapshot = snapshot_vol;
+                self.decel_frozen_count = 0;
+                self.decel_pending_preset = Some(self.last_preset.clone());
+                self.decel_pending_stop_source = StopSource::App;
+                self.clear_deliver_caps();
+                self.touch();
+                return None;
+            }
             return Some(self.enter_stopped_state(
                 fp_cfg,
                 site,
                 active_shift_id,
+                active_operator_name,
                 self.last_preset.clone(),
                 StopSource::App,
             ));
@@ -2116,10 +2316,11 @@ fn resolve_wayne_nozzle(
         }
     }
 
-    // 4. Legacy index match — never treat holster bytes as indices.
+    // 4. Legacy index match: lift codes are nozzle_index + 0x10 (Wayne protocol).
     if Frame::is_nozzle_lift_code(hose_code) {
+        let idx = hose_code - 0x10;
         for n in &active {
-            if n.index == hose_code {
+            if n.index == idx {
                 let (name, pid, color) = lookup_nozzle(site, fp, n.index);
                 return (n.index, name, pid, color);
             }

@@ -1,8 +1,15 @@
 use crate::crc::crc16;
 use crate::frame::Frame;
 
-pub fn decode_volume(v1: u8, v2: u8) -> f64 {
-    let digits = format!("{:02X}{:02X}", v1, v2);
+/// Decode volume from the four BCD bytes at frame positions off+2..off+5.
+///
+/// The `02 08` meter block carries volume as four BCD bytes:
+///   `02 08 [VX1][VX2][V1][V2] 00 [A1][A2][A3]`
+/// VX1/VX2 are 0x00 for volumes < 100 L and carry the hundreds/thousands
+/// digits for larger fills. Together the 8 hex digits form a centilitre count:
+///   e.g. 100.00 L → VX1=0x00 VX2=0x01 V1=0x00 V2=0x00 → "00010000" / 100
+pub fn decode_volume(vx1: u8, vx2: u8, v1: u8, v2: u8) -> f64 {
+    let digits = format!("{:02X}{:02X}{:02X}{:02X}", vx1, vx2, v1, v2);
     digits.parse::<f64>().unwrap_or(0.0) / 100.0
 }
 
@@ -69,6 +76,8 @@ fn try_crc(data: &[u8], ck1: u8, ck2: u8) -> bool {
 }
 
 struct FillDataFields {
+    volume_x1: u8,
+    volume_x2: u8,
     volume_l: u8,
     volume_h: u8,
     amount: [u8; 3],
@@ -129,6 +138,8 @@ fn parse_fill_data_block(inner: &[u8]) -> Option<FillDataFields> {
         && inner[inner.len() - 1] == 0x01;
     let (hose_product, hose_code) = embedded_hose_from_fill(inner, off, config_echo);
     Some(FillDataFields {
+        volume_x1: inner[off + 2],
+        volume_x2: inner[off + 3],
         volume_l: inner[off + 4],
         volume_h: inner[off + 5],
         amount: [inner[off + 7], inner[off + 8], inner[off + 9]],
@@ -235,6 +246,8 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
                     return Frame::Data {
                         addr,
                         seq: seq_fb,
+                        volume_x1: data.volume_x1,
+                        volume_x2: data.volume_x2,
                         volume_l: data.volume_l,
                         volume_h: data.volume_h,
                         amount: data.amount,
@@ -293,6 +306,8 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
             return Frame::Data {
                 addr,
                 seq,
+                volume_x1: data.volume_x1,
+                volume_x2: data.volume_x2,
                 volume_l: data.volume_l,
                 volume_h: data.volume_h,
                 amount: data.amount,
@@ -628,12 +643,16 @@ mod tests {
             Frame::Data {
                 hose_product,
                 hose_code,
+                volume_x1,
+                volume_x2,
                 volume_l,
                 volume_h,
                 ..
             } => {
                 assert_eq!(hose_product, Some(0x05));
                 assert_eq!(hose_code, Some(0x02));
+                assert_eq!(volume_x1, 0);
+                assert_eq!(volume_x2, 0);
                 assert_eq!(volume_l, 0);
                 assert_eq!(volume_h, 0);
             }
@@ -863,12 +882,14 @@ mod tests {
         raw.extend([0x03, 0xFA]);
         match parse_frame(&raw) {
             Frame::Data {
+                volume_x1,
+                volume_x2,
                 volume_l,
                 volume_h,
                 amount,
                 ..
             } => {
-                assert_eq!(decode_volume(volume_l, volume_h), 0.15);
+                assert_eq!(decode_volume(volume_x1, volume_x2, volume_l, volume_h), 0.15);
                 assert_eq!(decode_amount(amount[0], amount[1], amount[2]), 1575);
             }
             f => panic!("expected Data, got {:?}", f),
@@ -885,12 +906,14 @@ mod tests {
         match parse_frame(raw) {
             Frame::Data {
                 sale_complete,
+                volume_x1,
+                volume_x2,
                 volume_l,
                 volume_h,
                 ..
             } => {
                 assert!(sale_complete);
-                assert_eq!(decode_volume(volume_l, volume_h), 23.0);
+                assert_eq!(decode_volume(volume_x1, volume_x2, volume_l, volume_h), 23.0);
             }
             f => panic!("expected Data, got {:?}", f),
         }
@@ -909,6 +932,8 @@ mod tests {
             Frame::Data {
                 addr,
                 seq,
+                volume_x1,
+                volume_x2,
                 volume_l,
                 volume_h,
                 amount,
@@ -916,7 +941,7 @@ mod tests {
             } => {
                 assert_eq!(addr, 0x52);
                 assert_eq!(seq, 0x33);
-                assert_eq!(decode_volume(volume_l, volume_h), 0.0);
+                assert_eq!(decode_volume(volume_x1, volume_x2, volume_l, volume_h), 0.0);
                 assert_eq!(decode_amount(amount[0], amount[1], amount[2]), 0);
             }
             f => panic!("expected Data (CRC-fail fallback), got {:?}", f),

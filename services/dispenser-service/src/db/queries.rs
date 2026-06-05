@@ -4,7 +4,7 @@ use types::{Transaction, TxStatus, TxSummary};
 
 /// SQL fragment: statuses that count toward revenue / shift totals.
 #[allow(dead_code)]
-pub const REVENUE_STATUS_SQL: &str = "('COMPLETED', 'STOPPED')";
+pub const REVENUE_STATUS_SQL: &str = "('COMPLETED', 'STOPPED', 'CONTINUED_FROM')";
 
 fn status_str(status: &TxStatus) -> String {
     match status {
@@ -78,6 +78,36 @@ pub async fn touch_stopped_transaction(pool: &SqlitePool, tx: &Transaction) -> R
     Ok(r.rows_affected() > 0)
 }
 
+/// Merge a completed continuation into its parent STOPPED row.
+/// Updates the parent to COMPLETED with the combined totals so history shows
+/// a single entry rather than a STOPPED + CONTINUED_FROM pair.
+pub async fn merge_continuation_into_parent(
+    pool: &SqlitePool,
+    parent_tx_id: &str,
+    combined_volume: f64,
+    combined_amount: u64,
+) -> Result<bool> {
+    let r = sqlx::query(
+        r#"UPDATE transactions
+           SET status         = 'COMPLETED',
+               completed_at   = ?,
+               volume         = ?,
+               amount         = ?,
+               combined_volume = ?,
+               combined_amount = ?
+           WHERE id = ? AND status = 'STOPPED'"#,
+    )
+    .bind(chrono::Utc::now().timestamp_millis())
+    .bind(combined_volume)
+    .bind(combined_amount as i64)
+    .bind(combined_volume)
+    .bind(combined_amount as i64)
+    .bind(parent_tx_id)
+    .execute(pool)
+    .await?;
+    Ok(r.rows_affected() > 0)
+}
+
 pub async fn persist_closed_transaction(pool: &SqlitePool, tx: &Transaction) -> Result<()> {
     let now = chrono::Utc::now().timestamp_millis();
     match &tx.status {
@@ -96,7 +126,20 @@ pub async fn persist_closed_transaction(pool: &SqlitePool, tx: &Transaction) -> 
                 return Ok(());
             }
         }
-        TxStatus::ContinuedFrom(_) => {}
+        TxStatus::ContinuedFrom(parent_id) => {
+            // Merge the combined totals into the parent STOPPED row → single history entry.
+            if merge_continuation_into_parent(
+                pool,
+                parent_id,
+                tx.combined_volume,
+                tx.combined_amount,
+            )
+            .await?
+            {
+                return Ok(());
+            }
+            // Parent not found / not STOPPED — fall back to inserting a new row.
+        }
     }
     let _ = now;
     insert_transaction(pool, tx).await
@@ -120,14 +163,18 @@ pub async fn list_transactions(
     limit: i64,
     offset: i64,
     fp_id: Option<&str>,
+    shift_id: Option<&str>,
     statuses: &[&str],
     from_ms: Option<i64>,
     until_ms: Option<i64>,
 ) -> Result<Vec<Transaction>> {
-    let select = r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, parent_tx_id, combined_volume, combined_amount FROM transactions WHERE 1=1"#;
+    let select = r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, operator_name, parent_tx_id, combined_volume, combined_amount FROM transactions WHERE 1=1"#;
     let mut qb: QueryBuilder<sqlx::Sqlite> = QueryBuilder::new(select);
     if let Some(fp) = fp_id {
         qb.push(" AND fp_id = ").push_bind(fp);
+    }
+    if let Some(sid) = shift_id {
+        qb.push(" AND shift_id = ").push_bind(sid);
     }
     if !statuses.is_empty() {
         qb.push(" AND status IN (");
@@ -154,6 +201,7 @@ pub async fn list_transactions(
 pub async fn summarize_transactions(
     pool: &SqlitePool,
     fp_id: Option<&str>,
+    shift_id: Option<&str>,
     statuses: &[&str],
     from_ms: Option<i64>,
     until_ms: Option<i64>,
@@ -169,6 +217,9 @@ pub async fn summarize_transactions(
     );
     if let Some(fp) = fp_id {
         qb.push(" AND fp_id = ").push_bind(fp);
+    }
+    if let Some(sid) = shift_id {
+        qb.push(" AND shift_id = ").push_bind(sid);
     }
     if !statuses.is_empty() {
         qb.push(" AND status IN (");
@@ -196,7 +247,7 @@ pub async fn summarize_transactions(
 
 pub async fn get_transaction(pool: &SqlitePool, id: &str) -> Result<Option<Transaction>> {
     let row = sqlx::query_as::<_, TxRow>(
-        r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, parent_tx_id, combined_volume, combined_amount
+        r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, operator_name, parent_tx_id, combined_volume, combined_amount
            FROM transactions WHERE id = ?"#,
     )
     .bind(id)
@@ -221,6 +272,7 @@ struct TxRow {
     product_name: String,
     status: String,
     shift_id: Option<String>,
+    operator_name: Option<String>,
     parent_tx_id: Option<String>,
     combined_volume: f64,
     combined_amount: i64,
@@ -253,7 +305,7 @@ impl TxRow {
             product_name: self.product_name,
             status: st,
             shift_id: self.shift_id,
-            operator_name: None,
+            operator_name: self.operator_name,
             parent_tx_id: self.parent_tx_id,
             combined_volume: self.combined_volume,
             combined_amount: self.combined_amount as u64,

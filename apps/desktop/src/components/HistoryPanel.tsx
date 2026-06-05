@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { Shift, Transaction, TxStatus } from "../types/api";
-import { txStatusLabel, txStatusParentId } from "../types/api";
+import { txStatusI18nKey, txStatusLabel, txStatusParentId } from "../types/api";
 
 // ── print helpers ─────────────────────────────────────────────────────────────
 
@@ -56,6 +56,7 @@ function buildPrintInnerHtml(
   dateLabel: string,
   productLabel: string,
   t: (key: string, opts?: Record<string, unknown>) => string,
+  showCombinedForContinued: boolean,
 ): string {
   const now = new Date().toLocaleString(undefined, {
     day: "2-digit", month: "2-digit", year: "numeric",
@@ -69,9 +70,12 @@ function buildPrintInnerHtml(
       + " / "
       + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   };
-
-  const totalVol = rows.reduce((s, r) => s + r.volume, 0);
-  const totalAmt = rows.reduce((s, r) => s + r.amount, 0);
+  const rowVol = (r: Transaction) =>
+    r.status === "CONTINUED_FROM" && showCombinedForContinued ? (r.combined_volume ?? r.volume) : r.volume;
+  const rowAmt = (r: Transaction) =>
+    r.status === "CONTINUED_FROM" && showCombinedForContinued ? (r.combined_amount ?? r.amount) : r.amount;
+  const totalVol = rows.reduce((s, r) => s + rowVol(r), 0);
+  const totalAmt = rows.reduce((s, r) => s + rowAmt(r), 0);
   const cnt = summary?.count ?? rows.length;
   const vol = summary?.total_volume ?? totalVol;
   const amt = summary?.total_amount ?? totalAmt;
@@ -82,11 +86,11 @@ function buildPrintInnerHtml(
     <tr class="${i % 2 === 1 ? "alt" : ""}">
       <td class="c m">${i + 1}</td>
       <td>${r.product_name}</td>
-      <td class="r m">${fmtV(r.volume)}</td>
-      <td class="r m">${fmtA(r.amount)}</td>
+      <td class="r m">${fmtV(rowVol(r))}</td>
+      <td class="r m">${fmtA(rowAmt(r))}</td>
       <td class="m" style="font-size:9.5px">${fmtDt(r.started_at)}</td>
       <td>${r.label || r.fp_id}</td>
-      <td class="c">${txStatusLabel(r.status)}</td>
+      <td class="c">${t(txStatusI18nKey(r.status))}</td>
     </tr>`).join("");
 
   return `
@@ -289,6 +293,9 @@ export function HistoryPanel(props: {
   // status filter (server-side)
   const [statusFilter, setStatusFilter] = useState<StatusFilterId>("main");
 
+  // shift filter (server-side) — null = no shift filter
+  const [filterShiftId, setFilterShiftId] = useState<string | null>(null);
+
   // date range (server-side)
   const [datePreset,  setDatePreset]  = useState(props.currentShift ? "shift" : "today");
   const [customFrom,  setCustomFrom]  = useState("");
@@ -309,11 +316,21 @@ export function HistoryPanel(props: {
     [statusFilter],
   );
 
+  // CONTINUED_FROM rows store only the segment volume in `volume` and the full
+  // combined total in `combined_volume`. When the filter excludes STOPPED rows,
+  // show combined_volume so the operator sees the true fill total. When STOPPED
+  // is included (all / stopped views), use segment volume to avoid double-counting.
+  const showCombinedForContinued = statusesParam !== "" && !statusesParam.includes("STOPPED");
+  const rowVol = (r: Transaction) =>
+    r.status === "CONTINUED_FROM" && showCombinedForContinued ? (r.combined_volume ?? r.volume) : r.volume;
+  const rowAmt = (r: Transaction) =>
+    r.status === "CONTINUED_FROM" && showCombinedForContinued ? (r.combined_amount ?? r.amount) : r.amount;
+
   // reset page + clear summary when filters change
   useEffect(() => {
     setPage(0);
     setSummary(null);
-  }, [fromMs, untilMs, statusesParam]);
+  }, [fromMs, untilMs, statusesParam, filterShiftId]);
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
@@ -321,6 +338,7 @@ export function HistoryPanel(props: {
       const { invoke } = await import("@tauri-apps/api/core");
       const s = await invoke<TxSummary>("get_transactions_summary", {
         statuses: statusesParam || null,
+        shiftId:  filterShiftId ?? null,
         fromMs:   fromMs  ?? null,
         untilMs:  untilMs ?? null,
       });
@@ -330,7 +348,7 @@ export function HistoryPanel(props: {
     } finally {
       setSummaryLoading(false);
     }
-  }, [statusesParam, fromMs, untilMs]);
+  }, [statusesParam, filterShiftId, fromMs, untilMs]);
 
   const load = useCallback(async (p: number) => {
     setLoading(true);
@@ -341,6 +359,7 @@ export function HistoryPanel(props: {
         limit:    PAGE_SIZE,
         offset:   p * PAGE_SIZE,
         statuses: statusesParam || null,
+        shiftId:  filterShiftId ?? null,
         fromMs:   fromMs  ?? null,
         untilMs:  untilMs ?? null,
       });
@@ -351,7 +370,7 @@ export function HistoryPanel(props: {
     } finally {
       setLoading(false);
     }
-  }, [statusesParam, fromMs, untilMs]);
+  }, [statusesParam, filterShiftId, fromMs, untilMs]);
 
   useEffect(() => {
     if (!props.visible) return;
@@ -376,6 +395,18 @@ export function HistoryPanel(props: {
         untilMs:  untilMs ?? null,
       });
 
+      const rowsForPrint = filterProduct === "all"
+        ? allRows
+        : allRows.filter((r) => r.product_name === filterProduct);
+
+      const summaryForPrint = filterProduct === "all"
+        ? summary
+        : {
+            count: rowsForPrint.length,
+            total_volume: rowsForPrint.reduce((acc, r) => acc + rowVol(r), 0),
+            total_amount: rowsForPrint.reduce((acc, r) => acc + rowAmt(r), 0),
+          };
+
       const statusLabel = t(STATUS_FILTERS.find((f) => f.id === statusFilter)?.labelKey ?? "history.statusAll");
       const dateLabel = (() => {
         const p = DATE_PRESETS.find((d) => d.id === datePreset);
@@ -391,12 +422,13 @@ export function HistoryPanel(props: {
       })();
 
       const innerHtml = buildPrintInnerHtml(
-        allRows,
-        summary,
+        rowsForPrint,
+        summaryForPrint,
         statusLabel,
         dateLabel,
         filterProduct === "all" ? t("history.printAllFuel") : filterProduct,
         t,
+        showCombinedForContinued,
       );
 
       // Inject print root div
@@ -415,14 +447,25 @@ export function HistoryPanel(props: {
       styleEl.textContent = PRINT_CSS;
       document.head.appendChild(styleEl);
 
-      // Clean up after printing (fires when print dialog closes)
+      let cleaned = false;
       const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
         document.getElementById(PRINT_ROOT_ID)?.remove();
         document.getElementById(PRINT_STYLE_ID)?.remove();
+        window.removeEventListener("afterprint", cleanup);
+        window.removeEventListener("focus", onFocus);
       };
+      const onFocus = () => window.setTimeout(cleanup, 0);
+
       window.addEventListener("afterprint", cleanup, { once: true });
+      window.addEventListener("focus", onFocus, { once: true });
+
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
       window.print();
+      window.setTimeout(cleanup, 400);
     } catch {
       // silently ignore — user can retry
     } finally {
@@ -456,8 +499,8 @@ export function HistoryPanel(props: {
   }, [rows, filterProduct, sortCol, sortDesc]);
 
   // page-level totals (for table footer only)
-  const pageVol = processedRows.reduce((s, r) => s + r.volume, 0);
-  const pageAmt = processedRows.reduce((s, r) => s + r.amount, 0);
+  const pageVol = processedRows.reduce((s, r) => s + rowVol(r), 0);
+  const pageAmt = processedRows.reduce((s, r) => s + rowAmt(r), 0);
 
   const handleSort = (col: typeof sortCol) => {
     if (sortCol === col) setSortDesc(!sortDesc);
@@ -514,6 +557,14 @@ export function HistoryPanel(props: {
               {t(labelKey)}
             </QuickBtn>
           ))}
+          {props.currentShift && (
+            <QuickBtn
+              active={filterShiftId === props.currentShift.id}
+              onClick={() => setFilterShiftId((prev) => prev === props.currentShift!.id ? null : props.currentShift!.id)}
+            >
+              {t("history.currentShift")}
+            </QuickBtn>
+          )}
         </div>
       </div>
 
@@ -670,6 +721,9 @@ export function HistoryPanel(props: {
                   <th className="px-4 py-3 cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("status")}>
                     {t("history.colStatus")} <SortIcon col="status" />
                   </th>
+                  {!compact && (
+                    <th className="whitespace-nowrap px-3 py-3 text-text-muted">{t("history.colOperator")}</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-secondary/50 print:divide-gray-200">
@@ -684,10 +738,10 @@ export function HistoryPanel(props: {
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold tabular-nums text-text-primary print:text-black">
-                      {fmtVol(r.volume)}
+                      {fmtVol(rowVol(r))}
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold tabular-nums text-text-secondary print:text-gray-800">
-                      {fmtInt.format(r.amount)}
+                      {fmtInt.format(rowAmt(r))}
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 font-mono text-xs font-medium text-text-tertiary print:text-gray-700">
                       {fmtTime(r.started_at)}
@@ -700,9 +754,14 @@ export function HistoryPanel(props: {
                         className={`${statusPill(r.status)} print:border print:border-gray-300 print:text-black print:bg-transparent`}
                         title={txStatusParentId(r.status) ?? undefined}
                       >
-                        {txStatusLabel(r.status)}
+                        {t(txStatusI18nKey(r.status))}
                       </span>
                     </td>
+                    {!compact && (
+                      <td className="whitespace-nowrap px-3 py-3 text-xs text-text-muted print:text-gray-600">
+                        {r.operator_name ?? "—"}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

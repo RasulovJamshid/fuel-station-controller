@@ -17,6 +17,8 @@ pub enum Frame {
     Data {
         addr: u8,
         seq: u8,
+        volume_x1: u8,
+        volume_x2: u8,
         volume_l: u8,
         volume_h: u8,
         amount: [u8; 3],

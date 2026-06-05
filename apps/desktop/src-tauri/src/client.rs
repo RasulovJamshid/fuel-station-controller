@@ -280,6 +280,7 @@ impl ServiceClient {
         limit: Option<i64>,
         offset: Option<i64>,
         fp_id: Option<String>,
+        shift_id: Option<String>,
         statuses: Option<String>,
         from_ms: Option<i64>,
         until_ms: Option<i64>,
@@ -294,6 +295,9 @@ impl ServiceClient {
         }
         if let Some(ref id) = fp_id {
             req = req.query(&[("fp_id", id.as_str())]);
+        }
+        if let Some(ref sid) = shift_id {
+            req = req.query(&[("shift_id", sid.as_str())]);
         }
         if let Some(ref s) = statuses {
             req = req.query(&[("statuses", s.as_str())]);
@@ -312,9 +316,22 @@ impl ServiceClient {
             .map_err(fmt_err)
     }
 
+    pub async fn list_operators(&self) -> Result<Vec<Operator>, String> {
+        let url = self.base.join("operators").map_err(fmt_err)?;
+        self.http
+            .get(url)
+            .send()
+            .await
+            .map_err(fmt_err)?
+            .json()
+            .await
+            .map_err(fmt_err)
+    }
+
     pub async fn get_transactions_summary(
         &self,
         fp_id: Option<String>,
+        shift_id: Option<String>,
         statuses: Option<String>,
         from_ms: Option<i64>,
         until_ms: Option<i64>,
@@ -323,6 +340,9 @@ impl ServiceClient {
         let mut req = self.http.get(url);
         if let Some(ref id) = fp_id {
             req = req.query(&[("fp_id", id.as_str())]);
+        }
+        if let Some(ref sid) = shift_id {
+            req = req.query(&[("shift_id", sid.as_str())]);
         }
         if let Some(ref s) = statuses {
             req = req.query(&[("statuses", s.as_str())]);
@@ -360,32 +380,30 @@ impl ServiceClient {
 
     pub async fn start_shift(&self, cmd: StartShiftCmd) -> Result<Shift, String> {
         let url = self.base.join("shifts/start").map_err(fmt_err)?;
-        self.http
+        let resp = self.http
             .post(url)
             .json(&cmd)
             .send()
             .await
-            .map_err(fmt_err)?
-            .error_for_status()
-            .map_err(fmt_err)?
-            .json()
-            .await
-            .map_err(fmt_err)
+            .map_err(fmt_err)?;
+        if !resp.status().is_success() {
+            return Err(Self::response_error(resp).await);
+        }
+        resp.json().await.map_err(fmt_err)
     }
 
     pub async fn end_shift(&self, cmd: EndShiftCmd) -> Result<Shift, String> {
         let url = self.base.join("shifts/end").map_err(fmt_err)?;
-        self.http
+        let resp = self.http
             .post(url)
             .json(&cmd)
             .send()
             .await
-            .map_err(fmt_err)?
-            .error_for_status()
-            .map_err(fmt_err)?
-            .json()
-            .await
-            .map_err(fmt_err)
+            .map_err(fmt_err)?;
+        if !resp.status().is_success() {
+            return Err(Self::response_error(resp).await);
+        }
+        resp.json().await.map_err(fmt_err)
     }
 
     pub async fn handover_shift(&self, cmd: HandoverCmd) -> Result<serde_json::Value, String> {
@@ -393,17 +411,16 @@ impl ServiceClient {
             .base
             .join("shifts/handover")
             .map_err(fmt_err)?;
-        self.http
+        let resp = self.http
             .post(url)
             .json(&cmd)
             .send()
             .await
-            .map_err(fmt_err)?
-            .error_for_status()
-            .map_err(fmt_err)?
-            .json()
-            .await
-            .map_err(fmt_err)
+            .map_err(fmt_err)?;
+        if !resp.status().is_success() {
+            return Err(Self::response_error(resp).await);
+        }
+        resp.json().await.map_err(fmt_err)
     }
 
     pub async fn list_shifts(

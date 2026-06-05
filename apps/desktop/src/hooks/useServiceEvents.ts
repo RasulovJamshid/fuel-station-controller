@@ -54,6 +54,7 @@ export function useServiceEvents() {
   const setCurrentShift = useAppStore((s) => s.setCurrentShift);
   const setSite = useAppStore((s) => s.setSite);
   const setConnection = useAppStore((s) => s.setConnection);
+  const resetServiceState = useAppStore((s) => s.resetServiceState);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -65,6 +66,11 @@ export function useServiceEvents() {
           const parsed = JSON.parse(ev.payload) as WsEvent;
           setConnected(true);
           if (parsed.event === "service.connected") {
+            // Wipe holdDoneUntil and other transient display guards accumulated
+            // during the previous session so the fresh snapshot from
+            // bootstrapFromService is applied without the stale DONE-hold or
+            // nozzle-removed banners blocking the update.
+            resetServiceState();
             void bootstrapFromService(
               setSiteSnapshot, setStates, setCurrentShift, setSite, setConnection,
               () => cancelled,
@@ -82,7 +88,7 @@ export function useServiceEvents() {
       cancelled = true;
       unlisten?.();
     };
-  }, [applyEvent, setConnected, setSiteSnapshot, setStates, setCurrentShift, setSite, setConnection]);
+  }, [applyEvent, setConnected, setSiteSnapshot, setStates, setCurrentShift, setSite, setConnection, resetServiceState]);
 }
 
 /** Single bootstrap on mount with retry. */

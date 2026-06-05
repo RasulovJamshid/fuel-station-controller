@@ -128,12 +128,22 @@ async fn position_totals_for_shift(
     shift_id: &str,
 ) -> Result<Vec<ShiftPositionTotal>> {
     let rows: Vec<(String, String, i64, f64, i64)> = sqlx::query_as(
+        // CONTINUED_FROM rows credit segment volume only (STOPPED parent already
+        // counted the base). COMPLETED/STOPPED use combined_volume for accurate totals.
         r#"SELECT fp_id, label,
                   COUNT(*) as c,
-                  COALESCE(SUM(CASE WHEN combined_volume > 0 THEN combined_volume ELSE volume END), 0) as vol,
-                  COALESCE(SUM(CASE WHEN combined_amount > 0 THEN combined_amount ELSE amount END), 0) as amt
+                  COALESCE(SUM(CASE
+                    WHEN status = 'CONTINUED_FROM' THEN volume
+                    WHEN combined_volume > 0 THEN combined_volume
+                    ELSE volume
+                  END), 0) as vol,
+                  COALESCE(SUM(CASE
+                    WHEN status = 'CONTINUED_FROM' THEN amount
+                    WHEN combined_amount > 0 THEN combined_amount
+                    ELSE amount
+                  END), 0) as amt
            FROM transactions
-           WHERE shift_id = ? AND status IN ('COMPLETED', 'STOPPED')
+           WHERE shift_id = ? AND status IN ('COMPLETED', 'STOPPED', 'CONTINUED_FROM')
            GROUP BY fp_id, label"#,
     )
     .bind(shift_id)
@@ -202,19 +212,34 @@ pub async fn bump_shift_totals(
     shift_id: &str,
     volume: f64,
     amount: u64,
+    count_transaction: bool,
 ) -> Result<()> {
-    sqlx::query(
-        r#"UPDATE shifts SET
-            total_transactions = total_transactions + 1,
-            total_volume = total_volume + ?,
-            total_amount = total_amount + ?
-        WHERE id = ?"#,
-    )
-    .bind(volume)
-    .bind(amount as i64)
-    .bind(shift_id)
-    .execute(pool)
-    .await?;
+    if count_transaction {
+        sqlx::query(
+            r#"UPDATE shifts SET
+                total_transactions = total_transactions + 1,
+                total_volume = total_volume + ?,
+                total_amount = total_amount + ?
+            WHERE id = ?"#,
+        )
+        .bind(volume)
+        .bind(amount as i64)
+        .bind(shift_id)
+        .execute(pool)
+        .await?;
+    } else {
+        sqlx::query(
+            r#"UPDATE shifts SET
+                total_volume = total_volume + ?,
+                total_amount = total_amount + ?
+            WHERE id = ?"#,
+        )
+        .bind(volume)
+        .bind(amount as i64)
+        .bind(shift_id)
+        .execute(pool)
+        .await?;
+    }
     Ok(())
 }
 
@@ -231,6 +256,138 @@ pub async fn close_all_active_shifts(pool: &SqlitePool, ended_at: i64) -> Result
 /// Start shift row (business rules live in `shifts::ShiftCoordinator`).
 pub async fn persist_new_shift(pool: &SqlitePool, shift: &Shift) -> Result<()> {
     insert_shift(pool, shift).await
+}
+
+/// Assign all unshifted completed/stopped transactions that started at or after
+/// `since_ms` to `shift_id`, and update the shift's running totals.
+pub async fn backfill_unassigned_to_shift(
+    pool: &SqlitePool,
+    shift_id: &str,
+    since_ms: i64,
+) -> Result<()> {
+    let (count, vol, amt): (i64, f64, i64) = sqlx::query_as(
+        r#"SELECT COUNT(*),
+                  COALESCE(SUM(CASE
+                    WHEN status = 'CONTINUED_FROM' THEN volume
+                    WHEN combined_volume > 0 THEN combined_volume
+                    ELSE volume
+                  END), 0.0),
+                  COALESCE(SUM(CASE
+                    WHEN status = 'CONTINUED_FROM' THEN amount
+                    WHEN combined_amount > 0 THEN combined_amount
+                    ELSE amount
+                  END), 0)
+           FROM transactions
+           WHERE shift_id IS NULL AND started_at >= ? AND status IN ('COMPLETED', 'STOPPED', 'CONTINUED_FROM')"#,
+    )
+    .bind(since_ms)
+    .fetch_one(pool)
+    .await?;
+
+    if count == 0 {
+        return Ok(());
+    }
+
+    sqlx::query(
+        r#"UPDATE transactions SET shift_id = ?
+           WHERE shift_id IS NULL AND started_at >= ? AND status IN ('COMPLETED', 'STOPPED', 'CONTINUED_FROM')"#,
+    )
+    .bind(shift_id)
+    .bind(since_ms)
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"UPDATE shifts SET
+               total_transactions = total_transactions + ?,
+               total_volume       = total_volume + ?,
+               total_amount       = total_amount + ?
+           WHERE id = ?"#,
+    )
+    .bind(count)
+    .bind(vol)
+    .bind(amt)
+    .bind(shift_id)
+    .execute(pool)
+    .await?;
+
+    tracing::info!(shift_id, count, "backfilled unassigned transactions to shift");
+    Ok(())
+}
+
+/// Move completed/stopped transactions that belong to `from_shift_id` and
+/// started at or after `since_ms` into `to_shift_id`, adjusting both shifts'
+/// running totals. Used when a handover is backdated.
+pub async fn reassign_from_shift_since(
+    pool: &SqlitePool,
+    from_shift_id: &str,
+    to_shift_id: &str,
+    since_ms: i64,
+) -> Result<()> {
+    let (count, vol, amt): (i64, f64, i64) = sqlx::query_as(
+        r#"SELECT COUNT(*),
+                  COALESCE(SUM(CASE
+                    WHEN status = 'CONTINUED_FROM' THEN volume
+                    WHEN combined_volume > 0 THEN combined_volume
+                    ELSE volume
+                  END), 0.0),
+                  COALESCE(SUM(CASE
+                    WHEN status = 'CONTINUED_FROM' THEN amount
+                    WHEN combined_amount > 0 THEN combined_amount
+                    ELSE amount
+                  END), 0)
+           FROM transactions
+           WHERE shift_id = ? AND started_at >= ? AND status IN ('COMPLETED', 'STOPPED', 'CONTINUED_FROM')"#,
+    )
+    .bind(from_shift_id)
+    .bind(since_ms)
+    .fetch_one(pool)
+    .await?;
+
+    if count == 0 {
+        return Ok(());
+    }
+
+    sqlx::query(
+        r#"UPDATE transactions SET shift_id = ?
+           WHERE shift_id = ? AND started_at >= ? AND status IN ('COMPLETED', 'STOPPED', 'CONTINUED_FROM')"#,
+    )
+    .bind(to_shift_id)
+    .bind(from_shift_id)
+    .bind(since_ms)
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"UPDATE shifts SET
+               total_transactions = MAX(0, total_transactions - ?),
+               total_volume       = MAX(0.0, total_volume - ?),
+               total_amount       = MAX(0, total_amount - ?)
+           WHERE id = ?"#,
+    )
+    .bind(count)
+    .bind(vol)
+    .bind(amt)
+    .bind(from_shift_id)
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"UPDATE shifts SET
+               total_transactions = total_transactions + ?,
+               total_volume       = total_volume + ?,
+               total_amount       = total_amount + ?
+           WHERE id = ?"#,
+    )
+    .bind(count)
+    .bind(vol)
+    .bind(amt)
+    .bind(to_shift_id)
+    .execute(pool)
+    .await?;
+
+    tracing::info!(from_shift_id, to_shift_id, count, "reassigned transactions between shifts");
+    Ok(())
 }
 
 pub async fn list_operators(pool: &SqlitePool) -> Result<Vec<Operator>> {

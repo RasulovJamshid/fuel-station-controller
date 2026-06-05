@@ -45,6 +45,14 @@ pub struct SimDispenser {
     pub preauth_nozzle: Option<u8>,
     pub preauth_product: Option<u8>,
     pub preauth_product_name: Option<String>,
+    /// Volume limit decoded from the CONFIG frame's preset block (None = full tank).
+    pub preset_volume_liters: Option<f64>,
+    /// True when tick_volume hit the preset limit (nozzle still in tank).
+    /// False when the operator explicitly holstered (replace_nozzle while Delivering).
+    pub preset_completed: bool,
+    /// Emit one final Data frame at the capped preset volume before switching
+    /// to idle polling while the nozzle is still up.
+    pub preset_final_data_pending: bool,
 }
 
 impl SimDispenser {
@@ -81,6 +89,9 @@ impl SimDispenser {
             preauth_nozzle: None,
             preauth_product: None,
             preauth_product_name: None,
+            preset_volume_liters: None,
+            preset_completed: false,
+            preset_final_data_pending: false,
         }
     }
 
@@ -109,8 +120,11 @@ impl SimDispenser {
         self.last_tick = None;
         if self.status == SimStatus::Delivering || self.status == SimStatus::Done {
             self.status = SimStatus::Idle;
+            self.authorized_from_idle = false;
         }
-        self.authorized_from_idle = false;
+        // Do NOT clear authorized_from_idle unconditionally — if the service already
+        // sent CONFIG (sim is Authorized with authorized_from_idle=true), clearing it
+        // would cause the sim to jump straight to Delivering without a nozzle lift.
     }
 
     pub fn clear_preauth_expectation(&mut self) {
@@ -165,13 +179,32 @@ impl SimDispenser {
                 self.amount = 0;
                 self.last_tick = None;
                 self.authorized_from_idle = false;
+                self.preset_volume_liters = None;
+                self.preset_completed = false;
+                self.preset_final_data_pending = false;
                 self.clear_preauth_expectation();
                 Some(frame)
             }
             // Pre-auth while holstered: stay idle on the wire until the nozzle is lifted.
             SimStatus::Authorized if self.authorized_from_idle => Some(vec![self.addr, 0x70, 0xFA]),
             SimStatus::Authorized | SimStatus::Delivering => Some(self.data_frame()),
-            SimStatus::Done => Some(self.done_frame()),
+            SimStatus::Done => {
+                if self.preset_completed {
+                    if self.preset_final_data_pending {
+                        self.preset_final_data_pending = false;
+                        // Emit capped totals once so the backend records the full preset
+                        // amount before waiting for the physical holster event.
+                        Some(self.data_frame())
+                    } else {
+                        // Nozzle is still in the tank — return Idle so the service closes
+                        // the transaction without triggering the CompleteGhostFill GO_IDLE loop.
+                        // The lane stays Done until the operator explicitly holsters (nozzle-down).
+                        Some(vec![self.addr, 0x70, 0xFA])
+                    }
+                } else {
+                    Some(self.done_frame())
+                }
+            }
             SimStatus::Stopped => Some(self.stopped_frame()),
         }
     }
@@ -206,10 +239,16 @@ impl SimDispenser {
             }
             0x05 => {
                 if inner.len() == 5 {
-                    if self.status == SimStatus::Done {
+                    // GO_IDLE: for a normal holster-then-done flow (preset_completed=false) the
+                    // service sends this after recording the transaction — sim goes Idle.
+                    // For a preset-triggered Done (preset_completed=true) the nozzle is still in
+                    // the tank; ignore GO_IDLE and wait for nozzle-down instead.
+                    if self.status == SimStatus::Done && !self.preset_completed {
                         self.status = SimStatus::Idle;
                         self.volume = 0.0;
                         self.amount = 0;
+                        self.preset_volume_liters = None;
+                        self.preset_final_data_pending = false;
                     }
                     Some(ack())
                 } else if inner.len() > 8 {
@@ -223,11 +262,20 @@ impl SimDispenser {
                         self.amount = 0;
                         self.last_tick = Some(Instant::now());
                         self.status = SimStatus::Delivering;
-                    } else if self.status == SimStatus::Done {
-                        self.status = SimStatus::Idle;
+                        self.preset_final_data_pending = false;
+                    } else if self.status == SimStatus::Done
+                        || self.status == SimStatus::Idle
+                    {
+                        // Holstered preauth (or new preauth after a preset-completed Done):
+                        // store the config and wait for the nozzle lift.
                         self.volume = 0.0;
                         self.amount = 0;
+                        self.authorized_from_idle = true;
+                        self.preset_completed = false;
+                        self.preset_final_data_pending = false;
+                        self.status = SimStatus::Authorized;
                     }
+                    self.preset_volume_liters = parse_preset_from_config(inner);
                     Some(ack())
                 } else {
                     Some(ack())
@@ -323,6 +371,7 @@ impl SimDispenser {
                 self.amount = 0;
                 self.last_tick = None;
                 self.authorized_from_idle = false;
+                self.preset_final_data_pending = false;
                 self.status = SimStatus::NozzleUp;
                 Ok(())
             }
@@ -371,11 +420,21 @@ impl SimDispenser {
                 Ok(())
             }
             SimStatus::Delivering => {
-                self.status = SimStatus::Done;
+                // Physical holster during delivery should emit NozzleReturned first.
+                // Backend finalizes history from this event in simulator mode.
+                self.status = SimStatus::NozzleDown;
                 Ok(())
             }
             SimStatus::NozzleDown => Ok(()), // already going to Idle
-            SimStatus::Done | SimStatus::Stopped => {
+            SimStatus::Done => {
+                // Real pump emits NozzleReturned on holster, then goes Idle.
+                // Transition through NozzleDown so the next poll sends that frame.
+                self.status = SimStatus::NozzleDown;
+                Ok(())
+            }
+            SimStatus::Stopped => {
+                // Nozzle holstered after E-stop. Go directly to Idle so the service
+                // can keep its stopped_context intact for Resume/Close.
                 self.status = SimStatus::Idle;
                 self.volume = 0.0;
                 self.amount = 0;
@@ -408,6 +467,9 @@ impl SimDispenser {
         self.product_name = self.default_product_name.clone();
         self.price = self.default_price;
         self.fill_rate = self.default_fill_rate;
+        self.preset_volume_liters = None;
+        self.preset_completed = false;
+        self.preset_final_data_pending = false;
     }
 
     fn tick_volume(&mut self) {
@@ -427,6 +489,17 @@ impl SimDispenser {
         self.volume += self.fill_rate * elapsed;
         self.volume = (self.volume * 100.0).floor() / 100.0;
         self.amount = (self.volume * self.price as f64).floor() as u64;
+
+        if let Some(limit) = self.preset_volume_liters {
+            if self.volume >= limit {
+                self.volume = (limit * 100.0).floor() / 100.0;
+                self.amount = (self.volume * self.price as f64).floor() as u64;
+                self.last_tick = None;
+                self.preset_completed = true; // nozzle still in tank
+                self.preset_final_data_pending = true;
+                self.status = SimStatus::Done;
+            }
+        }
     }
 
     fn next_seq(&mut self) -> u8 {
@@ -476,6 +549,8 @@ impl SimDispenser {
     fn data_frame(&mut self) -> Vec<u8> {
         let seq = self.next_seq();
         let hundredths = (self.volume * 100.0).round() as u32;
+        let vx1_bcd = to_bcd_byte((hundredths / 1_000_000) % 100);
+        let vx2_bcd = to_bcd_byte((hundredths / 10_000) % 100);
         let v1_bcd = to_bcd_byte((hundredths / 100) % 100);
         let v2_bcd = to_bcd_byte(hundredths % 100);
         let a = self.amount.min(9_999_999);
@@ -483,7 +558,7 @@ impl SimDispenser {
         let a2_bcd = to_bcd_byte(((a / 100) % 100) as u32);
         let a3_bcd = to_bcd_byte((a % 100) as u32);
         build_frame(&[
-            self.addr, seq, 0x02, 0x08, 0x00, 0x00, v1_bcd, v2_bcd, 0x00, a1_bcd, a2_bcd, a3_bcd,
+            self.addr, seq, 0x02, 0x08, vx1_bcd, vx2_bcd, v1_bcd, v2_bcd, 0x00, a1_bcd, a2_bcd, a3_bcd,
         ])
     }
 
@@ -509,6 +584,25 @@ fn to_bcd_byte(v: u32) -> u8 {
     let tens = (v / 10) % 10;
     let ones = v % 10;
     ((tens << 4) | ones) as u8
+}
+
+/// Scan a CONFIG frame body for the `03 04 00 B1 B2 B3` preset-limit block and
+/// decode it as a volume in litres.  Returns `None` for full-tank (`09 99 00`).
+fn parse_preset_from_config(inner: &[u8]) -> Option<f64> {
+    for i in 0..inner.len().saturating_sub(5) {
+        if inner[i] == 0x03 && inner[i + 1] == 0x04 && inner[i + 2] == 0x00 {
+            let [b1, b2, b3] = [inner[i + 3], inner[i + 4], inner[i + 5]];
+            let hundredths = (b1 >> 4) as u32 * 100_000
+                + (b1 & 0xF) as u32 * 10_000
+                + (b2 >> 4) as u32 * 1_000
+                + (b2 & 0xF) as u32 * 100
+                + (b3 >> 4) as u32 * 10
+                + (b3 & 0xF) as u32;
+            // 09 99 00 → 99900 hundredths ≈ 999 L (full tank sentinel)
+            return if hundredths >= 99_900 { None } else { Some(hundredths as f64 / 100.0) };
+        }
+    }
+    None
 }
 
 pub type SharedDispensers = Arc<Mutex<Vec<SimDispenser>>>;

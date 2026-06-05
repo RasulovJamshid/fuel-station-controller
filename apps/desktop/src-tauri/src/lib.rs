@@ -37,6 +37,7 @@ pub fn run() {
             commands::handover_shift,
             commands::list_shifts,
             commands::get_shift_report,
+            commands::list_operators,
             commands::admin_login,
             commands::admin_get_prices,
             commands::admin_update_prices,

@@ -17,6 +17,16 @@ pub struct SiteConfig {
     pub shifts: ShiftConfig,
     #[serde(default)]
     pub ui: UiConfig,
+    #[serde(default)]
+    pub tanks: Vec<TankConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TankConfig {
+    pub product_id: u8,
+    pub label: String,
+    pub capacity_l: f64,
+    pub current_l: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -27,6 +37,11 @@ pub struct UiConfig {
     /// Auto-cancel pre-authorization if the customer never lifts the nozzle (0 = disabled).
     #[serde(default = "default_preauth_timeout_seconds")]
     pub preauth_timeout_seconds: u64,
+    /// When true, keep sending BUSY for up to ~10 s after an app-initiated STOP so the
+    /// pump can accept re-authorization and continue delivery without resetting its counter
+    /// (old-app behavior).  Falls back to normal STOPPED state if the pump ignores BUSY.
+    #[serde(default)]
+    pub use_decel_window_on_stop: bool,
 }
 
 fn default_auth_mode() -> String {
@@ -42,6 +57,7 @@ impl Default for UiConfig {
         Self {
             default_auth_mode: default_auth_mode(),
             preauth_timeout_seconds: default_preauth_timeout_seconds(),
+            use_decel_window_on_stop: false,
         }
     }
 }

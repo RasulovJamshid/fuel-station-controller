@@ -100,7 +100,7 @@
         {
           "index": 1,
           "product_id": 3,
-          "price": 10400,
+          "price": 10500,
           "active": true,
           "wayne_code": 0,
           "wayne_product_code": 0
@@ -124,7 +124,7 @@
         {
           "index": 1,
           "product_id": 3,
-          "price": 10400,
+          "price": 10500,
           "active": true,
           "wayne_code": 0,
           "wayne_product_code": 0
@@ -148,7 +148,7 @@
         {
           "index": 1,
           "product_id": 3,
-          "price": 10400,
+          "price": 10500,
           "active": true,
           "wayne_code": 0,
           "wayne_product_code": 0
@@ -172,7 +172,7 @@
         {
           "index": 1,
           "product_id": 3,
-          "price": 10400,
+          "price": 10500,
           "active": true,
           "wayne_code": 0,
           "wayne_product_code": 0
@@ -212,7 +212,7 @@
         {
           "index": 1,
           "product_id": 3,
-          "price": 10400,
+          "price": 10500,
           "active": true,
           "wayne_code": 0,
           "wayne_product_code": 0
@@ -251,7 +251,13 @@
   },
   "shifts": {
     "mode": "manual",
-    "scheduled": [],
+    "scheduled": [
+      {
+        "name": "Smena",
+        "start": "08:00",
+        "end": "10:47"
+      }
+    ],
     "require_operator_pin": false,
     "warn_before_end_minutes": 15,
     "allow_overlap_minutes": 30,
@@ -259,6 +265,39 @@
   },
   "ui": {
     "default_auth_mode": "preauth",
-    "preauth_timeout_seconds": 300
-  }
+    "preauth_timeout_seconds": 300,
+    "use_decel_window_on_stop": true
+  },
+  "tanks": [
+    {
+      "product_id": 3,
+      "label": "AI-92",
+      "capacity_l": 20000.0,
+      "current_l": 7600.0
+    },
+    {
+      "product_id": 4,
+      "label": "AI-95",
+      "capacity_l": 20000.0,
+      "current_l": 13000.0
+    },
+    {
+      "product_id": 5,
+      "label": "AI-98",
+      "capacity_l": 10000.0,
+      "current_l": 2700.0
+    },
+    {
+      "product_id": 6,
+      "label": "Diesel",
+      "capacity_l": 20000.0,
+      "current_l": 1600.0
+    },
+    {
+      "product_id": 7,
+      "label": "LPG",
+      "capacity_l": 15000.0,
+      "current_l": 10950.0
+    }
+  ]
 }

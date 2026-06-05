@@ -6,7 +6,7 @@ import type { TxStatus } from "../lib/txStatus";
 export type { FpStatus, FpStatusTag, PausedInfo, StopSource } from "../lib/fpStatus";
 export { pausedInfo, statusTag } from "../lib/fpStatus";
 export type { TxStatus } from "../lib/txStatus";
-export { txStatusLabel, txStatusParentId } from "../lib/txStatus";
+export { txStatusI18nKey, txStatusLabel, txStatusParentId } from "../lib/txStatus";
 
 export type AuthMode = "preauth" | "reactive";
 
@@ -62,12 +62,20 @@ export interface ShiftSlot {
   end: string;
 }
 
+export interface TankSnapshot {
+  product_id: number;
+  label: string;
+  capacity_l: number;
+  current_l: number;
+}
+
 export interface SiteSnapshot {
   site_id: string;
   site_name: string;
   protocol: string;
   positions: FpSnapshot[];
   products: { id: number; name: string; color: string; unit: string }[];
+  tanks?: TankSnapshot[];
   shift_mode?: ShiftMode;
   shift_schedule?: ShiftSlot[];
   require_operator_pin?: boolean;
@@ -102,6 +110,7 @@ export interface Shift {
 
 export interface StartShiftCmd {
   operator_name: string;
+  operator_id?: string;
   pin?: string;
   notes?: string;
   /** Unix ms override for shift start. Absent = server uses now(). */
@@ -116,8 +125,11 @@ export interface EndShiftCmd {
 export interface HandoverCmd {
   outgoing_shift_id: string;
   incoming_operator: string;
+  incoming_operator_id?: string;
   incoming_pin?: string;
   notes?: string;
+  /** Unix ms override for the incoming shift's start. Absent = server uses now(). */
+  incoming_started_at_override?: number;
 }
 
 export interface Transaction {

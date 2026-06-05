@@ -67,14 +67,16 @@ function StepperRow({
   autoFocus?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const didAutoFocusRef = useRef(false);
   
   useEffect(() => {
-    if (autoFocus && inputRef.current && !disabled) {
+    if (autoFocus && inputRef.current && !disabled && !didAutoFocusRef.current) {
       inputRef.current.focus();
+      didAutoFocusRef.current = true;
     }
   }, [autoFocus, disabled]);
 
-  const btnClass = `flex shrink-0 items-center justify-center rounded-md border border-border-primary bg-bg-input text-text-secondary transition hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-40 ${compact ? "h-10 w-10" : "h-12 w-12"}`;
+  const btnClass = `flex shrink-0 items-center justify-center rounded-md border border-border-primary bg-bg-input text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-40 ${compact ? "h-10 w-10" : "h-12 w-12"}`;
   return (
     <div className="flex items-stretch gap-1">
       <button type="button" className={btnClass} disabled={disabled} onClick={onDec} aria-label="Decrease">
@@ -263,7 +265,7 @@ export function PumpCardForm({
                 type="button"
                 disabled={disabled}
                 onClick={handleResetSelection}
-                className={`group inline-flex items-center gap-1 rounded-full bg-text-tertiary/15 text-xs font-semibold uppercase tracking-wide text-text-tertiary transition hover:bg-text-tertiary/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${
+                className={`group inline-flex items-center gap-1 rounded-full bg-text-tertiary/15 text-xs font-semibold uppercase tracking-wide text-text-tertiary transition hover:bg-text-tertiary/25 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40 ${
                   compact ? "px-2 py-0.5" : "px-3 py-0.5"
                 }`}
               >

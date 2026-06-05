@@ -35,7 +35,7 @@ export function useShift() {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const rows = await invoke<Shift[]>("list_shifts", {
-        limit: 20,
+        limit: 100,
         offset: 0,
         status: "CLOSED",
       });
@@ -57,6 +57,7 @@ export function useShift() {
         setInvokeError(null);
         const shift = await invoke<Shift>("start_shift", {
           operatorName: cmd.operator_name,
+          operatorId: cmd.operator_id ?? null,
           pin: cmd.pin ?? null,
           notes: cmd.notes ?? null,
           startedAtMs: cmd.started_at_override ?? null,
@@ -102,8 +103,10 @@ export function useShift() {
         const res = await invoke<{ outgoing: Shift; incoming: Shift }>("handover_shift", {
           outgoingShiftId: cmd.outgoing_shift_id,
           incomingOperator: cmd.incoming_operator,
+          incomingOperatorId: cmd.incoming_operator_id ?? null,
           incomingPin: cmd.incoming_pin ?? null,
           notes: cmd.notes ?? null,
+          incomingStartedAtMs: cmd.incoming_started_at_override ?? null,
         });
         setCurrentShift(res.incoming);
         setShowHandoverModal(false);

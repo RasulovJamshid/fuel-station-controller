@@ -147,8 +147,10 @@ impl TxStatus {
     }
 
     /// Revenue and shift totals include completed and interrupted sales with fuel.
+    /// ContinuedFrom carries the segment volume only; caller must add it to the
+    /// already-counted STOPPED parent to avoid double-counting.
     pub fn counts_toward_revenue(&self) -> bool {
-        matches!(self, Self::Completed | Self::Stopped)
+        matches!(self, Self::Completed | Self::Stopped | Self::ContinuedFrom(_))
     }
 }
 
@@ -307,6 +309,8 @@ pub struct SiteSnapshot {
     pub protocol: String,
     pub positions: Vec<FpSnapshot>,
     pub products: Vec<ProductSnapshot>,
+    #[serde(default)]
+    pub tanks: Vec<TankSnapshot>,
     pub shift_mode: String,
     pub shift_schedule: Vec<ShiftSlot>,
     pub require_operator_pin: bool,
@@ -349,6 +353,14 @@ pub struct ProductSnapshot {
     pub name: String,
     pub color: String,
     pub unit: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TankSnapshot {
+    pub product_id: u8,
+    pub label: String,
+    pub capacity_l: f64,
+    pub current_l: f64,
 }
 
 // ── Shift types (SHIFT_MANAGEMENT.md) ─────────────────────────────────────
@@ -400,6 +412,9 @@ pub struct Operator {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StartShiftCmd {
     pub operator_name: String,
+    /// Optional link to an existing operator record.
+    #[serde(default)]
+    pub operator_id: Option<String>,
     #[serde(default)]
     pub pin: Option<String>,
     #[serde(default)]
@@ -420,10 +435,16 @@ pub struct EndShiftCmd {
 pub struct HandoverCmd {
     pub outgoing_shift_id: String,
     pub incoming_operator: String,
+    /// Optional link to an existing operator record for the incoming operator.
+    #[serde(default)]
+    pub incoming_operator_id: Option<String>,
     #[serde(default)]
     pub incoming_pin: Option<String>,
     #[serde(default)]
     pub notes: Option<String>,
+    /// Override the incoming shift's start timestamp (Unix ms). Absent = server uses now().
+    #[serde(default)]
+    pub incoming_started_at_override: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

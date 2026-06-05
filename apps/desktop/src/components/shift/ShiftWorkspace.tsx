@@ -1,6 +1,11 @@
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Shift, ShiftMode, ShiftSlot } from "../../types/api";
 import { ShiftReportPanel } from "./ShiftReportPanel";
+
+const PAGE_SIZE = 8;
+const fmtL   = new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 1 });
+const fmtSum = new Intl.NumberFormat("uz-UZ");
 
 type Props = {
   mode: ShiftMode;
@@ -10,6 +15,7 @@ type Props = {
   onStart: () => void;
   onHandover: () => void;
   onEnd: () => void;
+  onViewShiftTransactions?: (shiftId: string) => void;
 };
 
 export function ShiftWorkspace({
@@ -20,8 +26,52 @@ export function ShiftWorkspace({
   onStart,
   onHandover,
   onEnd,
+  onViewShiftTransactions,
 }: Props) {
   const { t } = useTranslation();
+
+  const [todayStats, setTodayStats] = useState<{ count: number; volume: number; amount: number } | null>(null);
+  useEffect(() => {
+    if (mode === "disabled") return;
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const load = () =>
+      import("@tauri-apps/api/core").then(({ invoke }) =>
+        invoke<{ count: number; total_volume: number; total_amount: number }>(
+          "get_transactions_summary",
+          { statuses: "COMPLETED,CONTINUED_FROM", fromMs: startOfDay.getTime() },
+        ).then((s) => setTodayStats({ count: s.count, volume: s.total_volume, amount: s.total_amount }))
+          .catch(() => {})
+      );
+    void load();
+    const id = window.setInterval(() => void load(), 30_000);
+    return () => window.clearInterval(id);
+  }, [mode]);
+
+  const [search, setSearch]     = useState("");
+  const [sortAsc, setSortAsc]   = useState(false);
+  const [page, setPage]         = useState(0);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = q
+      ? recentShifts.filter(
+          (s) =>
+            s.operator_name.toLowerCase().includes(q) ||
+            (s.shift_name ?? "").toLowerCase().includes(q),
+        )
+      : recentShifts;
+    return [...list].sort((a, b) =>
+      sortAsc ? a.started_at - b.started_at : b.started_at - a.started_at,
+    );
+  }, [recentShifts, search, sortAsc]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage   = Math.min(page, totalPages - 1);
+  const paged      = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  const handleSearch = (v: string) => { setSearch(v); setPage(0); };
+  const toggleSort   = () => { setSortAsc((v) => !v); setPage(0); };
 
   if (mode === "disabled") {
     return (
@@ -69,9 +119,26 @@ export function ShiftWorkspace({
         </div>
       ) : null}
 
+      {todayStats && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border-primary/50 bg-bg-secondary/50 px-4 py-2.5 shadow-sm">
+          <span className="text-xs font-bold uppercase tracking-widest text-text-muted">
+            {t("shiftWorkspace.todayTotals")}
+          </span>
+          <span className="font-mono text-sm font-semibold text-text-primary">
+            {todayStats.count} {t("shiftReport.countSuffix")}
+          </span>
+          <span className="font-mono text-sm font-semibold text-accent-blue">
+            {fmtL.format(todayStats.volume)} L
+          </span>
+          <span className="font-mono text-sm font-semibold text-accent-amber">
+            {fmtSum.format(todayStats.amount)} {t("shiftReport.currency")}
+          </span>
+        </div>
+      )}
+
       {currentShift ? (
         <div className="space-y-4">
-          <ShiftReportPanel shift={currentShift} />
+          <ShiftReportPanel shift={currentShift} onViewTransactions={onViewShiftTransactions} />
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
@@ -107,16 +174,72 @@ export function ShiftWorkspace({
         </div>
       )}
 
+      {/* ── Closed shifts ── */}
       {recentShifts.length > 0 ? (
-        <div className="min-h-0 shrink-0">
-          <div className="mb-4 text-xs font-bold uppercase tracking-widest text-text-muted">
-            {t("shiftWorkspace.closedShifts")}
+        <div className="min-h-0 shrink-0 space-y-4">
+          {/* Header + controls */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-widest text-text-muted">
+              {t("shiftWorkspace.closedShifts")}
+            </span>
+            <span className="rounded-full border border-border-primary/50 bg-bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold text-text-muted">
+              {filtered.length}
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder={t("shiftWorkspace.searchPlaceholder")}
+                className="w-40 rounded-lg border border-border-primary/60 bg-bg-secondary px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-border-focus sm:w-52"
+              />
+              <button
+                type="button"
+                onClick={toggleSort}
+                className="rounded-lg border border-border-primary/60 bg-bg-secondary px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors whitespace-nowrap"
+              >
+                {sortAsc ? t("shiftWorkspace.sortOldest") : t("shiftWorkspace.sortNewest")}
+              </button>
+            </div>
           </div>
-          <div className="space-y-6">
-            {recentShifts.map((s) => (
-              <ShiftReportPanel key={s.id} shift={s} />
-            ))}
-          </div>
+
+          {/* Shift list */}
+          {paged.length === 0 ? (
+            <p className="rounded-xl border border-border-primary/40 bg-bg-secondary/40 px-4 py-6 text-center text-sm text-text-muted">
+              {t("shiftWorkspace.noShiftsFound")}
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {paged.map((s) => (
+                <ShiftReportPanel key={s.id} shift={s} onViewTransactions={onViewShiftTransactions} />
+              ))}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-3 pt-1">
+              <button
+                type="button"
+                disabled={safePage === 0}
+                onClick={() => setPage((p) => p - 1)}
+                className="rounded-lg border border-border-primary/60 bg-bg-secondary px-3.5 py-1.5 text-sm font-semibold text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ←
+              </button>
+              <span className="min-w-[4rem] text-center text-xs font-semibold text-text-muted">
+                {t("shiftWorkspace.pageOf", { current: safePage + 1, total: totalPages })}
+              </span>
+              <button
+                type="button"
+                disabled={safePage >= totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded-lg border border-border-primary/60 bg-bg-secondary px-3.5 py-1.5 text-sm font-semibold text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                →
+              </button>
+            </div>
+          )}
         </div>
       ) : null}
     </div>

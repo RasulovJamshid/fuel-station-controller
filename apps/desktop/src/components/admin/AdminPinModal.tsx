@@ -43,30 +43,30 @@ export function AdminPinModal({ open, forceChange, onSuccess, onCancel }: Props)
     >
       <form
         onSubmit={submit}
-        className="w-full max-w-sm rounded-xl border border-slate-600 bg-slate-900 p-6 shadow-xl"
+        className="w-full max-w-sm rounded-xl border border-border-primary bg-bg-card p-6 shadow-xl"
       >
-        <h2 id="admin-pin-title" className="text-lg font-semibold text-white">
+        <h2 id="admin-pin-title" className="text-lg font-semibold text-text-primary">
           {t("adminPin.title")}
         </h2>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mt-1 text-sm text-text-secondary">
           {forceChange ? t("adminPin.forceChange") : t("adminPin.desc")}
         </p>
         <input
           type="password"
           inputMode="numeric"
           autoComplete="off"
-          className="mt-4 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white"
+          className="mt-4 w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none"
           placeholder={t("adminPin.placeholder")}
           value={pin}
           onChange={(e) => setPin(e.target.value)}
           autoFocus
         />
-        {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+        {error && <p className="mt-2 text-sm text-accent-red-light">{error}</p>}
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+            className="rounded-lg px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary"
           >
             {t("adminPin.cancel")}
           </button>

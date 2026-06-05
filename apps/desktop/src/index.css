@@ -123,6 +123,26 @@
   body {
     font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
     @apply bg-bg-primary text-text-primary antialiased;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+  }
+
+  /* Keep data/copy surfaces selectable. */
+  input,
+  textarea,
+  [contenteditable=""],
+  [contenteditable="true"],
+  table,
+  th,
+  td,
+  pre,
+  code,
+  .selectable-text,
+  [data-selectable="true"] {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    user-select: text;
   }
 
   /* Native form controls ignore Tailwind bg on Linux/WebKit — force theme tokens. */
@@ -445,6 +465,14 @@ html.light .bg-amber-950\/50 {
   box-shadow: inset 0 0 0 1px rgb(var(--color-accent-blue) / 0.35);
 }
 
+.pump-mode-pill:focus-visible {
+  outline: none;
+  border-color: rgb(var(--color-accent-blue) / 0.8);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--color-accent-blue) / 0.4),
+    0 0 0 3px rgb(var(--color-accent-blue) / 0.22);
+}
+
 .pump-mode-pill:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -525,7 +553,11 @@ html.light .bg-slate-700 { background-color: rgb(var(--color-bg-tertiary)) !impo
 html.light .bg-slate-600 { background-color: rgb(var(--color-bg-tertiary)) !important; }
 html.light .bg-slate-500 { background-color: rgb(var(--color-border-primary) / 0.9) !important; }
 html.light .bg-slate-800\/50 { background-color: rgb(var(--color-bg-secondary) / 0.55) !important; }
+html.light .bg-slate-800\/60 { background-color: rgb(var(--color-bg-secondary) / 0.65) !important; }
+html.light .bg-slate-800\/30 { background-color: rgb(var(--color-bg-secondary) / 0.35) !important; }
 html.light .bg-amber-950\/30 { background-color: rgb(255 243 205) !important; }
+html.light .bg-red-900\/40   { background-color: rgb(254 226 226) !important; }
+html.light .text-red-300     { color: rgb(var(--color-accent-red-light)) !important; }
 
 /* Hover/focus/active states */
 html.light .hover\:bg-slate-800:hover { background-color: rgb(var(--color-bg-tertiary)) !important; }
@@ -534,6 +566,9 @@ html.light .hover\:bg-slate-600:hover { background-color: rgb(var(--color-border
 html.light .hover\:bg-slate-500:hover { background-color: rgb(var(--color-border-primary)) !important; }
 html.light .focus\:bg-slate-700:focus  { background-color: rgb(var(--color-bg-input)) !important; }
 html.light .active\:bg-slate-500:active { background-color: rgb(var(--color-border-primary)) !important; }
+
+/* hover:text-white becomes illegible on light surfaces — remap to primary */
+html.light .hover\:text-white:hover { color: rgb(var(--color-text-primary)) !important; }
 
 /* ── Borders ── */
 html.light .border-slate-900,
@@ -599,6 +634,10 @@ html.light .pump-card::after {
 }
 
 /* ── Pump chrome — glass effects need opaque bg on light surface ── */
+html.light .pump-card-icon-box {
+  background: rgb(var(--color-bg-secondary));
+  border-color: rgb(var(--color-border-primary) / 0.6);
+}
 html.light .pump-status-chip {
   background: rgb(var(--color-bg-secondary));
   border-color: rgb(var(--color-border-primary) / 0.7);
@@ -635,7 +674,7 @@ html.light .progress-fill {
 /* ── Brand logo Y-axis spin (rotates around vertical symmetry line) ── */
 @keyframes logo-spin-y {
   0%   { transform: perspective(200px) rotateY(0deg); animation-timing-function: ease-in-out; }
-  10%  { transform: perspective(200px) rotateY(360deg); }
+  30%  { transform: perspective(200px) rotateY(360deg); }
   100% { transform: perspective(200px) rotateY(360deg); }
 }
 

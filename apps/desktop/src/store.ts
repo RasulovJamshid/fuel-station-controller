@@ -46,6 +46,8 @@ interface AppState {
   holdDoneUntil: Record<string, number>;
   /** fp_id → how the last sale on this pump ended (for DONE banner copy) */
   lastSaleOutcome: Record<string, "completed" | "holster_ended" | "aborted">;
+  /** fp_id → totals of the most recently completed sale (shown on idle card) */
+  lastSale: Record<string, { volume: number; amount: number }>;
   preAuthTimeoutFpId: string | null;
   preAuthNozzleMismatch: PreAuthNozzleMismatchInfo | null;
   setPreAuthNozzleMismatch: (info: PreAuthNozzleMismatchInfo | null) => void;
@@ -56,6 +58,12 @@ interface AppState {
   clearPreAuthNozzleMismatch: () => void;
   /** After operator dismisses a completed-sale screen, return pump card to idle. */
   clearSaleDisplay: (fpId: string) => void;
+  /**
+   * Called when the service (re)connects. Wipes all transient per-pump UI state
+   * so the fresh status snapshot from the server is accepted without stale guards
+   * (holdDoneUntil, lastSaleOutcome, etc.) suppressing the update.
+   */
+  resetServiceState: () => void;
   /** Compact UI mode for smaller / touch screens. Persisted to localStorage. */
   smallScreen: boolean;
   setSmallScreen: (v: boolean) => void;
@@ -77,6 +85,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   nozzleRemovedAt: {},
   holdDoneUntil: {},
   lastSaleOutcome: {},
+  lastSale: {},
   preAuthTimeoutFpId: null,
   preAuthNozzleMismatch: null,
   smallScreen: (() => {
@@ -121,6 +130,11 @@ export const useAppStore = create<AppState>((set, get) => ({
               status: "IDLE" as const,
               volume: 0,
               amount: 0,
+              // Clear nozzle/product so the next customer's form starts blank.
+              nozzle_index: null,
+              product_id: null,
+              product_name: null,
+              product_color: null,
               pre_auth_preset: null,
               stopped_tx_id: null,
               stop_source: null,
@@ -132,6 +146,16 @@ export const useAppStore = create<AppState>((set, get) => ({
           : row,
       );
       return { states, holdDoneUntil, lastSaleOutcome };
+    }),
+  resetServiceState: () =>
+    set({
+      holdDoneUntil: {},
+      lastSaleOutcome: {},
+      nozzleRemovedAt: {},
+      preAuthTimeoutFpId: null,
+      preAuthNozzleMismatch: null,
+      currentShift: null,
+      shiftWarningMinutes: null,
     }),
   setPreAuthNozzleMismatch: (preAuthNozzleMismatch) => set({ preAuthNozzleMismatch }),
   setSite: (siteName) => set({ siteName }),
@@ -216,7 +240,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const combinedVol = (tx.combined_volume ?? 0) > 0 ? tx.combined_volume! : tx.volume;
       const combinedAmt = (tx.combined_amount ?? 0) > 0 ? tx.combined_amount! : tx.amount;
       const outcome =
-        tx.status === "COMPLETED"
+        tx.status === "COMPLETED" ||
+        (typeof tx.status === "object" && tx.status !== null && "CONTINUED_FROM" in tx.status)
           ? "completed"
           : tx.status === "ABORTED"
             ? "aborted"
@@ -241,6 +266,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             [tx.fp_id]: Date.now() + DONE_DISPLAY_HOLD_MS,
           },
           lastSaleOutcome: { ...get().lastSaleOutcome, [tx.fp_id]: outcome },
+          lastSale: { ...get().lastSale, [tx.fp_id]: { volume: combinedVol, amount: combinedAmt } },
         });
       }
       return;

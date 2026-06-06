@@ -2,8 +2,18 @@
   "name": "fuel-dispenser",
   "private": true,
   "description": "Workspace helper scripts (see scripts/azs.sh)",
+  "workspaces": [
+    "apps/desktop",
+    "apps/sim-desktop",
+    "apps/backend",
+    "apps/web"
+  ],
   "scripts": {
     "start": "bash scripts/azs.sh",
-    "azs": "bash scripts/azs.sh"
+    "azs": "bash scripts/azs.sh",
+    "backend:dev": "npm run start:dev --workspace=apps/backend",
+    "backend:build": "npm run build --workspace=apps/backend",
+    "web:dev": "npm run dev --workspace=apps/web",
+    "web:build": "npm run build --workspace=apps/web"
   }
 }

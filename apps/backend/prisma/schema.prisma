@@ -1,0 +1,366 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+// ── Multi-company ──────────────────────────────────────────────
+
+model Company {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  users    User[]
+  stations Station[]
+}
+
+// ── Users ──────────────────────────────────────────────────────
+
+model User {
+  id                String    @id @default(uuid())
+  companyId         String
+  email             String
+  name              String
+  passwordHash      String
+  role              UserRole
+  active            Boolean   @default(true)
+  twoFactorSecret   String?
+  twoFactorEnabled  Boolean   @default(false)
+  lastLoginAt       DateTime?
+  passwordChangedAt DateTime?
+  loginAttempts     Int       @default(0)
+  lockedUntil       DateTime?
+  preferences       Json      @default("{}")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  company         Company         @relation(fields: [companyId], references: [id])
+  stationAccess   StationAccess[]
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  passwordHistory PasswordHistory[]
+
+  @@unique([companyId, email])
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  STATION_MANAGER
+  ACCOUNTANT
+}
+
+model PasswordHistory {
+  id           String   @id @default(uuid())
+  userId       String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model StationAccess {
+  userId    String
+  stationId String
+
+  user    User    @relation(fields: [userId], references: [id])
+  station Station @relation(fields: [stationId], references: [id])
+
+  @@id([userId, stationId])
+}
+
+// ── Stations ───────────────────────────────────────────────────
+
+model Station {
+  id             String    @id
+  companyId      String
+  name           String
+  address        String?
+  timezone       String    @default("Asia/Tashkent")
+  apiKey         String    @unique @default(uuid())
+  active         Boolean   @default(true)
+  ipAllowlist    String[]
+  lastSyncAt     DateTime?
+  lastSeenAt     DateTime?
+  syncLagAlerted Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  company       Company              @relation(fields: [companyId], references: [id])
+  positions     FuelingPosition[]
+  transactions  Transaction[]
+  shifts        Shift[]
+  reservoirs    Reservoir[]
+  priceSettings PriceSetting[]
+  healthEvents  StationHealthEvent[]
+  uptimeHistory StationUptimeEvent[]
+  userAccess    StationAccess[]
+  alertRules    AlertRule[]
+}
+
+model StationUptimeEvent {
+  id         String   @id @default(uuid())
+  stationId  String
+  event      String
+  occurredAt DateTime
+
+  station Station @relation(fields: [stationId], references: [id])
+}
+
+model FuelingPosition {
+  id          String    @id
+  stationId   String
+  label       String
+  addressByte Int
+  active      Boolean   @default(true)
+  deletedAt   DateTime?
+
+  station Station  @relation(fields: [stationId], references: [id])
+  nozzles Nozzle[]
+}
+
+model Nozzle {
+  positionId  String
+  index       Int
+  productId   Int
+  productName String
+  active      Boolean @default(true)
+
+  position FuelingPosition @relation(fields: [positionId], references: [id])
+
+  @@id([positionId, index])
+}
+
+// ── Transactions ────────────────────────────────────────────────
+
+model Transaction {
+  id             String    @id
+  companyId      String
+  stationId      String
+  fpId           String
+  label          String
+  addressByte    Int
+  startedAt      DateTime
+  completedAt    DateTime?
+  volume         Float     @default(0)
+  amount         BigInt    @default(0)
+  price          Int       @default(0)
+  nozzleIndex    Int
+  productId      Int
+  productName    String
+  status         TxStatus
+  parentTxId     String?
+  combinedVolume Float?
+  combinedAmount BigInt?
+  shiftId        String?
+  operatorName   String?
+  syncedAt       DateTime  @default(now())
+  deletedAt      DateTime?
+
+  station Station @relation(fields: [stationId], references: [id])
+
+  @@index([stationId, startedAt])
+  @@index([companyId, startedAt])
+  @@index([stationId, productId, startedAt])
+  @@index([shiftId])
+}
+
+enum TxStatus {
+  COMPLETED
+  STOPPED
+  ABORTED
+}
+
+// ── Shifts ─────────────────────────────────────────────────────
+
+model Shift {
+  id                String      @id
+  companyId         String
+  stationId         String
+  operatorName      String
+  shiftName         String?
+  scheduledStart    String?
+  scheduledEnd      String?
+  startedAt         DateTime
+  endedAt           DateTime?
+  totalTransactions Int         @default(0)
+  totalVolume       Float       @default(0)
+  totalAmount       BigInt      @default(0)
+  status            ShiftStatus
+  notes             String?
+  syncedAt          DateTime    @default(now())
+  deletedAt         DateTime?
+
+  station        Station              @relation(fields: [stationId], references: [id])
+  positionTotals ShiftPositionTotal[]
+}
+
+enum ShiftStatus {
+  ACTIVE
+  CLOSED
+}
+
+model ShiftPositionTotal {
+  id                String @id @default(uuid())
+  shiftId           String
+  fpId              String
+  label             String
+  transactionsCount Int    @default(0)
+  totalVolume       Float  @default(0)
+  totalAmount       BigInt @default(0)
+
+  shift Shift @relation(fields: [shiftId], references: [id])
+}
+
+// ── Reservoirs ─────────────────────────────────────────────────
+
+model Reservoir {
+  id          String    @id @default(uuid())
+  stationId   String
+  tankId      String
+  label       String
+  productId   Int
+  productName String
+  capacity    Float
+  active      Boolean   @default(true)
+  deletedAt   DateTime?
+
+  station  Station          @relation(fields: [stationId], references: [id])
+  readings ReservoirReading[]
+
+  @@unique([stationId, tankId])
+}
+
+model ReservoirReading {
+  id           String   @id @default(uuid())
+  reservoirId  String
+  stationId    String
+  companyId    String
+  readingAt    DateTime
+  volumeLitres Float
+  levelMm      Float?
+  temperatureC Float?
+  waterMm      Float?
+  fillPercent  Float?
+  syncedAt     DateTime @default(now())
+
+  reservoir Reservoir @relation(fields: [reservoirId], references: [id])
+
+  @@index([stationId, readingAt])
+  @@index([companyId, readingAt])
+}
+
+// ── Prices ─────────────────────────────────────────────────────
+
+model PriceSetting {
+  stationId   String
+  fpId        String
+  nozzleIndex Int
+  productId   Int
+  productName String
+  price       Int
+  updatedAt   DateTime @default(now())
+  updatedBy   String
+
+  station Station @relation(fields: [stationId], references: [id])
+
+  @@id([stationId, fpId, nozzleIndex])
+}
+
+model PriceChangeLog {
+  id          String   @id @default(uuid())
+  companyId   String
+  stationId   String
+  fpId        String
+  nozzleIndex Int
+  productName String
+  oldPrice    Int
+  newPrice    Int
+  changedAt   DateTime @default(now())
+  changedBy   String
+  source      String
+}
+
+// ── Station health ─────────────────────────────────────────────
+
+model StationHealthEvent {
+  id         String   @id @default(uuid())
+  stationId  String
+  companyId  String
+  eventType  String
+  fpId       String?
+  detail     String?
+  occurredAt DateTime
+  syncedAt   DateTime @default(now())
+
+  station Station @relation(fields: [stationId], references: [id])
+}
+
+// ── Audit log ──────────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  companyId String
+  userId    String?
+  userEmail String?
+  action    String
+  entity    String
+  entityId  String?
+  oldValue  Json?
+  newValue  Json?
+  ipAddress String?
+  requestId String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+}
+
+// ── Alert rules ────────────────────────────────────────────────
+
+model AlertRule {
+  id             String   @id @default(uuid())
+  stationId      String?
+  companyId      String
+  type           String
+  threshold      Float?
+  enabled        Boolean  @default(true)
+  notifyTelegram Boolean  @default(true)
+  notifyEmail    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  station Station? @relation(fields: [stationId], references: [id])
+}
+
+// ── Sync deduplication ─────────────────────────────────────────
+
+model ProcessedSyncRecord {
+  id          String   @id
+  stationId   String
+  processedAt DateTime @default(now())
+
+  @@index([processedAt])
+}

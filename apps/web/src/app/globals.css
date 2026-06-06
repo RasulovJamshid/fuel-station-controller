@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    @apply text-slate-900 font-sans min-h-screen bg-slate-50 selection:bg-brand-500/30 transition-colors duration-300;
+  }
+  
+  /* Auto-skinning dark mode rules without needing dark: everywhere */
+  .dark body { @apply bg-[#09090b] text-slate-100; }
+  .dark .bg-white { @apply !bg-[#121214]; }
+  .dark .bg-slate-50, .dark .bg-slate-100 { @apply !bg-[#0e0e11]; }
+  .dark .border-slate-200, .dark .border-slate-100, .dark .border-slate-300 { @apply !border-zinc-800; }
+  .dark .text-slate-900, .dark .text-slate-800, .dark .text-slate-700 { @apply !text-zinc-100; }
+  .dark .text-slate-600, .dark .text-slate-500 { @apply !text-zinc-400; }
+  .dark .hover\:bg-slate-50:hover { @apply !bg-zinc-800/50; }
+  .dark .shadow-sm, .dark .shadow-md { @apply !shadow-none; }
+  .dark input, .dark select { @apply !bg-[#121214] !border-zinc-800 !text-zinc-100; }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+
+  .panel-subtle {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden;
+  }
+
+  .panel-header {
+    @apply px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-100;
+  }
+
+  .table-head-row {
+    @apply sticky top-0 z-10 bg-slate-50/95 backdrop-blur border-b border-slate-100;
+  }
+
+  .table-head-cell {
+    @apply px-3 sm:px-4 py-2.5 sm:py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider;
+  }
+
+  .table-cell {
+    @apply px-3 sm:px-4 py-2.5 sm:py-3;
+  }
+
+  .table-row-hover {
+    @apply hover:bg-slate-50 transition-colors;
+  }
+
+  .field-control {
+    @apply min-h-11 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-base text-slate-800 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20;
+  }
+
+  .control-label {
+    @apply text-base font-medium text-slate-700;
+  }
+
+  .input-control {
+    @apply min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-base text-slate-900 placeholder-slate-400 shadow-sm transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs;
+  }
+
+  .btn-md {
+    @apply px-4 py-2.5 text-base;
+  }
+
+  .btn-lg {
+    @apply px-5 py-2.5 text-base;
+  }
+
+  .btn-primary {
+    @apply bg-slate-900 text-white shadow-sm hover:bg-slate-800 focus:ring-slate-900;
+  }
+
+  .btn-ghost {
+    @apply text-slate-600 shadow-none hover:bg-slate-100 focus:ring-slate-400;
+  }
+
+  .btn-outline {
+    @apply border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 focus:ring-slate-200;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 text-white shadow-sm hover:bg-red-700 focus:ring-red-500;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium;
+  }
+
+  .icon-button {
+    @apply relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  .dark .scrollbar-thin {
+    scrollbar-color: #3f3f46 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors; }
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb { @apply bg-zinc-700 hover:bg-zinc-600; }
+}

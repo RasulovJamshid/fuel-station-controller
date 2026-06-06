@@ -1,0 +1,45 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    volumes:
+      - ./backups:/backups
+
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      POSTGRES_DB: azs_manager
+      POSTGRES_USER: azs
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U azs -d azs_manager"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:
+  redisdata:

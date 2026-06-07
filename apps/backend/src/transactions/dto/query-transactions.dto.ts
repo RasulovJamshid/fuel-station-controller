@@ -8,6 +8,11 @@ export class QueryTransactionsDto extends PaginationDto {
     @ApiPropertyOptional()
     @IsOptional()
     @IsString()
+    oilBaseId?: string;
+
+    @ApiPropertyOptional()
+    @IsOptional()
+    @IsString()
     stationId?: string;
 
     @ApiPropertyOptional()

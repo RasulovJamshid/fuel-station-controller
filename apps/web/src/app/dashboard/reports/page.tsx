@@ -1,10 +1,12 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import { Download } from 'lucide-react';
 import { reportsApi } from '@/lib/api';
 import { fmtVolume, fmtMoney } from '@/lib/format';
 import { Header } from '@/components/layout/header';
 import { RevenueChart } from '@/components/dashboard/revenue-chart';
 import { Button } from '@/components/ui/button';
+import { useOilBases } from '@/hooks/use-oil-bases';
 
 const PRESETS = [
   { label: '7 дней',  days: 7 },
@@ -13,21 +15,43 @@ const PRESETS = [
 ];
 
 export default function ReportsPage() {
-  const [preset, setPreset]   = useState(30);
-  const [revenue, setRevenue] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [operators, setOperators] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [preset, setPreset]         = useState(30);
+  const [oilBaseId, setOilBaseId]   = useState('');
+  const [revenue, setRevenue]       = useState<any[]>([]);
+  const [products, setProducts]     = useState<any[]>([]);
+  const [operators, setOperators]   = useState<any[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [exporting, setExporting]   = useState(false);
+  const oilBases = useOilBases();
+
+  async function doExport(type: 'transactions' | 'shifts', format: 'xlsx' | 'csv') {
+    setExporting(true);
+    try {
+      const from = new Date(Date.now() - preset * 86_400_000).toISOString();
+      const to   = new Date().toISOString();
+      const blob = await reportsApi.export({ type, format, from, to }) as any;
+      const url  = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob]));
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `${type}_${new Date().toISOString().slice(0,10)}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const load = useCallback(async (days: number) => {
     setLoading(true);
     const from = new Date(Date.now() - days * 86_400_000).toISOString();
     const to   = new Date().toISOString();
+    const base: Record<string, unknown> = { from, to };
+    if (oilBaseId) base.oilBaseId = oilBaseId;
     try {
       const [rev, prod, ops] = await Promise.all([
-        reportsApi.revenue({ from, to, groupBy: 'day' }),
-        reportsApi.products({ from, to }),
-        reportsApi.operators({ from, to }),
+        reportsApi.revenue({ ...base, groupBy: 'day' }),
+        reportsApi.products(base),
+        reportsApi.operators(base),
       ]);
       setRevenue(Array.isArray(rev) ? rev : []);
       setProducts(Array.isArray(prod) ? prod : []);
@@ -37,7 +61,7 @@ export default function ReportsPage() {
     }
   }, []);
 
-  useEffect(() => { load(preset); }, [preset, load]);
+  useEffect(() => { load(preset); }, [preset, oilBaseId, load]);
 
   // Aggregate revenue by period
   const chartData = revenue.reduce((acc: any[], row: any) => {
@@ -57,8 +81,8 @@ export default function ReportsPage() {
       <Header title="Отчёты" />
 
       <div className="p-2 sm:p-4 space-y-6">
-        {/* Period selector */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Period + oil-base selector + export */}
+        <div className="flex flex-wrap items-center gap-3">
           {PRESETS.map(p => (
             <Button
               key={p.days}
@@ -69,6 +93,24 @@ export default function ReportsPage() {
               {p.label}
             </Button>
           ))}
+          {oilBases.length > 0 && (
+            <select
+              value={oilBaseId}
+              onChange={e => setOilBaseId(e.target.value)}
+              className="field-control appearance-none ml-2"
+            >
+              <option value="">Все нефтебазы</option>
+              {oilBases.map(ob => <option key={ob.id} value={ob.id}>{ob.name}</option>)}
+            </select>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <Button size="sm" variant="outline" loading={exporting} onClick={() => doExport('transactions', 'xlsx')}>
+              <Download size={14} /> Транзакции XLSX
+            </Button>
+            <Button size="sm" variant="outline" loading={exporting} onClick={() => doExport('shifts', 'xlsx')}>
+              <Download size={14} /> Смены XLSX
+            </Button>
+          </div>
         </div>
 
         {/* Revenue chart */}

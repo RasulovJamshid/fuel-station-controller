@@ -19,7 +19,27 @@ model Company {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  users    User[]
+  users        User[]
+  stations     Station[]
+  oilBases     OilBase[]
+  integrations Integration[]
+}
+
+// ── Oil Bases (нефтебазы) ──────────────────────────────────────
+// Mid-tier grouping between Company and Stations.
+// A single oil base can be the parent of multiple fuel stations.
+
+model OilBase {
+  id        String    @id @default(uuid())
+  companyId String
+  name      String
+  address   String?
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  company  Company   @relation(fields: [companyId], references: [id])
   stations Station[]
 }
 
@@ -97,6 +117,7 @@ model StationAccess {
 model Station {
   id             String    @id
   companyId      String
+  oilBaseId      String?
   name           String
   address        String?
   timezone       String    @default("Asia/Tashkent")
@@ -111,6 +132,7 @@ model Station {
   deletedAt      DateTime?
 
   company       Company              @relation(fields: [companyId], references: [id])
+  oilBase       OilBase?             @relation(fields: [oilBaseId], references: [id])
   positions     FuelingPosition[]
   transactions  Transaction[]
   shifts        Shift[]
@@ -353,6 +375,47 @@ model AlertRule {
   createdAt      DateTime @default(now())
 
   station Station? @relation(fields: [stationId], references: [id])
+}
+
+// ── Integrations (outbound webhooks) ──────────────────────────
+
+model Integration {
+  id          String   @id @default(uuid())
+  companyId   String
+  name        String
+  url         String
+  authType    String   @default("none")  // none | bearer | hmac
+  authSecret  String?
+  events      String[] // transaction.completed | shift.closed | price.changed | health.event | tank.reading
+  active      Boolean  @default(true)
+  retryLimit  Int      @default(3)
+  timeoutMs   Int      @default(5000)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company    Company          @relation(fields: [companyId], references: [id])
+  deliveries WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id             String      @id @default(uuid())
+  integrationId  String
+  eventType      String
+  stationId      String?
+  payload        Json
+  status         String      @default("pending") // pending | delivered | failed
+  attempts       Int         @default(0)
+  nextRetryAt    DateTime?
+  lastAttemptAt  DateTime?
+  responseStatus Int?
+  responseBody   String?
+  error          String?
+  createdAt      DateTime    @default(now())
+
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([integrationId, createdAt])
 }
 
 // ── Sync deduplication ─────────────────────────────────────────

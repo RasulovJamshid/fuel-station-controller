@@ -187,6 +187,7 @@ pub async fn insert_shift(pool: &SqlitePool, shift: &Shift) -> Result<()> {
     .bind(&shift.notes)
     .execute(pool)
     .await?;
+    enqueue_shift(pool, shift).await;
     Ok(())
 }
 
@@ -204,7 +205,22 @@ pub async fn close_shift(
     .bind(id)
     .execute(pool)
     .await?;
+    // Re-fetch and enqueue the closed shift so the backend gets the final state.
+    if let Ok(Some(shift)) = get_shift(pool, id).await {
+        enqueue_shift(pool, &shift).await;
+    }
     Ok(())
+}
+
+/// Fire-and-forget sync enqueue for a shift.
+async fn enqueue_shift(pool: &SqlitePool, shift: &Shift) {
+    let payload = match serde_json::to_value(shift) {
+        Ok(v) => v,
+        Err(e) => { tracing::warn!("sync: shift serialize error: {e}"); return; }
+    };
+    if let Err(e) = crate::sync::enqueue(pool, "shift", &shift.id, &payload).await {
+        tracing::warn!("sync: enqueue shift {} failed: {e}", shift.id);
+    }
 }
 
 pub async fn bump_shift_totals(

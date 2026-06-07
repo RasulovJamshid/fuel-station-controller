@@ -44,6 +44,19 @@ function ToggleSwitch({
   );
 }
 
+interface SyncStatus {
+  enabled: boolean;
+  backend_url: string;
+  last_sync_at: number | null;
+  last_error: string | null;
+  pending_count: number;
+  total_synced: number;
+  connected: boolean;
+  last_price_pull_at: number | null;
+  prices_updated: number;
+  price_pull_interval_hours?: number;
+}
+
 const ADMIN_TOKEN_KEY = "azs_admin_token";
 
 export function getAdminToken(): string | null {
@@ -130,6 +143,30 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Sync config state
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [syncUrl, setSyncUrl] = useState("");
+  const [syncApiKey, setSyncApiKey] = useState("");
+  const [syncRetryInterval, setSyncRetryInterval] = useState(30);
+  const [syncBatchSize, setSyncBatchSize] = useState(100);
+  const [syncMaxRetries, setSyncMaxRetries] = useState(10);
+  const [syncPricePullInterval, setSyncPricePullInterval] = useState(12);
+  const [showApiKey, setShowApiKey] = useState(false);
+
+  const loadSyncStatus = useCallback(async () => {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const s = await invoke<SyncStatus>("get_sync_status");
+      setSyncStatus(s);
+      setSyncUrl(s.backend_url);
+      if (s.price_pull_interval_hours !== undefined) {
+        setSyncPricePullInterval(s.price_pull_interval_hours);
+      }
+    } catch {
+      // not fatal — sync may not be configured yet
+    }
+  }, []);
+
   const loadAll = useCallback(async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     const results = await Promise.allSettled([
@@ -174,7 +211,8 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
 
   useEffect(() => {
     loadAll().catch((e) => setInvokeError(e instanceof Error ? e.message : String(e)));
-  }, [loadAll, setInvokeError]);
+    loadSyncStatus();
+  }, [loadAll, setInvokeError, loadSyncStatus]);
 
   const refreshConfig = async () => {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -345,6 +383,28 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
       setMsg(t("admin.changePin.updatedMsg"));
     } catch (e) {
       if (is401(e)) { onSessionExpired(); return; }
+      setInvokeError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveSyncConfig = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("update_sync_config", {
+        backendUrl: syncUrl.trim() || null,
+        apiKey: syncApiKey.trim() || null,
+        retryIntervalSecs: syncRetryInterval,
+        batchSize: syncBatchSize,
+        maxRetries: syncMaxRetries,
+        pricePullIntervalHours: syncPricePullInterval,
+      });
+      await loadSyncStatus();
+      setMsg(t("admin.sync.savedMsg"));
+    } catch (e) {
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -715,6 +775,148 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
               />
             </div>
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+          <div className="flex items-start justify-between mb-1">
+            <h2 className="text-lg font-bold text-text-primary">{t("admin.sync.title")}</h2>
+            {syncStatus && (
+              <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                syncStatus.connected
+                  ? "border-accent-emerald/40 bg-accent-emerald/15 text-accent-emerald"
+                  : "border-border-secondary bg-bg-secondary text-text-secondary"
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${syncStatus.connected ? "bg-accent-emerald" : "bg-text-secondary"}`} />
+                {syncStatus.connected ? t("admin.sync.connected") : t("admin.sync.disconnected")}
+              </span>
+            )}
+          </div>
+          <p className="mb-4 text-sm font-medium text-text-muted">{t("admin.sync.description")}</p>
+
+          {syncStatus && (
+            <div className="mb-5 rounded-xl border border-border-primary/40 bg-bg-secondary/30 px-4 py-3 text-xs font-medium space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">{t("admin.sync.pending", { count: syncStatus.pending_count })}</span>
+                <button
+                  type="button"
+                  onClick={loadSyncStatus}
+                  className="text-accent-blue font-bold hover:text-accent-blue-light transition-colors"
+                >
+                  {t("admin.sync.refresh")}
+                </button>
+              </div>
+              <p className="text-text-muted">
+                {syncStatus.last_sync_at
+                  ? t("admin.sync.lastSync", { time: new Date(syncStatus.last_sync_at).toLocaleString() })
+                  : t("admin.sync.lastSyncNever")}
+              </p>
+              {syncStatus.last_error && (
+                <p className="text-accent-amber truncate">{t("admin.sync.lastError", { msg: syncStatus.last_error })}</p>
+              )}
+            </div>
+          )}
+
+          {syncStatus && (
+            <div className={`mb-4 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-semibold ${
+              syncStatus.enabled
+                ? "border-accent-emerald/30 bg-accent-emerald/10 text-accent-emerald"
+                : "border-border-secondary bg-bg-secondary/40 text-text-muted"
+            }`}>
+              <span className={`h-2 w-2 shrink-0 rounded-full ${syncStatus.enabled ? "bg-accent-emerald" : "bg-text-muted"}`} />
+              <span>{syncStatus.enabled ? t("admin.sync.enableSync") : t("admin.sync.enableSyncDesc")}</span>
+              <span className="ml-auto font-mono text-[10px] opacity-50">enabled={syncStatus.enabled ? "true" : "false"} · site.config.json</span>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-text-secondary">
+              {t("admin.sync.backendUrl")}
+              <input
+                type="url"
+                className={inputCls}
+                placeholder={t("admin.sync.backendUrlPlaceholder")}
+                value={syncUrl}
+                onChange={(e) => setSyncUrl(e.target.value)}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-text-secondary">
+              {t("admin.sync.apiKey")}
+              <div className="relative">
+                <input
+                  type={showApiKey ? "text" : "password"}
+                  className={`w-full pr-10 ${inputCls}`}
+                  placeholder={t("admin.sync.apiKeyPlaceholder")}
+                  value={syncApiKey}
+                  onChange={(e) => setSyncApiKey(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey((v) => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
+                  tabIndex={-1}
+                >
+                  {showApiKey ? "🙈" : "👁"}
+                </button>
+              </div>
+            </label>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <label className="flex flex-col gap-1.5 text-xs font-medium text-text-secondary">
+                {t("admin.sync.retryInterval")}
+                <input
+                  type="number"
+                  min={5}
+                  max={3600}
+                  className={inputCls}
+                  value={syncRetryInterval}
+                  onChange={(e) => setSyncRetryInterval(Number(e.target.value))}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs font-medium text-text-secondary">
+                {t("admin.sync.batchSize")}
+                <input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  className={inputCls}
+                  value={syncBatchSize}
+                  onChange={(e) => setSyncBatchSize(Number(e.target.value))}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs font-medium text-text-secondary">
+                {t("admin.sync.maxRetries")}
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  className={inputCls}
+                  value={syncMaxRetries}
+                  onChange={(e) => setSyncMaxRetries(Number(e.target.value))}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs font-medium text-text-secondary">
+                {t("admin.sync.pricePullInterval")}
+                <input
+                  type="number"
+                  min={0}
+                  max={168}
+                  className={inputCls}
+                  value={syncPricePullInterval}
+                  onChange={(e) => setSyncPricePullInterval(Number(e.target.value))}
+                />
+              </label>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={saveSyncConfig}
+            className="mt-5 rounded-xl border border-accent-blue/40 bg-accent-blue/10 px-5 py-2.5 text-sm font-bold text-accent-blue shadow-sm hover:bg-accent-blue/20 transition-all disabled:opacity-50"
+          >
+            {t("admin.sync.save")}
+          </button>
         </section>
 
         <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">

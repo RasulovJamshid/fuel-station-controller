@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { DashboardGateway } from '../dashboard/dashboard.gateway';
+import { IntegrationsService } from '../integrations/integrations.service';
 import { SyncBatchDto, SyncRecordDto } from './dto/sync-batch.dto';
 
 @Injectable()
@@ -8,8 +9,9 @@ export class SyncService {
     private readonly logger = new Logger(SyncService.name);
 
     constructor(
-        private prisma:  PrismaService,
-        private gateway: DashboardGateway,
+        private prisma:        PrismaService,
+        private gateway:       DashboardGateway,
+        private integrations:  IntegrationsService,
     ) {}
 
     async processBatch(stationId: string, companyId: string, dto: SyncBatchDto, ipAddress: string) {
@@ -101,6 +103,16 @@ export class SyncService {
         });
 
         this.gateway.broadcast('transaction.synced', { stationId, txId: p.id });
+
+        if (p.status === 'COMPLETED') {
+            this.integrations.dispatch(companyId, stationId, 'transaction.completed', {
+                id: p.id, fpId: p.fp_id, label: p.label,
+                productName: p.product_name, productId: p.product_id,
+                volume: p.volume, amount: p.amount, price: p.price,
+                startedAt: p.started_at, completedAt: p.completed_at,
+                operatorName: p.operator_name ?? null,
+            }).catch(() => {});
+        }
     }
 
     private async upsertShift(stationId: string, companyId: string, p: any) {
@@ -150,6 +162,15 @@ export class SyncService {
         }
 
         this.gateway.broadcast('shift.synced', { stationId, shiftId: p.id, status: p.status });
+
+        if (p.status === 'CLOSED') {
+            this.integrations.dispatch(companyId, stationId, 'shift.closed', {
+                id: p.id, operatorName: p.operator_name,
+                startedAt: p.started_at, endedAt: p.ended_at,
+                totalTransactions: p.total_transactions,
+                totalVolume: p.total_volume, totalAmount: p.total_amount,
+            }).catch(() => {});
+        }
     }
 
     private async upsertReservoirReading(stationId: string, companyId: string, p: any) {
@@ -176,6 +197,12 @@ export class SyncService {
         });
 
         this.gateway.broadcast('tank.updated', { stationId, tankId: p.tank_id });
+
+        this.integrations.dispatch(companyId, stationId, 'tank.reading', {
+            tankId: p.tank_id, reservoirId: reservoir.id,
+            volumeLitres: p.volume_litres, fillPercent: p.fill_percent ?? null,
+            levelMm: p.level_mm ?? null, readingAt: p.reading_at,
+        }).catch(() => {});
     }
 
     private async recordPriceChange(stationId: string, companyId: string, p: any) {
@@ -211,6 +238,28 @@ export class SyncService {
                 updatedAt: new Date(p.changed_at),
             },
         });
+
+        this.integrations.dispatch(companyId, stationId, 'price.changed', {
+            fpId: p.fp_id, nozzleIndex: p.nozzle_index,
+            productName: p.product_name, productId: p.product_id,
+            oldPrice: p.old_price, newPrice: p.new_price,
+            changedAt: p.changed_at, changedBy: p.changed_by ?? 'station',
+        }).catch(() => {});
+    }
+
+    async getCurrentPricesForStation(stationId: string) {
+        const prices = await this.prisma.priceSetting.findMany({
+            where: { stationId },
+            orderBy: [{ fpId: 'asc' }, { nozzleIndex: 'asc' }],
+        });
+        return prices.map(p => ({
+            fp_id:        p.fpId,
+            nozzle_index: p.nozzleIndex,
+            product_id:   p.productId,
+            product_name: p.productName,
+            price:        p.price,
+            updated_at:   p.updatedAt.getTime(),
+        }));
     }
 
     private async recordHealthEvent(stationId: string, companyId: string, p: any) {
@@ -224,5 +273,10 @@ export class SyncService {
                 occurredAt: new Date(p.occurred_at),
             },
         });
+
+        this.integrations.dispatch(companyId, stationId, 'health.event', {
+            eventType: p.event_type, fpId: p.fp_id ?? null,
+            detail: p.detail ?? null, occurredAt: p.occurred_at,
+        }).catch(() => {});
     }
 }

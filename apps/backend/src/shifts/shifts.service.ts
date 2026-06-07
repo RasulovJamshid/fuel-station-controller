@@ -6,11 +6,27 @@ import { PaginationDto, PaginatedResponse } from '../common/dto/pagination.dto';
 export class ShiftsService {
     constructor(private prisma: PrismaService) {}
 
-    async findAll(companyId: string, stationId: string | undefined, pagination: PaginationDto) {
+    private async stationIdsForOilBase(companyId: string, oilBaseId: string): Promise<string[]> {
+        const rows = await this.prisma.station.findMany({
+            where: { companyId, oilBaseId, deletedAt: null },
+            select: { id: true },
+        });
+        return rows.map(r => r.id);
+    }
+
+    async findAll(companyId: string, stationId: string | undefined, pagination: PaginationDto, oilBaseId?: string) {
+        const oilBaseStationIds = oilBaseId
+            ? await this.stationIdsForOilBase(companyId, oilBaseId)
+            : null;
+        if (oilBaseStationIds !== null && oilBaseStationIds.length === 0) {
+            return { data: [], total: 0, page: 1, pages: 1 };
+        }
+
         const where: any = {
             companyId,
             deletedAt: null,
-            ...(stationId ? { stationId } : {}),
+            ...(oilBaseStationIds ? { stationId: { in: oilBaseStationIds } } :
+                stationId         ? { stationId }                            : {}),
         };
         const [data, total] = await this.prisma.$transaction([
             this.prisma.shift.findMany({
@@ -34,13 +50,18 @@ export class ShiftsService {
         return shift;
     }
 
-    async getActive(companyId: string, stationId?: string) {
+    async getActive(companyId: string, stationId?: string, oilBaseId?: string) {
+        const oilBaseStationIds = oilBaseId
+            ? await this.stationIdsForOilBase(companyId, oilBaseId)
+            : null;
+
         return this.prisma.shift.findMany({
             where: {
                 companyId,
                 status: 'ACTIVE',
                 deletedAt: null,
-                ...(stationId ? { stationId } : {}),
+                ...(oilBaseStationIds ? { stationId: { in: oilBaseStationIds } } :
+                    stationId         ? { stationId }                            : {}),
             },
             include: { positionTotals: true },
         });

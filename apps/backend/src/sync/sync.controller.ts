@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Param, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiSecurity } from '@nestjs/swagger';
 import { Request } from 'express';
 import { SyncService } from './sync.service';
@@ -26,5 +26,12 @@ export class SyncController {
             dto,
             req.ip ?? '',
         );
+    }
+
+    /** Station polls this to get server-side price settings (for downward price sync). */
+    @Get(':stationId/prices')
+    @UseGuards(StationApiKeyGuard)
+    prices(@Param('stationId') stationId: string) {
+        return this.sync.getCurrentPricesForStation(stationId);
     }
 }

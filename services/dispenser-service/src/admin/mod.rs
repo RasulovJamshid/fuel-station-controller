@@ -145,6 +145,21 @@ pub async fn set_admin_pin(
     Ok(())
 }
 
+pub async fn reset_admin_pin_to_default(pool: &SqlitePool) -> Result<()> {
+    set_admin_pin(pool, "0000", "system", false).await?;
+    let now = chrono::Utc::now().timestamp_millis();
+    sqlx::query(
+        r#"INSERT INTO admin_config (key, value, updated_at, updated_by) VALUES (?, '1', ?, ?)
+           ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = excluded.updated_at, updated_by = excluded.updated_by"#,
+    )
+    .bind(PIN_MUST_CHANGE_KEY)
+    .bind(now)
+    .bind("system")
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 fn hash_pin(pin: &str) -> Result<String> {
     bcrypt::hash(pin, bcrypt::DEFAULT_COST).map_err(|e| anyhow!("bcrypt: {e}"))
 }

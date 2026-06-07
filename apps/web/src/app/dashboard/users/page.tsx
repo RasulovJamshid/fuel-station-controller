@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, ShieldCheck, Search } from 'lucide-react';
-import { usersApi } from '@/lib/api';
+import { Plus, Pencil, Trash2, ShieldCheck, Search, Building2 } from 'lucide-react';
+import { usersApi, stationsApi, usersApi2 } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
@@ -27,27 +27,55 @@ const EMPTY_FORM = { name: '', email: '', password: '', role: 'STATION_MANAGER' 
 
 export default function UsersPage() {
   const { user: me } = useAuthStore();
-  const [users, setUsers]       = useState<any[]>([]);
-  const [total, setTotal]       = useState(0);
-  const [loading, setLoading]   = useState(true);
+  const [users, setUsers]           = useState<any[]>([]);
+  const [total, setTotal]           = useState(0);
+  const [loading, setLoading]       = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [editing, setEditing]   = useState<any>(null);
-  const [deleting, setDeleting] = useState<any>(null);
-  const [form, setForm]         = useState(EMPTY_FORM);
-  const [saving, setSaving]     = useState(false);
-  const [error, setError]       = useState('');
-  const [query, setQuery]       = useState('');
+  const [editing, setEditing]       = useState<any>(null);
+  const [deleting, setDeleting]     = useState<any>(null);
+  const [form, setForm]             = useState(EMPTY_FORM);
+  const [saving, setSaving]         = useState(false);
+  const [error, setError]           = useState('');
+  const [query, setQuery]           = useState('');
+
+  // Station access management
+  const [accessUser, setAccessUser] = useState<any>(null);
+  const [allStations, setAllStations] = useState<any[]>([]);
+  const [accessSaving, setAccessSaving] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res: any = await usersApi.list();
+      const [res, stations]: any[] = await Promise.all([
+        usersApi.list(),
+        stationsApi.list(),
+      ]);
       setUsers(res.data ?? []);
       setTotal(res.total ?? 0);
+      setAllStations(Array.isArray(stations) ? stations : []);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  async function toggleStationAccess(userId: string, stationId: string, hasAccess: boolean) {
+    setAccessSaving(stationId);
+    try {
+      if (hasAccess) {
+        await usersApi2.revokeStationAccess(userId, stationId);
+      } else {
+        await usersApi2.grantStationAccess(userId, stationId);
+      }
+      // Refresh users to get updated stationAccess
+      const res: any = await usersApi.list();
+      setUsers(res.data ?? []);
+      // Also update the modal user reference
+      const updated = (res.data ?? []).find((u: any) => u.id === userId);
+      if (updated) setAccessUser(updated);
+    } finally {
+      setAccessSaving(null);
+    }
+  }
 
   useEffect(() => { load(); }, [load]);
 
@@ -204,6 +232,13 @@ export default function UsersPage() {
                       {u.id !== me?.id && (
                         <div className="flex items-center gap-1 justify-end">
                           <button
+                            onClick={() => setAccessUser(u)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                            title="Доступ к станциям"
+                          >
+                            <Building2 size={14} />
+                          </button>
+                          <button
                             onClick={() => openEdit(u)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
                           >
@@ -244,6 +279,45 @@ export default function UsersPage() {
         confirmLabel="Удалить"
         danger
       />
+
+      {/* Station access modal */}
+      <Modal open={!!accessUser} onClose={() => setAccessUser(null)} title={`Доступ к станциям — ${accessUser?.name}`}>
+        {accessUser && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-500">
+              Отметьте станции, к которым пользователь должен иметь доступ.
+              Для ролей COMPANY_ADMIN и SUPER_ADMIN доступ ко всем станциям предоставляется автоматически.
+            </p>
+            {allStations.length === 0 ? (
+              <p className="text-sm text-slate-400 py-4 text-center">Нет станций</p>
+            ) : (
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {allStations.map((s: any) => {
+                  const hasAccess = (accessUser.stationAccess ?? []).some((a: any) => a.stationId === s.id);
+                  return (
+                    <label key={s.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 cursor-pointer gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{s.name}</p>
+                        {s.address && <p className="text-xs text-slate-400">{s.address}</p>}
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={hasAccess}
+                        disabled={accessSaving === s.id}
+                        onChange={() => toggleStationAccess(accessUser.id, s.id, hasAccess)}
+                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            <div className="flex justify-end pt-2">
+              <Button variant="outline" onClick={() => setAccessUser(null)}>Закрыть</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

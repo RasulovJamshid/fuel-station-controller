@@ -9,7 +9,19 @@ import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
-@WebSocketGateway({ cors: { origin: '*' }, namespace: '/dashboard' })
+const wsOrigins = (process.env.CORS_ORIGINS ?? '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+
+@WebSocketGateway({
+    cors: {
+        origin:      wsOrigins.length > 0 ? wsOrigins : false,
+        credentials: true,
+    },
+    namespace:       '/dashboard',
+    transports:      ['websocket', 'polling'],
+    pingTimeout:     60_000,
+    pingInterval:    25_000,
+})
 export class DashboardGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer()
     server: Server;

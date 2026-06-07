@@ -66,6 +66,71 @@ export class StationsService {
         });
     }
 
+    async getDetail(id: string, companyId: string) {
+        const station = await this.findOne(id, companyId);
+
+        const [transactions, prices, shift, healthEvents, tanks] = await Promise.all([
+            this.prisma.transaction.findMany({
+                where: { stationId: id, deletedAt: null },
+                orderBy: { startedAt: 'desc' },
+                take: 20,
+                select: {
+                    id: true, fpId: true, label: true, nozzleIndex: true,
+                    productName: true, volume: true, amount: true,
+                    price: true, status: true, startedAt: true,
+                    completedAt: true, operatorName: true,
+                },
+            }),
+            this.prisma.priceSetting.findMany({
+                where: { stationId: id },
+                orderBy: [{ fpId: 'asc' }, { nozzleIndex: 'asc' }],
+            }),
+            this.prisma.shift.findFirst({
+                where: { stationId: id, status: 'ACTIVE' },
+                select: {
+                    id: true, operatorName: true, startedAt: true,
+                    totalTransactions: true, totalVolume: true, totalAmount: true,
+                },
+            }),
+            this.prisma.stationHealthEvent.findMany({
+                where: { stationId: id },
+                orderBy: { occurredAt: 'desc' },
+                take: 10,
+            }),
+            (this.prisma.$queryRaw`
+                SELECT DISTINCT ON (r.id)
+                    r.id, r."tankId", r.label, r."productName", r.capacity,
+                    rr."volumeLitres", rr."fillPercent", rr."readingAt"
+                FROM "Reservoir" r
+                LEFT JOIN "ReservoirReading" rr ON rr."reservoirId" = r.id
+                WHERE r."stationId" = ${id} AND r."deletedAt" IS NULL AND r.active = true
+                ORDER BY r.id, rr."readingAt" DESC NULLS LAST
+            ` as Promise<any[]>),
+        ]);
+
+        // Today's totals
+        const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+        const todayTx = transactions.filter(t =>
+            new Date(t.startedAt) >= todayStart && t.status === 'COMPLETED',
+        );
+        const todayVolume = todayTx.reduce((s, t) => s + (t.volume ?? 0), 0);
+        const todayAmount = todayTx.reduce((s, t) => s + Number(t.amount ?? 0), 0);
+
+        return {
+            station,
+            stats: {
+                todayTransactions: todayTx.length,
+                todayVolume,
+                todayAmount,
+            },
+            transactions,
+            prices,
+            activeShift: shift ?? null,
+            healthEvents,
+            tanks,
+        };
+    }
+
     async getUptimeHistory(stationId: string, companyId: string, days = 7) {
         await this.findOne(stationId, companyId);
         const since = new Date(Date.now() - days * 86_400_000);

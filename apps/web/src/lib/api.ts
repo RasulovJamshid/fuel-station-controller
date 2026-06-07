@@ -66,6 +66,7 @@ export const transactionsApi = {
 export const stationsApi = {
   list:      () => api.get('/stations'),
   get:       (id: string) => api.get(`/stations/${id}`),
+  detail:    (id: string) => api.get(`/stations/${id}/detail`),
   create:    (data: unknown) => api.post('/stations', data),
   update:    (id: string, data: unknown) => api.put(`/stations/${id}`, data),
   delete:    (id: string) => api.delete(`/stations/${id}`),
@@ -76,8 +77,12 @@ export const stationsApi = {
 
 export const shiftsApi = {
   list:   (params?: Record<string, unknown>) => api.get('/shifts', { params }),
-  active: (stationId?: string) =>
-    api.get('/shifts/active', { params: stationId ? { stationId } : {} }),
+  active: (stationId?: string, oilBaseId?: string) => {
+    const params: Record<string, string> = {};
+    if (stationId) params.stationId = stationId;
+    if (oilBaseId) params.oilBaseId = oilBaseId;
+    return api.get('/shifts/active', { params });
+  },
 };
 
 // ── Reservoirs ────────────────────────────────────────────────────────────────
@@ -105,4 +110,58 @@ export const reportsApi = {
   revenue:   (params: Record<string, unknown>) => api.get('/reports/revenue', { params }),
   operators: (params: Record<string, unknown>) => api.get('/reports/operators', { params }),
   products:  (params: Record<string, unknown>) => api.get('/reports/products', { params }),
+  export:    (params: Record<string, unknown>) => api.get('/export', { params, responseType: 'blob' }),
+};
+
+// ── Prices ────────────────────────────────────────────────────────────────────
+
+export const pricesApi = {
+  current: (stationId?: string) =>
+    api.get('/prices', { params: stationId ? { stationId } : {} }),
+  history: (params?: Record<string, unknown>) =>
+    api.get('/prices/history', { params }),
+  set: (data: {
+    stationId: string; fpId: string; nozzleIndex: number;
+    productId: number; productName: string; price: number;
+  }) => api.post('/prices', data),
+};
+
+export const usersApi2 = {
+  grantStationAccess:  (userId: string, stationId: string) =>
+    api.post(`/users/${userId}/station-access/${stationId}`),
+  revokeStationAccess: (userId: string, stationId: string) =>
+    api.delete(`/users/${userId}/station-access/${stationId}`),
+};
+
+// ── Integrations ──────────────────────────────────────────────────────────────
+
+export const integrationsApi = {
+  list:      () => api.get('/integrations'),
+  create:    (data: unknown) => api.post('/integrations', data),
+  update:    (id: string, data: unknown) => api.put(`/integrations/${id}`, data),
+  remove:    (id: string) => api.delete(`/integrations/${id}`),
+  test:      (id: string) => api.post(`/integrations/${id}/test`),
+  deliveries:(id: string) => api.get(`/integrations/${id}/deliveries`),
+};
+
+// ── Oil Bases ─────────────────────────────────────────────────────────────────
+
+export const oilBasesApi = {
+  list:          ()                                    => api.get('/oil-bases'),
+  summary:       ()                                    => api.get('/oil-bases/summary'),
+  get:           (id: string)                          => api.get(`/oil-bases/${id}`),
+  create:        (data: unknown)                       => api.post('/oil-bases', data),
+  update:        (id: string, data: unknown)           => api.put(`/oil-bases/${id}`, data),
+  delete:        (id: string)                          => api.delete(`/oil-bases/${id}`),
+  assignStation: (id: string, stationId: string)       => api.post(`/oil-bases/${id}/stations/${stationId}`),
+  detachStation: (id: string, stationId: string)       => api.delete(`/oil-bases/${id}/stations/${stationId}`),
+};
+
+// ── Alert Rules ───────────────────────────────────────────────────────────────
+
+export const alertRulesApi = {
+  list:   () => api.get('/alert-rules'),
+  create: (data: unknown) => api.post('/alert-rules', data),
+  update: (id: string, data: unknown) => api.put(`/alert-rules/${id}`, data),
+  delete: (id: string) => api.delete(`/alert-rules/${id}`),
 };

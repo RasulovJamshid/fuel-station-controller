@@ -54,6 +54,8 @@ pub fn run() {
             commands::admin_save_products,
             commands::admin_save_position_nozzles,
             commands::admin_change_pin,
+            commands::get_sync_status,
+            commands::update_sync_config,
         ])
         .setup(|app| {
             let ws = app.state::<ServiceClient>().ws_url();

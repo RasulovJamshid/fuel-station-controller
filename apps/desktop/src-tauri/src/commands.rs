@@ -514,6 +514,35 @@ pub async fn admin_change_pin(
         .await
 }
 
+#[tauri::command]
+pub async fn get_sync_status(
+    client: tauri::State<'_, ServiceClient>,
+) -> Result<serde_json::Value, String> {
+    client.get_sync_status().await
+}
+
+#[tauri::command]
+pub async fn update_sync_config(
+    client: tauri::State<'_, ServiceClient>,
+    enabled: Option<bool>,
+    backend_url: Option<String>,
+    api_key: Option<String>,
+    retry_interval_secs: Option<u64>,
+    batch_size: Option<usize>,
+    max_retries: Option<u32>,
+    price_pull_interval_hours: Option<u64>,
+) -> Result<(), String> {
+    let mut body = serde_json::Map::new();
+    if let Some(v) = enabled                   { body.insert("enabled".into(),                    serde_json::json!(v)); }
+    if let Some(v) = backend_url               { body.insert("backend_url".into(),                serde_json::json!(v)); }
+    if let Some(v) = api_key                   { body.insert("api_key".into(),                    serde_json::json!(v)); }
+    if let Some(v) = retry_interval_secs       { body.insert("retry_interval_secs".into(),        serde_json::json!(v)); }
+    if let Some(v) = batch_size                { body.insert("batch_size".into(),                 serde_json::json!(v)); }
+    if let Some(v) = max_retries               { body.insert("max_retries".into(),                serde_json::json!(v)); }
+    if let Some(v) = price_pull_interval_hours { body.insert("price_pull_interval_hours".into(),  serde_json::json!(v)); }
+    client.update_sync_config(serde_json::Value::Object(body)).await
+}
+
 pub async fn ws_forward_loop(app: AppHandle, ws_url: String) {
     loop {
         match connect_async(&ws_url).await {

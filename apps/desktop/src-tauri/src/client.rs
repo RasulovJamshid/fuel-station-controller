@@ -797,6 +797,35 @@ impl ServiceClient {
             .await
             .map_err(fmt_err)
     }
+
+    pub async fn get_sync_status(&self) -> Result<serde_json::Value, String> {
+        let url = self.base.join("sync/status").map_err(fmt_err)?;
+        self.http
+            .get(url)
+            .send()
+            .await
+            .map_err(fmt_err)?
+            .error_for_status()
+            .map_err(fmt_err)?
+            .json()
+            .await
+            .map_err(fmt_err)
+    }
+
+    pub async fn update_sync_config(&self, body: serde_json::Value) -> Result<(), String> {
+        let url = self.base.join("admin/sync-config").map_err(fmt_err)?;
+        let resp = self.http
+            .post(url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(fmt_err)?;
+        if resp.status().is_success() {
+            Ok(())
+        } else {
+            Err(Self::response_error(resp).await)
+        }
+    }
 }
 
 impl Default for ServiceClient {

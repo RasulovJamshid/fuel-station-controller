@@ -224,9 +224,10 @@ pub async fn save_products_to_db(
     sqlx::query("DELETE FROM products").execute(&mut *tx).await?;
     for p in products {
         sqlx::query(
-            "INSERT INTO products (id, name, color, unit, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO products (id, uuid, name, color, unit, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(p.id as i64)
+        .bind(&p.uuid)
         .bind(&p.name)
         .bind(&p.color)
         .bind(&p.unit)
@@ -242,14 +243,19 @@ pub async fn save_products_to_db(
 }
 
 pub async fn load_products_from_db(pool: &SqlitePool) -> Result<Vec<ProductConfig>> {
-    let rows: Vec<(i64, String, String, String)> =
-        sqlx::query_as("SELECT id, name, color, unit FROM products ORDER BY id")
+    let rows: Vec<(i64, String, String, String, String)> =
+        sqlx::query_as("SELECT id, uuid, name, color, unit FROM products ORDER BY id")
             .fetch_all(pool)
             .await?;
     Ok(rows
         .into_iter()
-        .map(|(id, name, color, unit)| ProductConfig {
+        .map(|(id, uuid, name, color, unit)| ProductConfig {
             id: id as u8,
+            uuid: if uuid.is_empty() {
+                uuid::Uuid::new_v4().to_string()
+            } else {
+                uuid
+            },
             name,
             color,
             unit,

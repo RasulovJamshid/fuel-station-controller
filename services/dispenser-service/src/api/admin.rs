@@ -351,6 +351,7 @@ async fn admin_post_prices(
     // Price history and nozzle price sync are non-critical — don't block the UI.
     if !db_records.is_empty() {
         let pool = st.pool.clone();
+        let station_id = st.cfg.read().await.site.id.clone();
         tokio::spawn(async move {
             for c in db_records {
                 if let Err(e) = admin_queries::insert_price_change(
@@ -377,6 +378,22 @@ async fn admin_post_prices(
                 .await
                 {
                     tracing::warn!(?e, "fp_nozzles price update failed");
+                }
+                // Enqueue for outbound sync so the backend learns about this price change.
+                let now = chrono::Utc::now();
+                let payload = serde_json::json!({
+                    "fp_id":        c.fp_id,
+                    "nozzle_index": c.nozzle_index,
+                    "product_id":   c.product_id,
+                    "product_name": c.product_name,
+                    "old_price":    c.old_price,
+                    "new_price":    c.new_price,
+                    "changed_at":   now.timestamp_millis(),
+                    "changed_by":   who,
+                });
+                let entity_id = format!("{}/{}/{}/{}", station_id, c.fp_id, c.nozzle_index, now.timestamp_millis());
+                if let Err(e) = crate::sync::enqueue(&pool, "price_change", &entity_id, &payload).await {
+                    tracing::warn!(?e, "price_change sync enqueue failed");
                 }
             }
         });
@@ -701,8 +718,17 @@ async fn admin_save_products(
                     format!("duplicate product id {id}"),
                 ));
             }
+            // Preserve existing UUID if provided; look up from current config by id; fall back to new.
+            let uuid = p.uuid
+                .filter(|u| !u.trim().is_empty())
+                .or_else(|| {
+                    let cfg = st.cfg.try_read().ok()?;
+                    cfg.products.iter().find(|ep| ep.id == id).map(|ep| ep.uuid.clone())
+                })
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
             products.push(ProductConfig {
                 id,
+                uuid,
                 name,
                 color: if p.color.trim().is_empty() {
                     "#888888".into()

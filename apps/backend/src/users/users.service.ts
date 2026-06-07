@@ -144,5 +144,6 @@ export class UsersService {
         role: true, active: true, twoFactorEnabled: true,
         lastLoginAt: true, createdAt: true, updatedAt: true,
         preferences: true,
+        stationAccess: { select: { stationId: true } },
     };
 }

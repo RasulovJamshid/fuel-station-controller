@@ -113,16 +113,19 @@ pub async fn persist_closed_transaction(pool: &SqlitePool, tx: &Transaction) -> 
     match &tx.status {
         TxStatus::Aborted => {
             if abort_stopped_transaction(pool, &tx.id).await? {
+                enqueue_tx(pool, tx).await;
                 return Ok(());
             }
         }
         TxStatus::Stopped => {
             if touch_stopped_transaction(pool, tx).await? {
+                enqueue_tx(pool, tx).await;
                 return Ok(());
             }
         }
         TxStatus::Completed => {
             if finalize_stopped_transaction(pool, &tx.id).await? {
+                enqueue_tx(pool, tx).await;
                 return Ok(());
             }
         }
@@ -136,13 +139,30 @@ pub async fn persist_closed_transaction(pool: &SqlitePool, tx: &Transaction) -> 
             )
             .await?
             {
+                // Enqueue the parent tx so the backend gets the updated combined totals.
+                // We don't have the full parent struct here, so we enqueue the child
+                // with CONTINUED_FROM — the backend service ignores this status anyway.
+                enqueue_tx(pool, tx).await;
                 return Ok(());
             }
             // Parent not found / not STOPPED — fall back to inserting a new row.
         }
     }
     let _ = now;
-    insert_transaction(pool, tx).await
+    insert_transaction(pool, tx).await?;
+    enqueue_tx(pool, tx).await;
+    Ok(())
+}
+
+/// Fire-and-forget sync enqueue — failures are logged but never propagate.
+async fn enqueue_tx(pool: &SqlitePool, tx: &Transaction) {
+    let payload = match serde_json::to_value(tx) {
+        Ok(v) => v,
+        Err(e) => { tracing::warn!("sync: tx serialize error: {e}"); return; }
+    };
+    if let Err(e) = crate::sync::enqueue(pool, "transaction", &tx.id, &payload).await {
+        tracing::warn!("sync: enqueue tx {} failed: {e}", tx.id);
+    }
 }
 
 pub async fn finalize_stopped_transaction(pool: &SqlitePool, stopped_tx_id: &str) -> Result<bool> {

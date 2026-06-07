@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, ArrowLeftRight, Gauge, BarChart3,
   Clock, Settings, LogOut, Fuel, Users,
+  Droplets, DollarSign, Bell, Building2, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
@@ -13,8 +14,13 @@ const nav = [
   { href: '/dashboard/transactions', label: 'Транзакции',    icon: ArrowLeftRight },
   { href: '/dashboard/shifts',       label: 'Смены',         icon: Clock },
   { href: '/dashboard/stations',     label: 'Станции',       icon: Gauge },
-  { href: '/dashboard/users',        label: 'Пользователи',  icon: Users },
+  { href: '/dashboard/oil-bases',    label: 'Нефтебазы',     icon: Building2 },
+  { href: '/dashboard/tanks',        label: 'Резервуары',    icon: Droplets },
+  { href: '/dashboard/prices',       label: 'Цены',          icon: DollarSign },
   { href: '/dashboard/reports',      label: 'Отчёты',        icon: BarChart3 },
+  { href: '/dashboard/alerts',        label: 'Оповещения',    icon: Bell },
+  { href: '/dashboard/integrations',  label: 'Интеграции',    icon: Zap },
+  { href: '/dashboard/users',         label: 'Пользователи',  icon: Users },
 ];
 
 interface SidebarProps {

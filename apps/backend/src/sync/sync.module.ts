@@ -3,9 +3,10 @@ import { SyncService } from './sync.service';
 import { SyncController } from './sync.controller';
 import { StationApiKeyGuard } from '../common/guards/station-api-key.guard';
 import { DashboardModule } from '../dashboard/dashboard.module';
+import { IntegrationsModule } from '../integrations/integrations.module';
 
 @Module({
-    imports: [DashboardModule],
+    imports: [DashboardModule, IntegrationsModule],
     providers: [SyncService, StationApiKeyGuard],
     controllers: [SyncController],
 })

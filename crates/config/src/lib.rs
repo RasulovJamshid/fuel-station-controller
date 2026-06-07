@@ -133,9 +133,17 @@ pub struct PollingConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProductConfig {
     pub id: u8,
+    /// Stable UUID for cross-system identification. Auto-generated on first load for
+    /// configs that pre-date this field.
+    #[serde(default = "gen_product_uuid")]
+    pub uuid: String,
     pub name: String,
     pub color: String,
     pub unit: String,
+}
+
+fn gen_product_uuid() -> String {
+    uuid::Uuid::new_v4().to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -167,7 +175,25 @@ pub struct SyncConfig {
     pub enabled: bool,
     pub backend_url: String,
     pub api_key: String,
+    /// How often the sync worker pushes queued records (seconds). Default: 30.
+    #[serde(default = "default_retry_interval_secs")]
+    pub retry_interval_secs: u64,
+    /// Max records per HTTP batch. Default: 100.
+    #[serde(default = "default_batch_size")]
+    pub batch_size: usize,
+    /// Records rejected this many times are skipped permanently. Default: 10.
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+    /// How often to pull price changes from the server (hours). Default: 12 (twice a day).
+    /// Set to 0 to disable scheduled pulls (startup-only).
+    #[serde(default = "default_price_pull_interval_hours")]
+    pub price_pull_interval_hours: u64,
 }
+
+fn default_retry_interval_secs() -> u64 { 30 }
+fn default_batch_size() -> usize { 100 }
+fn default_max_retries() -> u32 { 10 }
+fn default_price_pull_interval_hours() -> u64 { 12 }
 
 // ── Shift configuration (SHIFT_MANAGEMENT.md) ─────────────────────────────
 

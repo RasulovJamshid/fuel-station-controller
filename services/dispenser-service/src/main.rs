@@ -4,6 +4,7 @@ mod config;
 mod db;
 mod engine;
 mod shifts;
+mod sync;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -48,6 +49,8 @@ enum Commands {
     Start,
     #[cfg(windows)]
     Stop,
+    #[command(hide = true)]
+    ReinitAuth,
 }
 
 #[tokio::main]
@@ -55,12 +58,29 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Run => run(cli.config).await,
+        Commands::ReinitAuth => reinit_auth(cli.config).await,
         #[cfg(windows)]
         Commands::Install | Commands::Uninstall | Commands::Start | Commands::Stop => {
             tracing::warn!("service control is not implemented in this build");
             Ok(())
         }
     }
+}
+
+async fn reinit_auth(config_path: std::path::PathBuf) -> Result<()> {
+    let (cfg, _) = load(Some(config_path))?;
+    let db_opts = SqliteConnectOptions::new()
+        .filename(&cfg.service.db_path)
+        .create_if_missing(false)
+        .journal_mode(SqliteJournalMode::Wal)
+        .busy_timeout(std::time::Duration::from_secs(5));
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(db_opts)
+        .await?;
+    admin::reset_admin_pin_to_default(&pool).await?;
+    println!("Admin PIN reset to factory default. Must-change flag is set.");
+    Ok(())
 }
 
 async fn run(config_path: std::path::PathBuf) -> Result<()> {
@@ -187,6 +207,19 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
         .await;
     });
 
+    // Spawn outbound sync worker.
+    let sync_status = {
+        let r = cfg.read().await;
+        crate::sync::new_status(&r.sync)
+    };
+    tokio::spawn(crate::sync::run(
+        pool.clone(),
+        cfg.clone(),
+        config_path_buf.clone(),
+        sync_status.clone(),
+        cmd_tx.clone(),
+    ));
+
     tracing::info!(config = %config_path_buf.display(), "config file");
     let state = AppState {
         cfg,
@@ -198,6 +231,7 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
         shifts,
         admin_sessions: AdminSessions::new(),
         started: Instant::now(),
+        sync_status,
     };
 
     let app = router(state);

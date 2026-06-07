@@ -7,21 +7,26 @@ import { Header } from '@/components/layout/header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { useOilBases } from '@/hooks/use-oil-bases';
 
 export default function ShiftsPage() {
-  const [active, setActive]   = useState<any[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
-  const [total, setTotal]     = useState(0);
-  const [pages, setPages]     = useState(1);
-  const [page, setPage]       = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [active, setActive]       = useState<any[]>([]);
+  const [history, setHistory]     = useState<any[]>([]);
+  const [total, setTotal]         = useState(0);
+  const [pages, setPages]         = useState(1);
+  const [page, setPage]           = useState(1);
+  const [loading, setLoading]     = useState(true);
+  const [oilBaseId, setOilBaseId] = useState('');
+  const oilBases = useOilBases();
 
   const load = useCallback(async (p = 1) => {
     setLoading(true);
+    const params: any = { page: p, limit: 20 };
+    if (oilBaseId) params.oilBaseId = oilBaseId;
     try {
       const [act, hist] = await Promise.all([
-        shiftsApi.active(),
-        shiftsApi.list({ page: p, limit: 20 }),
+        shiftsApi.active(undefined, oilBaseId || undefined),
+        shiftsApi.list(params),
       ]);
       setActive(Array.isArray(act) ? act : []);
       const h = hist as any;
@@ -33,6 +38,7 @@ export default function ShiftsPage() {
     }
   }, []);
 
+  useEffect(() => { load(1); setPage(1); }, [oilBaseId]); // eslint-disable-line
   useEffect(() => { load(page); }, [page]); // eslint-disable-line
 
   const { connected } = useWebSocket(useCallback((ev: string) => {
@@ -44,6 +50,26 @@ export default function ShiftsPage() {
       <Header title="Смены" subtitle={`${total} смен всего`} connected={connected} />
 
       <div className="p-2 sm:p-4 space-y-8">
+        {/* Filter bar */}
+        {oilBases.length > 0 && (
+          <div className="panel p-4 flex flex-wrap items-end gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-500">Нефтебаза</label>
+              <select
+                value={oilBaseId}
+                onChange={e => setOilBaseId(e.target.value)}
+                className="field-control appearance-none"
+              >
+                <option value="">Все</option>
+                {oilBases.map(ob => <option key={ob.id} value={ob.id}>{ob.name}</option>)}
+              </select>
+            </div>
+            {oilBaseId && (
+              <Button variant="ghost" size="sm" onClick={() => setOilBaseId('')}>Сбросить</Button>
+            )}
+          </div>
+        )}
+
         {/* Active shifts */}
         {active.length > 0 && (
           <div>

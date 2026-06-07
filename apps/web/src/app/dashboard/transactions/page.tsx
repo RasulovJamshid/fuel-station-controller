@@ -1,32 +1,39 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { transactionsApi } from '@/lib/api';
+import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { transactionsApi, reportsApi } from '@/lib/api';
 import { fmtVolume, fmtMoney, fmtDate } from '@/lib/format';
 import { Header } from '@/components/layout/header';
 import { TxStatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { useToast } from '@/components/ui/toast';
+import { useOilBases } from '@/hooks/use-oil-bases';
 
 const STATUSES = ['', 'COMPLETED', 'STOPPED', 'ABORTED'];
 
 export default function TransactionsPage() {
-  const [data, setData]     = useState<any[]>([]);
-  const [total, setTotal]   = useState(0);
-  const [pages, setPages]   = useState(1);
-  const [page, setPage]     = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState('');
-  const [from, setFrom]     = useState('');
-  const [to, setTo]         = useState('');
+  const toast = useToast();
+  const [data, setData]         = useState<any[]>([]);
+  const [total, setTotal]       = useState(0);
+  const [pages, setPages]       = useState(1);
+  const [page, setPage]         = useState(1);
+  const [loading, setLoading]   = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [status, setStatus]     = useState('');
+  const [from, setFrom]         = useState('');
+  const [to, setTo]             = useState('');
+  const [oilBaseId, setOilBaseId] = useState('');
+  const oilBases = useOilBases();
 
   const load = useCallback(async (p = page) => {
     setLoading(true);
     try {
       const params: any = { page: p, limit: 50 };
-      if (status) params.status = [status];
-      if (from)   params.from   = new Date(from).toISOString();
-      if (to)     params.to     = new Date(to).toISOString();
+      if (status)    params.status    = [status];
+      if (from)      params.from      = new Date(from).toISOString();
+      if (to)        params.to        = new Date(to).toISOString();
+      if (oilBaseId) params.oilBaseId = oilBaseId;
       const res: any = await transactionsApi.list(params);
       setData(res.data ?? []);
       setTotal(res.total ?? 0);
@@ -36,10 +43,29 @@ export default function TransactionsPage() {
     }
   }, [page, status, from, to]);
 
-  useEffect(() => { load(1); setPage(1); }, [status, from, to]); // eslint-disable-line
+  useEffect(() => { load(1); setPage(1); }, [status, from, to, oilBaseId]); // eslint-disable-line
   useEffect(() => { load(page); }, [page]); // eslint-disable-line
 
   const { connected } = useWebSocket();
+
+  async function handleExport(format: 'csv' | 'xlsx') {
+    setExporting(true);
+    try {
+      const params: any = { type: 'transactions', format };
+      if (from)   params.from = new Date(from).toISOString();
+      if (to)     params.to   = new Date(to).toISOString();
+      const blob = await reportsApi.export(params) as any;
+      const url  = URL.createObjectURL(new Blob([blob]));
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `transactions_${Date.now()}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Файл ${format.toUpperCase()} скачан`);
+    } catch {
+      toast.error('Ошибка экспорта');
+    } finally { setExporting(false); }
+  }
 
   return (
     <div className="animate-fade-in">
@@ -48,6 +74,19 @@ export default function TransactionsPage() {
       <div className="p-2 sm:p-4 space-y-6">
         {/* Filters */}
         <div className="panel p-5 flex flex-wrap items-end gap-4">
+          {oilBases.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-500">Нефтебаза</label>
+              <select
+                value={oilBaseId}
+                onChange={e => setOilBaseId(e.target.value)}
+                className="field-control appearance-none"
+              >
+                <option value="">Все</option>
+                {oilBases.map(ob => <option key={ob.id} value={ob.id}>{ob.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-slate-500">С</label>
             <input
@@ -79,8 +118,14 @@ export default function TransactionsPage() {
             </select>
           </div>
           <div className="ml-auto flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => { setFrom(''); setTo(''); setStatus(''); }}>
+            <Button variant="ghost" size="sm" onClick={() => { setFrom(''); setTo(''); setStatus(''); setOilBaseId(''); }}>
               Сбросить
+            </Button>
+            <Button variant="outline" size="sm" loading={exporting} onClick={() => handleExport('csv')}>
+              <Download size={14} /> CSV
+            </Button>
+            <Button variant="outline" size="sm" loading={exporting} onClick={() => handleExport('xlsx')}>
+              <Download size={14} /> Excel
             </Button>
           </div>
         </div>

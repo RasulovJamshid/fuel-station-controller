@@ -17,13 +17,18 @@ export class ShiftsController {
         @CurrentUser() user: any,
         @Query() pagination: PaginationDto,
         @Query('stationId') stationId?: string,
+        @Query('oilBaseId') oilBaseId?: string,
     ) {
-        return this.shifts.findAll(user.companyId, stationId, pagination);
+        return this.shifts.findAll(user.companyId, stationId, pagination, oilBaseId);
     }
 
     @Get('active')
-    getActive(@CurrentUser() user: any, @Query('stationId') stationId?: string) {
-        return this.shifts.getActive(user.companyId, stationId);
+    getActive(
+        @CurrentUser() user: any,
+        @Query('stationId') stationId?: string,
+        @Query('oilBaseId') oilBaseId?: string,
+    ) {
+        return this.shifts.getActive(user.companyId, stationId, oilBaseId);
     }
 
     @Get(':id')

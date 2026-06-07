@@ -51,9 +51,9 @@ export class ReportsService {
         `;
     }
 
-    async getOperatorReport(companyId: string, from: Date, to: Date, stationId?: string) {
-        const stationFilter = stationId
-            ? Prisma.sql`AND "stationId" = ${stationId}`
+    async getOperatorReport(companyId: string, from: Date, to: Date, stationIds: string[] = []) {
+        const stationFilter = stationIds.length > 0
+            ? Prisma.sql`AND "stationId" = ANY(${stationIds})`
             : Prisma.empty;
 
         return this.prisma.$queryRaw<any[]>`
@@ -75,9 +75,9 @@ export class ReportsService {
         `;
     }
 
-    async getProductReport(companyId: string, from: Date, to: Date, stationId?: string) {
-        const stationFilter = stationId
-            ? Prisma.sql`AND "stationId" = ${stationId}`
+    async getProductReport(companyId: string, from: Date, to: Date, stationIds: string[] = []) {
+        const stationFilter = stationIds.length > 0
+            ? Prisma.sql`AND "stationId" = ANY(${stationIds})`
             : Prisma.empty;
 
         return this.prisma.$queryRaw<any[]>`

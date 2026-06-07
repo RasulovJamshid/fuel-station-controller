@@ -27,6 +27,7 @@ use crate::api::admin;
 use crate::api::ws::ws_upgrade;
 use crate::db::{queries, shift_queries};
 use crate::engine::{DispatchCommand, RuntimeFp};
+use crate::sync::SharedSyncStatus;
 use crate::shifts::ShiftCoordinator;
 
 #[derive(Clone)]
@@ -40,6 +41,7 @@ pub struct AppState {
     pub shifts: Arc<ShiftCoordinator>,
     pub admin_sessions: AdminSessions,
     pub started: Instant,
+    pub sync_status: SharedSyncStatus,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -72,6 +74,8 @@ pub fn router(state: AppState) -> Router {
         .route("/shifts/:id", get(get_shift))
         .route("/shifts/:id/report", get(shift_report))
         .route("/operators", get(list_operators).post(create_operator))
+        .route("/sync/status", get(get_sync_status))
+        .route("/admin/sync-config", post(update_sync_config))
         .route("/ws", get(ws_handler))
         .merge(admin::router())
         .layer(TraceLayer::new_for_http())
@@ -891,4 +895,43 @@ pub async fn get_transaction(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     row.map(Json).ok_or(StatusCode::NOT_FOUND)
+}
+
+// ── Sync status + config endpoints ───────────────────────────────────────────
+
+pub async fn get_sync_status(
+    State(st): State<AppState>,
+) -> Json<crate::sync::SyncStatus> {
+    Json(st.sync_status.lock().await.clone())
+}
+
+#[derive(serde::Deserialize)]
+pub struct UpdateSyncConfigBody {
+    pub enabled:                    Option<bool>,
+    pub backend_url:                Option<String>,
+    pub api_key:                    Option<String>,
+    pub retry_interval_secs:        Option<u64>,
+    pub batch_size:                 Option<usize>,
+    pub max_retries:                Option<u32>,
+    pub price_pull_interval_hours:  Option<u64>,
+}
+
+pub async fn update_sync_config(
+    State(st): State<AppState>,
+    Json(body): Json<UpdateSyncConfigBody>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    {
+        let mut cfg = st.cfg.write().await;
+        if let Some(v) = body.enabled                   { cfg.sync.enabled                   = v; }
+        if let Some(v) = body.backend_url               { cfg.sync.backend_url               = v; }
+        if let Some(v) = body.api_key                   { cfg.sync.api_key                   = v; }
+        if let Some(v) = body.retry_interval_secs       { cfg.sync.retry_interval_secs       = v; }
+        if let Some(v) = body.batch_size                { cfg.sync.batch_size                = v; }
+        if let Some(v) = body.max_retries               { cfg.sync.max_retries               = v; }
+        if let Some(v) = body.price_pull_interval_hours { cfg.sync.price_pull_interval_hours = v; }
+
+        crate::config::save(&cfg, &st.config_path)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
 }

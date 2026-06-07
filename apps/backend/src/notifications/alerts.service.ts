@@ -16,7 +16,87 @@ export class AlertsService {
     async checkAlerts() {
         await Promise.all([
             this.checkTankLevels(),
+            this.checkStationOffline(),
+            this.checkSyncLag(),
         ]);
+    }
+
+    private async checkStationOffline() {
+        const offlineThresholdMs = 15 * 60 * 1000; // 15 minutes
+        const cutoff = new Date(Date.now() - offlineThresholdMs);
+
+        const stations = await this.prisma.station.findMany({
+            where: {
+                active: true,
+                deletedAt: null,
+                OR: [
+                    { lastSeenAt: { lt: cutoff } },
+                    { lastSeenAt: null },
+                ],
+            },
+            select: { id: true, companyId: true, name: true, lastSeenAt: true },
+        });
+
+        for (const station of stations) {
+            const rules = await this.prisma.alertRule.findMany({
+                where: {
+                    companyId: station.companyId,
+                    type: 'station_offline',
+                    enabled: true,
+                    OR: [{ stationId: station.id }, { stationId: null }],
+                },
+            });
+
+            if (rules.length > 0) {
+                const ago = station.lastSeenAt
+                    ? Math.round((Date.now() - station.lastSeenAt.getTime()) / 60_000) + ' мин.'
+                    : 'никогда';
+                await this.notify.sendAlert({
+                    type: 'station_offline',
+                    stationId: station.id,
+                    message: `🔴 Станция <b>${station.name}</b> не выходила на связь (${ago})`,
+                });
+            }
+        }
+    }
+
+    private async checkSyncLag() {
+        const lagThresholdMs = 60 * 60 * 1000; // 1 hour without sync
+        const cutoff = new Date(Date.now() - lagThresholdMs);
+
+        const stations = await this.prisma.station.findMany({
+            where: {
+                active: true,
+                deletedAt: null,
+                OR: [
+                    { lastSyncAt: { lt: cutoff } },
+                    { lastSyncAt: null },
+                ],
+            },
+            select: { id: true, companyId: true, name: true, lastSyncAt: true },
+        });
+
+        for (const station of stations) {
+            const rules = await this.prisma.alertRule.findMany({
+                where: {
+                    companyId: station.companyId,
+                    type: 'sync_lag',
+                    enabled: true,
+                    OR: [{ stationId: station.id }, { stationId: null }],
+                },
+            });
+
+            if (rules.length > 0) {
+                const ago = station.lastSyncAt
+                    ? Math.round((Date.now() - station.lastSyncAt.getTime()) / 60_000) + ' мин.'
+                    : 'никогда';
+                await this.notify.sendAlert({
+                    type: 'sync_lag',
+                    stationId: station.id,
+                    message: `⚠️ Станция <b>${station.name}</b>: нет синхронизации уже ${ago}`,
+                });
+            }
+        }
     }
 
     private async checkTankLevels() {

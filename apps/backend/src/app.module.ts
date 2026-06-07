@@ -21,23 +21,36 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AuditModule } from './audit/audit.module';
 import { ExportModule } from './export/export.module';
+import { PricesModule } from './prices/prices.module';
+import { AlertRulesModule } from './alert-rules/alert-rules.module';
+import { OilBasesModule } from './oil-bases/oil-bases.module';
+import { IntegrationsModule } from './integrations/integrations.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
 
 @Module({
     imports: [
         ConfigModule.forRoot({
             isGlobal: true,
             validationSchema: Joi.object({
-                NODE_ENV:             Joi.string().valid('development', 'production', 'test').default('production'),
-                PORT:                 Joi.number().default(4000),
-                DATABASE_URL:         Joi.string().required(),
-                REDIS_URL:            Joi.string().required(),
-                JWT_SECRET:           Joi.string().min(32).required(),
-                JWT_EXPIRES_IN:       Joi.string().default('15m'),
-                JWT_REFRESH_SECRET:   Joi.string().min(32).required(),
+                NODE_ENV:               Joi.string().valid('development', 'production', 'test').default('production'),
+                PORT:                   Joi.number().default(4000),
+                DATABASE_URL:           Joi.string().required(),
+                REDIS_URL:              Joi.string().required(),
+                JWT_SECRET:             Joi.string().min(32).required(),
+                JWT_EXPIRES_IN:         Joi.string().default('15m'),
+                JWT_REFRESH_SECRET:     Joi.string().min(32).required(),
                 JWT_REFRESH_EXPIRES_IN: Joi.string().default('30d'),
-                BCRYPT_ROUNDS:        Joi.number().default(12),
-                MAX_LOGIN_ATTEMPTS:   Joi.number().default(5),
-                LOGIN_LOCKOUT_MINUTES: Joi.number().default(15),
+                BCRYPT_ROUNDS:          Joi.number().default(12),
+                MAX_LOGIN_ATTEMPTS:     Joi.number().default(5),
+                LOGIN_LOCKOUT_MINUTES:  Joi.number().default(15),
+                // Optional — validated loosely so they never block startup
+                CORS_ORIGINS:           Joi.string().allow('').default(''),
+                SWAGGER_ENABLED:        Joi.string().valid('true', 'false').default('false'),
+                TRANSACTION_RETENTION_DAYS:     Joi.number().default(1825),
+                ATG_READINGS_RAW_RETENTION_DAYS: Joi.number().default(90),
+                HEALTH_EVENTS_RETENTION_DAYS:   Joi.number().default(30),
+                AUDIT_LOG_RETENTION_DAYS:       Joi.number().default(365),
+                SYNC_LAG_ALERT_MINUTES:         Joi.number().default(30),
             }),
         }),
 
@@ -76,6 +89,11 @@ import { ExportModule } from './export/export.module';
         NotificationsModule,
         AuditModule,
         ExportModule,
+        PricesModule,
+        AlertRulesModule,
+        OilBasesModule,
+        IntegrationsModule,
+        MaintenanceModule,
     ],
 })
 export class AppModule implements NestModule {

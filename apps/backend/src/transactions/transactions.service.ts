@@ -7,11 +7,25 @@ import { QueryTransactionsDto } from './dto/query-transactions.dto';
 export class TransactionsService {
     constructor(private prisma: PrismaService) {}
 
+    private async stationIdsForOilBase(companyId: string, oilBaseId: string): Promise<string[]> {
+        const rows = await this.prisma.station.findMany({
+            where: { companyId, oilBaseId, deletedAt: null },
+            select: { id: true },
+        });
+        return rows.map(r => r.id);
+    }
+
     async findAll(companyId: string, q: QueryTransactionsDto) {
+        const oilBaseIds = q.oilBaseId
+            ? await this.stationIdsForOilBase(companyId, q.oilBaseId)
+            : null;
+        if (oilBaseIds !== null && oilBaseIds.length === 0) return { data: [], total: 0, page: 1, pages: 1 };
+
         const where: any = {
             companyId,
             deletedAt: null,
-            ...(q.stationId     ? { stationId: q.stationId }     : {}),
+            ...(oilBaseIds       ? { stationId: { in: oilBaseIds } } :
+                q.stationId     ? { stationId: q.stationId }        : {}),
             ...(q.fpId          ? { fpId: q.fpId }               : {}),
             ...(q.shiftId       ? { shiftId: q.shiftId }         : {}),
             ...(q.operatorName  ? { operatorName: { contains: q.operatorName, mode: 'insensitive' } } : {}),
@@ -46,10 +60,16 @@ export class TransactionsService {
     }
 
     async summarize(companyId: string, q: QueryTransactionsDto) {
+        const oilBaseIds = q.oilBaseId
+            ? await this.stationIdsForOilBase(companyId, q.oilBaseId)
+            : null;
+        if (oilBaseIds !== null && oilBaseIds.length === 0) return { count: 0, totalVolume: 0 };
+
         const where: any = {
             companyId,
             deletedAt: null,
-            ...(q.stationId     ? { stationId: q.stationId }    : {}),
+            ...(oilBaseIds       ? { stationId: { in: oilBaseIds } } :
+                q.stationId     ? { stationId: q.stationId }        : {}),
             ...(q.fpId          ? { fpId: q.fpId }              : {}),
             ...(q.shiftId       ? { shiftId: q.shiftId }        : {}),
             ...(q.status?.length ? { status: { in: q.status } } : {}),

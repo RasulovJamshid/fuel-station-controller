@@ -51,6 +51,11 @@ export class StationsController {
         return this.stations.rotateApiKey(id, user.companyId);
     }
 
+    @Get(':id/detail')
+    detail(@Param('id') id: string, @CurrentUser() user: any) {
+        return this.stations.getDetail(id, user.companyId);
+    }
+
     @Get(':id/uptime')
     uptimeHistory(
         @Param('id') id: string,

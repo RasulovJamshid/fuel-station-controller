@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, RotateCcw, Wifi, WifiOff, Copy, Check, Search } from 'lucide-react';
-import { stationsApi } from '@/lib/api';
+import { Plus, Pencil, Trash2, RotateCcw, Wifi, WifiOff, Copy, Check, Search, Building2, Layers, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
+import { stationsApi, oilBasesApi } from '@/lib/api';
 import { fmtRelative } from '@/lib/format';
 import { useAuthStore } from '@/store/auth';
 import { Header } from '@/components/layout/header';
@@ -16,8 +17,9 @@ const EMPTY = { id: '', name: '', address: '', timezone: 'Asia/Tashkent', ipAllo
 
 export default function StationsPage() {
   const { user } = useAuthStore();
-  const [stations, setStations] = useState<any[]>([]);
-  const [loading, setLoading]   = useState(true);
+  const [stations, setStations]   = useState<any[]>([]);
+  const [oilBases, setOilBases]   = useState<any[]>([]);
+  const [loading, setLoading]     = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing]   = useState<any>(null);
   const [deleting, setDeleting] = useState<any>(null);
@@ -32,8 +34,12 @@ export default function StationsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res: any = await stationsApi.list();
-      setStations(Array.isArray(res) ? res : []);
+      const [stRes, sumRes]: any[] = await Promise.all([
+        stationsApi.list(),
+        oilBasesApi.summary(),
+      ]);
+      setStations(Array.isArray(stRes) ? stRes : []);
+      setOilBases(sumRes?.oilBases ?? []);
     } finally { setLoading(false); }
   }, []);
 
@@ -97,6 +103,29 @@ export default function StationsPage() {
     );
   });
 
+  function renderStationCard(s: any) {
+    return (
+      <div key={s.id} className={cn('panel transition-all duration-200 hover:shadow-md overflow-hidden relative group border-t-4', isOnline(s) ? 'border-t-emerald-400' : 'border-t-slate-300')}>
+        <div className="p-6">
+          <div className="flex items-start justify-between mb-3">
+            <div className="min-w-0"><h3 className="font-semibold text-slate-900 truncate">{s.name}</h3>{s.address && <p className="text-xs text-slate-400 mt-0.5 truncate">{s.address}</p>}</div>
+            <Badge variant={isOnline(s) ? 'success' : 'neutral'} className="ml-2 flex-shrink-0">{isOnline(s) ? <><Wifi size={10} /> Онлайн</> : <><WifiOff size={10} /> Оффлайн</>}</Badge>
+          </div>
+          <div className="mt-3 space-y-1 text-xs text-slate-500">
+            <div className="flex justify-between"><span>ID</span><code className="bg-slate-100 rounded px-1.5 py-0.5 text-slate-600">{s.id}</code></div>
+            <div className="flex justify-between"><span>Синхр.</span><span>{s.lastSyncAt ? fmtRelative(s.lastSyncAt) : 'нет'}</span></div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 px-5 py-3 border-t border-slate-100 bg-slate-50">
+          <Link href={`/dashboard/stations/${s.id}`} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-brand-600 hover:bg-brand-50 transition-colors"><ExternalLink size={14} /> Подробнее</Link>
+          <button onClick={() => openEdit(s)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-brand-600 hover:bg-white transition-colors"><Pencil size={14} /> Изменить</button>
+          <button onClick={() => { setRotatingKey(s); setNewKey(null); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-amber-600 hover:bg-white transition-colors"><RotateCcw size={14} /> API ключ</button>
+          <button onClick={() => setDeleting(s)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-red-600 hover:bg-white transition-colors ml-auto"><Trash2 size={14} /> Удалить</button>
+        </div>
+      </div>
+    );
+  }
+
   function renderFormFields(isCreate: boolean) {
     return (
       <div className="space-y-5">
@@ -137,33 +166,64 @@ export default function StationsPage() {
           </div>
           <Button onClick={openCreate} size="md" className="shadow-brand-500/30 shadow-lg"><Plus size={18} /> Добавить станцию</Button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {loading ? Array.from({ length: 3 }).map((_, i) => <div key={i} className="panel p-5 h-44 animate-pulse" />) :
-           visibleStations.length === 0 ? (
-            <div className="col-span-full flex flex-col items-center py-16">
-              <p className="text-slate-400 mb-4">{query ? 'Ничего не найдено по вашему запросу' : 'Станций пока нет'}</p>
-              {!query && <Button onClick={openCreate} size="sm"><Plus size={16} /> Добавить первую</Button>}
-            </div>
-          ) : visibleStations.map((s: any) => (
-            <div key={s.id} className={cn('panel transition-all duration-200 hover:shadow-md overflow-hidden relative group border-t-4', isOnline(s) ? 'border-t-emerald-400' : 'border-t-slate-300')}>
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="min-w-0"><h3 className="font-semibold text-slate-900 truncate">{s.name}</h3>{s.address && <p className="text-xs text-slate-400 mt-0.5 truncate">{s.address}</p>}</div>
-                  <Badge variant={isOnline(s) ? 'success' : 'neutral'} className="ml-2 flex-shrink-0">{isOnline(s) ? <><Wifi size={10} /> Онлайн</> : <><WifiOff size={10} /> Оффлайн</>}</Badge>
+
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {Array.from({ length: 3 }).map((_, i) => <div key={i} className="panel p-5 h-44 animate-pulse" />)}
+          </div>
+        ) : visibleStations.length === 0 ? (
+          <div className="flex flex-col items-center py-16">
+            <p className="text-slate-400 mb-4">{query ? 'Ничего не найдено по вашему запросу' : 'Станций пока нет'}</p>
+            {!query && <Button onClick={openCreate} size="sm"><Plus size={16} /> Добавить первую</Button>}
+          </div>
+        ) : oilBases.length > 0 ? (
+          // ── Grouped view ──
+          <div className="space-y-6">
+            {oilBases.map(ob => {
+              const groupStations = visibleStations.filter((s: any) => s.oilBaseId === ob.id);
+              if (groupStations.length === 0 && query) return null;
+              return (
+                <div key={ob.id}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Building2 size={15} className="text-brand-500 flex-shrink-0" />
+                    <h2 className="text-sm font-semibold text-slate-700">{ob.name}</h2>
+                    <span className="text-xs text-slate-400">· {groupStations.length} ст.</span>
+                  </div>
+                  {groupStations.length === 0 ? (
+                    <p className="text-xs text-slate-400 pl-5">Нет станций в этой нефтебазе</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {groupStations.map((s: any) => renderStationCard(s))}
+                    </div>
+                  )}
                 </div>
-                <div className="mt-3 space-y-1 text-xs text-slate-500">
-                  <div className="flex justify-between"><span>ID</span><code className="bg-slate-100 rounded px-1.5 py-0.5 text-slate-600">{s.id}</code></div>
-                  <div className="flex justify-between"><span>Синхр.</span><span>{s.lastSyncAt ? fmtRelative(s.lastSyncAt) : 'нет'}</span></div>
+              );
+            })}
+            {/* Standalone */}
+            {(() => {
+              const obIds = new Set(oilBases.map((ob: any) => ob.id));
+              const standalone = visibleStations.filter((s: any) => !s.oilBaseId || !obIds.has(s.oilBaseId));
+              if (standalone.length === 0) return null;
+              return (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Layers size={15} className="text-slate-400 flex-shrink-0" />
+                    <h2 className="text-sm font-semibold text-slate-500">Без нефтебазы</h2>
+                    <span className="text-xs text-slate-400">· {standalone.length} ст.</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {standalone.map((s: any) => renderStationCard(s))}
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-1 px-5 py-3 border-t border-slate-100 bg-slate-50">
-                <button onClick={() => openEdit(s)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-brand-600 hover:bg-white transition-colors"><Pencil size={14} /> Изменить</button>
-                <button onClick={() => { setRotatingKey(s); setNewKey(null); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-amber-600 hover:bg-white transition-colors"><RotateCcw size={14} /> API ключ</button>
-                <button onClick={() => setDeleting(s)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-red-600 hover:bg-white transition-colors ml-auto"><Trash2 size={14} /> Удалить</button>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })()}
+          </div>
+        ) : (
+          // ── Flat view (no oil bases) ──
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {visibleStations.map((s: any) => renderStationCard(s))}
+          </div>
+        )}
       </div>
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Новая станция">{renderFormFields(true)}</Modal>

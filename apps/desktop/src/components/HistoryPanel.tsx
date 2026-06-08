@@ -71,9 +71,9 @@ function buildPrintInnerHtml(
       + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   };
   const rowVol = (r: Transaction) =>
-    r.status === "CONTINUED_FROM" && showCombinedForContinued ? (r.combined_volume ?? r.volume) : r.volume;
+    txStatusParentId(r.status) !== null && showCombinedForContinued ? (r.combined_volume ?? r.volume) : r.volume;
   const rowAmt = (r: Transaction) =>
-    r.status === "CONTINUED_FROM" && showCombinedForContinued ? (r.combined_amount ?? r.amount) : r.amount;
+    txStatusParentId(r.status) !== null && showCombinedForContinued ? (r.combined_amount ?? r.amount) : r.amount;
   const totalVol = rows.reduce((s, r) => s + rowVol(r), 0);
   const totalAmt = rows.reduce((s, r) => s + rowAmt(r), 0);
   const cnt = summary?.count ?? rows.length;
@@ -322,9 +322,9 @@ export function HistoryPanel(props: {
   // is included (all / stopped views), use segment volume to avoid double-counting.
   const showCombinedForContinued = statusesParam !== "" && !statusesParam.includes("STOPPED");
   const rowVol = (r: Transaction) =>
-    r.status === "CONTINUED_FROM" && showCombinedForContinued ? (r.combined_volume ?? r.volume) : r.volume;
+    txStatusParentId(r.status) !== null && showCombinedForContinued ? (r.combined_volume ?? r.volume) : r.volume;
   const rowAmt = (r: Transaction) =>
-    r.status === "CONTINUED_FROM" && showCombinedForContinued ? (r.combined_amount ?? r.amount) : r.amount;
+    txStatusParentId(r.status) !== null && showCombinedForContinued ? (r.combined_amount ?? r.amount) : r.amount;
 
   // reset page + clear summary when filters change
   useEffect(() => {

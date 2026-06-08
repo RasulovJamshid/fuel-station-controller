@@ -20,6 +20,14 @@
     "react-i18next": "^17.0.8",
     "zustand": "^5.0.0"
   },
+  "optionalDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "*",
+    "@rollup/rollup-linux-x64-gnu": "*",
+    "@rollup/rollup-darwin-arm64": "*",
+    "@tauri-apps/cli-win32-x64-msvc": "*",
+    "@tauri-apps/cli-linux-x64-gnu": "*",
+    "@tauri-apps/cli-darwin-arm64": "*"
+  },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "@types/node": "^25.9.1",

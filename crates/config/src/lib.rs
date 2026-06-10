@@ -19,6 +19,9 @@ pub struct SiteConfig {
     pub ui: UiConfig,
     #[serde(default)]
     pub tanks: Vec<TankConfig>,
+    /// ATG Modbus polling config. Absent or null = feature disabled.
+    #[serde(default)]
+    pub atg: Option<AtgConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -42,6 +45,16 @@ pub struct UiConfig {
     /// (old-app behavior).  Falls back to normal STOPPED state if the pump ignores BUSY.
     #[serde(default)]
     pub use_decel_window_on_stop: bool,
+    /// When true, the app Stop button acts as a final stop (no resume): the transaction
+    /// is promoted to COMPLETED once the nozzle is holstered.  When false (default) it
+    /// acts as Pause so the operator can resume the fill later.
+    #[serde(default)]
+    pub use_stop_mode: bool,
+    /// When true, show a "Cancel" button during delivery instead of Pause/Stop.
+    /// Clicking it stops the pump and immediately closes the transaction (no holster
+    /// required).  Intended for simulator configs where there is no physical nozzle.
+    #[serde(default)]
+    pub use_cancel_mode: bool,
 }
 
 fn default_auth_mode() -> String {
@@ -58,6 +71,8 @@ impl Default for UiConfig {
             default_auth_mode: default_auth_mode(),
             preauth_timeout_seconds: default_preauth_timeout_seconds(),
             use_decel_window_on_stop: false,
+            use_stop_mode: false,
+            use_cancel_mode: false,
         }
     }
 }
@@ -306,6 +321,106 @@ impl ShiftConfig {
             None
         }
     }
+}
+
+// ── ATG (Automatic Tank Gauge) configuration ──────────────────────────────
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct AtgConfig {
+    /// How often to poll all branches in seconds. Default: 300 (5 min).
+    #[serde(default = "default_atg_poll_interval")]
+    pub poll_interval_secs: u64,
+    /// Modbus TCP connect + read timeout in seconds. Default: 10.
+    #[serde(default = "default_atg_modbus_timeout")]
+    pub modbus_timeout_secs: f64,
+    /// POST target, e.g. "https://ps.ung.uz/api/integration/fuel-levels".
+    #[serde(default)]
+    pub api_url: String,
+    #[serde(default)]
+    pub auth: Option<AtgAuth>,
+    #[serde(default)]
+    pub branches: Vec<AtgBranch>,
+}
+
+fn default_atg_poll_interval() -> u64 { 300 }
+fn default_atg_modbus_timeout() -> f64 { 10.0 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AtgAuth {
+    /// Static Bearer token — takes priority over username/password login.
+    #[serde(default)]
+    pub api_token: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+    /// Login endpoint. Derived from api_url if empty.
+    #[serde(default)]
+    pub login_url: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AtgBranch {
+    /// Integer used as `ayoqshMdmId` in the integration payload.
+    pub id: u32,
+    #[serde(default)]
+    pub name: String,
+    pub host: String,
+    #[serde(default = "default_atg_port")]
+    pub port: u16,
+    #[serde(default = "default_atg_unit_id")]
+    pub unit_id: u8,
+    /// ModScan-style register address of the first register (e.g. 1000).
+    #[serde(default = "default_atg_start_register")]
+    pub start_register: u16,
+    /// Offset used to convert start_register to a 0-based PDU address (usually 1).
+    #[serde(default = "default_atg_address_base")]
+    pub address_base: u16,
+    /// Number of 16-bit registers to read. Must be a multiple of 12 (12 per slot, max 48).
+    #[serde(default = "default_atg_register_count")]
+    pub register_count: u16,
+    pub slots: Vec<AtgSlot>,
+}
+
+fn default_atg_port() -> u16 { 502 }
+fn default_atg_unit_id() -> u8 { 1 }
+fn default_atg_start_register() -> u16 { 1000 }
+fn default_atg_address_base() -> u16 { 1 }
+fn default_atg_register_count() -> u16 { 12 }
+
+impl AtgBranch {
+    /// 0-based PDU register address for the Modbus request.
+    pub fn pdu_address(&self) -> u16 {
+        self.start_register.saturating_sub(self.address_base)
+    }
+    /// Number of IEEE float32 values decoded from the register block.
+    pub fn float_count(&self) -> usize {
+        (self.register_count / 2) as usize
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AtgSlot {
+    /// 1-based tank slot number (1–4).
+    pub slot: u8,
+    /// Fuel type label used in the integration payload, e.g. "AI-92".
+    #[serde(rename = "type")]
+    pub fuel_type: String,
+    /// Links this ATG slot to a product in the site product catalog.
+    /// When set, live Modbus readings update the matching tank display.
+    #[serde(default)]
+    pub product_id: Option<u8>,
+    /// Human-readable label shown in the tank panel. Falls back to `fuel_type` when absent.
+    #[serde(default)]
+    pub label: Option<String>,
+    /// Physical tank capacity in litres for the UI fill-percent calculation.
+    /// If absent the value is taken from the matching TankConfig (by product_id) or maxima.product_volume.
+    #[serde(default)]
+    pub capacity_l: Option<f64>,
+    /// Optional per-parameter capacity values for percent calculation in the integration POST.
+    /// Key "product_volume" → max litres → emits `product_volume_percent`.
+    #[serde(default)]
+    pub maxima: HashMap<String, f64>,
 }
 
 impl SiteConfig {

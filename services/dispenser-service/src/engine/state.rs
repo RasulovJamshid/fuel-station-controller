@@ -82,6 +82,12 @@ pub struct RuntimeFp {
     /// Completed sale awaiting operator dismiss — blocks duplicate history on other nozzles.
     pub completed_sale: Option<CompletedSaleLatch>,
 
+    // ── Holster close deferral ───────────────────────────────────────────────
+    /// When true, the first NozzleReturned was seen but finalization is deferred by one
+    /// poll cycle so the pump can deliver its final Data frame (with the true pump-counter
+    /// reading) before the transaction is recorded.  Finalize on the next Data/idle frame.
+    pub pending_holster_close: bool,
+
     // ── Decel window (old-app BUSY-after-stop) ──────────────────────────────
     /// Wall-clock ms when the STOP command was sent; `None` = no decel window active.
     pub decel_stop_sent_at: Option<i64>,
@@ -145,6 +151,7 @@ impl RuntimeFp {
             last_wire_hose_code: None,
             last_wire_hose_at_ms: 0,
             completed_sale: None,
+            pending_holster_close: false,
             decel_stop_sent_at: None,
             decel_vol_snapshot: 0.0,
             decel_frozen_count: 0,
@@ -388,8 +395,33 @@ impl RuntimeFp {
         active_shift_id: Option<String>,
         active_operator_name: Option<String>,
     ) -> FrameEffect {
+        // If the software cap was never cleared it means the nozzle was holstered
+        // before the app polled the final sale_complete BUSY frame.  Snap to the
+        // preset cap so history records exactly the preset value rather than the
+        // last-polled (slightly-under) reading.
+        if let Some(cap_a) = self.cap_amount {
+            let (cur_vol, _) = self.combined_totals();
+            let price = self.active_nozzle_price();
+            if cur_vol > 0.0 && price > 0 {
+                let cap_vol = cap_a as f64 / price as f64;
+                if cap_vol > cur_vol {
+                    self.apply_metering(cap_vol, cap_a);
+                }
+            }
+        } else if let Some(cap_v) = self.cap_volume_liters {
+            let (cur_vol, _) = self.combined_totals();
+            if cur_vol > 0.0 && cap_v > cur_vol {
+                let cap_a = self.amount_from_volume(cap_v);
+                self.apply_metering(cap_v, cap_a);
+            }
+        }
         let (vol, _) = self.combined_totals();
         self.clear_deliver_caps();
+        self.pending_holster_close = false;
+        // Guard: if a PAUSE decel window was open but we reach holster-completion
+        // (e.g. via an unhandled code path), disarm the timer so it cannot fire a
+        // second save after this one.
+        self.clear_decel_window();
         self.state.status = FpStatus::Done;
         let completed = self.sale_target_met() || vol < 0.01;
         let tx = self.close_transaction(completed, fp_cfg, site, active_shift_id, active_operator_name);
@@ -616,6 +648,7 @@ impl RuntimeFp {
         self.clear_deliver_caps();
         self.clear_decel_window();
         self.clear_continuation_fields();
+        self.pending_holster_close = false;
         self.state.status = FpStatus::Idle;
         self.state.stop_source = None;
         self.state.pre_auth_preset = None;
@@ -762,9 +795,19 @@ impl RuntimeFp {
                     self.touch();
                     FrameEffect::CompleteGhostFill
                 } else if self.holster_ends_sale_early() {
+                    // Early abort (operator pulled nozzle before preset) — finalize immediately.
+                    self.pending_holster_close = false;
                     self.end_sale_from_holster_early(fp_cfg, site, active_shift_id, active_operator_name)
-                } else {
+                } else if self.pending_holster_close {
+                    // Second holster event (or fallback after deferral) — finalize now.
+                    self.pending_holster_close = false;
                     self.complete_sale_from_holster(fp_cfg, site, active_shift_id, active_operator_name)
+                } else {
+                    // First holster event: defer one poll cycle so the pump can send its final
+                    // Data frame carrying the true pump-counter reading before we record.
+                    self.pending_holster_close = true;
+                    self.touch();
+                    FrameEffect::StatusChanged
                 }
             }
             FpStatus::PreAuthorized => {
@@ -801,6 +844,44 @@ impl RuntimeFp {
                 self.reset_to_idle();
                 self.touch();
                 FrameEffect::StatusChanged
+            }
+            FpStatus::Stopped {
+                stop_source: StopSource::AppFinal,
+                ..
+            } => {
+                // Stop mode (no resume): nozzle holstered → finalize as Completed.
+                let tx = self.finalize_stopped_sale(fp_cfg, site, active_shift_id, active_operator_name, true);
+                FrameEffect::TransactionDone {
+                    tx,
+                    action: TxCompleteAction::AcknowledgeIdle,
+                }
+            }
+            FpStatus::Stopped {
+                stop_source: StopSource::App,
+                ref stopped_tx_id,
+                ..
+            } => {
+                // Paused fill: pump sent NozzleReturned while we were in pause state.
+                // Finalize as STOPPED and emit NozzleRemoved so the poll_loop persists it.
+                let tx_id = stopped_tx_id.clone();
+                let fp_id = self.state.fp_id.clone();
+                let tx = self.finalize_stopped_sale(fp_cfg, site, active_shift_id, active_operator_name, false);
+                FrameEffect::NozzleRemoved {
+                    fp_id,
+                    stopped_tx_id: Some(tx_id),
+                    tx,
+                }
+            }
+            FpStatus::Stopped {
+                stop_source: StopSource::External,
+                ..
+            } => {
+                // Pump-side stop: nozzle holstered → finalize as STOPPED (operator review).
+                let tx = self.finalize_stopped_sale(fp_cfg, site, active_shift_id, active_operator_name, false);
+                FrameEffect::TransactionDone {
+                    tx,
+                    action: TxCompleteAction::AcknowledgeIdle,
+                }
             }
             _ => {
                 self.reset_to_idle();
@@ -851,6 +932,17 @@ impl RuntimeFp {
                 }
             }
             Stopped {
+                stop_source: StopSource::AppFinal,
+                ..
+            } => {
+                // Stop mode (no resume): nozzle-down or idle → finalize as Completed.
+                let tx = self.finalize_stopped_sale(fp_cfg, site, active_shift_id, active_operator_name, true);
+                FrameEffect::TransactionDone {
+                    tx,
+                    action: TxCompleteAction::AcknowledgeIdle,
+                }
+            }
+            Stopped {
                 stop_source: StopSource::External,
                 ..
             } => {
@@ -879,6 +971,25 @@ impl RuntimeFp {
                 }
             }
             Authorizing => {
+                // Decel window: PAUSE was pressed while in Authorizing state; idle frame
+                // confirms nozzle is down — commit the paused transaction exactly as the
+                // Delivering branch does.
+                if self.in_decel_window() {
+                    let (vol, amt) = self.combined_totals();
+                    if vol < 0.01 && amt == 0 {
+                        self.clear_decel_window();
+                        self.cancel_zero_volume_session();
+                        self.touch();
+                        return FrameEffect::CompleteGhostFill;
+                    }
+                    let preset = self.decel_pending_preset.take()
+                        .unwrap_or_else(|| self.last_preset.clone());
+                    let ss = self.decel_pending_stop_source;
+                    self.clear_decel_window();
+                    return self.enter_stopped_state(
+                        fp_cfg, site, active_shift_id, active_operator_name, preset, ss,
+                    );
+                }
                 if self.pending_authorize_config_repeat {
                     self.pending_authorize_config_repeat = false;
                     self.preauth_config_on_wire = true;
@@ -949,6 +1060,13 @@ impl RuntimeFp {
                     self.touch();
                     return FrameEffect::None;
                 }
+                if !self.pending_holster_close {
+                    // Nozzle physically-up expired by staleness only — no explicit holster
+                    // frame received.  Keep waiting to avoid showing Done prematurely.
+                    self.touch();
+                    return FrameEffect::None;
+                }
+                self.pending_holster_close = false;
                 if self.holster_ends_sale_early() {
                     return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id, active_operator_name);
                 }
@@ -1134,6 +1252,13 @@ impl RuntimeFp {
                 self.touch();
                 return FrameEffect::SendDoneAwaitHolster;
             }
+            if !self.pending_holster_close {
+                // nozzle_physically_up() is false only due to the staleness timer —
+                // no explicit NozzleReturned received yet.  Keep waiting.
+                self.touch();
+                return FrameEffect::SendDoneAwaitHolster;
+            }
+            self.pending_holster_close = false;
             if self.holster_ends_sale_early() {
                 return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id, active_operator_name);
             }
@@ -1545,11 +1670,16 @@ impl RuntimeFp {
                 let continuing = self.continuation.is_some();
                 self.state.seq = *seq;
                 if continuing {
-                    // Continuation (E-stop resume / Continue fill): keep existing nozzle
-                    // info but resolve the Wayne code again in case prices changed.
-                    let (cfg_idx, name, pid, color) =
-                        resolve_wayne_nozzle(site, fp_cfg, *product, *nozzle);
-                    self.state.nozzle_index = Some(cfg_idx);
+                    // Continuation (E-stop resume / Continue fill): the nozzle identity
+                    // is fixed by the stopped context.  Re-derive display names from
+                    // config so they stay in sync with any admin catalog changes, but do
+                    // NOT re-resolve the nozzle index from the wire — some Wayne firmware
+                    // variants change the PP byte after E-stop re-authorization, which
+                    // would cause the wrong product to be shown on the pump card and
+                    // written into the continuation transaction.
+                    let existing_nozzle = self.state.nozzle_index.unwrap_or(1);
+                    let (name, pid, color) = lookup_nozzle(site, fp_cfg, existing_nozzle);
+                    self.state.nozzle_index = Some(existing_nozzle);
                     self.state.product_id = Some(pid);
                     self.state.product_name = Some(name);
                     self.state.product_color = Some(color);
@@ -1697,6 +1827,15 @@ impl RuntimeFp {
                     self.state.status = FpStatus::NozzleUp;
                     self.touch();
                     return FrameEffect::Online;
+                }
+
+                // Pump is holding a completed previous-session sale (app crashed/restarted
+                // before sending GO_IDLE).  Don't create a ghost transaction — acknowledge
+                // with GO_IDLE so the pump clears its counters and accepts new fills.
+                if self.state.status == FpStatus::Offline && *sale_complete {
+                    self.state.status = FpStatus::Idle;
+                    self.touch();
+                    return FrameEffect::CompleteGhostFill;
                 }
 
                 if self.state.status == FpStatus::Authorizing
@@ -1902,7 +2041,14 @@ impl RuntimeFp {
                             self.touch();
                             return FrameEffect::StatusChanged;
                         }
-                        // Nozzle is already holstered — close immediately.
+                        if !self.pending_holster_close {
+                            // nozzle_physically_up() is false only due to the staleness timer,
+                            // not because an explicit NozzleReturned was received.  Keep waiting.
+                            self.touch();
+                            return FrameEffect::StatusChanged;
+                        }
+                        // Nozzle confirmed holstered — close.
+                        self.pending_holster_close = false;
                         if self.holster_ends_sale_early() {
                             return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id, active_operator_name.clone());
                         }
@@ -2118,6 +2264,7 @@ impl RuntimeFp {
         active_shift_id: Option<String>,
         active_operator_name: Option<String>,
         use_decel_window: bool,
+        stop_mode: bool,
     ) -> Option<FrameEffect> {
         if self.state.status == FpStatus::PreAuthorized {
             self.cancel_pre_auth();
@@ -2131,6 +2278,7 @@ impl RuntimeFp {
             FpStatus::Delivering | FpStatus::Authorizing
         ) || self.current_tx.is_some()
         {
+            let stop_source = if stop_mode { StopSource::AppFinal } else { StopSource::App };
             if use_decel_window {
                 if self.in_decel_window() {
                     // Second Stop while decel window is already open — ignore.
@@ -2143,7 +2291,7 @@ impl RuntimeFp {
                 self.decel_vol_snapshot = snapshot_vol;
                 self.decel_frozen_count = 0;
                 self.decel_pending_preset = Some(self.last_preset.clone());
-                self.decel_pending_stop_source = StopSource::App;
+                self.decel_pending_stop_source = stop_source;
                 self.clear_deliver_caps();
                 self.touch();
                 return None;
@@ -2154,7 +2302,7 @@ impl RuntimeFp {
                 active_shift_id,
                 active_operator_name,
                 self.last_preset.clone(),
-                StopSource::App,
+                stop_source,
             ));
         }
         None

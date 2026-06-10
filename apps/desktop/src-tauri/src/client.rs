@@ -826,6 +826,52 @@ impl ServiceClient {
             Err(Self::response_error(resp).await)
         }
     }
+
+    pub async fn admin_get_atg_config(&self) -> Result<serde_json::Value, String> {
+        let url = self.base.join("admin/atg-config").map_err(fmt_err)?;
+        self.http
+            .get(url)
+            .send()
+            .await
+            .map_err(fmt_err)?
+            .error_for_status()
+            .map_err(fmt_err)?
+            .json()
+            .await
+            .map_err(fmt_err)
+    }
+
+    pub async fn admin_atg_discover(&self, port: Option<u16>) -> Result<serde_json::Value, String> {
+        let mut url = self.base.join("admin/atg-discover").map_err(fmt_err)?;
+        if let Some(p) = port {
+            url.set_query(Some(&format!("port={p}")));
+        }
+        self.http
+            .get(url)
+            .send()
+            .await
+            .map_err(fmt_err)?
+            .error_for_status()
+            .map_err(fmt_err)?
+            .json()
+            .await
+            .map_err(fmt_err)
+    }
+
+    pub async fn admin_save_atg_config(&self, body: serde_json::Value) -> Result<(), String> {
+        let url = self.base.join("admin/atg-config").map_err(fmt_err)?;
+        let resp = self.http
+            .post(url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(fmt_err)?;
+        if resp.status().is_success() {
+            Ok(())
+        } else {
+            Err(Self::response_error(resp).await)
+        }
+    }
 }
 
 impl Default for ServiceClient {

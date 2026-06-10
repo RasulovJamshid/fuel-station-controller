@@ -55,6 +55,7 @@ export function DispenserRow({
   onAuthorize, onPreAuthorize, onCancelPreAuth, onStop,
   onResumeFill, onContinueFill, onCloseStopped, onDismissSale,
   shiftRequired = false, onStartShift,
+  useStopMode = false,
 }: DispenserCardProps) {
   const { t } = useTranslation();
   const [setupOpen, setSetupOpen] = useState(false);
@@ -118,6 +119,7 @@ export function DispenserRow({
   const isOffline       = tag === "OFFLINE";
   const isPaused        = paused != null;
   const isAppPause      = paused?.stop_source === "APP";
+  const isAppStop       = paused?.stop_source === "APP_FINAL";
   const isExternalPause = paused?.stop_source === "EXTERNAL";
   const hasActivePreAuth =
     tag === "PRE_AUTHORIZED" ||
@@ -211,7 +213,7 @@ export function DispenserRow({
     }
     if (isDelivering) {
       return (
-        <button type="button" data-no-keyboard="true" title={t("dispenser.pause")} onClick={() => onStop(state.fp_id)}
+        <button type="button" data-no-keyboard="true" title={useStopMode ? t("dispenser.stop") : t("dispenser.pause")} onClick={() => onStop(state.fp_id)}
           className="flex h-full w-full items-center justify-center rounded-lg border border-amber-800/50 bg-amber-950/40 text-accent-amber hover:bg-amber-950/60">
           <Icon src={pauseIcon} className="h-7 w-7" />
         </button>
@@ -223,6 +225,16 @@ export function DispenserRow({
           className="flex h-full w-full items-center justify-center rounded-lg border border-border-primary bg-bg-secondary text-text-secondary hover:bg-bg-tertiary">
           <Icon src={banIcon} className="h-7 w-7" />
         </button>
+      );
+    }
+    if (isAppStop && paused) {
+      return (
+        <div className="flex h-full w-full flex-col gap-1 py-1.5">
+          <button type="button" title={t("dispenser.closeTransaction")} onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
+            className="flex w-full items-center justify-center rounded-md py-0.5 text-text-muted hover:text-text-secondary">
+            <Icon src={xCircleIcon} className="h-4 w-4" />
+          </button>
+        </div>
       );
     }
     if (isAppPause && paused) {

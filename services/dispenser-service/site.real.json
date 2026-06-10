@@ -29,24 +29,28 @@
   "products": [
     {
       "id": 1,
+      "uuid": "4508ccc2-efc4-4b21-858e-cb051918f020",
       "name": "AI-92",
       "color": "#2196F3",
       "unit": "litre"
     },
     {
       "id": 2,
+      "uuid": "8b16692b-0af2-49d5-9dbe-ae8966c31f03",
       "name": "AI-95",
       "color": "#FF9800",
       "unit": "litre"
     },
     {
       "id": 3,
+      "uuid": "6e943096-7c98-4bc9-ba60-08f9a39f5b90",
       "name": "Diesel",
       "color": "#795548",
       "unit": "litre"
     },
     {
       "id": 4,
+      "uuid": "b4b2e2fe-7bd4-49bf-ba33-6f02930cd703",
       "name": "AI-91",
       "color": "#4CAF50",
       "unit": "litre"
@@ -214,16 +218,14 @@
       ]
     }
   ],
-  "tanks": [
-    { "product_id": 1, "label": "AI-92", "capacity_l": 12640, "current_l": 3831 },
-    { "product_id": 2, "label": "AI-95", "capacity_l": 12640, "current_l": 6531 },
-    { "product_id": 3, "label": "Diesel", "capacity_l": 12640, "current_l": 951 },
-    { "product_id": 4, "label": "AI-91", "capacity_l": 12640, "current_l": 9120 }
-  ],
   "sync": {
     "enabled": false,
     "backend_url": "",
-    "api_key": ""
+    "api_key": "",
+    "retry_interval_secs": 30,
+    "batch_size": 100,
+    "max_retries": 10,
+    "price_pull_interval_hours": 12
   },
   "shifts": {
     "mode": "manual",
@@ -235,6 +237,84 @@
   },
   "ui": {
     "default_auth_mode": "preauth",
-    "preauth_timeout_seconds": 300
+    "preauth_timeout_seconds": 300,
+    "use_decel_window_on_stop": false,
+    "use_stop_mode": true
+  },
+  "tanks": [
+    {
+      "product_id": 1,
+      "label": "AI-92",
+      "capacity_l": 12640.0,
+      "current_l": 3831.0
+    },
+    {
+      "product_id": 2,
+      "label": "AI-95",
+      "capacity_l": 12640.0,
+      "current_l": 6531.0
+    },
+    {
+      "product_id": 3,
+      "label": "Diesel",
+      "capacity_l": 12640.0,
+      "current_l": 951.0
+    },
+    {
+      "product_id": 4,
+      "label": "AI-91",
+      "capacity_l": 12640.0,
+      "current_l": 9120.0
+    }
+  ],
+  "atg": {
+    "poll_interval_secs": 300,
+    "modbus_timeout_secs": 10.0,
+    "branches": [
+      {
+        "id": 0,
+        "name": "Bostonliquid AZS",
+        "host": "192.168.127.254",
+        "port": 6400,
+        "unit_id": 1,
+        "start_register": 1000,
+        "address_base": 1,
+        "register_count": 48,
+        "slots": [
+          {
+            "slot": 1,
+            "type": "AI-92",
+            "product_id": 1,
+            "label": null,
+            "capacity_l": 12640.0,
+            "maxima": {}
+          },
+          {
+            "slot": 2,
+            "type": "AI-95",
+            "product_id": 2,
+            "label": null,
+            "capacity_l": 12640.0,
+            "maxima": {}
+          },
+          {
+            "slot": 3,
+            "type": "Diesel",
+            "product_id": 3,
+            "label": null,
+            "capacity_l": 12640.0,
+            "maxima": {}
+          },
+          {
+            "slot": 4,
+            "type": "AI-91",
+            "product_id": 4,
+            "label": null,
+            "capacity_l": 12640.0,
+            "maxima": {}
+          }
+        ]
+      }
+    ]
   }
 }

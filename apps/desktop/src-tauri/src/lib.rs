@@ -56,6 +56,9 @@ pub fn run() {
             commands::admin_change_pin,
             commands::get_sync_status,
             commands::update_sync_config,
+            commands::admin_atg_discover,
+            commands::admin_get_atg_config,
+            commands::admin_save_atg_config,
         ])
         .setup(|app| {
             let ws = app.state::<ServiceClient>().ws_url();

@@ -74,6 +74,9 @@ export function ReservoirsPanel() {
                   levelPct={tank.levelPct}
                   currentL={tank.current_l}
                   capacityL={tank.capacity_l}
+                  temperatureC={tank.temperature_c}
+                  waterL={tank.water_l}
+                  updatedAtMs={tank.updated_at_ms}
                   tone={tank.tone}
                   subtitle={tank.product?.name}
                 />

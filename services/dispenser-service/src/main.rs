@@ -161,6 +161,7 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
 
     let (events_tx, _events_rx) = broadcast::channel::<types::WsEvent>(256);
     let (cmd_tx, cmd_rx) = mpsc::channel::<DispatchCommand>(64);
+    let tank_levels: atg::TankLevels = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 
     let shifts = Arc::new(ShiftCoordinator::new(pool.clone(), cfg_for_shifts.clone()));
     shifts.restore().await?;
@@ -220,6 +221,22 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
         cmd_tx.clone(),
     ));
 
+    // Spawn ATG Modbus polling task when configured.
+    if let Some(atg_cfg) = cfg.read().await.atg.clone() {
+        tracing::info!(
+            branches = atg_cfg.branches.len(),
+            interval_secs = atg_cfg.poll_interval_secs,
+            "ATG task starting"
+        );
+        let tank_configs = cfg.read().await.tanks.clone();
+        tokio::spawn(atg::run(
+            atg_cfg,
+            tank_levels.clone(),
+            tank_configs,
+            events_tx.clone(),
+        ));
+    }
+
     tracing::info!(config = %config_path_buf.display(), "config file");
     let state = AppState {
         cfg,
@@ -232,6 +249,7 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
         admin_sessions: AdminSessions::new(),
         started: Instant::now(),
         sync_status,
+        tank_levels,
     };
 
     let app = router(state);

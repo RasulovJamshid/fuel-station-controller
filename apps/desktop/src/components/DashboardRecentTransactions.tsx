@@ -11,13 +11,21 @@ function fmtTime(ms: number) {
   return `${date} ${time}`;
 }
 
-export function DashboardRecentTransactions({ onOpenHistory }: { onOpenHistory: () => void }) {
+// shiftId: undefined = shifts disabled (no filter), null = shift required but not started, string = filter to this shift
+export function DashboardRecentTransactions({
+  onOpenHistory,
+  shiftId,
+}: {
+  onOpenHistory: () => void;
+  shiftId?: string | null;
+}) {
   const { t } = useTranslation();
   const [rows, setRows] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (shiftId === null) { setRows([]); setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
@@ -26,6 +34,7 @@ export function DashboardRecentTransactions({ onOpenHistory }: { onOpenHistory: 
         limit: 6,
         offset: 0,
         statuses: "COMPLETED,CONTINUED_FROM",
+        shiftId: shiftId ?? null,
         fromMs: null,
         untilMs: null,
       });
@@ -35,7 +44,7 @@ export function DashboardRecentTransactions({ onOpenHistory }: { onOpenHistory: 
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [shiftId]);
 
   useEffect(() => {
     void load();
@@ -69,7 +78,9 @@ export function DashboardRecentTransactions({ onOpenHistory }: { onOpenHistory: 
       </header>
 
       <div className="min-h-0 flex-1 overflow-hidden px-3 py-2">
-        {loading && rows.length === 0 ? (
+        {shiftId === null ? (
+          <p className="py-8 text-center text-sm text-text-muted">{t("history.noActiveShift")}</p>
+        ) : loading && rows.length === 0 ? (
           <p className="py-8 text-center text-sm text-text-muted">{t("history.loading")}</p>
         ) : error ? (
           <p className="rounded-lg border border-accent-red/40 bg-accent-red/10 px-3 py-2 text-xs text-accent-red-light">{error}</p>

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type {
   AdminPriceEntry,
   AdminSettingsSnapshot,
+  AtgConfigSnapshot,
   Operator,
   PriceChange,
   ShiftMode,
@@ -143,6 +144,27 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // ATG config state
+  const [atgConfig, setAtgConfig] = useState<AtgConfigSnapshot | null>(null);
+  const [atgPollInterval, setAtgPollInterval] = useState(300);
+  const [atgTimeout, setAtgTimeout] = useState(10.0);
+  const [atgApiUrl, setAtgApiUrl] = useState("");
+  const [atgDiscovering, setAtgDiscovering] = useState(false);
+  const [atgDiscovered, setAtgDiscovered] = useState<{ subnet: string; port: number; found: string[] } | null>(null);
+
+  const loadAtgConfig = useCallback(async () => {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const cfg = await invoke<AtgConfigSnapshot>("admin_get_atg_config");
+      setAtgConfig(cfg);
+      setAtgPollInterval(cfg.poll_interval_secs);
+      setAtgTimeout(cfg.modbus_timeout_secs);
+      setAtgApiUrl(cfg.api_url);
+    } catch {
+      // ATG may not be available on this service version
+    }
+  }, []);
+
   // Sync config state
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [syncUrl, setSyncUrl] = useState("");
@@ -212,7 +234,8 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
   useEffect(() => {
     loadAll().catch((e) => setInvokeError(e instanceof Error ? e.message : String(e)));
     loadSyncStatus();
-  }, [loadAll, setInvokeError, loadSyncStatus]);
+    loadAtgConfig();
+  }, [loadAll, setInvokeError, loadSyncStatus, loadAtgConfig]);
 
   const refreshConfig = async () => {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -383,6 +406,42 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
       setMsg(t("admin.changePin.updatedMsg"));
     } catch (e) {
       if (is401(e)) { onSessionExpired(); return; }
+      setInvokeError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const discoverAtg = async () => {
+    setAtgDiscovering(true);
+    setAtgDiscovered(null);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const result = await invoke<{ subnet: string; port: number; found: string[] }>(
+        "admin_atg_discover",
+        { port: null },
+      );
+      setAtgDiscovered(result);
+    } catch (e) {
+      setInvokeError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAtgDiscovering(false);
+    }
+  };
+
+  const saveAtgConfig = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("admin_save_atg_config", {
+        pollIntervalSecs: atgPollInterval,
+        modbusTimeoutSecs: atgTimeout,
+        apiUrl: atgApiUrl.trim() || null,
+      });
+      await loadAtgConfig();
+      setMsg(t("admin.atg.savedMsg"));
+    } catch (e) {
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -918,6 +977,149 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
             {t("admin.sync.save")}
           </button>
         </section>
+
+        {atgConfig && (
+          <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+            <div className="flex items-start justify-between mb-1">
+              <h2 className="text-lg font-bold text-text-primary">{t("admin.atg.title")}</h2>
+              <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                atgConfig.enabled
+                  ? "border-accent-emerald/40 bg-accent-emerald/15 text-accent-emerald"
+                  : "border-border-secondary bg-bg-secondary text-text-secondary"
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${atgConfig.enabled ? "bg-accent-emerald animate-pulse" : "bg-text-secondary"}`} />
+                {atgConfig.enabled ? t("admin.atg.enabled") : t("admin.atg.disabled")}
+              </span>
+            </div>
+            <p className="mb-5 text-sm font-medium text-text-muted">{t("admin.atg.description")}</p>
+
+            {/* Branch summary */}
+            {atgConfig.branches.length > 0 && (
+              <div className="mb-5 space-y-2">
+                {atgConfig.branches.map((branch) => (
+                  <div key={branch.id} className="rounded-xl border border-border-primary/40 bg-bg-secondary/30 px-4 py-3 text-xs font-medium">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-text-primary">{branch.name || `Branch #${branch.id}`}</span>
+                      <span className="font-mono text-text-muted">{branch.host}:{branch.port}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {branch.slots.map((slot) => (
+                        <span key={slot.slot} className="rounded-full border border-border-primary/50 bg-bg-primary/60 px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
+                          {slot.slot}. {slot.type}
+                          {slot.product_id != null ? ` (id:${slot.product_id})` : ""}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Network discovery */}
+            <div className="mb-5 rounded-xl border border-border-primary/40 bg-bg-secondary/20 px-4 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-text-secondary">{t("admin.atg.discover")}</p>
+                <button
+                  type="button"
+                  disabled={atgDiscovering}
+                  onClick={discoverAtg}
+                  className="flex items-center gap-1.5 rounded-lg border border-accent-blue/40 bg-accent-blue/10 px-3 py-1.5 text-xs font-bold text-accent-blue hover:bg-accent-blue/20 transition-all disabled:opacity-50"
+                >
+                  {atgDiscovering ? (
+                    <>
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-accent-blue/30 border-t-accent-blue" />
+                      {t("admin.atg.discovering")}
+                    </>
+                  ) : (
+                    t("admin.atg.scanNetwork")
+                  )}
+                </button>
+              </div>
+              {atgDiscovered && (
+                <div className="mt-2 space-y-1.5">
+                  <p className="text-[10px] font-semibold text-text-muted">
+                    {t("admin.atg.scannedSubnet", { subnet: `${atgDiscovered.subnet}.0/24`, port: atgDiscovered.port })}
+                  </p>
+                  {atgDiscovered.found.length === 0 ? (
+                    <p className="text-xs font-semibold text-text-muted">{t("admin.atg.noneFound")}</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {atgDiscovered.found.map((ip) => (
+                        <button
+                          key={ip}
+                          type="button"
+                          title={t("admin.atg.useIp")}
+                          onClick={() => {
+                            const updated = atgConfig ? {
+                              ...atgConfig,
+                              branches: atgConfig.branches.map((b, i) =>
+                                i === 0 ? { ...b, host: ip } : b
+                              ),
+                            } : null;
+                            setAtgConfig(updated);
+                          }}
+                          className="rounded-full border border-accent-emerald/40 bg-accent-emerald/10 px-3 py-1 text-xs font-bold text-accent-emerald hover:bg-accent-emerald/20 transition-all"
+                        >
+                          {ip}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1.5 text-sm font-medium text-text-secondary">
+                  {t("admin.atg.pollInterval")}
+                  <input
+                    type="number"
+                    min={30}
+                    max={3600}
+                    className={inputCls}
+                    value={atgPollInterval}
+                    onChange={(e) => setAtgPollInterval(Number(e.target.value))}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm font-medium text-text-secondary">
+                  {t("admin.atg.modbusTimeout")}
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    step={0.5}
+                    className={inputCls}
+                    value={atgTimeout}
+                    onChange={(e) => setAtgTimeout(Number(e.target.value))}
+                  />
+                </label>
+              </div>
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-text-secondary">
+                {t("admin.atg.apiUrl")}
+                <input
+                  type="url"
+                  className={inputCls}
+                  placeholder={t("admin.atg.apiUrlPlaceholder")}
+                  value={atgApiUrl}
+                  onChange={(e) => setAtgApiUrl(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                type="button"
+                disabled={busy || !atgConfig.enabled}
+                onClick={saveAtgConfig}
+                className="rounded-xl border border-accent-blue/40 bg-accent-blue/10 px-5 py-2.5 text-sm font-bold text-accent-blue shadow-sm hover:bg-accent-blue/20 transition-all disabled:opacity-50"
+              >
+                {t("admin.atg.save")}
+              </button>
+              <span className="font-mono text-[10px] opacity-40 text-text-muted">site.config.json</span>
+            </div>
+          </section>
+        )}
 
         <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
           <h2 className="mb-4 text-lg font-bold text-text-primary">{t("admin.changePin.title")}</h2>

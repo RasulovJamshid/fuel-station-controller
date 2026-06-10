@@ -45,16 +45,27 @@ function levelState(pct: number): "critical" | "low" | "ok" {
   return "ok";
 }
 
+/** Returns a human-readable "X min ago" / "X h ago" string, or null if recent (< 2 min). */
+function staleLabel(updatedAtMs: number | undefined): string | null {
+  if (updatedAtMs == null) return null;
+  const ageMs = Date.now() - updatedAtMs;
+  const ageSec = Math.floor(ageMs / 1000);
+  if (ageSec < 120) return null;          // fresh — no label
+  if (ageSec < 3600) return `${Math.floor(ageSec / 60)} min ago`;
+  return `${Math.floor(ageSec / 3600)} h ago`;
+}
+
 export function TankGauge(props: {
   label: string;
   levelPct: number;
   subtitle?: string;
   currentL?: number;
   capacityL?: number;
+  temperatureC?: number;
+  waterL?: number;
+  updatedAtMs?: number;
   tone?: Tone;
   className?: string;
-  compact?: boolean;
-  vertical?: boolean;
   probe?: string;
 }) {
   const { t } = useTranslation();
@@ -66,6 +77,9 @@ export function TankGauge(props: {
   const current  = props.currentL ?? null;
   const free     = capacity != null && current != null ? Math.max(capacity - current, 0) : null;
 
+  const stale   = staleLabel(props.updatedAtMs);
+  const hasLive = props.updatedAtMs != null;
+
   const statusBadge =
     state === "critical"
       ? "bg-accent-red/15 text-accent-red ring-1 ring-accent-red/30"
@@ -76,6 +90,14 @@ export function TankGauge(props: {
   const statusLabel =
     state === "critical" ? t("tankGauge.critical") : state === "low" ? t("tankGauge.low") : null;
 
+  const tempStr = props.temperatureC != null
+    ? `${props.temperatureC.toFixed(1)}°C`
+    : "—";
+
+  const waterStr = props.waterL != null
+    ? `${fmtL.format(Math.round(props.waterL))} L`
+    : "—";
+
   return (
     <article className={`relative flex flex-col overflow-hidden rounded-[32px] border border-border-primary/60 bg-gradient-to-br from-bg-card/95 via-bg-card/75 to-bg-primary/60 shadow-[0_25px_45px_rgba(5,10,20,0.45)] ${props.className ?? ""}`}>
       <div className={`pointer-events-none absolute inset-x-6 top-4 h-24 rounded-full bg-gradient-to-b ${styles.glow} to-transparent blur-2xl`} aria-hidden />
@@ -85,6 +107,18 @@ export function TankGauge(props: {
             <span>{t("tankGauge.tank")}</span>
             <span className="h-1 w-1 rounded-full bg-text-tertiary/50" aria-hidden />
             <span>{props.probe ?? "ATG"}</span>
+            {/* Live / stale indicator */}
+            {hasLive && !stale && (
+              <span className="flex items-center gap-1 rounded-full bg-accent-emerald/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-emerald">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-emerald" />
+                {t("tankGauge.live")}
+              </span>
+            )}
+            {stale && (
+              <span className="flex items-center gap-1 rounded-full bg-accent-amber/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-amber">
+                {stale}
+              </span>
+            )}
           </div>
           <p className="text-xl font-black text-text-primary leading-tight">{props.label}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold">
@@ -113,7 +147,7 @@ export function TankGauge(props: {
             ))}
           </div>
 
-          <div className="relative flex w-20 flex-col items-center">
+          <div className="relative flex w-20 shrink-0 flex-col items-center">
             <div className="relative h-40 w-full overflow-hidden rounded-[1.3rem] border border-border-primary/40 bg-gradient-to-b from-bg-primary/80 via-bg-secondary/40 to-bg-tertiary/40 shadow-[inset_0_8px_16px_rgba(0,0,0,0.25)]">
               <div className="pointer-events-none absolute inset-0 flex flex-col justify-between py-3">
                 {gaugeTicks.map((tick) => (
@@ -132,6 +166,7 @@ export function TankGauge(props: {
           </div>
 
           <div className="flex flex-1 flex-col gap-3">
+            {/* Capacity + available */}
             <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border-primary/40 bg-bg-primary/50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-text-tertiary">
               <div>
                 <p>{t("tankGauge.capacity")}</p>
@@ -147,6 +182,7 @@ export function TankGauge(props: {
               </div>
             </div>
 
+            {/* Current stock */}
             <div className="rounded-2xl border border-dashed border-border-primary/50 bg-bg-secondary/30 px-3 py-2">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-text-tertiary">{t("tankGauge.currentStock")}</p>
               <p className="font-mono text-xl font-black tabular-nums text-text-primary">
@@ -155,21 +191,26 @@ export function TankGauge(props: {
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-bg-tertiary/70">
                 <div className={`h-full rounded-full transition-all duration-700 ${styles.bar}`} style={{ width: `${pct}%` }} />
               </div>
+              {/* Temperature + water row */}
               <div className="mt-2 grid grid-cols-2 gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-text-muted">
                 <div>
                   <p>{t("tankGauge.temp")}</p>
-                  <p className="text-sm font-black text-text-primary">{props.subtitle?.match(/(\d+°C)/)?.[0] ?? "24°C"}</p>
+                  <p className={`text-sm font-black ${props.temperatureC != null ? "text-text-primary" : "text-text-muted/50"}`}>
+                    {tempStr}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p>{t("tankGauge.probe")}</p>
-                  <p className="text-sm font-black text-text-primary">{props.probe ?? "ATG"}</p>
+                  <p>{t("tankGauge.water")}</p>
+                  <p className={`text-sm font-black ${props.waterL != null && props.waterL > 0 ? "text-accent-amber" : "text-text-primary"}`}>
+                    {waterStr}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {(current == null || capacity == null) && (
+        {!hasLive && (
           <div className="rounded-2xl border border-border-primary/40 bg-bg-primary/40 px-3 py-2 text-xs text-center text-text-muted">
             {t("tankGauge.atgUpdate")}
           </div>

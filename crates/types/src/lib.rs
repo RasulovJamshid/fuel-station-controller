@@ -5,7 +5,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum StopSource {
+    /// App-initiated pause — saves as STOPPED, operator can resume later.
     App,
+    /// App-initiated stop (no-resume) — saves as STOPPED then promotes to COMPLETED on nozzle down.
+    AppFinal,
+    /// Pump-side stop (nozzle handle released) — operator can continue.
     External,
 }
 
@@ -232,6 +236,9 @@ pub enum WsEvent {
         shift_id: String,
         minutes_remaining: u32,
     },
+    /// ATG poller published fresh tank levels. Sent after every successful Modbus round.
+    #[serde(rename = "tank.updated")]
+    TankUpdated { tanks: Vec<TankSnapshot> },
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -318,6 +325,13 @@ pub struct SiteSnapshot {
     pub default_auth_mode: String,
     #[serde(default = "default_preauth_timeout_seconds")]
     pub preauth_timeout_seconds: u64,
+    /// When true the Stop button finalizes as Completed on nozzle-down (no resume).
+    /// When false the Stop button acts as Pause, allowing the operator to resume later.
+    #[serde(default)]
+    pub use_stop_mode: bool,
+    /// When true show a "Cancel" button that stops and immediately closes the transaction.
+    #[serde(default)]
+    pub use_cancel_mode: bool,
 }
 
 fn default_preauth_timeout_seconds() -> u64 {
@@ -361,6 +375,29 @@ pub struct TankSnapshot {
     pub label: String,
     pub capacity_l: f64,
     pub current_l: f64,
+    /// Fuel temperature in °C from the ATG probe. Absent when ATG is not configured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature_c: Option<f64>,
+    /// Water layer volume in litres from the ATG probe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub water_l: Option<f64>,
+    /// Unix millisecond timestamp of the last successful ATG Modbus read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at_ms: Option<i64>,
+}
+
+/// Live reading from the ATG poller, keyed by product_id.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TankLiveLevel {
+    pub product_id: u8,
+    /// Current fuel volume in litres from the Modbus probe.
+    pub current_l: f64,
+    /// Fuel temperature in °C.
+    pub temperature_c: f64,
+    /// Water layer volume in litres.
+    pub water_l: f64,
+    /// Unix millisecond timestamp of the last successful Modbus read.
+    pub updated_at_ms: i64,
 }
 
 // ── Shift types (SHIFT_MANAGEMENT.md) ─────────────────────────────────────

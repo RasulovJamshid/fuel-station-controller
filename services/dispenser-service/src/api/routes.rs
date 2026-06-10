@@ -21,6 +21,7 @@ use types::{
     ResumeFillCmd, Shift, ShiftSlot, SiteSnapshot, StartShiftCmd, StopCmd, StopSource, TankSnapshot,
     Transaction, TxStatus, TxSummary, UpdateAllPricesCmd, WsEvent,
 };
+use atg::TankLevels;
 
 use crate::admin::AdminSessions;
 use crate::api::admin;
@@ -42,6 +43,8 @@ pub struct AppState {
     pub admin_sessions: AdminSessions,
     pub started: Instant,
     pub sync_status: SharedSyncStatus,
+    /// Live ATG tank levels keyed by product_id. Empty map when ATG is not configured.
+    pub tank_levels: TankLevels,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -76,6 +79,8 @@ pub fn router(state: AppState) -> Router {
         .route("/operators", get(list_operators).post(create_operator))
         .route("/sync/status", get(get_sync_status))
         .route("/admin/sync-config", post(update_sync_config))
+        .route("/admin/atg-config", get(get_atg_config).post(update_atg_config))
+        .route("/admin/atg-discover", get(atg_discover))
         .route("/ws", get(ws_handler))
         .merge(admin::router())
         .layer(TraceLayer::new_for_http())
@@ -114,7 +119,10 @@ fn protocol_str(p: &Protocol) -> String {
         .unwrap_or_else(|| format!("{p:?}"))
 }
 
-fn site_snapshot(cfg: &SiteConfig) -> SiteSnapshot {
+fn site_snapshot(
+    cfg: &SiteConfig,
+    live: &std::collections::HashMap<u8, types::TankLiveLevel>,
+) -> SiteSnapshot {
     let positions: Vec<FpSnapshot> = cfg
         .fueling_positions
         .iter()
@@ -172,11 +180,28 @@ fn site_snapshot(cfg: &SiteConfig) -> SiteSnapshot {
     let tanks: Vec<TankSnapshot> = cfg
         .tanks
         .iter()
-        .map(|t| TankSnapshot {
-            product_id: t.product_id,
-            label: t.label.clone(),
-            capacity_l: t.capacity_l,
-            current_l: t.current_l,
+        .map(|t| {
+            if let Some(l) = live.get(&t.product_id) {
+                TankSnapshot {
+                    product_id: t.product_id,
+                    label: t.label.clone(),
+                    capacity_l: t.capacity_l,
+                    current_l: l.current_l,
+                    temperature_c: Some(l.temperature_c),
+                    water_l: Some(l.water_l),
+                    updated_at_ms: Some(l.updated_at_ms),
+                }
+            } else {
+                TankSnapshot {
+                    product_id: t.product_id,
+                    label: t.label.clone(),
+                    capacity_l: t.capacity_l,
+                    current_l: t.current_l,
+                    temperature_c: None,
+                    water_l: None,
+                    updated_at_ms: None,
+                }
+            }
         })
         .collect();
     SiteSnapshot {
@@ -191,6 +216,8 @@ fn site_snapshot(cfg: &SiteConfig) -> SiteSnapshot {
         require_operator_pin: cfg.shifts.require_operator_pin,
         default_auth_mode: cfg.ui.default_auth_mode.clone(),
         preauth_timeout_seconds: cfg.ui.preauth_timeout_seconds,
+        use_stop_mode: cfg.ui.use_stop_mode,
+        use_cancel_mode: cfg.ui.use_cancel_mode,
     }
 }
 
@@ -211,6 +238,10 @@ async fn ensure_stopped_context(
                 return Err(match req {
                     StopSource::App => {
                         "this pause was not caused by the app; use continue after lifting the nozzle"
+                            .into()
+                    }
+                    StopSource::AppFinal => {
+                        "this stop is final and cannot be resumed"
                             .into()
                     }
                     StopSource::External => {
@@ -299,6 +330,9 @@ async fn dispatch_resume_or_continue(
             price,
             preset,
         },
+        StopSource::AppFinal => {
+            return Err((StatusCode::BAD_REQUEST, "stop-mode fills cannot be resumed".into()));
+        }
         StopSource::External => DispatchCommand::ContinueFill {
             byte,
             price,
@@ -474,7 +508,8 @@ pub async fn health(State(st): State<AppState>) -> Json<HealthBody> {
 
 pub async fn get_config(State(st): State<AppState>) -> Json<SiteSnapshot> {
     let cfg = st.cfg.read().await;
-    Json(site_snapshot(&cfg))
+    let live = st.tank_levels.read().await;
+    Json(site_snapshot(&cfg, &live))
 }
 
 pub async fn get_status(State(st): State<AppState>) -> Json<Vec<FpState>> {
@@ -934,4 +969,160 @@ pub async fn update_sync_config(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     }
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// ── ATG config ────────────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+struct AtgBranchInfo {
+    id: u32,
+    name: String,
+    host: String,
+    port: u16,
+    slots: Vec<AtgSlotInfo>,
+}
+
+#[derive(serde::Serialize)]
+struct AtgSlotInfo {
+    slot: u8,
+    #[serde(rename = "type")]
+    fuel_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    product_id: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    capacity_l: Option<f64>,
+}
+
+#[derive(serde::Serialize)]
+struct AtgConfigSnapshot {
+    enabled: bool,
+    poll_interval_secs: u64,
+    modbus_timeout_secs: f64,
+    api_url: String,
+    branches: Vec<AtgBranchInfo>,
+}
+
+async fn get_atg_config(
+    State(st): State<AppState>,
+) -> Json<AtgConfigSnapshot> {
+    let cfg = st.cfg.read().await;
+    match &cfg.atg {
+        None => Json(AtgConfigSnapshot {
+            enabled: false,
+            poll_interval_secs: 300,
+            modbus_timeout_secs: 10.0,
+            api_url: String::new(),
+            branches: vec![],
+        }),
+        Some(atg) => Json(AtgConfigSnapshot {
+            enabled: true,
+            poll_interval_secs: atg.poll_interval_secs,
+            modbus_timeout_secs: atg.modbus_timeout_secs,
+            api_url: atg.api_url.clone(),
+            branches: atg.branches.iter().map(|b| AtgBranchInfo {
+                id: b.id,
+                name: b.name.clone(),
+                host: b.host.clone(),
+                port: b.port,
+                slots: b.slots.iter().map(|s| AtgSlotInfo {
+                    slot: s.slot,
+                    fuel_type: s.fuel_type.clone(),
+                    product_id: s.product_id,
+                    label: s.label.clone(),
+                    capacity_l: s.capacity_l,
+                }).collect(),
+            }).collect(),
+        }),
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct UpdateAtgConfigBody {
+    pub poll_interval_secs:   Option<u64>,
+    pub modbus_timeout_secs:  Option<f64>,
+    pub api_url:              Option<String>,
+}
+
+async fn update_atg_config(
+    State(st): State<AppState>,
+    Json(body): Json<UpdateAtgConfigBody>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    {
+        let mut cfg = st.cfg.write().await;
+        if let Some(ref mut atg) = cfg.atg {
+            if let Some(v) = body.poll_interval_secs  { atg.poll_interval_secs  = v; }
+            if let Some(v) = body.modbus_timeout_secs { atg.modbus_timeout_secs = v; }
+            if let Some(v) = body.api_url             { atg.api_url             = v; }
+        }
+        crate::config::save(&cfg, &st.config_path)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// ── ATG network discovery ─────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+struct DiscoverQuery {
+    /// Modbus TCP port to probe. Defaults to 6400.
+    #[serde(default = "default_discover_port")]
+    port: u16,
+    /// Connect timeout per host in milliseconds. Defaults to 600.
+    #[serde(default = "default_discover_timeout_ms")]
+    timeout_ms: u64,
+}
+
+fn default_discover_port() -> u16 { 6400 }
+fn default_discover_timeout_ms() -> u64 { 600 }
+
+fn local_ipv4() -> Option<std::net::Ipv4Addr> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    match socket.local_addr().ok()?.ip() {
+        std::net::IpAddr::V4(v4) => Some(v4),
+        _ => None,
+    }
+}
+
+#[derive(serde::Serialize)]
+struct DiscoverResult {
+    subnet: String,
+    port: u16,
+    found: Vec<String>,
+}
+
+async fn atg_discover(
+    Query(params): Query<DiscoverQuery>,
+) -> Result<Json<DiscoverResult>, (StatusCode, String)> {
+    let local = local_ipv4()
+        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "cannot determine local IP".into()))?;
+
+    let octets = local.octets();
+    let subnet = format!("{}.{}.{}", octets[0], octets[1], octets[2]);
+    let port = params.port;
+    let timeout = std::time::Duration::from_millis(params.timeout_ms);
+
+    let mut handles = Vec::with_capacity(254);
+    for host in 1u8..=254 {
+        let addr = format!("{}.{}:{}", subnet, host, port);
+        let subnet_clone = subnet.clone();
+        handles.push(tokio::spawn(async move {
+            match tokio::time::timeout(timeout, tokio::net::TcpStream::connect(&addr)).await {
+                Ok(Ok(_)) => Some(format!("{}.{}", subnet_clone, host)),
+                _ => None,
+            }
+        }));
+    }
+
+    let mut found = Vec::new();
+    for h in handles {
+        if let Ok(Some(ip)) = h.await {
+            found.push(ip);
+        }
+    }
+    found.sort();
+
+    Ok(Json(DiscoverResult { subnet, port, found }))
 }

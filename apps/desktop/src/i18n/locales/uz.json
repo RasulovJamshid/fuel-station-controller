@@ -135,6 +135,9 @@
     "lastFill": "Oxirgi quyish",
     "start": "Boshlash",
     "pause": "Pauza",
+    "stop": "Toʼxtatish",
+    "cancel": "Bekor qilish",
+    "holsterToFinish": "Tugatish uchun pistoletni joyiga qoʼying",
     "nozzleRemoved": "Pistolet qoʼyildi — quyish yopildi",
     "hoseInTank": "Shlang hali bakda",
     "partialSaved": "Qisman quyish saqlandi. Pistoletni olib chiqmasdan davom eting.",
@@ -238,7 +241,8 @@
     "available": "Mavjud",
     "currentStock": "Joriy zaxira",
     "temp": "Harorat",
-    "probe": "Zond",
+    "water": "Suv",
+    "live": "Jonli",
     "atgUpdate": "Zaxira maʼlumotlari ATG orqali yangilanadi."
   },
   "history": {
@@ -415,6 +419,24 @@
       "refresh": "Holatni yangilash",
       "save": "Sinxronizatsiya sozlamalarini saqlash",
       "savedMsg": "Sinxronizatsiya sozlamalari saqlandi."
+    },
+    "atg": {
+      "title": "ATG — Avtomatik sath oʼlchagich",
+      "description": "Modbus TCP orqali yoqilgʼi sath oʼlchagichlari bilan ulanish sozlamalari.",
+      "enabled": "Yoqilgan",
+      "disabled": "Oʼchirilgan",
+      "pollInterval": "Soʼrov oraligʼi (sek)",
+      "modbusTimeout": "Modbus taymout (sek)",
+      "apiUrl": "Integratsiya API manzili",
+      "apiUrlPlaceholder": "https://api.example.com/fuel-levels",
+      "save": "ATG sozlamalarini saqlash",
+      "savedMsg": "ATG sozlamalari saqlandi.",
+      "discover": "Qurilmalarni topish",
+      "scanNetwork": "Tarmoqni skanerlash",
+      "discovering": "Skanerlanyapti...",
+      "scannedSubnet": "{{subnet}} tarmoqi skanerlandi (port {{port}})",
+      "noneFound": "Hech qanday qurilma topilmadi",
+      "useIp": "Ushbu IP manzildan foydalanish"
     },
     "changePin": {
       "title": "Admin PIN ni oʼgartirish",

@@ -1,8 +1,19 @@
-import dispenserIcon  from "@/assets/icons/dispenser.svg";
-import fuelVolumeIcon from "@/assets/icons/fuel-volume.svg";
-import historyIcon    from "@/assets/icons/history-table.svg";
-import settingIcon    from "@/assets/icons/setting.svg";
-import userIcon       from "@/assets/icons/user.svg";
+import dispenserIconRaw  from "@/assets/icons/dispenser.svg?raw";
+import fuelVolumeIconRaw from "@/assets/icons/fuel-volume.svg?raw";
+import historyIconRaw    from "@/assets/icons/history-table.svg?raw";
+import settingIconRaw    from "@/assets/icons/setting.svg?raw";
+import userIconRaw       from "@/assets/icons/user.svg?raw";
+
+// Encode SVG as a base64 data URI so CSS mask-image works in WebView2 (Tauri/Windows)
+function svgToDataUri(raw: string): string {
+  return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(raw)))}`;
+}
+
+const dispenserIcon  = svgToDataUri(dispenserIconRaw);
+const fuelVolumeIcon = svgToDataUri(fuelVolumeIconRaw);
+const historyIcon    = svgToDataUri(historyIconRaw);
+const settingIcon    = svgToDataUri(settingIconRaw);
+const userIcon       = svgToDataUri(userIconRaw);
 import { ThemeToggleCompact } from "./ThemeToggle";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 

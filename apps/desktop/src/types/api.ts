@@ -67,6 +67,12 @@ export interface TankSnapshot {
   label: string;
   capacity_l: number;
   current_l: number;
+  /** Fuel temperature in °C from the ATG probe. Absent when ATG is not configured. */
+  temperature_c?: number;
+  /** Water layer volume in litres from the ATG probe. */
+  water_l?: number;
+  /** Unix ms timestamp of the last successful ATG Modbus read. */
+  updated_at_ms?: number;
 }
 
 export interface SiteSnapshot {
@@ -81,6 +87,8 @@ export interface SiteSnapshot {
   require_operator_pin?: boolean;
   default_auth_mode?: AuthMode;
   preauth_timeout_seconds?: number;
+  use_stop_mode?: boolean;
+  use_cancel_mode?: boolean;
 }
 
 export interface ShiftPositionTotal {
@@ -223,7 +231,8 @@ export type WsEvent =
   | { event: "shift.started"; data: Shift }
   | { event: "shift.ended"; data: Shift }
   | { event: "shift.handover"; data: { outgoing: Shift; incoming: Shift } }
-  | { event: "shift.warning"; data: { shift_id: string; minutes_remaining: number } };
+  | { event: "shift.warning"; data: { shift_id: string; minutes_remaining: number } }
+  | { event: "tank.updated"; data: { tanks: TankSnapshot[] } };
 
 export interface AdminPriceEntry {
   fp_id: string;
@@ -252,6 +261,30 @@ export interface Operator {
   has_pin: boolean;
   active: boolean;
   created_at: number;
+}
+
+export interface AtgSlotInfo {
+  slot: number;
+  type: string;
+  product_id?: number;
+  label?: string;
+  capacity_l?: number;
+}
+
+export interface AtgBranchInfo {
+  id: number;
+  name: string;
+  host: string;
+  port: number;
+  slots: AtgSlotInfo[];
+}
+
+export interface AtgConfigSnapshot {
+  enabled: boolean;
+  poll_interval_secs: number;
+  modbus_timeout_secs: number;
+  api_url: string;
+  branches: AtgBranchInfo[];
 }
 
 export interface AdminSettingsSnapshot {

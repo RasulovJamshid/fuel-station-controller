@@ -543,6 +543,35 @@ pub async fn update_sync_config(
     client.update_sync_config(serde_json::Value::Object(body)).await
 }
 
+#[tauri::command]
+pub async fn admin_atg_discover(
+    client: tauri::State<'_, ServiceClient>,
+    port: Option<u16>,
+) -> Result<serde_json::Value, String> {
+    client.admin_atg_discover(port).await
+}
+
+#[tauri::command]
+pub async fn admin_get_atg_config(
+    client: tauri::State<'_, ServiceClient>,
+) -> Result<serde_json::Value, String> {
+    client.admin_get_atg_config().await
+}
+
+#[tauri::command]
+pub async fn admin_save_atg_config(
+    client: tauri::State<'_, ServiceClient>,
+    poll_interval_secs: Option<u64>,
+    modbus_timeout_secs: Option<f64>,
+    api_url: Option<String>,
+) -> Result<(), String> {
+    let mut body = serde_json::Map::new();
+    if let Some(v) = poll_interval_secs  { body.insert("poll_interval_secs".into(),  serde_json::json!(v)); }
+    if let Some(v) = modbus_timeout_secs { body.insert("modbus_timeout_secs".into(), serde_json::json!(v)); }
+    if let Some(v) = api_url             { body.insert("api_url".into(),             serde_json::json!(v)); }
+    client.admin_save_atg_config(serde_json::Value::Object(body)).await
+}
+
 pub async fn ws_forward_loop(app: AppHandle, ws_url: String) {
     loop {
         match connect_async(&ws_url).await {

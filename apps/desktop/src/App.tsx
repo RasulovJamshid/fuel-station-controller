@@ -114,6 +114,8 @@ export default function App() {
   }, [siteSnapshot]);
 
   const defaultAuthMode = siteSnapshot?.default_auth_mode ?? "preauth";
+  const useStopMode = siteSnapshot?.use_stop_mode ?? false;
+  const useCancelMode = siteSnapshot?.use_cancel_mode ?? false;
 
   // Shift requirement: operators must start a shift before authorizing dispensers.
   const shiftRequired = shift.mode !== "disabled" && !shift.currentShift;
@@ -216,6 +218,29 @@ export default function App() {
         const msg = e instanceof Error ? e.message : String(e);
         setInvokeError(msg);
         console.error("stop_dispenser failed", e);
+      }
+    },
+    [setInvokeError, setStates],
+  );
+
+  const onCancel = useCallback(
+    async (fpId: string) => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      try {
+        setInvokeError(null);
+        await invoke("stop_dispenser", { fpId });
+        const rows = await invoke<import("./types/api").FpState[]>("get_all_status");
+        setStates(rows);
+        const stoppedTxId = rows.find((r) => r.fp_id === fpId)?.stopped_tx_id;
+        if (stoppedTxId) {
+          await invoke("close_stopped_transaction", { fpId, stoppedTxId });
+          const updated = await invoke<import("./types/api").FpState[]>("get_all_status");
+          setStates(updated);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setInvokeError(msg);
+        console.error("cancel_fill failed", e);
       }
     },
     [setInvokeError, setStates],
@@ -552,12 +577,15 @@ export default function App() {
                         onPreAuthorize={onPreAuthorize}
                         onCancelPreAuth={onCancelPreAuth}
                         onStop={onStop}
+                        onCancel={onCancel}
                         onResumeFill={onResumeFill}
                         onContinueFill={onContinueFill}
                         onCloseStopped={onCloseStopped}
                         onDismissSale={onDismissSale}
                         shiftRequired={shiftRequired}
                         onStartShift={openStartShift}
+                        useStopMode={useStopMode}
+                        useCancelMode={useCancelMode}
                       />
                     </div>
                   ))}
@@ -620,12 +648,15 @@ export default function App() {
                               onPreAuthorize={onPreAuthorize}
                               onCancelPreAuth={onCancelPreAuth}
                               onStop={onStop}
+                              onCancel={onCancel}
                               onResumeFill={onResumeFill}
                               onContinueFill={onContinueFill}
                               onCloseStopped={onCloseStopped}
                               onDismissSale={onDismissSale}
                               shiftRequired={shiftRequired}
                               onStartShift={openStartShift}
+                              useStopMode={useStopMode}
+                              useCancelMode={useCancelMode}
                             />
                           </div>
                         ))}
@@ -635,7 +666,10 @@ export default function App() {
 
                   <section className="grid min-h-[13rem] shrink-0 flex-[4] grid-cols-1 gap-3 overflow-hidden xl:grid-cols-12">
                     <div className="min-h-0 xl:col-span-7">
-                      <DashboardRecentTransactions onOpenHistory={() => setWorkspaceTab("history")} />
+                      <DashboardRecentTransactions
+                        onOpenHistory={() => setWorkspaceTab("history")}
+                        shiftId={shift.mode === "disabled" ? undefined : (shift.currentShift?.id ?? null)}
+                      />
                     </div>
                     <div className="min-h-0 xl:col-span-5">
                       <DashboardTanksMini />

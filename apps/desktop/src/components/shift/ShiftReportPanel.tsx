@@ -93,7 +93,7 @@ function buildShiftPrintHtml(
       </table>
     </div>` : "";
 
-  const byFuelHtml = productTotals && productTotals.length > 0 ? `
+  const byFuelHtml = shift.status === "ACTIVE" && productTotals && productTotals.length > 0 ? `
     <div class="section">
       <h2>${t("shiftReport.byFuelType")}</h2>
       <table>
@@ -154,6 +154,10 @@ export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; 
   const [productTotals, setProductTotals] = useState<{name: string; volume: number; amount: number; count: number}[] | null>(null);
 
   useEffect(() => {
+    if (shift.status !== "ACTIVE") {
+      setProductTotals([]);
+      return;
+    }
     async function load() {
       try {
         const { invoke } = await import("@tauri-apps/api/core");
@@ -181,7 +185,7 @@ export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; 
       }
     }
     load();
-  }, [shift.id]);
+  }, [shift.id, shift.status]);
 
   const handlePrint = useCallback(() => {
     const existing = document.getElementById(SHIFT_PRINT_ROOT_ID);
@@ -303,7 +307,7 @@ export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; 
           </div>
         ) : null}
 
-        {productTotals && productTotals.length > 0 ? (
+        {shift.status === "ACTIVE" && productTotals && productTotals.length > 0 ? (
           <div>
             <div className="mb-2 text-xs font-bold uppercase tracking-wider text-text-muted">
               {t("shiftReport.byFuelType")}

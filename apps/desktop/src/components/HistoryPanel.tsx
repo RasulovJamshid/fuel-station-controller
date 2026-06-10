@@ -293,8 +293,13 @@ export function HistoryPanel(props: {
   // status filter (server-side)
   const [statusFilter, setStatusFilter] = useState<StatusFilterId>("main");
 
-  // shift filter (server-side) — null = no shift filter
-  const [filterShiftId, setFilterShiftId] = useState<string | null>(null);
+  // shift filter (server-side) — null = no shift filter; defaults to active shift
+  const [filterShiftId, setFilterShiftId] = useState<string | null>(props.currentShift?.id ?? null);
+
+  // Sync shift filter when a shift starts, ends, or changes (handover)
+  useEffect(() => {
+    setFilterShiftId(props.currentShift?.id ?? null);
+  }, [props.currentShift?.id]);
 
   // date range (server-side)
   const [datePreset,  setDatePreset]  = useState(props.currentShift ? "shift" : "today");

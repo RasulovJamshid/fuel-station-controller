@@ -481,6 +481,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (ev.event === "shift.warning") {
       set({ shiftWarningMinutes: ev.data.minutes_remaining });
+      return;
+    }
+    if (ev.event === "tank.updated") {
+      const snap = get().siteSnapshot;
+      if (snap) {
+        set({ siteSnapshot: { ...snap, tanks: ev.data.tanks } });
+      }
     }
   },
 }));

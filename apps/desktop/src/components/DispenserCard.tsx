@@ -162,6 +162,11 @@ export interface DispenserCardProps {
   /** When true and pump is idle/waiting, block authorization and prompt to start a shift. */
   shiftRequired?: boolean;
   onStartShift?: () => void;
+  /** When true, the Stop/Pause button acts as a final stop (no resume). */
+  useStopMode?: boolean;
+  /** When true, show a Cancel button that stops + immediately closes the transaction. */
+  useCancelMode?: boolean;
+  onCancel?: (fpId: string) => void;
 }
 
 export function DispenserCard({
@@ -181,6 +186,9 @@ export function DispenserCard({
   onDismissSale,
   shiftRequired = false,
   onStartShift,
+  useStopMode = false,
+  useCancelMode = false,
+  onCancel,
 }: DispenserCardProps) {
   const { t } = useTranslation();
   const [setupOpen, setSetupOpen] = useState(false);
@@ -313,6 +321,7 @@ export function DispenserCard({
   }, [shouldAutoDismiss, state.fp_id]);
   const isPaused = paused != null;
   const isAppPause = paused?.stop_source === "APP";
+  const isAppStop = paused?.stop_source === "APP_FINAL";
   const isExternalPause = paused?.stop_source === "EXTERNAL";
   const hasContinuationBase =
     (state.base_volume ?? 0) > 0 &&
@@ -711,15 +720,33 @@ export function DispenserCard({
               type="button"
               data-no-keyboard="true"
               className={`flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-900/50 bg-amber-950/40 font-bold uppercase tracking-wide leading-tight text-accent-amber hover:bg-amber-950/60 ${compact ? "py-2 text-sm" : "py-2.5 text-sm"}`}
-              onClick={() => onStop(state.fp_id)}
+              onClick={() => useCancelMode ? onCancel?.(state.fp_id) : onStop(state.fp_id)}
             >
               <InlineIcon src={pauseIcon} className="h-4 w-4 shrink-0" />
-              {t("dispenser.pause")}
+              {useCancelMode ? t("dispenser.cancel") : useStopMode ? t("dispenser.stop") : t("dispenser.pause")}
             </button>
           ) : showNozzleRemovedBanner ? (
             <p className={`text-center font-semibold text-accent-amber-light ${compact ? "text-sm" : "text-sm"}`}>
               {t("dispenser.nozzleRemoved")}
             </p>
+          ) : isAppStop && paused ? (
+            <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
+              {!compact && (
+                <p className="text-center text-sm font-medium text-text-secondary">
+                  {t("dispenser.holsterToFinish")}
+                </p>
+              )}
+              <button
+                type="button"
+                className={`w-full text-center font-semibold leading-tight text-text-tertiary underline-offset-2 hover:text-text-secondary hover:underline ${compact ? "text-sm" : "text-sm"}`}
+                onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
+              >
+                <span className="flex items-center justify-center gap-1">
+                  <InlineIcon src={xCircleIcon} className={`shrink-0 ${compact ? "h-3 w-3" : "h-4 w-4"}`} />
+                  {t("dispenser.closeTransaction")}
+                </span>
+              </button>
+            </div>
           ) : isAppPause && paused ? (
             <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
               {!compact && (

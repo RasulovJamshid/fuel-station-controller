@@ -1,6 +1,6 @@
 import type { FpState } from "../types/api";
 
-export type StopSource = "APP" | "EXTERNAL";
+export type StopSource = "APP" | "APP_FINAL" | "EXTERNAL";
 
 export type FpStatusTag =
   | "OFFLINE"

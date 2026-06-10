@@ -597,10 +597,6 @@ pub async fn run_poll_loop(
                 let _ = events.send(WsEvent::Offline { fp_id, label });
             }
 
-            if real_bus {
-                tokio::time::sleep(Duration::from_millis(RS485_TURNAROUND_MS)).await;
-            }
-
             {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
@@ -642,6 +638,7 @@ pub async fn run_poll_loop(
                         {
                             let source_str = match stop_source {
                                 StopSource::App => "APP",
+                                StopSource::AppFinal => "APP_FINAL",
                                 StopSource::External => "EXTERNAL",
                             };
                             let _ = events.send(WsEvent::Paused {
@@ -665,7 +662,7 @@ pub async fn run_poll_loop(
                 map.get(&byte).map_or(false, |rt| {
                     // Holstered pre-auth: CONFIG is on wire, pump expects BUSY every poll
                     // to keep the authorization alive until the nozzle is lifted.
-                    if rt.state.status == FpStatus::PreAuthorized && rt.preauth_config_on_wire {
+                    if rt.state.status == FpStatus::PreAuthorized && rt.pre_auth.is_some() {
                         return true;
                     }
                     if !matches!(
@@ -693,6 +690,15 @@ pub async fn run_poll_loop(
             }
 
             broadcast_status(byte, &runtimes, &events).await;
+
+            // Turnaround guard: wait for the bus to settle after the last TX for
+            // this slot (which may be a BUSY keepalive sent above) before polling
+            // the next pump address.  Previously this sleep was before the busy
+            // write, leaving zero gap between BUSY TX and the next poll — causing
+            // the pump's C0 FA ACK to arrive in the next pump's response window.
+            if real_bus {
+                tokio::time::sleep(Duration::from_millis(RS485_TURNAROUND_MS)).await;
+            }
         }
     }
 }
@@ -865,6 +871,7 @@ async fn process_parsed_frame(
         } => {
             let source_str = match stop_source {
                 types::StopSource::App => "APP",
+                types::StopSource::AppFinal => "APP_FINAL",
                 types::StopSource::External => "EXTERNAL",
             };
             let _ = events.send(WsEvent::Paused {
@@ -1147,7 +1154,7 @@ async fn apply_command(
             let effect = {
                 let mut map = runtimes.write().await;
                 map.get_mut(&byte)
-                    .and_then(|rt| rt.apply_stop(&fp_cfg, cfg, active_shift_id, active_operator_name, cfg.ui.use_decel_window_on_stop))
+                    .and_then(|rt| rt.apply_stop(&fp_cfg, cfg, active_shift_id, active_operator_name, cfg.ui.use_decel_window_on_stop, cfg.ui.use_stop_mode))
             };
             if let Some(FrameEffect::Paused {
                 tx,
@@ -1160,6 +1167,7 @@ async fn apply_command(
             {
                 let source_str = match stop_source {
                     types::StopSource::App => "APP",
+                    types::StopSource::AppFinal => "APP_FINAL",
                     types::StopSource::External => "EXTERNAL",
                 };
                 let _ = events.send(WsEvent::Paused {
@@ -1252,7 +1260,7 @@ async fn apply_command(
                 let mut map = runtimes.write().await;
                 for fp in cfg.active_positions() {
                     if let Some(rt) = map.get_mut(&fp.address_byte) {
-                        if let Some(effect) = rt.apply_stop(fp, cfg, active_shift_id.clone(), active_operator_name.clone(), false) {
+                        if let Some(effect) = rt.apply_stop(fp, cfg, active_shift_id.clone(), active_operator_name.clone(), false, false) {
                             stopped_effects.push((fp.address_byte, fp.id.clone(), effect));
                         }
                     }
@@ -1270,6 +1278,7 @@ async fn apply_command(
                 {
                     let source_str = match stop_source {
                         types::StopSource::App => "APP",
+                        types::StopSource::AppFinal => "APP_FINAL",
                         types::StopSource::External => "EXTERNAL",
                     };
                     let _ = events.send(WsEvent::Paused {
@@ -1371,7 +1380,7 @@ async fn apply_command(
             } else {
                 // Holstered preauth: CONFIG sent before lift; StatusTransition arrives
                 // during a later POLL when the nozzle is lifted, handled normally then.
-                let _ = send_auth_pair(
+                let auth_resp = send_auth_pair(
                     backend,
                     byte,
                     &fp_cfg,
@@ -1380,9 +1389,16 @@ async fn apply_command(
                     price,
                     &cfg.connection.protocol,
                 );
+                // Only mark config on wire when the pump actually ACKed it (C0 FA in
+                // response). If CONFIG got no reply the flag stays false, so
+                // start_delivery_from_pre_auth will call begin_auth_session() on NozzleUp
+                // and the first Data frame will retrigger SendAuthorizeConfig.
+                let config_acked = auth_resp.windows(2).any(|w| w == [0xC0, 0xFA]);
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
-                    rt.mark_preauth_config_on_wire();
+                    if config_acked {
+                        rt.mark_preauth_config_on_wire();
+                    }
                 }
             }
             let _ = events.send(WsEvent::PreAuthorized {

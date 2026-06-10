@@ -123,6 +123,36 @@
   },
   "ui": {
     "default_auth_mode": "preauth",
-    "preauth_timeout_seconds": 300
+    "preauth_timeout_seconds": 300,
+    "use_cancel_mode": true
+  },
+  "tanks": [
+    { "product_id": 3, "label": "AI-92",   "capacity_l": 20000.0, "current_l": 12000.0 },
+    { "product_id": 4, "label": "AI-95",   "capacity_l": 20000.0, "current_l": 8500.0  },
+    { "product_id": 5, "label": "AI-98",   "capacity_l": 10000.0, "current_l": 3200.0  },
+    { "product_id": 6, "label": "Diesel",  "capacity_l": 20000.0, "current_l": 6400.0  },
+    { "product_id": 7, "label": "LPG",     "capacity_l": 15000.0, "current_l": 9100.0  }
+  ],
+  "atg": {
+    "poll_interval_secs": 300,
+    "modbus_timeout_secs": 10.0,
+    "branches": [
+      {
+        "id": 1,
+        "name": "Main tank farm",
+        "host": "192.168.1.100",
+        "port": 6400,
+        "unit_id": 1,
+        "start_register": 1000,
+        "address_base": 1,
+        "register_count": 48,
+        "slots": [
+          { "slot": 1, "type": "AI-92",  "product_id": 3, "capacity_l": 20000 },
+          { "slot": 2, "type": "AI-95",  "product_id": 4, "capacity_l": 20000 },
+          { "slot": 3, "type": "AI-98",  "product_id": 5, "capacity_l": 10000 },
+          { "slot": 4, "type": "Diesel", "product_id": 6, "capacity_l": 20000 }
+        ]
+      }
+    ]
   }
 }

@@ -4,6 +4,12 @@ import { useAppStore } from "../store";
 
 const fmtInt = new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 0 });
 
+/** Returns true when the ATG reading is recent (< 10 minutes old). */
+function isLive(updatedAtMs: number | undefined): boolean {
+  if (updatedAtMs == null) return false;
+  return Date.now() - updatedAtMs < 10 * 60 * 1000;
+}
+
 export function DashboardTanksMini() {
   const { t } = useTranslation();
   const siteSnapshot = useAppStore((s) => s.siteSnapshot);
@@ -54,14 +60,22 @@ export function DashboardTanksMini() {
             {rows.map((row) => {
               const color = row.product?.color ?? "#6b7280";
               const warn = alertColor(row.levelPct);
+              const live = isLive(row.updated_at_ms);
+              const tempStr = row.temperature_c != null
+                ? `${row.temperature_c.toFixed(0)}°`
+                : null;
+
               return (
                 <div
                   key={row.product_id}
                   className="flex flex-1 flex-col items-center gap-1.5 rounded-xl border border-border-primary/50 bg-bg-primary/40 px-2 py-2"
                 >
-                  {/* Label + dot */}
+                  {/* Label + live dot */}
                   <div className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${live ? "animate-pulse" : ""}`}
+                      style={{ backgroundColor: live ? color : "#6b7280" }}
+                    />
                     <span className="truncate text-[11px] font-bold uppercase tracking-wide text-text-secondary">
                       {row.label}
                     </span>
@@ -77,7 +91,7 @@ export function DashboardTanksMini() {
                         opacity: 0.85,
                       }}
                     />
-                    {/* Percentage label centred in gauge */}
+                    {/* Percentage centred in gauge */}
                     <span
                       className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[10px] font-black tabular-nums"
                       style={{ color: warn ?? color }}
@@ -90,6 +104,13 @@ export function DashboardTanksMini() {
                   <span className="whitespace-nowrap font-mono text-[11px] font-semibold tabular-nums text-text-primary">
                     {fmtInt.format(row.current_l)} L
                   </span>
+
+                  {/* Temperature badge — only when ATG data is present */}
+                  {tempStr && (
+                    <span className="rounded-full bg-bg-tertiary/60 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-text-muted">
+                      {tempStr}
+                    </span>
+                  )}
                 </div>
               );
             })}

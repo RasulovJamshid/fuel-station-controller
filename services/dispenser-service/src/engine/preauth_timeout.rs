@@ -30,10 +30,23 @@ pub fn spawn_preauth_timeout_task(
                 let map = runtimes.read().await;
                 map.iter()
                     .filter_map(|(&byte, rt)| {
-                        if !matches!(rt.state.status, FpStatus::PreAuthorized) {
+                        // Primary case: holstered preauth waiting for customer lift.
+                        let started = if matches!(rt.state.status, FpStatus::PreAuthorized) {
+                            rt.pre_auth_started_at?
+                        } else if matches!(rt.state.status, FpStatus::Authorizing | FpStatus::NozzleUp)
+                            && rt.preauth_config_on_wire
+                            && rt.state.volume < 0.01
+                            && rt.state.amount == 0
+                        {
+                            // CONFIG is on wire but no fuel has flowed — the arm-phase
+                            // firmware-artifact guard in apply_nozzle_holstered now keeps
+                            // the lane in Authorizing on spurious holster frames.  If the
+                            // customer genuinely holstered, time it out the same way so
+                            // the lane does not stay armed forever.
+                            rt.auth_session_started_at?
+                        } else {
                             return None;
-                        }
-                        let started = rt.pre_auth_started_at?;
+                        };
                         if now.saturating_sub(started) >= timeout_ms as i64 {
                             Some((byte, rt.state.fp_id.clone()))
                         } else {

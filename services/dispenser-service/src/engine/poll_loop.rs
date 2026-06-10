@@ -307,7 +307,7 @@ async fn dispatch_poll_frames(
 
         let mut map = runtimes.write().await;
         if let Some(rt) = map.get_mut(&byte) {
-            if has_pre || (preauth_armed && confirmed) {
+            if confirmed && (has_pre || preauth_armed) {
                 rt.start_delivery_from_pre_auth(&fp_cfg, cfg);
             }
         }

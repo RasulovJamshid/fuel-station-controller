@@ -791,6 +791,14 @@ impl RuntimeFp {
                         self.touch();
                         return FrameEffect::StatusChanged;
                     }
+                    // CONFIG is on wire: Wayne firmware emits a spurious NozzleReturned
+                    // immediately after ACKing CONFIG as a state-confirmation artifact —
+                    // the same artifact already guarded in the PreAuthorized branch.
+                    // Stay armed; the preauth-timeout task cancels if no fuel flows.
+                    if self.preauth_config_on_wire {
+                        self.touch();
+                        return FrameEffect::StatusChanged;
+                    }
                     self.cancel_zero_volume_session();
                     self.touch();
                     FrameEffect::CompleteGhostFill
@@ -1532,6 +1540,11 @@ impl RuntimeFp {
                             if self.nozzle_physically_up() {
                                 self.touch();
                                 FrameEffect::StatusChanged
+                            } else if self.preauth_config_on_wire {
+                                // Same firmware artifact guard as apply_nozzle_holstered:
+                                // pump confirms nozzle state after CONFIG before delivery starts.
+                                self.touch();
+                                FrameEffect::None
                             } else {
                                 self.cancel_zero_volume_session();
                                 self.touch();
@@ -1794,9 +1807,13 @@ impl RuntimeFp {
                             return FrameEffect::StatusChanged;
                         }
                         self.note_wire_hose(*hh);
-                        // CONFIG was just sent and no fuel has flowed yet — the pump
-                        // emits holster codes in compound arm frames as firmware artifact.
-                        if self.preauth_config_on_wire
+                        // CONFIG is on wire (or pending in the deferred-config path) and
+                        // no fuel has flowed yet — the pump emits holster codes in compound
+                        // arm frames as a firmware artifact.  Guard both the immediate-CONFIG
+                        // path (preauth_config_on_wire) and the deferred-CONFIG path where we
+                        // are waiting for the pump to return to idle before sending CONFIG
+                        // (pending_authorize_config_repeat).
+                        if (self.preauth_config_on_wire || self.pending_authorize_config_repeat)
                             && self.state.status == FpStatus::Authorizing
                         {
                             let (v, a) = self.combined_totals();

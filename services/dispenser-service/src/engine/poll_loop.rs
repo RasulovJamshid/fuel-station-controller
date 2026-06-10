@@ -10,14 +10,14 @@ use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
 use site_config::Protocol;
-use types::{preset_label, FpStatus, Preset, StopSource, UpdatePriceCmd, WsEvent};
+use types::{preset_label, FpStatus, Preset, StopSource, Transaction, TxStatus, UpdatePriceCmd, WsEvent};
 use wayne_europump::{
     ack, authorise_cmd, authorize_config, authorize_initial, busy, done, encode_preset_limit_bcd,
     parse_frame, poll, pre_authorise_price, stop_frame, stop_pre_frame, Frame,
     FrameAccumulator,
 };
 
-use super::state::{FrameEffect, RuntimeFp, TxCompleteAction, DECEL_WINDOW_TIMEOUT_MS};
+use super::state::{CurrentTx, FrameEffect, PreAuthContext, RuntimeFp, TxCompleteAction, DECEL_WINDOW_TIMEOUT_MS};
 use crate::shifts::ShiftCoordinator;
 
 /// RS-485 needs quiet time between polls to different addresses (ms).
@@ -434,6 +434,10 @@ pub async fn run_poll_loop(
     pool: SqlitePool,
     shifts: Arc<ShiftCoordinator>,
 ) {
+    if matches!(cfg.connection.protocol, Protocol::Gilbarco) {
+        return run_gilbarco_poll_loop(cfg, backend, runtimes, disp_by_byte, events, commands, pool, shifts).await;
+    }
+
     let addrs: Vec<u8> = cfg.active_addresses();
 
     let mut interval = tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
@@ -1477,6 +1481,741 @@ async fn apply_command(
                     });
                 }
             }
+        }
+    }
+}
+
+// ── Gilbarco Two-Wire Protocol (TWOTP-IS-1.0-S) poll loop ────────────────────
+
+async fn run_gilbarco_poll_loop(
+    cfg: Arc<SiteConfig>,
+    backend: SerialBackend,
+    runtimes: Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    disp_by_byte: HashMap<u8, FuelingPositionConfig>,
+    events: broadcast::Sender<WsEvent>,
+    mut commands: mpsc::Receiver<DispatchCommand>,
+    pool: SqlitePool,
+    shifts: Arc<ShiftCoordinator>,
+) {
+    use gilbarco::GilbarcoStatus;
+
+    let addrs: Vec<u8> = cfg.active_addresses();
+    // Flag each address for a price sync on its first Idle observation.
+    let mut pending_prices: HashMap<u8, bool> = addrs.iter().map(|&a| (a, true)).collect();
+
+    let mut interval = tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    loop {
+        while let Ok(cmd) = commands.try_recv() {
+            gbr_apply_command(&cfg, &runtimes, &events, &backend, cmd, &mut pending_prices).await;
+        }
+
+        for &byte in &addrs {
+            interval.tick().await;
+            while let Ok(cmd) = commands.try_recv() {
+                gbr_apply_command(&cfg, &runtimes, &events, &backend, cmd, &mut pending_prices)
+                    .await;
+            }
+
+            let fp_cfg = match disp_by_byte.get(&byte) {
+                Some(x) => x,
+                None => continue,
+            };
+
+            // Send single-byte status request; response: [echo][status]
+            let resp = match exchange_serial(&backend, &gilbarco::status(byte)) {
+                Ok(r) if r.len() >= 2 => r,
+                _ => {
+                    let went_offline = {
+                        let mut map = runtimes.write().await;
+                        map.get_mut(&byte)
+                            .map(|rt| rt.on_poll_missed(cfg.polling.offline_threshold_polls))
+                            .unwrap_or(false)
+                    };
+                    if went_offline {
+                        let _ = events.send(WsEvent::Offline {
+                            fp_id: fp_cfg.id.clone(),
+                            label: fp_cfg.label.clone(),
+                        });
+                    }
+                    broadcast_status(byte, &runtimes, &events).await;
+                    continue;
+                }
+            };
+
+            {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.on_poll_success();
+                }
+            }
+
+            let gbr_st = gilbarco::parse_status_byte(resp[1]);
+
+            match gbr_st {
+                GilbarcoStatus::Offline => {
+                    // Short response already handled above; this is an unknown status byte.
+                    let went_offline = {
+                        let mut map = runtimes.write().await;
+                        map.get_mut(&byte)
+                            .map(|rt| rt.on_poll_missed(cfg.polling.offline_threshold_polls))
+                            .unwrap_or(false)
+                    };
+                    if went_offline {
+                        let _ = events.send(WsEvent::Offline {
+                            fp_id: fp_cfg.id.clone(),
+                            label: fp_cfg.label.clone(),
+                        });
+                    }
+                }
+
+                GilbarcoStatus::Idle => {
+                    // Price sync: listen → SetPrice for each active nozzle.
+                    if pending_prices.get(&byte).copied().unwrap_or(false) {
+                        if gbr_send_set_price(byte, fp_cfg, &runtimes, &backend).await {
+                            pending_prices.insert(byte, false);
+                        }
+                    }
+
+                    let is_pre_auth = {
+                        let map = runtimes.read().await;
+                        map.get(&byte)
+                            .map(|rt| {
+                                rt.pre_auth.is_some()
+                                    && rt.state.status == FpStatus::PreAuthorized
+                            })
+                            .unwrap_or(false)
+                    };
+
+                    if is_pre_auth {
+                        // Operator pre-authorized before nozzle lift → arm the pump now.
+                        let _ = exchange_serial(&backend, &gilbarco::authorize(byte));
+                        debug!(
+                            addr = format_args!("0x{byte:02X}"),
+                            "Gilbarco: pre-authorize sent to pump on Idle"
+                        );
+                    } else {
+                        // Genuinely idle — clear any lingering mid-transaction state.
+                        let mut map = runtimes.write().await;
+                        if let Some(rt) = map.get_mut(&byte) {
+                            if !matches!(
+                                rt.state.status,
+                                FpStatus::Idle
+                                    | FpStatus::Offline
+                                    | FpStatus::Done
+                                    | FpStatus::Stopped { .. }
+                            ) {
+                                rt.state.status = FpStatus::Idle;
+                                rt.state.volume = 0.0;
+                                rt.state.amount = 0;
+                                rt.state.nozzle_index = None;
+                                rt.current_tx = None;
+                                rt.pre_auth = None;
+                            }
+                        }
+                    }
+                }
+
+                GilbarcoStatus::NozzleLifted => {
+                    let has_pending_auth = {
+                        let map = runtimes.read().await;
+                        map.get(&byte)
+                            .map(|rt| {
+                                rt.pre_auth.is_some()
+                                    || rt.state.status == FpStatus::PreAuthorized
+                            })
+                            .unwrap_or(false)
+                    };
+
+                    // Identify which nozzle is lifted via listen-mode GetNozzle.
+                    let nozzle = gbr_query_nozzle(byte, &backend).unwrap_or(1);
+                    let (product_id, product_name) = gbr_nozzle_product(fp_cfg, &cfg, nozzle);
+                    let price = {
+                        let map = runtimes.read().await;
+                        map.get(&byte)
+                            .map(|rt| {
+                                rt.nozzle_prices
+                                    .get(&nozzle)
+                                    .copied()
+                                    .unwrap_or(rt.state.price)
+                            })
+                            .unwrap_or_else(|| fp_cfg.default_price().unwrap_or(0))
+                    };
+
+                    if has_pending_auth {
+                        // Authorize was already queued → send authorize command now.
+                        let _ = exchange_serial(&backend, &gilbarco::authorize(byte));
+                        let tx = CurrentTx {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            started_at: Utc::now().timestamp_millis(),
+                            product_id,
+                            product_name: product_name.clone(),
+                            nozzle_index: nozzle,
+                        };
+                        let mut map = runtimes.write().await;
+                        if let Some(rt) = map.get_mut(&byte) {
+                            rt.current_tx = Some(tx);
+                            rt.state.nozzle_index = Some(nozzle);
+                            rt.state.product_id = Some(product_id);
+                            rt.state.product_name = Some(product_name);
+                            rt.state.price = price;
+                            rt.state.volume = 0.0;
+                            rt.state.amount = 0;
+                            rt.state.status = FpStatus::Authorizing;
+                            rt.pre_auth = None;
+                        }
+                        info!(
+                            addr = format_args!("0x{byte:02X}"),
+                            nozzle,
+                            "Gilbarco: NozzleLifted + pending auth → Authorize sent"
+                        );
+                    } else {
+                        // No pending auth — notify UI and wait for operator.
+                        let product_color = cfg
+                            .product(product_id)
+                            .map(|p| p.color.clone())
+                            .unwrap_or_default();
+                        {
+                            let mut map = runtimes.write().await;
+                            if let Some(rt) = map.get_mut(&byte) {
+                                rt.state.nozzle_index = Some(nozzle);
+                                rt.state.product_id = Some(product_id);
+                                rt.state.product_name = Some(product_name.clone());
+                                rt.state.price = price;
+                                rt.state.status = FpStatus::NozzleUp;
+                            }
+                        }
+                        let _ = events.send(WsEvent::NozzleUp {
+                            fp_id: fp_cfg.id.clone(),
+                            nozzle_index: nozzle,
+                            product_id,
+                            product_name,
+                            product_color,
+                            price,
+                        });
+                    }
+                }
+
+                GilbarcoStatus::Authorized => {
+                    // Pump is armed; delivery will begin when the customer opens the valve.
+                    let needs_tx = {
+                        let map = runtimes.read().await;
+                        map.get(&byte)
+                            .map(|rt| rt.current_tx.is_none())
+                            .unwrap_or(false)
+                    };
+                    if needs_tx {
+                        let nozzle = {
+                            let map = runtimes.read().await;
+                            map.get(&byte)
+                                .and_then(|rt| rt.state.nozzle_index)
+                                .unwrap_or(1)
+                        };
+                        let (product_id, product_name) = gbr_nozzle_product(fp_cfg, &cfg, nozzle);
+                        let price = {
+                            let map = runtimes.read().await;
+                            map.get(&byte)
+                                .map(|rt| {
+                                    rt.nozzle_prices.get(&nozzle).copied().unwrap_or(rt.state.price)
+                                })
+                                .unwrap_or(0)
+                        };
+                        let tx = CurrentTx {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            started_at: Utc::now().timestamp_millis(),
+                            product_id,
+                            product_name,
+                            nozzle_index: nozzle,
+                        };
+                        let mut map = runtimes.write().await;
+                        if let Some(rt) = map.get_mut(&byte) {
+                            rt.current_tx = Some(tx);
+                            rt.state.price = price;
+                            rt.state.status = FpStatus::Authorizing;
+                            rt.pre_auth = None;
+                        }
+                    } else {
+                        let mut map = runtimes.write().await;
+                        if let Some(rt) = map.get_mut(&byte) {
+                            if matches!(rt.state.status, FpStatus::NozzleUp | FpStatus::PreAuthorized) {
+                                rt.state.status = FpStatus::Authorizing;
+                                rt.pre_auth = None;
+                            }
+                        }
+                    }
+                }
+
+                GilbarcoStatus::Delivering => {
+                    // Live delivery: poll display for running amount.
+                    if let Ok(disp) = exchange_serial(&backend, &gilbarco::get_display(byte)) {
+                        if let Some(raw_amount) = gilbarco::parse_display_response(&disp) {
+                            let price = {
+                                let map = runtimes.read().await;
+                                map.get(&byte).map(|rt| rt.state.price).unwrap_or(1)
+                            };
+                            let volume = if price > 0 {
+                                raw_amount as f64 / price as f64
+                            } else {
+                                0.0
+                            };
+                            let mut map = runtimes.write().await;
+                            if let Some(rt) = map.get_mut(&byte) {
+                                rt.state.status = FpStatus::Delivering;
+                                rt.state.amount = raw_amount;
+                                rt.state.volume = volume;
+                                // Ensure a tx record exists if Delivering was first observed here.
+                                if rt.current_tx.is_none() {
+                                    let nozzle = rt.state.nozzle_index.unwrap_or(1);
+                                    let (pid, pname) = gbr_nozzle_product(fp_cfg, &cfg, nozzle);
+                                    rt.current_tx = Some(CurrentTx {
+                                        id: uuid::Uuid::new_v4().to_string(),
+                                        started_at: Utc::now().timestamp_millis(),
+                                        product_id: pid,
+                                        product_name: pname,
+                                        nozzle_index: nozzle,
+                                    });
+                                }
+                            }
+                        }
+                    } else {
+                        let mut map = runtimes.write().await;
+                        if let Some(rt) = map.get_mut(&byte) {
+                            rt.state.status = FpStatus::Delivering;
+                        }
+                    }
+                }
+
+                GilbarcoStatus::TransactionComplete => {
+                    gbr_close_transaction(
+                        byte,
+                        fp_cfg,
+                        &backend,
+                        &cfg,
+                        &runtimes,
+                        &events,
+                        &pool,
+                        &shifts,
+                    )
+                    .await;
+                }
+
+                GilbarcoStatus::Stopped => {
+                    let mut map = runtimes.write().await;
+                    if let Some(rt) = map.get_mut(&byte) {
+                        if !rt.state.status.is_stopped() {
+                            let vol = rt.state.volume;
+                            let amt = rt.state.amount;
+                            let tx_id = rt
+                                .current_tx
+                                .as_ref()
+                                .map(|t| t.id.clone())
+                                .unwrap_or_default();
+                            rt.state.status = FpStatus::Stopped {
+                                stopped_volume: vol,
+                                stopped_amount: amt,
+                                stopped_tx_id: tx_id,
+                                stop_source: StopSource::External,
+                            };
+                        }
+                    }
+                }
+
+                // ListenMode stray response — no action.
+                GilbarcoStatus::ListenMode => {}
+            }
+
+            broadcast_status(byte, &runtimes, &events).await;
+        }
+    }
+}
+
+/// Enter Gilbarco listen mode on `addr`, then send `cmd` and return the response.
+fn gbr_listen_then_send(backend: &SerialBackend, addr: u8, cmd: &[u8]) -> Option<Vec<u8>> {
+    let lr = exchange_serial(backend, &gilbarco::listen_mode(addr)).ok()?;
+    if lr.is_empty() || !(0xD1..=0xDF).contains(&lr[0]) {
+        return None;
+    }
+    exchange_serial(backend, cmd).ok()
+}
+
+/// Identify which nozzle is lifted via listen-mode GetNozzle → 1-based index.
+fn gbr_query_nozzle(addr: u8, backend: &SerialBackend) -> Option<u8> {
+    let resp = gbr_listen_then_send(backend, addr, &gilbarco::get_nozzle())?;
+    gilbarco::parse_nozzle_response(&resp)
+}
+
+/// Look up (product_id, product_name) for a nozzle by 1-based index.
+fn gbr_nozzle_product(
+    fp: &FuelingPositionConfig,
+    cfg: &SiteConfig,
+    nozzle_index: u8,
+) -> (u8, String) {
+    let product_id = fp
+        .nozzles
+        .iter()
+        .find(|n| n.index == nozzle_index)
+        .map(|n| n.product_id)
+        .unwrap_or(0);
+    let product_name = cfg
+        .product(product_id)
+        .map(|p| p.name.clone())
+        .unwrap_or_default();
+    (product_id, product_name)
+}
+
+/// Send SetPrice for all active nozzles via listen-mode.  Returns `true` if all sent.
+async fn gbr_send_set_price(
+    byte: u8,
+    fp_cfg: &FuelingPositionConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    backend: &SerialBackend,
+) -> bool {
+    let prices: Vec<(u8, u32)> = {
+        let map = runtimes.read().await;
+        let Some(rt) = map.get(&byte) else {
+            return false;
+        };
+        fp_cfg
+            .nozzles
+            .iter()
+            .filter(|n| n.active)
+            .map(|n| {
+                (
+                    n.index,
+                    rt.nozzle_prices.get(&n.index).copied().unwrap_or(n.price),
+                )
+            })
+            .collect()
+    };
+    for (nozzle_index, price) in prices {
+        let cmd = gilbarco::set_price(nozzle_index, price);
+        if gbr_listen_then_send(backend, byte, &cmd).is_none() {
+            return false;
+        }
+    }
+    true
+}
+
+/// Fetch final transaction data from pump, persist to DB, emit Done event.
+async fn gbr_close_transaction(
+    byte: u8,
+    fp_cfg: &FuelingPositionConfig,
+    backend: &SerialBackend,
+    cfg: &SiteConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+    pool: &SqlitePool,
+    shifts: &ShiftCoordinator,
+) {
+    let already_done = {
+        let map = runtimes.read().await;
+        map.get(&byte)
+            .map(|rt| matches!(rt.state.status, FpStatus::Done))
+            .unwrap_or(true)
+    };
+    if already_done {
+        return;
+    }
+
+    let tx_data = exchange_serial(backend, &gilbarco::get_transaction(byte))
+        .ok()
+        .and_then(|r| gilbarco::parse_transaction_response(&r));
+
+    let (ctx, price, nozzle_index) = {
+        let map = runtimes.read().await;
+        let Some(rt) = map.get(&byte) else {
+            return;
+        };
+        (
+            rt.current_tx.clone(),
+            rt.state.price,
+            rt.state.nozzle_index.unwrap_or(1),
+        )
+    };
+
+    let ctx = match ctx {
+        Some(c) => c,
+        None => {
+            // No active tx recorded — create a minimal one for the record.
+            let (product_id, product_name) = gbr_nozzle_product(fp_cfg, cfg, nozzle_index);
+            CurrentTx {
+                id: uuid::Uuid::new_v4().to_string(),
+                started_at: Utc::now().timestamp_millis(),
+                product_id,
+                product_name,
+                nozzle_index,
+            }
+        }
+    };
+
+    let (volume, amount) = match tx_data {
+        Some(td) => (td.volume_raw as f64 / 1000.0, td.amount_raw),
+        None => {
+            let map = runtimes.read().await;
+            map.get(&byte)
+                .map(|rt| (rt.state.volume, rt.state.amount))
+                .unwrap_or((0.0, 0))
+        }
+    };
+
+    let (shift_id, operator_name) = shifts.active_info().await;
+    let now_ms = Utc::now().timestamp_millis();
+    let tx = Transaction {
+        id: ctx.id.clone(),
+        fp_id: fp_cfg.id.clone(),
+        label: fp_cfg.label.clone(),
+        address_byte: byte,
+        started_at: ctx.started_at,
+        completed_at: Some(now_ms),
+        volume,
+        amount,
+        price,
+        nozzle_index: ctx.nozzle_index,
+        product_id: ctx.product_id,
+        product_name: ctx.product_name.clone(),
+        status: TxStatus::resolve(volume, true),
+        shift_id,
+        operator_name,
+        parent_tx_id: None,
+        combined_volume: volume,
+        combined_amount: amount,
+    };
+
+    if let Err(e) = crate::db::queries::insert_transaction(pool, &tx).await {
+        warn!(?e, byte, "Gilbarco: DB insert failed for transaction");
+    }
+    let _ = events.send(WsEvent::Done(tx));
+    {
+        let mut map = runtimes.write().await;
+        if let Some(rt) = map.get_mut(&byte) {
+            rt.state.status = FpStatus::Done;
+            rt.state.volume = volume;
+            rt.state.amount = amount;
+            rt.current_tx = None;
+            rt.pre_auth = None;
+        }
+    }
+    info!(
+        addr = format_args!("0x{byte:02X}"),
+        volume,
+        amount,
+        "Gilbarco: transaction complete, Done emitted"
+    );
+}
+
+async fn gbr_apply_command(
+    cfg: &SiteConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+    backend: &SerialBackend,
+    cmd: DispatchCommand,
+    pending_prices: &mut HashMap<u8, bool>,
+) {
+    match cmd {
+        DispatchCommand::Authorize { byte, price, preset } => {
+            let fp_cfg = match cfg.position_by_address(byte) {
+                Some(p) => p.clone(),
+                None => return,
+            };
+            let nozzle_up = {
+                let map = runtimes.read().await;
+                map.get(&byte)
+                    .filter(|rt| rt.state.status == FpStatus::NozzleUp)
+                    .and_then(|rt| rt.state.nozzle_index)
+            };
+            if let Some(nozzle) = nozzle_up {
+                // Nozzle already up → authorize immediately.
+                let _ = exchange_serial(backend, &gilbarco::authorize(byte));
+                let (product_id, product_name) = gbr_nozzle_product(&fp_cfg, cfg, nozzle);
+                let tx = CurrentTx {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    started_at: Utc::now().timestamp_millis(),
+                    product_id,
+                    product_name,
+                    nozzle_index: nozzle,
+                };
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.current_tx = Some(tx);
+                    rt.state.price = price;
+                    rt.set_last_preset(preset);
+                    rt.state.status = FpStatus::Authorizing;
+                    rt.pre_auth = None;
+                }
+            } else {
+                // Queue authorize for when nozzle is lifted.
+                let product_id = fp_cfg.nozzles.first().map(|n| n.product_id).unwrap_or(0);
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.pre_auth = Some(PreAuthContext { nozzle_index: 0, product_id });
+                    rt.state.price = price;
+                    rt.set_last_preset(preset);
+                }
+            }
+            broadcast_status(byte, runtimes, events).await;
+        }
+
+        DispatchCommand::Preauthorize {
+            byte,
+            price,
+            preset,
+            nozzle_index,
+        } => {
+            let fp_cfg = match cfg.position_by_address(byte) {
+                Some(p) => p.clone(),
+                None => return,
+            };
+            let (product_id, _product_name) = gbr_nozzle_product(&fp_cfg, cfg, nozzle_index);
+            let preset_label_str = preset_label(&preset);
+            {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.pre_auth = Some(PreAuthContext { nozzle_index, product_id });
+                    rt.state.price = price;
+                    rt.state.nozzle_index = Some(nozzle_index);
+                    rt.state.product_id = Some(product_id);
+                    rt.state.status = FpStatus::PreAuthorized;
+                    rt.state.pre_auth_preset = Some(preset_label_str.clone());
+                    rt.set_last_preset(preset);
+                }
+            }
+            let _ = events.send(WsEvent::PreAuthorized {
+                fp_id: fp_cfg.id.clone(),
+                price,
+                preset: preset_label_str,
+                nozzle_index,
+            });
+            broadcast_status(byte, runtimes, events).await;
+        }
+
+        DispatchCommand::Stop { byte } => {
+            let _ = exchange_serial(backend, &gilbarco::halt(byte));
+            {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    if !rt.state.status.is_stopped() {
+                        let vol = rt.state.volume;
+                        let amt = rt.state.amount;
+                        let tx_id = rt
+                            .current_tx
+                            .as_ref()
+                            .map(|t| t.id.clone())
+                            .unwrap_or_default();
+                        rt.state.status = FpStatus::Stopped {
+                            stopped_volume: vol,
+                            stopped_amount: amt,
+                            stopped_tx_id: tx_id,
+                            stop_source: StopSource::App,
+                        };
+                        rt.pre_auth = None;
+                    }
+                }
+            }
+            broadcast_status(byte, runtimes, events).await;
+        }
+
+        DispatchCommand::EStop => {
+            for fp in cfg.active_positions() {
+                let _ = exchange_serial(backend, &gilbarco::halt(fp.address_byte));
+            }
+            let mut map = runtimes.write().await;
+            for fp in cfg.active_positions() {
+                if let Some(rt) = map.get_mut(&fp.address_byte) {
+                    let vol = rt.state.volume;
+                    let amt = rt.state.amount;
+                    let tx_id = rt
+                        .current_tx
+                        .as_ref()
+                        .map(|t| t.id.clone())
+                        .unwrap_or_default();
+                    rt.state.status = FpStatus::Stopped {
+                        stopped_volume: vol,
+                        stopped_amount: amt,
+                        stopped_tx_id: tx_id,
+                        stop_source: StopSource::App,
+                    };
+                    rt.pre_auth = None;
+                    let _ = events.send(WsEvent::Status(rt.snapshot_state()));
+                }
+            }
+        }
+
+        DispatchCommand::ResetAll => {
+            let mut map = runtimes.write().await;
+            for fp in cfg.active_positions() {
+                if let Some(rt) = map.get_mut(&fp.address_byte) {
+                    rt.reset_for_operator(fp);
+                    let _ = events.send(WsEvent::Status(rt.snapshot_state()));
+                }
+            }
+        }
+
+        DispatchCommand::ResetLane { byte } => {
+            let fp_cfg = match cfg.position_by_address(byte) {
+                Some(p) => p.clone(),
+                None => return,
+            };
+            let mut map = runtimes.write().await;
+            if let Some(rt) = map.get_mut(&byte) {
+                match rt.operator_dismiss_display(&fp_cfg) {
+                    Ok(()) => {
+                        let _ = events.send(WsEvent::Status(rt.snapshot_state()));
+                    }
+                    Err(e) => warn!(byte, %e, "Gilbarco: dismiss lane"),
+                }
+            }
+        }
+
+        DispatchCommand::UpdatePrices { updates, changed_by } => {
+            let mut map = runtimes.write().await;
+            for u in updates {
+                let Some(fp) = cfg.position_by_id(&u.fp_id) else {
+                    continue;
+                };
+                let product_name = fp
+                    .nozzles
+                    .iter()
+                    .find(|n| n.index == u.nozzle_index)
+                    .and_then(|n| cfg.product(n.product_id).map(|p| p.name.clone()))
+                    .unwrap_or_default();
+                if let Some(rt) = map.get_mut(&fp.address_byte) {
+                    let old = rt.set_nozzle_price(u.nozzle_index, u.price);
+                    let _ = events.send(WsEvent::PriceUpdated {
+                        fp_id: u.fp_id.clone(),
+                        nozzle_index: u.nozzle_index,
+                        product_name,
+                        old_price: old,
+                        new_price: u.price,
+                        changed_by: changed_by.clone(),
+                    });
+                    pending_prices.insert(fp.address_byte, true);
+                }
+            }
+        }
+
+        // Gilbarco does not support E-stop continuation in MVP.
+        DispatchCommand::ContinueFill { .. } | DispatchCommand::ResumeFill { .. } => {}
+
+        DispatchCommand::CancelPreauth { byte } => {
+            let fp_cfg = match cfg.position_by_address(byte) {
+                Some(p) => p.clone(),
+                None => return,
+            };
+            {
+                let mut map = runtimes.write().await;
+                if let Some(rt) = map.get_mut(&byte) {
+                    rt.pre_auth = None;
+                    rt.state.pre_auth_preset = None;
+                    if rt.state.status == FpStatus::PreAuthorized {
+                        rt.state.status = FpStatus::Idle;
+                    }
+                }
+            }
+            let _ = events.send(WsEvent::PreAuthCancelled {
+                fp_id: fp_cfg.id.clone(),
+            });
+            broadcast_status(byte, runtimes, events).await;
         }
     }
 }

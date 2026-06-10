@@ -5,6 +5,7 @@ members = [
     "crates/protocol-trait",
     "crates/wayne-europump",
     "crates/atg",
+    "crates/gilbarco",
     "services/dispenser-service",
     "apps/desktop/src-tauri",
     "apps/sim-desktop/src-tauri",

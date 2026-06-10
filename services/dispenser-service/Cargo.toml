@@ -8,6 +8,7 @@ types = { path = "../../crates/types" }
 site_config = { path = "../../crates/config" }
 wayne-europump = { path = "../../crates/wayne-europump" }
 atg = { path = "../../crates/atg" }
+gilbarco = { path = "../../crates/gilbarco" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

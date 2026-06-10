@@ -1,0 +1,138 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/backend/**"
+      - "apps/web/**"
+
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Services to rebuild (e.g. 'backend frontend'). Leave empty to auto-detect."
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false   # never cancel a running deploy; queue behind it
+
+jobs:
+  # ── Detect which parts of the repo changed ────────────────────────────────
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend:  ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - "apps/backend/**"
+            frontend:
+              - "apps/web/**"
+
+  # ── Deploy ────────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy
+    needs: changes
+    runs-on: ubuntu-latest
+
+    # Skip if nothing relevant changed (unless manually triggered)
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.backend == 'true'  ||
+      needs.changes.outputs.frontend == 'true'
+
+    steps:
+      - name: Build service list
+        id: services
+        run: |
+          # Manual override takes priority
+          if [ -n "${{ github.event.inputs.services }}" ]; then
+            echo "list=${{ github.event.inputs.services }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          SERVICES=""
+          [ "${{ needs.changes.outputs.backend }}"  = "true" ] && SERVICES="$SERVICES backend"
+          [ "${{ needs.changes.outputs.frontend }}" = "true" ] && SERVICES="$SERVICES frontend"
+          # Trim leading space
+          SERVICES="${SERVICES# }"
+          echo "list=$SERVICES" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          port:     ${{ secrets.DEPLOY_PORT || 22 }}
+          script_stop: true   # abort on first non-zero exit
+          script: |
+            set -euo pipefail
+
+            DEPLOY_DIR=/opt/azs
+            COMPOSE_DIR=$DEPLOY_DIR/apps/backend
+            SERVICES="${{ steps.services.outputs.list }}"
+
+            echo "==> Pulling latest code"
+            git -C "$DEPLOY_DIR" pull --ff-only origin main
+
+            echo "==> Rebuilding: $SERVICES"
+            cd "$COMPOSE_DIR"
+            docker compose up -d --build --remove-orphans $SERVICES
+
+            echo "==> Waiting for services to become healthy (up to 120 s)"
+            TIMEOUT=120
+            ELAPSED=0
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+              UNHEALTHY=$(docker compose ps --format json \
+                | python3 -c "
+            import sys, json
+            rows = [json.loads(l) for l in sys.stdin if l.strip()]
+            bad  = [r['Name'] for r in rows if r.get('Health','') not in ('healthy','')]
+            print(' '.join(bad))
+            " 2>/dev/null || echo "")
+              [ -z "$UNHEALTHY" ] && break
+              echo "  still waiting: $UNHEALTHY"
+              sleep 5
+              ELAPSED=$((ELAPSED + 5))
+            done
+
+            if [ -n "$UNHEALTHY" ]; then
+              echo "ERROR: services did not become healthy: $UNHEALTHY"
+              docker compose ps
+              docker compose logs --tail=50 $SERVICES
+              exit 1
+            fi
+
+            echo "==> Verifying API health"
+            curl -sf --retry 5 --retry-delay 3 \
+              https://fuelstation.ung.uz/api/health \
+              | python3 -m json.tool
+
+            echo "==> Deploy complete"
+            docker compose ps
+
+      - name: Notify on failure
+        if: failure()
+        uses: appleboy/telegram-action@v1
+        with:
+          to:      ${{ secrets.TELEGRAM_CHAT_ID }}
+          token:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ❌ Deploy FAILED on `${{ github.repository }}`
+            Branch: `${{ github.ref_name }}`
+            Commit: `${{ github.sha }}`
+            By: ${{ github.actor }}
+            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        # Don't fail the whole job if Telegram isn't configured
+        continue-on-error: true

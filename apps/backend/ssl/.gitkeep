@@ -1,0 +1,2 @@
+# Drop fullchain.pem and privkey.pem here.
+# These files are ignored by .gitignore — never commit certificates or private keys.

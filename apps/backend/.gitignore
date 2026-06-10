@@ -1,0 +1,20 @@
+# Secrets — never commit
+.env
+
+# TLS certificates and private keys
+ssl/*.pem
+ssl/*.key
+ssl/*.crt
+ssl/*.p12
+ssl/*.pfx
+
+# Build output
+dist/
+node_modules/
+
+# Database dumps
+backups/*.sql.gz
+backups/*.sql
+
+# Logs
+*.log

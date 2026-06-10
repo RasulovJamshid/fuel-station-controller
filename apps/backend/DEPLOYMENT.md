@@ -1,6 +1,7 @@
-# AZS Manager — Remote Server Deployment Guide
+# AZS Manager — Production Deployment Guide
 
-This guide takes you from a blank Ubuntu/Debian VPS to a running production backend in about 30 minutes.
+Domain: **fuelstation.ung.uz**
+Stack: Next.js frontend · NestJS backend · PostgreSQL (TimescaleDB) · Redis · nginx
 
 ---
 
@@ -11,10 +12,10 @@ This guide takes you from a blank Ubuntu/Debian VPS to a running production back
 3. [Install Docker and Docker Compose](#3-install-docker-and-docker-compose)
 4. [Upload the application](#4-upload-the-application)
 5. [Configure environment variables](#5-configure-environment-variables)
-6. [Configure nginx for your domain](#6-configure-nginx-for-your-domain)
-7. [Obtain a TLS certificate](#7-obtain-a-tls-certificate)
-8. [First start](#8-first-start)
-9. [Verify everything is running](#9-verify-everything-is-running)
+6. [Obtain a TLS certificate](#6-obtain-a-tls-certificate)
+7. [First start](#7-first-start)
+8. [Verify everything is running](#8-verify-everything-is-running)
+9. [Continuous deployment (GitHub Actions)](#9-continuous-deployment-github-actions)
 10. [Day-to-day operations](#10-day-to-day-operations)
 11. [Updating the application](#11-updating-the-application)
 12. [Backup and restore](#12-backup-and-restore)
@@ -24,15 +25,15 @@ This guide takes you from a blank Ubuntu/Debian VPS to a running production back
 
 ## 1. Server requirements
 
-| Resource | Minimum | Recommended |
-|----------|---------|-------------|
-| CPU | 2 vCPU | 4 vCPU |
-| RAM | 2 GB | 4 GB |
-| Disk | 20 GB SSD | 60 GB SSD |
-| OS | Ubuntu 22.04 LTS | Ubuntu 22.04 LTS |
-| Open ports | 22 (SSH), 80, 443 | same |
+| Resource   | Minimum         | Recommended      |
+|------------|-----------------|------------------|
+| CPU        | 2 vCPU          | 4 vCPU           |
+| RAM        | 4 GB            | 8 GB             |
+| Disk       | 30 GB SSD       | 60 GB SSD        |
+| OS         | Ubuntu 22.04 LTS| Ubuntu 22.04 LTS |
+| Open ports | 22, 80, 443     | same             |
 
-Providers that work well: Hetzner Cloud (CX21+), DigitalOcean (Droplet 2 GB+), Vultr, or any VPS with a public IP.
+Providers: Hetzner Cloud (CX21+), DigitalOcean (Droplet 4 GB+), Vultr.
 
 ---
 
@@ -41,23 +42,22 @@ Providers that work well: Hetzner Cloud (CX21+), DigitalOcean (Droplet 2 GB+), V
 Connect as root, then run:
 
 ```bash
-# Create a deployment user (never run production as root)
+# Create a non-root deployment user
 adduser deploy
 usermod -aG sudo deploy
-# Copy your SSH key to the new user
 rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy
 
-# Basic firewall — allow SSH, HTTP, HTTPS only
+# Firewall — SSH, HTTP, HTTPS only
 ufw allow OpenSSH
 ufw allow 80/tcp
 ufw allow 443/tcp
 ufw enable
 
-# Keep the system patched
+# Update packages
 apt update && apt upgrade -y
 apt install -y curl git unzip ca-certificates gnupg lsb-release
 
-# Switch to the deployment user for all further steps
+# Switch to deploy user for all further steps
 su - deploy
 ```
 
@@ -66,7 +66,6 @@ su - deploy
 ## 3. Install Docker and Docker Compose
 
 ```bash
-# Add Docker's official GPG key and repository
 sudo install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
   | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -81,87 +80,105 @@ echo \
 sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-# Allow the deploy user to run docker without sudo
 sudo usermod -aG docker deploy
-newgrp docker   # apply group without logout
+newgrp docker
 
 # Verify
-docker --version          # Docker 25+
-docker compose version    # Docker Compose v2.x
+docker --version           # Docker 25+
+docker compose version     # Docker Compose v2.x
 ```
 
 ---
 
 ## 4. Upload the application
 
-**Option A — Git (recommended if you have a private repo)**
+The compose file lives in `apps/backend/` and references the frontend at `../web`, so the entire monorepo must be present on the server.
+
+### Option A — Git (recommended)
 
 ```bash
-# On the server
 git clone https://github.com/your-org/fuel-dispenser.git /opt/azs
 cd /opt/azs/apps/backend
 ```
 
-**Option B — rsync from your local machine**
+### Option B — rsync from your local machine
+
+Run this from **your local machine** inside the monorepo root:
 
 ```bash
-# Run this from your local machine
-rsync -avz --exclude node_modules --exclude dist --exclude .git \
-  ./apps/backend/ deploy@YOUR_SERVER_IP:/opt/azs/backend/
+rsync -avz \
+  --exclude 'node_modules' \
+  --exclude '.next' \
+  --exclude 'dist' \
+  --exclude '.git' \
+  --exclude 'target' \
+  ./ deploy@YOUR_SERVER_IP:/opt/azs/
 ```
 
 Then on the server:
 
 ```bash
-cd /opt/azs/backend
+cd /opt/azs/apps/backend
 ```
 
-All remaining commands in this guide assume you are inside the `apps/backend/` directory.
+> All remaining commands assume you are inside `apps/backend/`.
+
+### Directory structure on the server
+
+```
+/opt/azs/
+├── apps/
+│   ├── backend/          ← docker-compose.yml lives here
+│   │   ├── docker-compose.yml
+│   │   ├── Dockerfile
+│   │   ├── nginx.conf
+│   │   ├── .env          ← created in step 5
+│   │   ├── ssl/          ← TLS certs (created in step 6)
+│   │   └── backups/
+│   └── web/              ← Next.js frontend
+│       └── Dockerfile
+└── ...
+```
 
 ---
 
 ## 5. Configure environment variables
 
 ```bash
-# Start from the example file
 cp .env.example .env
-nano .env   # or use vim
+nano .env
 ```
 
 ### Generate strong secrets
 
-Run this command **three times** to get three independent secrets (JWT_SECRET, JWT_REFRESH_SECRET, and one for POSTGRES_PASSWORD / REDIS_PASSWORD):
+Run three times to get three independent random values:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-### Required values to change
-
-Open `.env` and set every line that says `CHANGE_ME`:
+### Required values
 
 ```env
-# Database
+# ── Database ─────────────────────────────────────────────────────────────────
 POSTGRES_PASSWORD=<strong-random-password>
 DATABASE_URL=postgresql://azs:<strong-random-password>@postgres:5432/azs_manager?connection_limit=10&pool_timeout=30
 
-# Redis — password must be identical in both lines
+# ── Redis ─────────────────────────────────────────────────────────────────────
 REDIS_PASSWORD=<strong-random-password>
 REDIS_URL=redis://:<strong-random-password>@redis:6379
 
-# JWT — use two different secrets
+# ── JWT ───────────────────────────────────────────────────────────────────────
 JWT_SECRET=<64-char-hex>
 JWT_REFRESH_SECRET=<64-char-hex-different>
 
-# Your domain(s)
-CORS_ORIGINS=https://azs.yourdomain.com
+# ── CORS ──────────────────────────────────────────────────────────────────────
+CORS_ORIGINS=https://fuelstation.ung.uz
 
-# First admin account (used only on the very first start)
-SEED_ADMIN_EMAIL=admin@yourdomain.com
+# ── Seed admin (first start only) ────────────────────────────────────────────
+SEED_ADMIN_EMAIL=admin@fuelstation.ung.uz
 SEED_ADMIN_PASSWORD=<strong-password>
 ```
-
-### Lock down the file
 
 ```bash
 chmod 600 .env
@@ -169,171 +186,283 @@ chmod 600 .env
 
 ---
 
-## 6. Configure nginx for your domain
+## 6. Install the corporate TLS certificate
 
-Edit `nginx.conf` and replace `server_name _;` with your actual domain:
+nginx expects exactly two files inside `apps/backend/ssl/`:
 
-```bash
-sed -i 's/server_name _;/server_name azs.yourdomain.com;/' nginx.conf
-```
+| File | Contents |
+|------|----------|
+| `ssl/fullchain.pem` | Your domain certificate **followed by** the full CA intermediate chain, concatenated in order |
+| `ssl/privkey.pem` | The private key (never commit this file — it is in `.gitignore`) |
 
-At this point, keep the server listening on **port 80** (HTTP only). You will switch to HTTPS after obtaining the TLS certificate in the next step.
+The `ssl/` directory already exists in the repo (it contains only a `.gitkeep`). Copy your certificate files into it on the server after cloning.
 
 ---
 
-## 7. Obtain a TLS certificate
+### Format A — You received separate `.crt` / `.key` / `.ca-bundle` files
 
-We use Certbot with the standalone plugin so the certificate is fetched before nginx is running.
+This is the most common corporate delivery format:
 
 ```bash
-# Install Certbot
-sudo apt install -y certbot
+cd /opt/azs/apps/backend/ssl
 
-# Stop anything using port 80 first (nothing should be yet)
-# Request the certificate
-sudo certbot certonly --standalone \
-  -d azs.yourdomain.com \
-  --non-interactive \
-  --agree-tos \
-  --email admin@yourdomain.com
+# Concatenate: domain cert first, then the intermediate chain
+cat fuelstation_ung_uz.crt ca-bundle.crt > fullchain.pem
 
-# Certificates are written to:
-#   /etc/letsencrypt/live/azs.yourdomain.com/fullchain.pem
-#   /etc/letsencrypt/live/azs.yourdomain.com/privkey.pem
+# Copy the private key
+cp fuelstation_ung_uz.key privkey.pem
 
-# Make them readable by the deploy user's docker group
-sudo chmod 755 /etc/letsencrypt/live/
-sudo chmod 755 /etc/letsencrypt/archive/
+chmod 600 privkey.pem
 ```
 
-### Create the ssl/ directory and link the certs
+> If your CA gave you multiple intermediate files (e.g. `intermediate1.crt` and `root.crt`), chain them in order: `cat domain.crt intermediate1.crt root.crt > fullchain.pem`
+
+---
+
+### Format B — You received a `.pfx` or `.p12` bundle (common from Windows-based CAs)
 
 ```bash
-mkdir -p ssl
-sudo cp /etc/letsencrypt/live/azs.yourdomain.com/fullchain.pem ssl/fullchain.pem
-sudo cp /etc/letsencrypt/live/azs.yourdomain.com/privkey.pem   ssl/privkey.pem
-sudo chown deploy:deploy ssl/*.pem
-chmod 600 ssl/privkey.pem
-```
+cd /opt/azs/apps/backend/ssl
 
-### Enable HTTPS in nginx.conf
+# Install openssl if needed
+sudo apt install -y openssl
 
-Open `nginx.conf` and make these changes:
+# Replace YOUR_PFX_PASSWORD with the password the CA gave you
+# (leave it empty and just press Enter if there is no password)
 
-1. **Uncomment** the HTTP → HTTPS redirect block at the top of the `http {}` section:
-   ```nginx
-   server {
-       listen 80;
-       server_name azs.yourdomain.com;
-       return 301 https://$host$request_uri;
-   }
-   ```
+# Extract the domain certificate
+openssl pkcs12 -in certificate.pfx -clcerts -nokeys -out domain.crt \
+  -passin pass:YOUR_PFX_PASSWORD
 
-2. **Change** the main server block to listen on 443:
-   ```nginx
-   listen 443 ssl http2;
-   server_name azs.yourdomain.com;
-   ```
+# Extract the CA chain
+openssl pkcs12 -in certificate.pfx -cacerts -nokeys -chain -out chain.crt \
+  -passin pass:YOUR_PFX_PASSWORD
 
-3. **Uncomment** the SSL lines inside the server block:
-   ```nginx
-   ssl_certificate     /etc/nginx/ssl/fullchain.pem;
-   ssl_certificate_key /etc/nginx/ssl/privkey.pem;
-   ssl_protocols       TLSv1.2 TLSv1.3;
-   ...
-   add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
-   ```
+# Extract the private key (no passphrase on the output key)
+openssl pkcs12 -in certificate.pfx -nocerts -nodes -out privkey.pem \
+  -passin pass:YOUR_PFX_PASSWORD
 
-### Auto-renew certificate
+# Combine cert + chain into fullchain.pem
+cat domain.crt chain.crt > fullchain.pem
 
-```bash
-# Certbot installs a systemd timer automatically. Verify it:
-sudo systemctl status certbot.timer
+# Remove the intermediate files
+rm domain.crt chain.crt
 
-# Add a deploy hook to copy renewed certs and reload nginx
-sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
-sudo tee /etc/letsencrypt/renewal-hooks/deploy/azs.sh <<'EOF'
-#!/bin/sh
-cp /etc/letsencrypt/live/azs.yourdomain.com/fullchain.pem /opt/azs/backend/ssl/fullchain.pem
-cp /etc/letsencrypt/live/azs.yourdomain.com/privkey.pem   /opt/azs/backend/ssl/privkey.pem
-chmod 600 /opt/azs/backend/ssl/privkey.pem
-docker exec $(docker ps -qf name=azs_nginx) nginx -s reload
-EOF
-sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/azs.sh
+chmod 600 privkey.pem
 ```
 
 ---
 
-## 8. First start
+### Format C — You received a single `.pem` that already contains everything
+
+Some CAs deliver a single file that already contains the cert and full chain:
 
 ```bash
-cd /opt/azs/backend
+cd /opt/azs/apps/backend/ssl
+cp everything.pem fullchain.pem
+cp private.key    privkey.pem
+chmod 600 privkey.pem
+```
 
-# Build images and start all services in the background
+Verify it looks correct (should show at least 2 `CERTIFICATE` blocks):
+
+```bash
+grep -c "BEGIN CERTIFICATE" fullchain.pem
+# Expected: 2 or 3
+```
+
+---
+
+### Verify the certificate before starting
+
+```bash
+# Check the cert matches the private key (both MD5 hashes must be identical)
+openssl x509 -noout -modulus -in ssl/fullchain.pem | md5sum
+openssl rsa  -noout -modulus -in ssl/privkey.pem   | md5sum
+
+# Check the cert is valid for your domain
+openssl x509 -noout -subject -issuer -dates -in ssl/fullchain.pem
+
+# Expected output includes:
+#   subject= ... fuelstation.ung.uz
+#   notAfter= <future date>
+```
+
+If the two MD5 hashes differ, the key does not match the certificate — contact your CA.
+
+---
+
+### Certificate renewal
+
+Corporate certificates typically expire after 1 or 2 years. When you receive a renewed certificate, repeat the steps above to replace the files, then reload nginx — **no restart needed**:
+
+```bash
+docker compose exec nginx nginx -s reload
+```
+
+---
+
+## 7. First start
+
+```bash
+cd /opt/azs/apps/backend
+
+# Build all images and start every service
 docker compose up -d --build
 
-# Watch the startup logs (Ctrl-C to stop watching — services keep running)
+# Watch startup logs
 docker compose logs -f
 ```
 
 **Expected startup order:**
 
-1. `postgres` — TimescaleDB starts, health check passes (~10 s)
-2. `redis` — starts in ~2 s
-3. `backend` — waits for postgres, runs `prisma db push`, seeds admin user, starts NestJS (~30 s)
-4. `nginx` — proxies requests once backend is healthy
+| # | Service    | What happens                                              | Time     |
+|---|------------|-----------------------------------------------------------|----------|
+| 1 | `postgres`  | TimescaleDB init, health check passes                    | ~10 s    |
+| 2 | `redis`     | Starts with password                                     | ~2 s     |
+| 3 | `backend`   | Waits for postgres, runs `prisma db push`, seeds admin   | ~30 s    |
+| 4 | `frontend`  | Next.js standalone server starts                         | ~20 s    |
+| 5 | `nginx`     | Starts after backend and frontend are healthy            | ~2 s     |
 
-The first build downloads base images and compiles TypeScript — it takes **2–4 minutes**. Subsequent builds are much faster due to Docker layer caching.
+The first build pulls base images and compiles TypeScript + Next.js — allow **3–6 minutes**.
 
 ---
 
-## 9. Verify everything is running
-
-### Check container status
+## 8. Verify everything is running
 
 ```bash
 docker compose ps
 ```
 
-All four services should show `healthy` or `running`:
+Expected output:
 
 ```
-NAME              STATUS
-azs_nginx         running (healthy)
-azs_backend       running (healthy)
-azs_postgres      running (healthy)
-azs_redis         running (healthy)
+NAME                STATUS
+azs_nginx           running (healthy)
+azs_frontend        running (healthy)
+azs_backend         running (healthy)
+azs_postgres        running (healthy)
+azs_redis           running (healthy)
 ```
 
-### Health check
+### API health check
 
 ```bash
-curl -s https://azs.yourdomain.com/api/health | python3 -m json.tool
+curl -s https://fuelstation.ung.uz/api/health | python3 -m json.tool
 ```
-
-Expected response:
 
 ```json
-{
-  "status": "ok",
-  "info": { "database": { "status": "up" } }
-}
+{ "status": "ok", "info": { "database": { "status": "up" } } }
 ```
 
-### Test login
+### Frontend
+
+Open `https://fuelstation.ung.uz` in a browser — you should see the login page.
+
+### Test login via API
 
 ```bash
-curl -s -X POST https://azs.yourdomain.com/api/v1/auth/login \
+curl -s -X POST https://fuelstation.ung.uz/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@yourdomain.com","password":"YOUR_SEED_PASSWORD"}' \
+  -d '{"email":"admin@fuelstation.ung.uz","password":"YOUR_SEED_PASSWORD"}' \
   | python3 -m json.tool
 ```
 
-You should receive an `accessToken` in the response.
+You should receive an `accessToken`.
 
-### Verify TLS rating (optional)
+### TLS rating (optional)
 
-Visit `https://www.ssllabs.com/ssltest/analyze.html?d=azs.yourdomain.com` — you should get **A** or **A+**.
+Visit `https://www.ssllabs.com/ssltest/analyze.html?d=fuelstation.ung.uz` — expect **A** or **A+**.
+
+---
+
+## 9. Continuous deployment (GitHub Actions)
+
+The workflow at `.github/workflows/deploy.yml` automatically deploys to the server on every push to `main` that touches `apps/backend/**` or `apps/web/**`. It detects which services changed and rebuilds only those — postgres and redis are never restarted.
+
+### How it works
+
+```
+push to main
+    │
+    ├─ apps/backend/** changed? → rebuild backend
+    ├─ apps/web/**     changed? → rebuild frontend
+    └─ neither changed          → skip deploy
+```
+
+After rebuilding, the workflow waits for all containers to report `healthy`, then hits `/api/health`. If anything fails it posts a Telegram message and marks the run red.
+
+You can also trigger a deploy manually from the GitHub UI (Actions → Deploy to Production → Run workflow) and optionally specify which services to rebuild.
+
+### 1 — Create a deploy SSH key
+
+Run this **on the server** as the `deploy` user:
+
+```bash
+ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/github_deploy -N ""
+# Authorise the key for login
+cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+# Print the private key — you will paste this into GitHub
+cat ~/.ssh/github_deploy
+```
+
+### 2 — Add GitHub repository secrets
+
+Go to **Settings → Secrets and variables → Actions → New repository secret** and add:
+
+| Secret name          | Value                                      |
+|----------------------|--------------------------------------------|
+| `DEPLOY_HOST`        | Your server IP or hostname                 |
+| `DEPLOY_USER`        | `deploy`                                   |
+| `DEPLOY_SSH_KEY`     | Contents of `~/.ssh/github_deploy` (private key) |
+| `DEPLOY_PORT`        | `22` (or your custom SSH port)             |
+| `TELEGRAM_BOT_TOKEN` | Your bot token (optional — failure alerts) |
+| `TELEGRAM_CHAT_ID`   | Chat/group ID to receive alerts (optional) |
+
+### 3 — Allow deploy user to run git pull without a passphrase
+
+The server must be able to pull from the private GitHub repo. The simplest way is a **deploy key**:
+
+```bash
+# On the server — generate a separate read-only deploy key for git
+ssh-keygen -t ed25519 -C "server-git-pull" -f ~/.ssh/git_deploy -N ""
+cat ~/.ssh/git_deploy.pub
+```
+
+Add the public key to GitHub: **repo → Settings → Deploy keys → Add deploy key** (read-only, no write access).
+
+Then configure git on the server to use it:
+
+```bash
+# ~/.ssh/config
+cat >> ~/.ssh/config <<'EOF'
+Host github.com
+  IdentityFile ~/.ssh/git_deploy
+  StrictHostKeyChecking accept-new
+EOF
+chmod 600 ~/.ssh/config
+
+# Test
+ssh -T git@github.com
+```
+
+Finally, make sure the repo was cloned via SSH (not HTTPS):
+
+```bash
+cd /opt/azs
+git remote set-url origin git@github.com:your-org/fuel-dispenser.git
+```
+
+### 4 — Verify the first automated deploy
+
+Push any change to `main` that touches `apps/backend/` or `apps/web/`, then watch:
+
+```
+GitHub → Actions → Deploy to Production → latest run
+```
+
+The run should complete in 3–6 minutes on a cold cache. Subsequent deploys are faster due to Docker layer caching.
 
 ---
 
@@ -342,33 +471,24 @@ Visit `https://www.ssllabs.com/ssltest/analyze.html?d=azs.yourdomain.com` — yo
 ### View logs
 
 ```bash
-# All services, live
-docker compose logs -f
-
-# One service only
-docker compose logs -f backend
-docker compose logs -f nginx
-
-# Last 100 lines of backend
-docker compose logs --tail=100 backend
+docker compose logs -f                      # all services, live
+docker compose logs -f backend              # backend only
+docker compose logs -f frontend             # frontend only
+docker compose logs --tail=100 backend      # last 100 lines
 ```
 
 ### Restart a service
 
 ```bash
 docker compose restart backend
+docker compose restart frontend
 docker compose restart nginx
 ```
 
-### Stop everything
+### Stop / start everything
 
 ```bash
 docker compose down
-```
-
-### Start everything
-
-```bash
 docker compose up -d
 ```
 
@@ -384,73 +504,81 @@ docker compose exec postgres psql -U azs -d azs_manager
 docker compose exec redis redis-cli -a "$REDIS_PASSWORD"
 ```
 
-### Run a one-off backend command
+### Prisma Studio (web DB UI)
 
 ```bash
-# Prisma Studio (web UI for the database) — bind to localhost only
 docker compose exec backend npx prisma studio --port 5555
-# Then ssh-tunnel: ssh -L 5555:localhost:5555 deploy@YOUR_SERVER_IP
+# SSH tunnel from your machine:
+ssh -L 5555:localhost:5555 deploy@YOUR_SERVER_IP
+# Then open http://localhost:5555
 ```
 
 ---
 
 ## 11. Updating the application
 
+### Backend only
+
 ```bash
-cd /opt/azs/backend
-
-# Pull latest code (if using git)
+cd /opt/azs/apps/backend
 git -C /opt/azs pull
-
-# Rebuild and restart with zero downtime for nginx/redis/postgres
 docker compose up -d --build backend
-
-# Watch the rolling restart
 docker compose logs -f backend
 ```
 
-The `postgres` and `redis` containers are untouched during application updates — no data is lost.
+### Frontend only
 
-If the Prisma schema changed, `entrypoint.sh` runs `prisma db push` automatically on startup, applying new tables/columns without dropping existing data.
+```bash
+cd /opt/azs/apps/backend
+git -C /opt/azs pull
+docker compose up -d --build frontend
+docker compose logs -f frontend
+```
+
+### Full stack
+
+```bash
+cd /opt/azs/apps/backend
+git -C /opt/azs pull
+docker compose up -d --build
+```
+
+`postgres` and `redis` are untouched — no data is lost. Prisma migrations run automatically on backend startup.
 
 ---
 
 ## 12. Backup and restore
 
-### Manual database backup
+### Manual backup
 
 ```bash
-# Creates a compressed SQL dump in ./backups/
-docker compose exec postgres \
+mkdir -p backups
+docker compose exec -T postgres \
   pg_dump -U azs azs_manager \
   | gzip > backups/azs_$(date +%Y%m%d_%H%M%S).sql.gz
-
-# List backups
-ls -lh backups/
 ```
 
 ### Automated daily backup (cron)
 
-Add to the `deploy` user's crontab (`crontab -e`):
+```bash
+crontab -e
+```
+
+Add:
 
 ```cron
-0 2 * * * cd /opt/azs/backend && docker compose exec -T postgres \
+0 2 * * * cd /opt/azs/apps/backend && docker compose exec -T postgres \
   pg_dump -U azs azs_manager | gzip \
   > backups/azs_$(date +\%Y\%m\%d).sql.gz 2>> /var/log/azs-backup.log
 ```
 
-### Restore from backup
+### Restore
 
 ```bash
-# Stop the backend so no writes happen during restore
-docker compose stop backend
-
-# Restore
+docker compose stop backend frontend
 gunzip -c backups/azs_20240601_020000.sql.gz \
   | docker compose exec -T postgres psql -U azs -d azs_manager
-
-# Restart
-docker compose start backend
+docker compose start backend frontend
 ```
 
 ---
@@ -464,60 +592,55 @@ docker compose logs backend | tail -50
 ```
 
 Common causes:
-- **`DATABASE_URL` wrong** — check that the password matches `POSTGRES_PASSWORD`
-- **`REDIS_URL` wrong** — check that the password matches `REDIS_PASSWORD`
-- **`JWT_SECRET` too short** — must be at least 32 characters
-- **Port 4000 already in use** — check with `ss -tlnp | grep 4000`
+- `DATABASE_URL` password doesn't match `POSTGRES_PASSWORD`
+- `REDIS_URL` password doesn't match `REDIS_PASSWORD`
+- `JWT_SECRET` shorter than 32 characters
+- Port 4000 in use: `ss -tlnp | grep 4000`
 
-### nginx returns 502 Bad Gateway
-
-The backend container is not ready yet. Wait 30 seconds and try again.
+### Frontend won't start
 
 ```bash
-# Check if backend is healthy
-docker compose ps backend
-docker compose logs backend | grep "running on port"
+docker compose logs frontend | tail -50
 ```
 
-### Cannot connect to WebSocket
+- `NEXT_PUBLIC_API_URL` not set → API calls will fail at runtime
+- Missing `public/` directory in the build context
 
-1. Confirm the `CORS_ORIGINS` in `.env` includes the exact origin the browser is using (including `https://` and no trailing slash).
-2. Confirm nginx config has the `/dashboard` location block with `proxy_set_header Upgrade $http_upgrade;`.
-3. Check browser developer tools → Network → WS tab for the connection error.
+### nginx 502 Bad Gateway
+
+Backend or frontend isn't ready yet. Wait 30 s and check:
+
+```bash
+docker compose ps
+docker compose logs backend | grep "running on port"
+docker compose logs frontend | grep "ready"
+```
+
+### WebSocket not connecting
+
+1. `CORS_ORIGINS` in `.env` must be exactly `https://fuelstation.ung.uz` (no trailing slash).
+2. nginx `/dashboard` block must have `proxy_set_header Upgrade $http_upgrade;`.
+3. Browser DevTools → Network → WS tab for the error.
 
 ### Database connection pool exhausted
-
-Increase `connection_limit` in `DATABASE_URL`:
 
 ```env
 DATABASE_URL=postgresql://azs:pass@postgres:5432/azs_manager?connection_limit=20&pool_timeout=30
 ```
 
-Also check for queries taking unusually long:
-
-```bash
-docker compose exec postgres psql -U azs -d azs_manager \
-  -c "SELECT pid, now() - pg_stat_activity.query_start AS duration, query
-      FROM pg_stat_activity
-      WHERE state = 'active' AND now() - query_start > interval '5 seconds'
-      ORDER BY duration DESC;"
-```
-
 ### TLS certificate expired
 
 ```bash
-sudo certbot renew --dry-run   # test first
-sudo certbot renew             # renew
+sudo certbot renew --dry-run
+sudo certbot renew
 ```
 
-The deploy hook copies the new cert and reloads nginx automatically.
-
-### Check disk space
+### Disk space
 
 ```bash
 df -h
-docker system df          # see Docker space usage
-docker system prune -f    # remove unused images/containers (safe; data volumes are untouched)
+docker system df
+docker system prune -f    # removes unused images/containers; volumes are safe
 ```
 
 ---
@@ -525,30 +648,32 @@ docker system prune -f    # remove unused images/containers (safe; data volumes 
 ## Quick-reference cheatsheet
 
 ```bash
-# Start
-docker compose up -d --build
+# ── Start / stop ────────────────────────────────────────────────────────────
+docker compose up -d --build     # build + start all
+docker compose down              # stop all (data volumes preserved)
 
-# Stop
-docker compose down
-
-# Restart app only
+# ── Restart individual services ──────────────────────────────────────────────
 docker compose restart backend
+docker compose restart frontend
+docker compose restart nginx
 
-# Live logs
+# ── Logs ─────────────────────────────────────────────────────────────────────
 docker compose logs -f
+docker compose logs -f backend
+docker compose logs -f frontend
 
-# Health check
-curl https://azs.yourdomain.com/api/health
+# ── Health ────────────────────────────────────────────────────────────────────
+curl https://fuelstation.ung.uz/api/health
 
-# Database shell
+# ── Database ──────────────────────────────────────────────────────────────────
 docker compose exec postgres psql -U azs -d azs_manager
 
-# Manual backup
+# ── Backup ────────────────────────────────────────────────────────────────────
 docker compose exec -T postgres pg_dump -U azs azs_manager | gzip > backups/manual.sql.gz
 
-# Renew TLS
-sudo certbot renew
+# ── Deploy update ─────────────────────────────────────────────────────────────
+git -C /opt/azs pull && docker compose up -d --build
 
-# Pull + redeploy
-git -C /opt/azs pull && docker compose up -d --build backend
+# ── Renew TLS ─────────────────────────────────────────────────────────────────
+sudo certbot renew
 ```

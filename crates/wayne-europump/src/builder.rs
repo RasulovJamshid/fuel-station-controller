@@ -71,7 +71,12 @@ pub fn encode_price(price_sum_per_litre: u32) -> [u8; 2] {
 /// Examples: 14300 → `[0x01, 0x43, 0x00]` (display "4300", internal 14300),
 ///           10500 → `[0x01, 0x05, 0x00]` (display "0500", internal 10500),
 ///           9200  → `[0x00, 0x92, 0x00]` (display "9200", internal 9200).
-pub fn authorize_config(addr: u8, product_codes: &[u8], prices: &[u32], limit_bcd: [u8; 3]) -> Vec<u8> {
+pub fn authorize_config(
+    addr: u8,
+    product_codes: &[u8],
+    prices: &[u32],
+    limit_bcd: [u8; 3],
+) -> Vec<u8> {
     let n = product_codes.len().clamp(1, 4);
 
     let mut payload = vec![addr, 0x30];
@@ -111,6 +116,8 @@ pub fn authorize_config(addr: u8, product_codes: &[u8], prices: &[u32], limit_bc
 ///
 /// Amount presets are converted to a volume limit using `price_per_liter` (sum per litre,
 /// same unit as on the wire). The pump expects litres × 100 in BCD, not raw sum.
+/// Use ceiling so money presets do not stop below the requested amount when the target
+/// cannot be represented exactly in 0.01 L steps.
 pub fn encode_preset_limit_bcd(
     full_tank: bool,
     volume_liters: Option<f64>,
@@ -124,10 +131,12 @@ pub fn encode_preset_limit_bcd(
         // Sniffer: 10.0 L → `00 10 00` (liters × 100).
         return encode_bcd_3((l * 100.0).round() as u32);
     }
-    if let (Some(a), Some(price)) = (amount_sum.filter(|&v| v > 0), price_per_liter.filter(|&p| p > 0))
-    {
+    if let (Some(a), Some(price)) = (
+        amount_sum.filter(|&v| v > 0),
+        price_per_liter.filter(|&p| p > 0),
+    ) {
         let liters = a as f64 / price as f64;
-        return encode_bcd_3((liters * 100.0).round().min(999_999.0) as u32);
+        return encode_bcd_3((liters * 100.0).ceil().min(999_999.0) as u32);
     }
     [0x09, 0x99, 0x00]
 }
@@ -178,7 +187,7 @@ mod tests {
         assert_eq!(encode_price(14300), [0x43, 0x00]);
         assert_eq!(encode_price(10500), [0x05, 0x00]);
         assert_eq!(encode_price(15000), [0x50, 0x00]);
-        assert_eq!(encode_price(9200),  [0x92, 0x00]);
+        assert_eq!(encode_price(9200), [0x92, 0x00]);
         assert_eq!(encode_price(12400), [0x24, 0x00]);
     }
 
@@ -192,9 +201,12 @@ mod tests {
         );
         assert!(frame.starts_with(&[0x52, 0x30, 0x01, 0x01, 0x05]));
         // Block 1: [01 PP flag] × 4
-        assert!(frame
-            .windows(12)
-            .any(|w| w == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00, 0x01, 0x24, 0x00, 0x01, 0x43, 0x30]));
+        assert!(
+            frame
+                .windows(12)
+                .any(|w| w
+                    == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00, 0x01, 0x24, 0x00, 0x01, 0x43, 0x30])
+        );
         // Block 2: 3-byte BCD prices — 14300=[01 43 00], 10500=[01 05 00], 9200=[00 92 00]
         assert!(frame
             .windows(6)
@@ -217,9 +229,12 @@ mod tests {
             [0x09, 0x99, 0x00],
         );
         // Block 1 unchanged
-        assert!(frame
-            .windows(12)
-            .any(|w| w == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00, 0x01, 0x24, 0x00, 0x01, 0x05, 0x30]));
+        assert!(
+            frame
+                .windows(12)
+                .any(|w| w
+                    == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00, 0x01, 0x24, 0x00, 0x01, 0x05, 0x30])
+        );
         // Block 2: 3-byte BCD prices — 14300=[01 43 00], 10500=[01 05 00], 12400=[01 24 00]
         assert!(frame
             .windows(6)
@@ -241,6 +256,20 @@ mod tests {
         assert!(frame
             .windows(6)
             .any(|w| w == [0x03, 0x04, 0x00, 0x00, 0x01, 0x00]));
+    }
+
+    #[test]
+    fn config_amount_preset_rounds_up_to_avoid_underfill() {
+        // 100_000 sum at 10_500 sum/L is 9.5238 L; send 9.53 L, not 9.52 L.
+        let frame = authorize_config(
+            0x53,
+            &[0x05],
+            &[10_500],
+            encode_preset_limit_bcd(false, None, Some(100_000), Some(10_500)),
+        );
+        assert!(frame
+            .windows(6)
+            .any(|w| w == [0x03, 0x04, 0x00, 0x00, 0x09, 0x53]));
     }
 
     #[test]

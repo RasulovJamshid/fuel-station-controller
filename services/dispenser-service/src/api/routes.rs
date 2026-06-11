@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
+use atg::TankLevels;
 use axum::extract::ws::WebSocketUpgrade;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -18,18 +19,17 @@ use tower_http::trace::TraceLayer;
 use types::{
     AuthorizeCmd, CloseStoppedTxCmd, ContinueFillCmd, CreateOperatorCmd, EndShiftCmd, FpSnapshot,
     FpState, FpStatus, HandoverCmd, NozzleSnapshot, Operator, Preset, ProductSnapshot,
-    ResumeFillCmd, Shift, ShiftSlot, SiteSnapshot, StartShiftCmd, StopCmd, StopSource, TankSnapshot,
-    Transaction, TxStatus, TxSummary, UpdateAllPricesCmd, WsEvent,
+    ResumeFillCmd, Shift, ShiftSlot, SiteSnapshot, StartShiftCmd, StopCmd, StopSource,
+    TankSnapshot, Transaction, TxStatus, TxSummary, UpdateAllPricesCmd, WsEvent,
 };
-use atg::TankLevels;
 
 use crate::admin::AdminSessions;
 use crate::api::admin;
 use crate::api::ws::ws_upgrade;
 use crate::db::{queries, shift_queries};
 use crate::engine::{DispatchCommand, RuntimeFp};
-use crate::sync::SharedSyncStatus;
 use crate::shifts::ShiftCoordinator;
+use crate::sync::SharedSyncStatus;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -79,7 +79,10 @@ pub fn router(state: AppState) -> Router {
         .route("/operators", get(list_operators).post(create_operator))
         .route("/sync/status", get(get_sync_status))
         .route("/admin/sync-config", post(update_sync_config))
-        .route("/admin/atg-config", get(get_atg_config).post(update_atg_config))
+        .route(
+            "/admin/atg-config",
+            get(get_atg_config).post(update_atg_config),
+        )
         .route("/admin/atg-discover", get(atg_discover))
         .route("/ws", get(ws_handler))
         .merge(admin::router())
@@ -331,7 +334,10 @@ async fn dispatch_resume_or_continue(
             preset,
         },
         StopSource::AppFinal => {
-            return Err((StatusCode::BAD_REQUEST, "stop-mode fills cannot be resumed".into()));
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "stop-mode fills cannot be resumed".into(),
+            ));
         }
         StopSource::External => DispatchCommand::ContinueFill {
             byte,
@@ -552,25 +558,6 @@ pub async fn authorize(
     Json(cmd): Json<AuthorizeCmd>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let fp = fp_config(&st, &cmd.fp_id).await?;
-    let nozzle_index = cmd
-        .nozzle_index
-        .or_else(|| fp.active_nozzles().first().map(|n| n.index))
-        .ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                "no active nozzle for position".into(),
-            )
-        })?;
-    if !fp
-        .nozzles
-        .iter()
-        .any(|n| n.index == nozzle_index && n.active)
-    {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            format!("nozzle {} not active on {}", nozzle_index, cmd.fp_id),
-        ));
-    }
     validate_preset(&cmd.preset)?;
     if let Some(p) = cmd.price_override {
         if p == 0 {
@@ -582,27 +569,49 @@ pub async fn authorize(
     }
     let byte = fp.address_byte;
     let map = st.runtimes.read().await;
-    if map.get(&byte).is_some_and(|r| r.stopped_context.is_some()) {
+    let Some(rt) = map.get(&byte) else {
+        return Err((StatusCode::BAD_REQUEST, "lane offline".into()));
+    };
+    if rt.stopped_context.is_some() {
         return Err((
             StatusCode::BAD_REQUEST,
             "sale is paused — use Resume fill or Continue fill with the original transaction, not a new authorization".into(),
         ));
     }
-    let is_nozzle_up = map
-        .get(&byte)
-        .is_some_and(|r| matches!(r.state.status, FpStatus::NozzleUp));
-    if !is_nozzle_up {
+    let lifted_nozzle = if matches!(rt.state.status, FpStatus::NozzleUp) {
+        rt.state.nozzle_index
+    } else {
+        None
+    };
+    let Some(lifted_nozzle) = lifted_nozzle else {
         return Err((
             StatusCode::BAD_REQUEST,
             "reactive authorize requires NOZZLE_UP (lift nozzle first)".into(),
         ));
+    };
+    let nozzle_index = cmd.nozzle_index.unwrap_or(lifted_nozzle);
+    if nozzle_index != lifted_nozzle {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "requested nozzle {} but lifted nozzle is {}",
+                nozzle_index, lifted_nozzle
+            ),
+        ));
+    }
+    if !fp
+        .nozzles
+        .iter()
+        .any(|n| n.index == nozzle_index && n.active)
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("nozzle {} not active on {}", nozzle_index, cmd.fp_id),
+        ));
     }
     let price = cmd
         .price_override
-        .or_else(|| {
-            map.get(&byte)
-                .and_then(|r| r.nozzle_prices.get(&nozzle_index).copied())
-        })
+        .or_else(|| rt.nozzle_prices.get(&nozzle_index).copied())
         .or_else(|| price_from_cfg(&st, byte, nozzle_index))
         .ok_or_else(|| {
             (
@@ -634,25 +643,6 @@ pub async fn preauthorize(
         ));
     }
     let fp = fp_config(&st, &fp_id).await?;
-    let nozzle_index = cmd
-        .nozzle_index
-        .or_else(|| fp.active_nozzles().first().map(|n| n.index))
-        .ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                "no active nozzle for position".into(),
-            )
-        })?;
-    if !fp
-        .nozzles
-        .iter()
-        .any(|n| n.index == nozzle_index && n.active)
-    {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            format!("nozzle {} not active on {}", nozzle_index, fp_id),
-        ));
-    }
     validate_preset(&cmd.preset)?;
     if let Some(p) = cmd.price_override {
         if p == 0 {
@@ -663,23 +653,70 @@ pub async fn preauthorize(
         }
     }
     let byte = fp.address_byte;
-    {
+    let (nozzle_index, route_as_reactive) = {
         let map = st.runtimes.read().await;
-        if map.get(&byte).is_some_and(|r| r.stopped_context.is_some()) {
+        let Some(rt) = map.get(&byte) else {
+            return Err((StatusCode::BAD_REQUEST, "lane offline".into()));
+        };
+        if rt.stopped_context.is_some() {
             return Err((
                 StatusCode::BAD_REQUEST,
                 "sale is paused — use Resume fill or Continue fill, not a new pre-authorization"
                     .into(),
             ));
         }
-        let preauth_ok = map.get(&byte).is_some_and(|r| matches!(r.state.status, FpStatus::Idle));
-        if !preauth_ok {
+        let lifted_nozzle = if matches!(rt.state.status, FpStatus::NozzleUp) {
+            rt.state.nozzle_index
+        } else {
+            None
+        };
+        let nozzle_index = if lifted_nozzle.is_some() {
+            cmd.nozzle_index.ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "nozzle was lifted while pre-authorizing; selected nozzle is required".into(),
+                )
+            })?
+        } else {
+            cmd.nozzle_index
+                .or_else(|| fp.active_nozzles().first().map(|n| n.index))
+                .ok_or_else(|| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        "no active nozzle for position".into(),
+                    )
+                })?
+        };
+        if !fp
+            .nozzles
+            .iter()
+            .any(|n| n.index == nozzle_index && n.active)
+        {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("nozzle {} not active on {}", nozzle_index, fp_id),
+            ));
+        }
+        if let Some(lifted_nozzle) = lifted_nozzle {
+            if nozzle_index != lifted_nozzle {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "pre-authorize requested nozzle {} but lifted nozzle is {}",
+                        nozzle_index, lifted_nozzle
+                    ),
+                ));
+            }
+            (nozzle_index, true)
+        } else if matches!(rt.state.status, FpStatus::Idle) {
+            (nozzle_index, false)
+        } else {
             return Err((
                 StatusCode::BAD_REQUEST,
                 "pre-authorize requires IDLE — nozzle must be holstered before authorizing".into(),
             ));
         }
-    }
+    };
     let price = {
         let map = st.runtimes.read().await;
         cmd.price_override
@@ -695,13 +732,22 @@ pub async fn preauthorize(
                 )
             })?
     };
-    st.commands
-        .send(DispatchCommand::Preauthorize {
+    let command = if route_as_reactive {
+        DispatchCommand::Authorize {
+            byte,
+            price,
+            preset: cmd.preset.clone(),
+        }
+    } else {
+        DispatchCommand::Preauthorize {
             byte,
             price,
             preset: cmd.preset.clone(),
             nozzle_index,
-        })
+        }
+    };
+    st.commands
+        .send(command)
         .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
     Ok(Json(serde_json::json!({ "ok": true })))
@@ -934,21 +980,19 @@ pub async fn get_transaction(
 
 // ── Sync status + config endpoints ───────────────────────────────────────────
 
-pub async fn get_sync_status(
-    State(st): State<AppState>,
-) -> Json<crate::sync::SyncStatus> {
+pub async fn get_sync_status(State(st): State<AppState>) -> Json<crate::sync::SyncStatus> {
     Json(st.sync_status.lock().await.clone())
 }
 
 #[derive(serde::Deserialize)]
 pub struct UpdateSyncConfigBody {
-    pub enabled:                    Option<bool>,
-    pub backend_url:                Option<String>,
-    pub api_key:                    Option<String>,
-    pub retry_interval_secs:        Option<u64>,
-    pub batch_size:                 Option<usize>,
-    pub max_retries:                Option<u32>,
-    pub price_pull_interval_hours:  Option<u64>,
+    pub enabled: Option<bool>,
+    pub backend_url: Option<String>,
+    pub api_key: Option<String>,
+    pub retry_interval_secs: Option<u64>,
+    pub batch_size: Option<usize>,
+    pub max_retries: Option<u32>,
+    pub price_pull_interval_hours: Option<u64>,
 }
 
 pub async fn update_sync_config(
@@ -957,13 +1001,27 @@ pub async fn update_sync_config(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     {
         let mut cfg = st.cfg.write().await;
-        if let Some(v) = body.enabled                   { cfg.sync.enabled                   = v; }
-        if let Some(v) = body.backend_url               { cfg.sync.backend_url               = v; }
-        if let Some(v) = body.api_key                   { cfg.sync.api_key                   = v; }
-        if let Some(v) = body.retry_interval_secs       { cfg.sync.retry_interval_secs       = v; }
-        if let Some(v) = body.batch_size                { cfg.sync.batch_size                = v; }
-        if let Some(v) = body.max_retries               { cfg.sync.max_retries               = v; }
-        if let Some(v) = body.price_pull_interval_hours { cfg.sync.price_pull_interval_hours = v; }
+        if let Some(v) = body.enabled {
+            cfg.sync.enabled = v;
+        }
+        if let Some(v) = body.backend_url {
+            cfg.sync.backend_url = v;
+        }
+        if let Some(v) = body.api_key {
+            cfg.sync.api_key = v;
+        }
+        if let Some(v) = body.retry_interval_secs {
+            cfg.sync.retry_interval_secs = v;
+        }
+        if let Some(v) = body.batch_size {
+            cfg.sync.batch_size = v;
+        }
+        if let Some(v) = body.max_retries {
+            cfg.sync.max_retries = v;
+        }
+        if let Some(v) = body.price_pull_interval_hours {
+            cfg.sync.price_pull_interval_hours = v;
+        }
 
         crate::config::save(&cfg, &st.config_path)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -1004,9 +1062,7 @@ struct AtgConfigSnapshot {
     branches: Vec<AtgBranchInfo>,
 }
 
-async fn get_atg_config(
-    State(st): State<AppState>,
-) -> Json<AtgConfigSnapshot> {
+async fn get_atg_config(State(st): State<AppState>) -> Json<AtgConfigSnapshot> {
     let cfg = st.cfg.read().await;
     match &cfg.atg {
         None => Json(AtgConfigSnapshot {
@@ -1021,28 +1077,36 @@ async fn get_atg_config(
             poll_interval_secs: atg.poll_interval_secs,
             modbus_timeout_secs: atg.modbus_timeout_secs,
             api_url: atg.api_url.clone(),
-            branches: atg.branches.iter().map(|b| AtgBranchInfo {
-                id: b.id,
-                name: b.name.clone(),
-                host: b.host.clone(),
-                port: b.port,
-                slots: b.slots.iter().map(|s| AtgSlotInfo {
-                    slot: s.slot,
-                    fuel_type: s.fuel_type.clone(),
-                    product_id: s.product_id,
-                    label: s.label.clone(),
-                    capacity_l: s.capacity_l,
-                }).collect(),
-            }).collect(),
+            branches: atg
+                .branches
+                .iter()
+                .map(|b| AtgBranchInfo {
+                    id: b.id,
+                    name: b.name.clone(),
+                    host: b.host.clone(),
+                    port: b.port,
+                    slots: b
+                        .slots
+                        .iter()
+                        .map(|s| AtgSlotInfo {
+                            slot: s.slot,
+                            fuel_type: s.fuel_type.clone(),
+                            product_id: s.product_id,
+                            label: s.label.clone(),
+                            capacity_l: s.capacity_l,
+                        })
+                        .collect(),
+                })
+                .collect(),
         }),
     }
 }
 
 #[derive(serde::Deserialize)]
 pub struct UpdateAtgConfigBody {
-    pub poll_interval_secs:   Option<u64>,
-    pub modbus_timeout_secs:  Option<f64>,
-    pub api_url:              Option<String>,
+    pub poll_interval_secs: Option<u64>,
+    pub modbus_timeout_secs: Option<f64>,
+    pub api_url: Option<String>,
 }
 
 async fn update_atg_config(
@@ -1052,9 +1116,15 @@ async fn update_atg_config(
     {
         let mut cfg = st.cfg.write().await;
         if let Some(ref mut atg) = cfg.atg {
-            if let Some(v) = body.poll_interval_secs  { atg.poll_interval_secs  = v; }
-            if let Some(v) = body.modbus_timeout_secs { atg.modbus_timeout_secs = v; }
-            if let Some(v) = body.api_url             { atg.api_url             = v; }
+            if let Some(v) = body.poll_interval_secs {
+                atg.poll_interval_secs = v;
+            }
+            if let Some(v) = body.modbus_timeout_secs {
+                atg.modbus_timeout_secs = v;
+            }
+            if let Some(v) = body.api_url {
+                atg.api_url = v;
+            }
         }
         crate::config::save(&cfg, &st.config_path)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -1074,8 +1144,12 @@ struct DiscoverQuery {
     timeout_ms: u64,
 }
 
-fn default_discover_port() -> u16 { 6400 }
-fn default_discover_timeout_ms() -> u64 { 600 }
+fn default_discover_port() -> u16 {
+    6400
+}
+fn default_discover_timeout_ms() -> u64 {
+    600
+}
 
 fn local_ipv4() -> Option<std::net::Ipv4Addr> {
     let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
@@ -1096,8 +1170,12 @@ struct DiscoverResult {
 async fn atg_discover(
     Query(params): Query<DiscoverQuery>,
 ) -> Result<Json<DiscoverResult>, (StatusCode, String)> {
-    let local = local_ipv4()
-        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "cannot determine local IP".into()))?;
+    let local = local_ipv4().ok_or_else(|| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "cannot determine local IP".into(),
+        )
+    })?;
 
     let octets = local.octets();
     let subnet = format!("{}.{}.{}", octets[0], octets[1], octets[2]);
@@ -1124,5 +1202,9 @@ async fn atg_discover(
     }
     found.sort();
 
-    Ok(Json(DiscoverResult { subnet, port, found }))
+    Ok(Json(DiscoverResult {
+        subnet,
+        port,
+        found,
+    }))
 }

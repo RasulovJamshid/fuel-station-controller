@@ -111,7 +111,11 @@ fn find_fill_data_offset(inner: &[u8]) -> Option<(usize, bool)> {
 }
 
 /// Hose status from `03 04 01 PP 00 HH` / `03 04 00 PP 00 HH`, or holster derived from CONFIG echo before `02 08`.
-fn embedded_hose_from_fill(inner: &[u8], off: usize, config_echo: bool) -> (Option<u8>, Option<u8>) {
+fn embedded_hose_from_fill(
+    inner: &[u8],
+    off: usize,
+    config_echo: bool,
+) -> (Option<u8>, Option<u8>) {
     if let Some((p, h)) = scan_embedded_hose_status(inner) {
         return (Some(p), Some(h));
     }
@@ -132,10 +136,9 @@ fn parse_fill_data_block(inner: &[u8]) -> Option<FillDataFields> {
     if inner.len() < off + 10 {
         return None;
     }
-    let sale_complete = inner.len() >= off + 15
-        && inner[inner.len() - 3] == 0x01
-        && inner[inner.len() - 2] == 0x01
-        && inner[inner.len() - 1] == 0x01;
+    let sale_complete = inner[off + 10..]
+        .windows(3)
+        .any(|w| w[0] == 0x01 && w[1] == 0x01 && matches!(w[2], 0x01 | 0x05 | 0x06));
     let (hose_product, hose_code) = embedded_hose_from_fill(inner, off, config_echo);
     Some(FillDataFields {
         volume_x1: inner[off + 2],
@@ -160,21 +163,27 @@ pub fn scan_embedded_hose_status(body: &[u8]) -> Option<(u8, u8)> {
     if body.len() < 6 {
         return None;
     }
+    let mut found = None;
     for i in 0..=body.len() - 6 {
         if body[i] == 0x03 && body[i + 1] == 0x04 {
             if body[i + 2] == 0x01 {
                 // Standard: 03 04 01 PP 00 HH
-                return Some((body[i + 3], body[i + 5]));
+                found = Some((body[i + 3], body[i + 5]));
+                continue;
             }
             if body[i + 2] == 0x00 && Frame::is_nozzle_holster_code(body[i + 5]) {
                 // Type-B: 03 04 00 PP 00 HH — only match holster codes here.
                 // Lift codes in this position are config-echo prefixes handled elsewhere.
-                let product = if body[i + 4] == 0x00 { body[i + 3] } else { body[i + 4] };
-                return Some((product, body[i + 5]));
+                let product = if body[i + 4] == 0x00 {
+                    body[i + 3]
+                } else {
+                    body[i + 4]
+                };
+                found = Some((product, body[i + 5]));
             }
         }
     }
-    None
+    found
 }
 
 fn verify_crc(body: &[u8]) -> bool {
@@ -269,6 +278,20 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
             return Frame::Unknown(raw.to_vec());
         }
         if inner.len() >= 8 && inner[2] == 0x03 && inner[3] == 0x04 && inner[4] == 0x01 {
+            if let Some(data) = parse_fill_data_block(inner) {
+                return Frame::Data {
+                    addr,
+                    seq,
+                    volume_x1: data.volume_x1,
+                    volume_x2: data.volume_x2,
+                    volume_l: data.volume_l,
+                    volume_h: data.volume_h,
+                    amount: data.amount,
+                    sale_complete: data.sale_complete,
+                    hose_product: data.hose_product,
+                    hose_code: data.hose_code,
+                };
+            }
             let product = inner[5];
             let nozzle = inner[7];
             if Frame::is_nozzle_holster_code(nozzle) {
@@ -325,10 +348,20 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
             let product = if inner[6] == 0x00 { inner[5] } else { inner[6] };
             let nozzle = inner[7];
             if Frame::is_nozzle_holster_code(nozzle) {
-                return Frame::NozzleReturned { addr, seq, product, hose: nozzle };
+                return Frame::NozzleReturned {
+                    addr,
+                    seq,
+                    product,
+                    hose: nozzle,
+                };
             }
             if Frame::is_nozzle_lift_code(nozzle) {
-                return Frame::NozzleUp { addr, seq, product, nozzle };
+                return Frame::NozzleUp {
+                    addr,
+                    seq,
+                    product,
+                    nozzle,
+                };
             }
         }
     }
@@ -694,7 +727,12 @@ mod tests {
             0x53u8, 0x38, 0x03, 0x04, 0x00, 0x24, 0x00, 0x13, 0x0C, 0xDF, 0x03, 0xFA,
         ];
         match parse_frame(raw) {
-            Frame::NozzleUp { addr, seq, product, nozzle } => {
+            Frame::NozzleUp {
+                addr,
+                seq,
+                product,
+                nozzle,
+            } => {
                 assert_eq!(addr, 0x53);
                 assert_eq!(seq, 0x38);
                 assert_eq!(product, 0x24);
@@ -711,7 +749,9 @@ mod tests {
             0x53u8, 0x35, 0x03, 0x04, 0x00, 0x05, 0x00, 0x12, 0x41, 0xD5, 0x03, 0xFA,
         ];
         match parse_frame(raw) {
-            Frame::NozzleUp { product, nozzle, .. } => {
+            Frame::NozzleUp {
+                product, nozzle, ..
+            } => {
                 assert_eq!(product, 0x05);
                 assert_eq!(nozzle, 0x12);
             }
@@ -727,7 +767,12 @@ mod tests {
             0x53u8, 0x3F, 0x03, 0x04, 0x00, 0x01, 0x24, 0x13, 0x70, 0xD4, 0x03, 0xFA,
         ];
         match parse_frame(raw) {
-            Frame::NozzleUp { addr, seq, product, nozzle } => {
+            Frame::NozzleUp {
+                addr,
+                seq,
+                product,
+                nozzle,
+            } => {
                 assert_eq!(addr, 0x53);
                 assert_eq!(seq, 0x3F);
                 assert_eq!(product, 0x24);
@@ -872,8 +917,8 @@ mod tests {
     fn busy_wrapped_fill_data_parsed() {
         // After PC BUSY during delivery: `01 01 04` prefix before `02 08` meter block.
         let body = &[
-            0x53u8, 0x3D, 0x01, 0x01, 0x04, 0x02, 0x08, 0x00, 0x00, 0x00, 0x15, 0x00, 0x00,
-            0x15, 0x75,
+            0x53u8, 0x3D, 0x01, 0x01, 0x04, 0x02, 0x08, 0x00, 0x00, 0x00, 0x15, 0x00, 0x00, 0x15,
+            0x75,
         ];
         let crc = crc16(body);
         let mut raw = body.to_vec();
@@ -889,7 +934,10 @@ mod tests {
                 amount,
                 ..
             } => {
-                assert_eq!(decode_volume(volume_x1, volume_x2, volume_l, volume_h), 0.15);
+                assert_eq!(
+                    decode_volume(volume_x1, volume_x2, volume_l, volume_h),
+                    0.15
+                );
                 assert_eq!(decode_amount(amount[0], amount[1], amount[2]), 1575);
             }
             f => panic!("expected Data, got {:?}", f),
@@ -913,9 +961,73 @@ mod tests {
                 ..
             } => {
                 assert!(sale_complete);
-                assert_eq!(decode_volume(volume_x1, volume_x2, volume_l, volume_h), 23.0);
+                assert_eq!(
+                    decode_volume(volume_x1, volume_x2, volume_l, volume_h),
+                    23.0
+                );
             }
             f => panic!("expected Data, got {:?}", f),
+        }
+    }
+
+    #[test]
+    fn fill_frame_with_holster_and_multi_tail() {
+        // Real serial11061430 end frame: final meter + lifted hose echo + holster + 01 01 06.
+        let raw = &[
+            0x52, 0x32, 0x02, 0x08, 0x00, 0x00, 0x18, 0x29, 0x00, 0x19, 0x20, 0x45, 0x03, 0x04,
+            0x01, 0x05, 0x00, 0x12, 0x03, 0x04, 0x01, 0x05, 0x00, 0x02, 0x01, 0x01, 0x06, 0x3F,
+            0x0D, 0x03, 0xFA,
+        ];
+        match parse_frame(raw) {
+            Frame::Data {
+                sale_complete,
+                hose_product,
+                hose_code,
+                volume_x1,
+                volume_x2,
+                volume_l,
+                volume_h,
+                ..
+            } => {
+                assert!(sale_complete);
+                assert_eq!(hose_product, Some(0x05));
+                assert_eq!(hose_code, Some(0x02));
+                assert_eq!(
+                    decode_volume(volume_x1, volume_x2, volume_l, volume_h),
+                    18.29
+                );
+            }
+            f => panic!("expected Data with holster + multi tail, got {:?}", f),
+        }
+    }
+
+    #[test]
+    fn fill_frame_with_front_holster_and_idle_tail() {
+        // Sniffed stop/final frame: holster before meter block, then 01 01 05 tail.
+        let raw = &[
+            0x52, 0x3B, 0x03, 0x04, 0x01, 0x05, 0x00, 0x02, 0x02, 0x08, 0x00, 0x00, 0x01, 0x95,
+            0x00, 0x02, 0x04, 0x75, 0x01, 0x01, 0x05, 0x53, 0x6E, 0x03, 0xFA,
+        ];
+        match parse_frame(raw) {
+            Frame::Data {
+                sale_complete,
+                hose_product,
+                hose_code,
+                volume_x1,
+                volume_x2,
+                volume_l,
+                volume_h,
+                ..
+            } => {
+                assert!(sale_complete);
+                assert_eq!(hose_product, Some(0x05));
+                assert_eq!(hose_code, Some(0x02));
+                assert_eq!(
+                    decode_volume(volume_x1, volume_x2, volume_l, volume_h),
+                    1.95
+                );
+            }
+            f => panic!("expected Data with front holster + idle tail, got {:?}", f),
         }
     }
 

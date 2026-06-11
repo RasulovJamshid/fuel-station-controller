@@ -18,8 +18,8 @@ fn status_str(status: &TxStatus) -> String {
 pub async fn insert_transaction(pool: &SqlitePool, tx: &Transaction) -> Result<()> {
     sqlx::query(
         r#"INSERT INTO transactions
-        (id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, parent_tx_id, combined_volume, combined_amount)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        (id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, operator_name, parent_tx_id, combined_volume, combined_amount)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(&tx.id)
     .bind(&tx.fp_id)
@@ -35,6 +35,7 @@ pub async fn insert_transaction(pool: &SqlitePool, tx: &Transaction) -> Result<(
     .bind(&tx.product_name)
     .bind(status_str(&tx.status))
     .bind(&tx.shift_id)
+    .bind(&tx.operator_name)
     .bind(&tx.parent_tx_id)
     .bind(tx.combined_volume)
     .bind(tx.combined_amount as i64)
@@ -158,7 +159,10 @@ pub async fn persist_closed_transaction(pool: &SqlitePool, tx: &Transaction) -> 
 async fn enqueue_tx(pool: &SqlitePool, tx: &Transaction) {
     let payload = match serde_json::to_value(tx) {
         Ok(v) => v,
-        Err(e) => { tracing::warn!("sync: tx serialize error: {e}"); return; }
+        Err(e) => {
+            tracing::warn!("sync: tx serialize error: {e}");
+            return;
+        }
     };
     if let Err(e) = crate::sync::enqueue(pool, "transaction", &tx.id, &payload).await {
         tracing::warn!("sync: enqueue tx {} failed: {e}", tx.id);

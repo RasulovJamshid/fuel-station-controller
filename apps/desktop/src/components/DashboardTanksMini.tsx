@@ -27,14 +27,15 @@ export function DashboardTanksMini() {
         .map((n) => n.product_id),
     );
 
+    const liveTanks = tanks.filter((t) => t.updated_at_ms != null);
     const visible = activeProductIds.size > 0
-      ? tanks.filter((t) => activeProductIds.has(t.product_id))
-      : tanks;
+      ? liveTanks.filter((t) => activeProductIds.has(t.product_id))
+      : liveTanks;
 
     return visible.map((tank) => {
       const product = productMap.get(tank.product_id);
       const levelPct = tank.capacity_l > 0
-        ? Math.round((tank.current_l / tank.capacity_l) * 100)
+        ? Math.max(0, Math.min(100, Math.round((tank.current_l / tank.capacity_l) * 100)))
         : 0;
       return { ...tank, product, levelPct };
     });
@@ -54,7 +55,14 @@ export function DashboardTanksMini() {
 
       <div className="min-h-0 flex-1 overflow-hidden px-3 py-3">
         {rows.length === 0 ? (
-          <p className="flex h-full items-center justify-center text-sm text-text-muted">—</p>
+          <div className="flex h-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border-primary/50 bg-bg-primary/35 px-4 text-center">
+            <p className="text-xs font-bold uppercase tracking-wide text-text-primary">
+              {t("reservoirs.noLiveData")}
+            </p>
+            <p className="text-[11px] font-semibold leading-4 text-text-muted">
+              {t("reservoirs.noLiveShort")}
+            </p>
+          </div>
         ) : (
           <div className="flex h-full items-stretch gap-2">
             {rows.map((row) => {

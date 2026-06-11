@@ -23,15 +23,19 @@ export function ReservoirsPanel() {
         .map((n) => n.product_id),
     );
 
+    const liveTanks = allTanks.filter((t) => t.updated_at_ms != null);
     const visible = activeProductIds.size > 0
-      ? allTanks.filter((t) => activeProductIds.has(t.product_id))
-      : allTanks;
+      ? liveTanks.filter((t) => activeProductIds.has(t.product_id))
+      : liveTanks;
+
+    const clampPct = (value: number) =>
+      Math.max(0, Math.min(100, Math.round(value)));
 
     return visible.map((tank, i) => ({
       ...tank,
       product: productMap.get(tank.product_id),
       levelPct: tank.capacity_l > 0
-        ? Math.round((tank.current_l / tank.capacity_l) * 100)
+        ? clampPct((tank.current_l / tank.capacity_l) * 100)
         : 0,
       tone: TONE_ORDER[i % TONE_ORDER.length],
     }));
@@ -64,7 +68,14 @@ export function ReservoirsPanel() {
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-4">
           {tanks.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-sm text-text-muted">—</div>
+            <div className="flex h-full min-h-[220px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border-primary/50 bg-bg-primary/35 px-6 text-center">
+              <p className="text-sm font-bold uppercase tracking-wide text-text-primary">
+                {t("reservoirs.noLiveData")}
+              </p>
+              <p className="max-w-md text-xs font-semibold leading-5 text-text-muted">
+                {t("reservoirs.noLiveHint")}
+              </p>
+            </div>
           ) : (
             <div className="grid auto-rows-fr gap-5 md:grid-cols-2 xl:grid-cols-3">
               {tanks.map((tank) => (

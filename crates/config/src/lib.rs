@@ -565,6 +565,8 @@ impl SiteConfig {
         self.validate_connection()?;
         self.validate_products()?;
         self.validate_positions()?;
+        self.validate_tanks()?;
+        self.validate_atg()?;
         self.validate_shifts()?;
         Ok(())
     }
@@ -599,6 +601,125 @@ impl SiteConfig {
             }
             if p.name.is_empty() {
                 bail!("Product id {} has empty name", p.id);
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_tanks(&self) -> Result<()> {
+        let product_ids: HashSet<u8> = self.products.iter().map(|p| p.id).collect();
+        let mut tank_products = HashSet::new();
+        for t in &self.tanks {
+            if !product_ids.contains(&t.product_id) {
+                bail!("Tank '{}' references unknown product_id {}", t.label, t.product_id);
+            }
+            if !tank_products.insert(t.product_id) {
+                bail!("Duplicate tank for product_id {}", t.product_id);
+            }
+            if t.label.trim().is_empty() {
+                bail!("Tank for product_id {} has empty label", t.product_id);
+            }
+            if t.capacity_l <= 0.0 {
+                bail!("Tank '{}' capacity_l must be > 0", t.label);
+            }
+            if t.current_l < 0.0 {
+                bail!("Tank '{}' current_l cannot be negative", t.label);
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_atg(&self) -> Result<()> {
+        let Some(atg) = &self.atg else {
+            return Ok(());
+        };
+        if atg.poll_interval_secs == 0 {
+            bail!("atg.poll_interval_secs must be > 0");
+        }
+        if atg.modbus_timeout_secs <= 0.0 {
+            bail!("atg.modbus_timeout_secs must be > 0");
+        }
+
+        let product_ids: HashSet<u8> = self.products.iter().map(|p| p.id).collect();
+        let tank_product_ids: HashSet<u8> = self.tanks.iter().map(|t| t.product_id).collect();
+        let mut branch_ids = HashSet::new();
+
+        for branch in &atg.branches {
+            if !branch_ids.insert(branch.id) {
+                bail!("Duplicate ATG branch id {}", branch.id);
+            }
+            if branch.host.trim().is_empty() {
+                bail!("ATG branch {} has empty host", branch.id);
+            }
+            if branch.register_count < 12
+                || branch.register_count > 48
+                || branch.register_count % 12 != 0
+            {
+                bail!(
+                    "ATG branch {} register_count must be 12, 24, 36, or 48",
+                    branch.id
+                );
+            }
+            if branch.slots.is_empty() {
+                bail!("ATG branch {} must define at least one slot", branch.id);
+            }
+
+            let mut slots = HashSet::new();
+            for slot in &branch.slots {
+                if !(1..=4).contains(&slot.slot) {
+                    bail!("ATG branch {} slot must be 1..=4, got {}", branch.id, slot.slot);
+                }
+                if !slots.insert(slot.slot) {
+                    bail!("ATG branch {} has duplicate slot {}", branch.id, slot.slot);
+                }
+                if slot.slot as u16 * 12 > branch.register_count {
+                    bail!(
+                        "ATG branch {} slot {} is outside register_count {}",
+                        branch.id,
+                        slot.slot,
+                        branch.register_count
+                    );
+                }
+                if slot.fuel_type.trim().is_empty() {
+                    bail!("ATG branch {} slot {} has empty type", branch.id, slot.slot);
+                }
+                if let Some(pid) = slot.product_id {
+                    if !product_ids.contains(&pid) {
+                        bail!(
+                            "ATG branch {} slot {} references unknown product_id {}",
+                            branch.id,
+                            slot.slot,
+                            pid
+                        );
+                    }
+                    if !tank_product_ids.contains(&pid) {
+                        bail!(
+                            "ATG branch {} slot {} product_id {} has no matching tanks[] entry",
+                            branch.id,
+                            slot.slot,
+                            pid
+                        );
+                    }
+                }
+                if matches!(slot.label.as_deref(), Some(label) if label.trim().is_empty()) {
+                    bail!("ATG branch {} slot {} has empty label", branch.id, slot.slot);
+                }
+                if matches!(slot.capacity_l, Some(capacity) if capacity <= 0.0) {
+                    bail!("ATG branch {} slot {} capacity_l must be > 0", branch.id, slot.slot);
+                }
+                for (key, value) in &slot.maxima {
+                    if key.trim().is_empty() {
+                        bail!("ATG branch {} slot {} has empty maxima key", branch.id, slot.slot);
+                    }
+                    if *value <= 0.0 {
+                        bail!(
+                            "ATG branch {} slot {} maxima.{} must be > 0",
+                            branch.id,
+                            slot.slot,
+                            key
+                        );
+                    }
+                }
             }
         }
         Ok(())

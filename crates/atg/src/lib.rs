@@ -19,7 +19,7 @@ use std::time::Duration;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{info, warn};
 
-use site_config::TankConfig;
+use site_config::SiteConfig;
 use types::{TankLiveLevel, TankSnapshot, WsEvent};
 
 /// Shared live-level store: product_id → `TankLiveLevel`.
@@ -53,23 +53,32 @@ fn read_slot(floats: &[f32], slot_1based: u8) -> Option<(f64, f64, f64, f64)> {
 
 /// Run the ATG polling loop indefinitely. Call from `tokio::spawn`.
 pub async fn run(
-    cfg: AtgConfig,
+    cfg: Arc<RwLock<SiteConfig>>,
     tank_levels: TankLevels,
-    tank_configs: Vec<TankConfig>,
     events: broadcast::Sender<WsEvent>,
 ) {
-    if cfg.branches.is_empty() {
-        warn!("ATG: no branches configured — task will do nothing");
-    }
-    if cfg.api_url.is_empty() {
-        warn!("ATG: api_url not set — payloads built but not POSTed");
-    }
-
-    let interval = Duration::from_secs(cfg.poll_interval_secs);
-    let modbus_timeout = Duration::from_secs_f64(cfg.modbus_timeout_secs);
-    let poster = poster::Poster::new(cfg.api_url.clone(), cfg.auth.clone());
-
     loop {
+        let current = {
+            let cfg = cfg.read().await;
+            cfg.atg.clone().map(|atg| (atg, cfg.tanks.clone()))
+        };
+        let Some((atg_cfg, tank_configs)) = current else {
+            warn!("ATG: config disabled — sleeping");
+            tokio::time::sleep(Duration::from_secs(300)).await;
+            continue;
+        };
+
+        if atg_cfg.branches.is_empty() {
+            warn!("ATG: no branches configured — task will do nothing");
+        }
+        if atg_cfg.api_url.is_empty() {
+            warn!("ATG: api_url not set — payloads built but not POSTed");
+        }
+
+        let interval = Duration::from_secs(atg_cfg.poll_interval_secs);
+        let modbus_timeout = Duration::from_secs_f64(atg_cfg.modbus_timeout_secs);
+        let poster = poster::Poster::new(atg_cfg.api_url.clone(), atg_cfg.auth.clone());
+
         let now_ms = chrono::Utc::now().timestamp_millis();
         let collected_at = {
             use chrono::Utc;
@@ -78,13 +87,13 @@ pub async fn run(
                 .to_string()
         };
 
-        let total = cfg.branches.len();
+        let total = atg_cfg.branches.len();
         let mut ok_count = 0usize;
         let mut all_payloads = Vec::new();
         // product_id → (current_l, temperature_c, water_l)
         let mut level_updates: HashMap<u8, TankLiveLevel> = HashMap::new();
 
-        for branch in &cfg.branches {
+        for branch in &atg_cfg.branches {
             match modbus::read_branch(branch, modbus_timeout).await {
                 Ok(floats) => {
                     ok_count += 1;

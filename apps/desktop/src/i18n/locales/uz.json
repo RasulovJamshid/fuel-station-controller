@@ -230,7 +230,10 @@
     "subtitle": "ATG Tank Inventari",
     "live": "Jonli",
     "tanks": "{{n}} tank",
-    "settings": "Sozlamalar"
+    "settings": "Sozlamalar",
+    "noLiveData": "ATG maʼlumoti yoʼq",
+    "noLiveShort": "Urovnomer aloqasini tekshiring.",
+    "noLiveHint": "Urovnomer muvaffaqiyatli oʼqilgandan keyin koʼrsatkichlar chiqadi. ATG sozlamalarida quvvat, tarmoq, IP-manzil, port va unit_id ni tekshiring."
   },
   "tankGauge": {
     "tank": "Tank",

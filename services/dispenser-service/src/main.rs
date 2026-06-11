@@ -221,18 +221,19 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
         cmd_tx.clone(),
     ));
 
-    // Spawn ATG Modbus polling task when configured.
-    if let Some(atg_cfg) = cfg.read().await.atg.clone() {
+    // Spawn ATG Modbus polling task. It reads the shared config each cycle, so admin
+    // changes to ATG settings take effect without restarting the service.
+    {
+        let atg_cfg = cfg.read().await.atg.clone();
         tracing::info!(
-            branches = atg_cfg.branches.len(),
-            interval_secs = atg_cfg.poll_interval_secs,
+            enabled = atg_cfg.is_some(),
+            branches = atg_cfg.as_ref().map(|a| a.branches.len()).unwrap_or(0),
+            interval_secs = atg_cfg.as_ref().map(|a| a.poll_interval_secs).unwrap_or(300),
             "ATG task starting"
         );
-        let tank_configs = cfg.read().await.tanks.clone();
         tokio::spawn(atg::run(
-            atg_cfg,
+            cfg.clone(),
             tank_levels.clone(),
-            tank_configs,
             events_tx.clone(),
         ));
     }

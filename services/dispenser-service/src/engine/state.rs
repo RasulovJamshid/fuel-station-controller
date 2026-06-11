@@ -87,6 +87,11 @@ pub struct RuntimeFp {
     /// poll cycle so the pump can deliver its final Data frame (with the true pump-counter
     /// reading) before the transaction is recorded.  Finalize on the next Data/idle frame.
     pub pending_holster_close: bool,
+    /// The pump signalled `sale_complete` (hardware preset reached) while the nozzle was
+    /// still in the tank.  Cleared when the sale is finalized.  Used by
+    /// `holster_ends_sale_early()` to distinguish a BCD-rounding shortfall (not early)
+    /// from a genuine operator-initiated early holster.
+    pub pump_sale_complete: bool,
 
     // ── Decel window (old-app BUSY-after-stop) ──────────────────────────────
     /// Wall-clock ms when the STOP command was sent; `None` = no decel window active.
@@ -152,6 +157,7 @@ impl RuntimeFp {
             last_wire_hose_at_ms: 0,
             completed_sale: None,
             pending_holster_close: false,
+            pump_sale_complete: false,
             decel_stop_sent_at: None,
             decel_vol_snapshot: 0.0,
             decel_frozen_count: 0,
@@ -365,6 +371,12 @@ impl RuntimeFp {
 
     /// Nozzle holstered before the preset cap — close the sale for operator review (no continue).
     fn holster_ends_sale_early(&self) -> bool {
+        // If the pump hardware already signalled sale_complete, the preset was reached
+        // (the shortfall vs cap_amount is only BCD rounding, ≤ price × 0.01 L).
+        // Route to complete_sale_from_holster so it can snap the amount to the preset value.
+        if self.pump_sale_complete {
+            return false;
+        }
         let (vol, _) = self.combined_totals();
         vol > 0.01 && !self.sale_target_met()
     }
@@ -395,29 +407,10 @@ impl RuntimeFp {
         active_shift_id: Option<String>,
         active_operator_name: Option<String>,
     ) -> FrameEffect {
-        // If the software cap was never cleared it means the nozzle was holstered
-        // before the app polled the final sale_complete BUSY frame.  Snap to the
-        // preset cap so history records exactly the preset value rather than the
-        // last-polled (slightly-under) reading.
-        if let Some(cap_a) = self.cap_amount {
-            let (cur_vol, _) = self.combined_totals();
-            let price = self.active_nozzle_price();
-            if cur_vol > 0.0 && price > 0 {
-                let cap_vol = cap_a as f64 / price as f64;
-                if cap_vol > cur_vol {
-                    self.apply_metering(cap_vol, cap_a);
-                }
-            }
-        } else if let Some(cap_v) = self.cap_volume_liters {
-            let (cur_vol, _) = self.combined_totals();
-            if cur_vol > 0.0 && cap_v > cur_vol {
-                let cap_a = self.amount_from_volume(cap_v);
-                self.apply_metering(cap_v, cap_a);
-            }
-        }
         let (vol, _) = self.combined_totals();
         self.clear_deliver_caps();
         self.pending_holster_close = false;
+        self.pump_sale_complete = false;
         // Guard: if a PAUSE decel window was open but we reach holster-completion
         // (e.g. via an unhandled code path), disarm the timer so it cannot fire a
         // second save after this one.
@@ -649,6 +642,7 @@ impl RuntimeFp {
         self.clear_decel_window();
         self.clear_continuation_fields();
         self.pending_holster_close = false;
+        self.pump_sale_complete = false;
         self.state.status = FpStatus::Idle;
         self.state.stop_source = None;
         self.state.pre_auth_preset = None;
@@ -2055,6 +2049,7 @@ impl RuntimeFp {
                             // Pump signalled end-of-sale but the nozzle is still in the tank.
                             // Wait for the physical holster event — it gives us the true final
                             // volume and prevents recording a premature or stale total.
+                            self.pump_sale_complete = true;
                             self.touch();
                             return FrameEffect::StatusChanged;
                         }
@@ -2066,6 +2061,9 @@ impl RuntimeFp {
                         }
                         // Nozzle confirmed holstered — close.
                         self.pending_holster_close = false;
+                        // Hardware preset was reached (we are inside `sale_complete=true`),
+                        // regardless of whether NozzleReturned arrived before or after this frame.
+                        self.pump_sale_complete = true;
                         if self.holster_ends_sale_early() {
                             return self.end_sale_from_holster_early(fp_cfg, site, active_shift_id, active_operator_name.clone());
                         }

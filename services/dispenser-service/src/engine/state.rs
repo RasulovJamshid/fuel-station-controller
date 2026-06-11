@@ -1190,6 +1190,7 @@ impl RuntimeFp {
                 return FrameEffect::CompleteGhostFill;
             }
             if self.nozzle_physically_up() {
+                self.pump_sale_complete = true;
                 self.touch();
                 return FrameEffect::SendDoneAwaitHolster;
             }
@@ -1784,6 +1785,7 @@ impl RuntimeFp {
                                 self.state.status,
                                 FpStatus::Authorizing | FpStatus::Delivering
                             )
+                            && !self.pump_sale_complete
                         {
                             self.last_wire_hose_at_ms = Utc::now().timestamp_millis();
                             self.touch();
@@ -1795,6 +1797,7 @@ impl RuntimeFp {
                                 self.state.status,
                                 FpStatus::Authorizing | FpStatus::Delivering
                             )
+                            && !self.pump_sale_complete
                         {
                             self.last_wire_hose_at_ms = Utc::now().timestamp_millis();
                             self.touch();

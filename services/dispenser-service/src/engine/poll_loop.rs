@@ -250,9 +250,6 @@ async fn dispatch_poll_frames(
         let Some(rt) = map.get_mut(&byte) else {
             continue;
         };
-        let preauth_armed = rt.preauth_config_on_wire;
-        let confirmed = rt.preauth_nozzle_confirmed;
-        let has_pre = rt.pre_auth.is_some();
         // nozzle_index is resolved from the Wayne hose code by process_parsed_frame above.
         let lifted_nozzle = rt.state.nozzle_index.unwrap_or(1);
         drop(map);
@@ -307,7 +304,7 @@ async fn dispatch_poll_frames(
 
         let mut map = runtimes.write().await;
         if let Some(rt) = map.get_mut(&byte) {
-            if confirmed && (has_pre || preauth_armed) {
+            if rt.preauth_nozzle_confirmed && (rt.pre_auth.is_some() || rt.preauth_config_on_wire) {
                 rt.start_delivery_from_pre_auth(&fp_cfg, cfg);
             }
         }

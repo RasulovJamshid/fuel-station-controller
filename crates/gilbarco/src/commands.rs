@@ -58,8 +58,8 @@ pub fn set_price(nozzle_index: u8, price_int: u32) -> Vec<u8> {
     let digits = encode_4digit(price_int);
     // digits[0] = LSB (units), digits[3] = MSB (thousands)
     let cmd: Vec<u8> = vec![
-        0xFF, 0xE5, 0xF4, 0xF6, nozzle_id, 0xF7,
-        digits[0], digits[1], digits[2], digits[3], // units first (LSB-first per protocol)
+        0xFF, 0xE5, 0xF4, 0xF6, nozzle_id, 0xF7, digits[0], digits[1], digits[2],
+        digits[3], // units first (LSB-first per protocol)
         0xFB,
     ];
     let lrc = gilbarco_lrc(&cmd);
@@ -75,8 +75,8 @@ pub fn set_price(nozzle_index: u8, price_int: u32) -> Vec<u8> {
 pub fn preset_amount(amount_int: u32) -> Vec<u8> {
     let digits = encode_5digit(amount_int);
     let cmd: Vec<u8> = vec![
-        0xFF, 0xE6, 0xF2, 0xF8,
-        digits[0], digits[1], digits[2], digits[3], digits[4], // units first (LSB-first)
+        0xFF, 0xE6, 0xF2, 0xF8, digits[0], digits[1], digits[2], digits[3],
+        digits[4], // units first (LSB-first)
         0xFB,
     ];
     let lrc = gilbarco_lrc(&cmd);
@@ -144,7 +144,7 @@ mod tests {
         assert_eq!(frame[0], 0xFF);
         assert_eq!(frame[4], 0xE0); // nozzle id
         assert_eq!(frame[5], 0xF7); // price header
-        // Last byte is always 0xF0
+                                    // Last byte is always 0xF0
         assert_eq!(*frame.last().unwrap(), 0xF0);
         // Second-to-last is LRC (0xE0..0xEF)
         let lrc = frame[frame.len() - 2];

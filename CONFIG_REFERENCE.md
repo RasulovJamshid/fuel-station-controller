@@ -406,6 +406,7 @@ Omit or set to `null` to disable.
 | Field          | Type    | Required | Description |
 |----------------|---------|----------|-------------|
 | `slot`         | integer | yes      | 1-based slot number on the gauge (1–4) |
+| `tank_id`      | string  | no       | Backend reservoir `tankId` for sync. Defaults to `product_id` when omitted |
 | `type`         | string  | yes      | Fuel type label used in the API payload, e.g. `"AI-92"` |
 | `product_id`   | integer | no       | Links this slot to a product in the catalog. When set, live readings update the matching tank display |
 | `label`        | string  | no       | Display label. Falls back to `type` when absent |

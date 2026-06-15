@@ -8,7 +8,9 @@ use chrono::{Local, Timelike};
 use site_config::{ShiftMode, SiteConfig};
 use sqlx::SqlitePool;
 use tokio::sync::RwLock;
-use types::{EndShiftCmd, HandoverCmd, Shift, ShiftStatus, StartShiftCmd, Transaction, TxStatus, WsEvent};
+use types::{
+    EndShiftCmd, HandoverCmd, Shift, ShiftStatus, StartShiftCmd, Transaction, TxStatus, WsEvent,
+};
 use uuid::Uuid;
 
 use crate::db::shift_queries;
@@ -93,7 +95,8 @@ impl ShiftCoordinator {
             _ => (None, None, None),
         };
         let id = Uuid::new_v4().to_string();
-        let started_at = cmd.started_at_override
+        let started_at = cmd
+            .started_at_override
             .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
         let shift = Shift {
             id,
@@ -210,8 +213,16 @@ impl ShiftCoordinator {
             let (vol, amt) = if is_continuation {
                 (tx.volume, tx.amount)
             } else {
-                let v = if tx.combined_volume > 0.0 { tx.combined_volume } else { tx.volume };
-                let a = if tx.combined_amount > 0 { tx.combined_amount } else { tx.amount };
+                let v = if tx.combined_volume > 0.0 {
+                    tx.combined_volume
+                } else {
+                    tx.volume
+                };
+                let a = if tx.combined_amount > 0 {
+                    tx.combined_amount
+                } else {
+                    tx.amount
+                };
                 (v, a)
             };
             shift_queries::bump_shift_totals(&self.pool, sid, vol, amt, !is_continuation).await?;

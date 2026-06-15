@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use atg::TankLevels;
 use axum::extract::ws::WebSocketUpgrade;
@@ -1037,12 +1037,18 @@ struct AtgBranchInfo {
     name: String,
     host: String,
     port: u16,
+    unit_id: u8,
+    start_register: u16,
+    address_base: u16,
+    register_count: u16,
     slots: Vec<AtgSlotInfo>,
 }
 
 #[derive(serde::Serialize)]
 struct AtgSlotInfo {
     slot: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tank_id: Option<String>,
     #[serde(rename = "type")]
     fuel_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1051,6 +1057,7 @@ struct AtgSlotInfo {
     label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     capacity_l: Option<f64>,
+    maxima: std::collections::HashMap<String, f64>,
 }
 
 #[derive(serde::Serialize)]
@@ -1059,6 +1066,7 @@ struct AtgConfigSnapshot {
     poll_interval_secs: u64,
     modbus_timeout_secs: f64,
     api_url: String,
+    auth: Option<site_config::AtgAuth>,
     branches: Vec<AtgBranchInfo>,
 }
 
@@ -1070,6 +1078,7 @@ async fn get_atg_config(State(st): State<AppState>) -> Json<AtgConfigSnapshot> {
             poll_interval_secs: 300,
             modbus_timeout_secs: 10.0,
             api_url: String::new(),
+            auth: None,
             branches: vec![],
         }),
         Some(atg) => Json(AtgConfigSnapshot {
@@ -1077,6 +1086,7 @@ async fn get_atg_config(State(st): State<AppState>) -> Json<AtgConfigSnapshot> {
             poll_interval_secs: atg.poll_interval_secs,
             modbus_timeout_secs: atg.modbus_timeout_secs,
             api_url: atg.api_url.clone(),
+            auth: atg.auth.clone(),
             branches: atg
                 .branches
                 .iter()
@@ -1085,15 +1095,21 @@ async fn get_atg_config(State(st): State<AppState>) -> Json<AtgConfigSnapshot> {
                     name: b.name.clone(),
                     host: b.host.clone(),
                     port: b.port,
+                    unit_id: b.unit_id,
+                    start_register: b.start_register,
+                    address_base: b.address_base,
+                    register_count: b.register_count,
                     slots: b
                         .slots
                         .iter()
                         .map(|s| AtgSlotInfo {
                             slot: s.slot,
+                            tank_id: s.tank_id.clone(),
                             fuel_type: s.fuel_type.clone(),
                             product_id: s.product_id,
                             label: s.label.clone(),
                             capacity_l: s.capacity_l,
+                            maxima: s.maxima.clone(),
                         })
                         .collect(),
                 })
@@ -1107,15 +1123,18 @@ pub struct UpdateAtgConfigBody {
     pub poll_interval_secs: Option<u64>,
     pub modbus_timeout_secs: Option<f64>,
     pub api_url: Option<String>,
+    pub auth: Option<site_config::AtgAuth>,
+    pub branches: Option<Vec<site_config::AtgBranch>>,
 }
 
 async fn update_atg_config(
     State(st): State<AppState>,
     Json(body): Json<UpdateAtgConfigBody>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    {
-        let mut cfg = st.cfg.write().await;
-        if let Some(ref mut atg) = cfg.atg {
+    let snapshot = {
+        let cfg = st.cfg.read().await;
+        let mut snapshot = cfg.clone();
+        if let Some(ref mut atg) = snapshot.atg {
             if let Some(v) = body.poll_interval_secs {
                 atg.poll_interval_secs = v;
             }
@@ -1125,9 +1144,24 @@ async fn update_atg_config(
             if let Some(v) = body.api_url {
                 atg.api_url = v;
             }
+            if let Some(v) = body.auth {
+                atg.auth = Some(v);
+            }
+            if let Some(v) = body.branches {
+                atg.branches = v;
+            }
         }
-        crate::config::save(&cfg, &st.config_path)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        snapshot
+            .validate()
+            .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+        snapshot
+    };
+
+    crate::config::save(&snapshot, &st.config_path)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    {
+        let mut cfg = st.cfg.write().await;
+        *cfg = snapshot;
     }
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -1136,19 +1170,18 @@ async fn update_atg_config(
 
 #[derive(serde::Deserialize)]
 struct DiscoverQuery {
-    /// Modbus TCP port to probe. Defaults to 6400.
-    #[serde(default = "default_discover_port")]
-    port: u16,
+    /// Modbus TCP port to probe. Defaults to first configured ATG branch or 6400.
+    port: Option<u16>,
     /// Connect timeout per host in milliseconds. Defaults to 600.
-    #[serde(default = "default_discover_timeout_ms")]
-    timeout_ms: u64,
-}
-
-fn default_discover_port() -> u16 {
-    6400
-}
-fn default_discover_timeout_ms() -> u64 {
-    600
+    timeout_ms: Option<u64>,
+    /// Modbus unit id to use when decoding discovered tanks.
+    unit_id: Option<u8>,
+    /// First holding register in human/vendor numbering.
+    start_register: Option<u16>,
+    /// Register numbering base, usually 0 or 1.
+    address_base: Option<u16>,
+    /// Number of 16-bit registers to read.
+    register_count: Option<u16>,
 }
 
 fn local_ipv4() -> Option<std::net::Ipv4Addr> {
@@ -1165,9 +1198,19 @@ struct DiscoverResult {
     subnet: String,
     port: u16,
     found: Vec<String>,
+    devices: Vec<DiscoveredAtgDevice>,
+}
+
+#[derive(serde::Serialize)]
+struct DiscoveredAtgDevice {
+    host: String,
+    tanks: Vec<atg::DiscoveredTankSlot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
 }
 
 async fn atg_discover(
+    State(st): State<AppState>,
     Query(params): Query<DiscoverQuery>,
 ) -> Result<Json<DiscoverResult>, (StatusCode, String)> {
     let local = local_ipv4().ok_or_else(|| {
@@ -1179,15 +1222,52 @@ async fn atg_discover(
 
     let octets = local.octets();
     let subnet = format!("{}.{}.{}", octets[0], octets[1], octets[2]);
-    let port = params.port;
-    let timeout = std::time::Duration::from_millis(params.timeout_ms);
+    let configured = {
+        let cfg = st.cfg.read().await;
+        cfg.atg.as_ref().and_then(|atg| {
+            atg.branches.first().map(|branch| {
+                (
+                    branch.port,
+                    branch.unit_id,
+                    branch.start_register,
+                    branch.address_base,
+                    branch.register_count,
+                    atg.modbus_timeout_secs,
+                )
+            })
+        })
+    };
+    let port = params
+        .port
+        .or_else(|| configured.map(|c| c.0))
+        .unwrap_or(6400);
+    let unit_id = params
+        .unit_id
+        .or_else(|| configured.map(|c| c.1))
+        .unwrap_or(1);
+    let start_register = params
+        .start_register
+        .or_else(|| configured.map(|c| c.2))
+        .unwrap_or(1000);
+    let address_base = params
+        .address_base
+        .or_else(|| configured.map(|c| c.3))
+        .unwrap_or(1);
+    let register_count = params
+        .register_count
+        .or_else(|| configured.map(|c| c.4))
+        .unwrap_or(48);
+    let scan_timeout = Duration::from_millis(params.timeout_ms.unwrap_or(600));
+    let probe_timeout = configured
+        .map(|c| Duration::from_secs_f64(c.5.max(0.1)))
+        .unwrap_or(scan_timeout);
 
     let mut handles = Vec::with_capacity(254);
     for host in 1u8..=254 {
         let addr = format!("{}.{}:{}", subnet, host, port);
         let subnet_clone = subnet.clone();
         handles.push(tokio::spawn(async move {
-            match tokio::time::timeout(timeout, tokio::net::TcpStream::connect(&addr)).await {
+            match tokio::time::timeout(scan_timeout, tokio::net::TcpStream::connect(&addr)).await {
                 Ok(Ok(_)) => Some(format!("{}.{}", subnet_clone, host)),
                 _ => None,
             }
@@ -1202,9 +1282,47 @@ async fn atg_discover(
     }
     found.sort();
 
+    let mut probe_handles = Vec::with_capacity(found.len());
+    for host in &found {
+        let host = host.clone();
+        probe_handles.push(tokio::spawn(async move {
+            match atg::discover_host_tanks(
+                &host,
+                port,
+                unit_id,
+                start_register,
+                address_base,
+                register_count,
+                probe_timeout,
+            )
+            .await
+            {
+                Ok(tanks) => DiscoveredAtgDevice {
+                    host,
+                    tanks,
+                    error: None,
+                },
+                Err(e) => DiscoveredAtgDevice {
+                    host,
+                    tanks: Vec::new(),
+                    error: Some(e.to_string()),
+                },
+            }
+        }));
+    }
+
+    let mut devices = Vec::with_capacity(probe_handles.len());
+    for h in probe_handles {
+        if let Ok(device) = h.await {
+            devices.push(device);
+        }
+    }
+    devices.sort_by(|a, b| a.host.cmp(&b.host));
+
     Ok(Json(DiscoverResult {
         subnet,
         port,
         found,
+        devices,
     }))
 }

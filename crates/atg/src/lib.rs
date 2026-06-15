@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{info, warn};
 
 use site_config::SiteConfig;
@@ -28,14 +28,15 @@ pub type TankLevels = Arc<RwLock<HashMap<u8, TankLiveLevel>>>;
 
 // ── Slot field indices (6 floats per slot, in Modbus register order) ──────
 const IDX_PRODUCT_HEIGHT: usize = 0;
+const IDX_WATER_HEIGHT: usize = 1;
 const IDX_TEMPERATURE: usize = 2;
-// 3 = product_and_water_volume
+const IDX_PRODUCT_AND_WATER_VOLUME: usize = 3;
 const IDX_PRODUCT_VOLUME: usize = 4;
 const IDX_WATER_VOLUME: usize = 5;
 
 /// Extract the live fields we care about for one 1-based slot from the float slice.
 /// Returns `None` if the slot is out of range or the reading looks invalid.
-fn read_slot(floats: &[f32], slot_1based: u8) -> Option<(f64, f64, f64, f64)> {
+fn read_slot(floats: &[f32], slot_1based: u8) -> Option<(f64, f64, f64, f64, f64)> {
     let base = ((slot_1based - 1) as usize) * 6;
     if base + 5 >= floats.len() {
         return None;
@@ -47,8 +48,72 @@ fn read_slot(floats: &[f32], slot_1based: u8) -> Option<(f64, f64, f64, f64)> {
     let temperature_c = floats[base + IDX_TEMPERATURE] as f64;
     let water_l = floats[base + IDX_WATER_VOLUME] as f64;
     let product_height = floats[base + IDX_PRODUCT_HEIGHT] as f64;
-    let _ = (water_l, product_height); // may be used in future metrics
-    Some((current_l, temperature_c, water_l, product_height))
+    let water_height = floats[base + IDX_WATER_HEIGHT] as f64;
+    Some((
+        current_l,
+        temperature_c,
+        water_l,
+        product_height,
+        water_height,
+    ))
+}
+
+#[derive(Debug, Clone)]
+pub struct LocalTankReading {
+    pub tank_id: String,
+    pub product_id: u8,
+    pub volume_litres: f64,
+    pub level_mm: f64,
+    pub temperature_c: f64,
+    pub water_mm: f64,
+    pub fill_percent: Option<f64>,
+    pub reading_at_ms: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DiscoveredTankSlot {
+    pub slot: u8,
+    pub product_height: f64,
+    pub water_height: f64,
+    pub temperature_c: f64,
+    pub product_and_water_volume: f64,
+    pub product_volume: f64,
+    pub water_volume: f64,
+}
+
+/// Probe one ATG host using the standard tank-gauge register layout and return active slots.
+pub async fn discover_host_tanks(
+    host: &str,
+    port: u16,
+    unit_id: u8,
+    start_register: u16,
+    address_base: u16,
+    register_count: u16,
+    timeout: Duration,
+) -> anyhow::Result<Vec<DiscoveredTankSlot>> {
+    let pdu_addr = start_register
+        .checked_sub(address_base)
+        .ok_or_else(|| anyhow::anyhow!("start_register must be >= address_base"))?;
+    let floats = modbus::read_host(host, port, unit_id, pdu_addr, register_count, timeout).await?;
+    Ok(floats
+        .chunks_exact(6)
+        .enumerate()
+        .filter_map(|(index, slot)| {
+            let product_volume = slot[IDX_PRODUCT_VOLUME] as f64;
+            if product_volume <= 0.0 {
+                return None;
+            }
+            Some(DiscoveredTankSlot {
+                slot: (index + 1) as u8,
+                product_height: slot[IDX_PRODUCT_HEIGHT] as f64,
+                water_height: slot[IDX_WATER_HEIGHT] as f64,
+                temperature_c: slot[IDX_TEMPERATURE] as f64,
+                product_and_water_volume: slot[IDX_PRODUCT_AND_WATER_VOLUME] as f64,
+                product_volume,
+                water_volume: slot[IDX_WATER_VOLUME] as f64,
+            })
+        })
+        .collect())
 }
 
 /// Run the ATG polling loop indefinitely. Call from `tokio::spawn`.
@@ -56,6 +121,7 @@ pub async fn run(
     cfg: Arc<RwLock<SiteConfig>>,
     tank_levels: TankLevels,
     events: broadcast::Sender<WsEvent>,
+    sync_tx: Option<mpsc::UnboundedSender<LocalTankReading>>,
 ) {
     loop {
         let current = {
@@ -82,9 +148,7 @@ pub async fn run(
         let now_ms = chrono::Utc::now().timestamp_millis();
         let collected_at = {
             use chrono::Utc;
-            Utc::now()
-                .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-                .to_string()
+            Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
         };
 
         let total = atg_cfg.branches.len();
@@ -102,7 +166,13 @@ pub async fn run(
                     for slot in &branch.slots {
                         if let Some(pid) = slot.product_id {
                             match read_slot(&floats, slot.slot) {
-                                Some((current_l, temperature_c, water_l, _)) => {
+                                Some((
+                                    current_l,
+                                    temperature_c,
+                                    water_l,
+                                    product_height,
+                                    water_height,
+                                )) => {
                                     level_updates.insert(
                                         pid,
                                         TankLiveLevel {
@@ -113,6 +183,34 @@ pub async fn run(
                                             updated_at_ms: now_ms,
                                         },
                                     );
+                                    if let Some(tx) = &sync_tx {
+                                        let capacity_l = slot.capacity_l.or_else(|| {
+                                            tank_configs
+                                                .iter()
+                                                .find(|t| t.product_id == pid)
+                                                .map(|t| t.capacity_l)
+                                        });
+                                        let fill_percent = capacity_l
+                                            .filter(|capacity| *capacity > 0.0)
+                                            .map(|capacity| current_l / capacity * 100.0);
+                                        let tank_id = slot
+                                            .tank_id
+                                            .as_deref()
+                                            .or(slot.label.as_deref())
+                                            .filter(|s| !s.trim().is_empty())
+                                            .map(str::to_string)
+                                            .unwrap_or_else(|| pid.to_string());
+                                        let _ = tx.send(LocalTankReading {
+                                            tank_id,
+                                            product_id: pid,
+                                            volume_litres: current_l,
+                                            level_mm: product_height,
+                                            temperature_c,
+                                            water_mm: water_height,
+                                            fill_percent,
+                                            reading_at_ms: now_ms,
+                                        });
+                                    }
                                 }
                                 None => warn!(
                                     branch_id = branch.id,

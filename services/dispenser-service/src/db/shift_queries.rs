@@ -216,7 +216,10 @@ pub async fn close_shift(
 async fn enqueue_shift(pool: &SqlitePool, shift: &Shift) {
     let payload = match serde_json::to_value(shift) {
         Ok(v) => v,
-        Err(e) => { tracing::warn!("sync: shift serialize error: {e}"); return; }
+        Err(e) => {
+            tracing::warn!("sync: shift serialize error: {e}");
+            return;
+        }
     };
     if let Err(e) = crate::sync::enqueue(pool, "shift", &shift.id, &payload).await {
         tracing::warn!("sync: enqueue shift {} failed: {e}", shift.id);
@@ -327,7 +330,11 @@ pub async fn backfill_unassigned_to_shift(
     .execute(pool)
     .await?;
 
-    tracing::info!(shift_id, count, "backfilled unassigned transactions to shift");
+    tracing::info!(
+        shift_id,
+        count,
+        "backfilled unassigned transactions to shift"
+    );
     Ok(())
 }
 
@@ -402,7 +409,12 @@ pub async fn reassign_from_shift_since(
     .execute(pool)
     .await?;
 
-    tracing::info!(from_shift_id, to_shift_id, count, "reassigned transactions between shifts");
+    tracing::info!(
+        from_shift_id,
+        to_shift_id,
+        count,
+        "reassigned transactions between shifts"
+    );
     Ok(())
 }
 

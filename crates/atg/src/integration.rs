@@ -173,7 +173,12 @@ pub fn build_payloads(
                     slot_metas.push(meta);
                     maxima_list.push(&sc.maxima);
                 }
-                Err(e) => warn!(branch = branch.id, slot = sc.slot, ?e, "slot extraction failed"),
+                Err(e) => warn!(
+                    branch = branch.id,
+                    slot = sc.slot,
+                    ?e,
+                    "slot extraction failed"
+                ),
             }
         }
 

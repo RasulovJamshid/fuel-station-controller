@@ -3,8 +3,8 @@
 //! Auth priority: api_token > cached login token > attempt without auth.
 //! On HTTP 401, invalidates the cached token and re-logins once.
 
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde_json::Value;
 use tokio::sync::Mutex;
@@ -29,6 +29,11 @@ pub struct Poster {
 
 impl Poster {
     pub fn new(api_url: String, auth: Option<AtgAuth>) -> Self {
+        let api_url = std::env::var("API_URL")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(api_url);
         Self {
             api_url,
             auth,
@@ -45,15 +50,45 @@ impl Poster {
 
     /// Returns a Bearer token string, or None if no auth is configured.
     async fn bearer(&self) -> Option<String> {
-        let auth = self.auth.as_ref()?;
+        if let Some(token) = std::env::var("API_TOKEN")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+        {
+            return Some(token);
+        }
+
+        let empty = AtgAuth {
+            api_token: String::new(),
+            username: String::new(),
+            password: String::new(),
+            login_url: String::new(),
+        };
+        let auth = self.auth.as_ref().unwrap_or(&empty);
 
         // Static API token wins immediately.
         if !auth.api_token.is_empty() {
             return Some(auth.api_token.clone());
         }
 
+        let username = std::env::var("AUTH_USERNAME")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| auth.username.clone());
+        let password = std::env::var("AUTH_PASSWORD")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| auth.password.clone());
+        let login_url = std::env::var("AUTH_LOGIN_URL")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| auth.login_url.clone());
+
         // No login credentials = no auth.
-        if auth.username.is_empty() || auth.password.is_empty() {
+        if username.is_empty() || password.is_empty() {
             return None;
         }
 
@@ -65,7 +100,13 @@ impl Poster {
             }
         }
 
-        self.login(auth).await
+        let effective_auth = AtgAuth {
+            api_token: String::new(),
+            username,
+            password,
+            login_url,
+        };
+        self.login(&effective_auth).await
     }
 
     async fn invalidate(&self) {
@@ -148,7 +189,12 @@ impl Poster {
             let req = {
                 let mut b = self.client.post(&self.api_url).json(&payload);
                 if let Some(ref t) = tok {
-                    b = b.header("Authorization", format!("Bearer {}", t));
+                    let value = if t.to_ascii_lowercase().starts_with("bearer ") {
+                        t.clone()
+                    } else {
+                        format!("Bearer {}", t)
+                    };
+                    b = b.header("Authorization", value);
                 }
                 b
             };
@@ -160,7 +206,8 @@ impl Poster {
                         info!(status = %status, "ATG POST ok");
                         return;
                     }
-                    if status == reqwest::StatusCode::UNAUTHORIZED && tok.is_some() && !auth_retried {
+                    if status == reqwest::StatusCode::UNAUTHORIZED && tok.is_some() && !auth_retried
+                    {
                         auth_retried = true;
                         self.invalidate().await;
                         attempt -= 1; // don't count the 401 as a normal attempt

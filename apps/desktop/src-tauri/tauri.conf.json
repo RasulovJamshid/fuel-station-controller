@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "AZS Manager",
+  "productName": "AYOQSH UNG",
   "version": "0.1.0",
   "identifier": "uz.ung.azs-manager",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "AZS Manager",
+        "title": "AYOQSH UNG",
         "width": 1280,
         "height": 800,
         "resizable": true

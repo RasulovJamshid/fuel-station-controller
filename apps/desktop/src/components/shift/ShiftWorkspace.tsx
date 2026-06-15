@@ -39,7 +39,7 @@ export function ShiftWorkspace({
       import("@tauri-apps/api/core").then(({ invoke }) =>
         invoke<{ count: number; total_volume: number; total_amount: number }>(
           "get_transactions_summary",
-          { statuses: "COMPLETED,CONTINUED_FROM", fromMs: startOfDay.getTime() },
+          { statuses: "COMPLETED,STOPPED,CONTINUED_FROM", fromMs: startOfDay.getTime() },
         ).then((s) => setTodayStats({ count: s.count, volume: s.total_volume, amount: s.total_amount }))
           .catch(() => {})
       );

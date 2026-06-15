@@ -33,8 +33,10 @@ pub fn spawn_preauth_timeout_task(
                         // Primary case: holstered preauth waiting for customer lift.
                         let started = if matches!(rt.state.status, FpStatus::PreAuthorized) {
                             rt.pre_auth_started_at?
-                        } else if matches!(rt.state.status, FpStatus::Authorizing | FpStatus::NozzleUp)
-                            && rt.preauth_config_on_wire
+                        } else if matches!(
+                            rt.state.status,
+                            FpStatus::Authorizing | FpStatus::NozzleUp
+                        ) && rt.preauth_config_on_wire
                             && rt.state.volume < 0.01
                             && rt.state.amount == 0
                         {

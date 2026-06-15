@@ -6,10 +6,9 @@ use sqlx::SqlitePool;
 /// Ensures `fp_nozzles` has `wayne_product_code` (migration 006).
 /// Safe to call on every startup — no-op when column already exists.
 pub async fn ensure_fp_nozzles_schema(pool: &SqlitePool) -> Result<()> {
-    let cols: Vec<String> =
-        sqlx::query_scalar("SELECT name FROM pragma_table_info('fp_nozzles')")
-            .fetch_all(pool)
-            .await?;
+    let cols: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info('fp_nozzles')")
+        .fetch_all(pool)
+        .await?;
     if !cols.iter().any(|c| c == "wayne_product_code") {
         sqlx::query(
             "ALTER TABLE fp_nozzles ADD COLUMN wayne_product_code INTEGER NOT NULL DEFAULT 0",

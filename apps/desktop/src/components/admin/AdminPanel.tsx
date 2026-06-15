@@ -58,6 +58,29 @@ interface SyncStatus {
   price_pull_interval_hours?: number;
 }
 
+interface DiscoveredTankSlot {
+  slot: number;
+  product_height: number;
+  water_height: number;
+  temperature_c: number;
+  product_and_water_volume: number;
+  product_volume: number;
+  water_volume: number;
+}
+
+interface DiscoveredAtgDevice {
+  host: string;
+  tanks: DiscoveredTankSlot[];
+  error?: string;
+}
+
+interface AtgDiscoveryResult {
+  subnet: string;
+  port: number;
+  found: string[];
+  devices?: DiscoveredAtgDevice[];
+}
+
 const ADMIN_TOKEN_KEY = "azs_admin_token";
 
 export function getAdminToken(): string | null {
@@ -150,7 +173,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
   const [atgTimeout, setAtgTimeout] = useState(10.0);
   const [atgApiUrl, setAtgApiUrl] = useState("");
   const [atgDiscovering, setAtgDiscovering] = useState(false);
-  const [atgDiscovered, setAtgDiscovered] = useState<{ subnet: string; port: number; found: string[] } | null>(null);
+  const [atgDiscovered, setAtgDiscovered] = useState<AtgDiscoveryResult | null>(null);
 
   const loadAtgConfig = useCallback(async () => {
     try {
@@ -417,9 +440,16 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
     setAtgDiscovered(null);
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const result = await invoke<{ subnet: string; port: number; found: string[] }>(
+      const branch = atgConfig?.branches[0];
+      const result = await invoke<AtgDiscoveryResult>(
         "admin_atg_discover",
-        { port: null },
+        {
+          port: branch?.port ?? null,
+          unitId: branch?.unit_id ?? null,
+          startRegister: branch?.start_register ?? null,
+          addressBase: branch?.address_base ?? null,
+          registerCount: branch?.register_count ?? null,
+        },
       );
       setAtgDiscovered(result);
     } catch (e) {
@@ -438,6 +468,8 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
         pollIntervalSecs: atgPollInterval,
         modbusTimeoutSecs: atgTimeout,
         apiUrl: atgApiUrl.trim() || null,
+        auth: atgConfig?.auth ?? null,
+        branches: atgConfig?.branches ?? null,
       });
       await loadAtgConfig();
       setMsg(t("admin.atg.savedMsg"));
@@ -1043,26 +1075,46 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                   {atgDiscovered.found.length === 0 ? (
                     <p className="text-xs font-semibold text-text-muted">{t("admin.atg.noneFound")}</p>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      {atgDiscovered.found.map((ip) => (
-                        <button
-                          key={ip}
-                          type="button"
-                          title={t("admin.atg.useIp")}
-                          onClick={() => {
-                            const updated = atgConfig ? {
-                              ...atgConfig,
-                              branches: atgConfig.branches.map((b, i) =>
-                                i === 0 ? { ...b, host: ip } : b
-                              ),
-                            } : null;
-                            setAtgConfig(updated);
-                          }}
-                          className="rounded-full border border-accent-emerald/40 bg-accent-emerald/10 px-3 py-1 text-xs font-bold text-accent-emerald hover:bg-accent-emerald/20 transition-all"
-                        >
-                          {ip}
-                        </button>
-                      ))}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {atgDiscovered.found.map((ip) => {
+                        const device = atgDiscovered.devices?.find((entry) => entry.host === ip);
+                        return (
+                          <div key={ip} className="rounded-lg border border-border-primary/50 bg-bg-primary/40 p-2">
+                            <button
+                              type="button"
+                              title={t("admin.atg.useIp")}
+                              onClick={() => {
+                                const updated = atgConfig ? {
+                                  ...atgConfig,
+                                  branches: atgConfig.branches.map((b, i) =>
+                                    i === 0 ? { ...b, host: ip } : b
+                                  ),
+                                } : null;
+                                setAtgConfig(updated);
+                              }}
+                              className="rounded-full border border-accent-emerald/40 bg-accent-emerald/10 px-3 py-1 text-xs font-bold text-accent-emerald hover:bg-accent-emerald/20 transition-all"
+                            >
+                              {ip}
+                            </button>
+                            {device?.tanks.length ? (
+                              <div className="mt-2 space-y-1">
+                                {device.tanks.map((tank) => (
+                                  <div key={tank.slot} className="rounded-md bg-bg-secondary/50 px-2 py-1 text-[10px] font-semibold text-text-secondary">
+                                    <span className="text-text-primary">Tank {tank.slot}</span>
+                                    <span className="ml-2">{Math.round(tank.product_volume).toLocaleString()} L</span>
+                                    <span className="ml-2">{tank.temperature_c.toFixed(1)}°C</span>
+                                    <span className="ml-2">water {Math.round(tank.water_volume).toLocaleString()} L</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-[10px] font-semibold text-text-muted">
+                                {device?.error ? device.error : "No active tanks returned"}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

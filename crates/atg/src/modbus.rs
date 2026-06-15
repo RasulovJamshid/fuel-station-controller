@@ -87,7 +87,7 @@ fn words_to_floats(words: &[u16]) -> Vec<f32> {
 
 /// Read all holding registers for one ATG branch and decode as f32 floats.
 pub async fn read_branch(branch: &AtgBranch, timeout: Duration) -> anyhow::Result<Vec<f32>> {
-    let regs = read_registers(
+    read_host(
         &branch.host,
         branch.port,
         branch.unit_id,
@@ -95,6 +95,18 @@ pub async fn read_branch(branch: &AtgBranch, timeout: Duration) -> anyhow::Resul
         branch.register_count,
         timeout,
     )
-    .await?;
+    .await
+}
+
+/// Read holding registers from a raw ATG Modbus host and decode as f32 floats.
+pub async fn read_host(
+    host: &str,
+    port: u16,
+    unit_id: u8,
+    pdu_addr: u16,
+    count: u16,
+    timeout: Duration,
+) -> anyhow::Result<Vec<f32>> {
+    let regs = read_registers(host, port, unit_id, pdu_addr, count, timeout).await?;
     Ok(words_to_floats(&regs))
 }

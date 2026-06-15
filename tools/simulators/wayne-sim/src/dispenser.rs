@@ -263,9 +263,7 @@ impl SimDispenser {
                         self.last_tick = Some(Instant::now());
                         self.status = SimStatus::Delivering;
                         self.preset_final_data_pending = false;
-                    } else if self.status == SimStatus::Done
-                        || self.status == SimStatus::Idle
-                    {
+                    } else if self.status == SimStatus::Done || self.status == SimStatus::Idle {
                         // Holstered preauth (or new preauth after a preset-completed Done):
                         // store the config and wait for the nozzle lift.
                         self.volume = 0.0;
@@ -558,7 +556,8 @@ impl SimDispenser {
         let a2_bcd = to_bcd_byte(((a / 100) % 100) as u32);
         let a3_bcd = to_bcd_byte((a % 100) as u32);
         build_frame(&[
-            self.addr, seq, 0x02, 0x08, vx1_bcd, vx2_bcd, v1_bcd, v2_bcd, 0x00, a1_bcd, a2_bcd, a3_bcd,
+            self.addr, seq, 0x02, 0x08, vx1_bcd, vx2_bcd, v1_bcd, v2_bcd, 0x00, a1_bcd, a2_bcd,
+            a3_bcd,
         ])
     }
 
@@ -599,7 +598,11 @@ fn parse_preset_from_config(inner: &[u8]) -> Option<f64> {
                 + (b3 >> 4) as u32 * 10
                 + (b3 & 0xF) as u32;
             // 09 99 00 → 99900 hundredths ≈ 999 L (full tank sentinel)
-            return if hundredths >= 99_900 { None } else { Some(hundredths as f64 / 100.0) };
+            return if hundredths >= 99_900 {
+                None
+            } else {
+                Some(hundredths as f64 / 100.0)
+            };
         }
     }
     None

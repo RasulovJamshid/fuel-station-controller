@@ -7,6 +7,7 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use site_config::{NozzleConfig, ProductConfig, ShiftMode, SiteConfig};
 use std::collections::HashMap;
+use std::sync::Arc;
 use types::{
     AdminApplyPricesCmd, AdminAuthCmd, AdminAuthResponse, AdminCatalog, AdminChangePinCmd,
     AdminConfigEntry, AdminNozzleInput, AdminNozzleRow, AdminPositionCatalog, AdminPriceEntry,
@@ -56,15 +57,13 @@ pub fn router() -> Router<AppState> {
         .route("/admin/change-pin", post(admin_change_pin))
 }
 
-
 /// Build catalog from DB-loaded products/nozzles, using cfg only for FP metadata (label, address, active).
 fn catalog_from_db(
     cfg: &SiteConfig,
     products: Vec<ProductConfig>,
     nozzles_map: HashMap<String, Vec<NozzleConfig>>,
 ) -> AdminCatalog {
-    let product_lookup: HashMap<u8, &ProductConfig> =
-        products.iter().map(|p| (p.id, p)).collect();
+    let product_lookup: HashMap<u8, &ProductConfig> = products.iter().map(|p| (p.id, p)).collect();
     let product_snapshots: Vec<ProductSnapshot> = products
         .iter()
         .map(|p| ProductSnapshot {
@@ -117,14 +116,25 @@ async fn persist_site_config(
     st: &AppState,
     snapshot: SiteConfig,
 ) -> Result<(), (StatusCode, String)> {
+    persist_site_config_with_runtime_sync(st, snapshot, true).await
+}
+
+async fn persist_site_config_with_runtime_sync(
+    st: &AppState,
+    snapshot: SiteConfig,
+    sync_runtime: bool,
+) -> Result<(), (StatusCode, String)> {
     snapshot
         .validate()
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     // Pre-flight: verify the config file can actually be opened for writing by
     // this process (accounts for POSIX effective UID/GID, not just the mode bits).
     {
-        match std::fs::OpenOptions::new().write(true).open(&st.config_path) {
-            Ok(_) => {} // writable — proceed
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .open(&st.config_path)
+        {
+            Ok(_) => {}                                                  // writable — proceed
             Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {} // new file, parent dir checked on write
             Err(e) => {
                 return Err((
@@ -162,7 +172,20 @@ async fn persist_site_config(
         let mut cfg = st.cfg.write().await;
         *cfg = snapshot;
     }
-    sync_runtimes_from_cfg(st).await;
+    if sync_runtime {
+        sync_runtimes_from_cfg(st).await;
+    }
+    let snapshot = {
+        let cfg = st.cfg.read().await;
+        Arc::new(cfg.clone())
+    };
+    if let Err(e) = st
+        .commands
+        .send(DispatchCommand::ReloadConfig { cfg: snapshot })
+        .await
+    {
+        tracing::warn!(?e, "poll-loop config reload skipped");
+    }
     Ok(())
 }
 
@@ -175,10 +198,7 @@ async fn sync_runtimes_from_cfg(st: &AppState) {
             .cloned()
             .collect::<Vec<_>>()
     };
-    let Ok(mut map) = st.runtimes.try_write() else {
-        tracing::warn!("runtime sync skipped — poll loop is busy");
-        return;
-    };
+    let mut map = st.runtimes.write().await;
     for fp in positions {
         if let Some(rt) = map.get_mut(&fp.address_byte) {
             rt.sync_nozzles_from_config(&fp);
@@ -335,68 +355,74 @@ async fn admin_post_prices(
         snap
     };
 
-    persist_site_config(&st, cfg_snapshot).await?;
+    for c in &db_records {
+        admin_queries::update_nozzle_price_in_db(
+            &st.pool,
+            &c.fp_id,
+            c.nozzle_index,
+            c.new_price,
+            &who,
+        )
+        .await
+        .map_err(internal)?;
+    }
+
+    persist_site_config_with_runtime_sync(&st, cfg_snapshot, false).await?;
 
     let n = updates.len();
     if !updates.is_empty() {
-        let updates_for_runtime = updates;
-        if let Err(e) = st.commands.try_send(DispatchCommand::UpdatePrices {
-            updates: updates_for_runtime,
-            changed_by: who.clone(),
-        }) {
-            tracing::warn!(?e, "UpdatePrices dispatch skipped — config already saved");
-        }
+        st.commands
+            .send(DispatchCommand::UpdatePrices {
+                updates,
+                changed_by: who.clone(),
+            })
+            .await
+            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
     }
 
-    // Price history and nozzle price sync are non-critical — don't block the UI.
+    // Price history and outbound sync are non-critical; DB source-of-truth was updated above.
     if !db_records.is_empty() {
-        let pool = st.pool.clone();
         let station_id = st.cfg.read().await.site.id.clone();
-        tokio::spawn(async move {
-            for c in db_records {
-                if let Err(e) = admin_queries::insert_price_change(
-                    &pool,
-                    &c.fp_id,
-                    c.nozzle_index,
-                    c.product_id,
-                    &c.product_name,
-                    c.old_price,
-                    c.new_price,
-                    &who,
-                )
-                .await
-                {
-                    tracing::warn!(?e, "price history insert failed");
-                }
-                if let Err(e) = admin_queries::update_nozzle_price_in_db(
-                    &pool,
-                    &c.fp_id,
-                    c.nozzle_index,
-                    c.new_price,
-                    &who,
-                )
-                .await
-                {
-                    tracing::warn!(?e, "fp_nozzles price update failed");
-                }
-                // Enqueue for outbound sync so the backend learns about this price change.
-                let now = chrono::Utc::now();
-                let payload = serde_json::json!({
-                    "fp_id":        c.fp_id,
-                    "nozzle_index": c.nozzle_index,
-                    "product_id":   c.product_id,
-                    "product_name": c.product_name,
-                    "old_price":    c.old_price,
-                    "new_price":    c.new_price,
-                    "changed_at":   now.timestamp_millis(),
-                    "changed_by":   who,
-                });
-                let entity_id = format!("{}/{}/{}/{}", station_id, c.fp_id, c.nozzle_index, now.timestamp_millis());
-                if let Err(e) = crate::sync::enqueue(&pool, "price_change", &entity_id, &payload).await {
-                    tracing::warn!(?e, "price_change sync enqueue failed");
-                }
+        for c in &db_records {
+            if let Err(e) = admin_queries::insert_price_change(
+                &st.pool,
+                &c.fp_id,
+                c.nozzle_index,
+                c.product_id,
+                &c.product_name,
+                c.old_price,
+                c.new_price,
+                &who,
+            )
+            .await
+            {
+                tracing::warn!(?e, "price history insert failed");
             }
-        });
+            // Enqueue for outbound sync so the backend learns about this price change.
+            let now = chrono::Utc::now();
+            let payload = serde_json::json!({
+                "fp_id":        c.fp_id,
+                "nozzle_index": c.nozzle_index,
+                "product_id":   c.product_id,
+                "product_name": c.product_name,
+                "old_price":    c.old_price,
+                "new_price":    c.new_price,
+                "changed_at":   now.timestamp_millis(),
+                "changed_by":   who,
+            });
+            let entity_id = format!(
+                "{}/{}/{}/{}",
+                station_id,
+                c.fp_id,
+                c.nozzle_index,
+                now.timestamp_millis()
+            );
+            if let Err(e) =
+                crate::sync::enqueue(&st.pool, "price_change", &entity_id, &payload).await
+            {
+                tracing::warn!(?e, "price_change sync enqueue failed");
+            }
+        }
     }
     Ok(Json(serde_json::json!({ "ok": true, "updated": n })))
 }
@@ -691,7 +717,10 @@ async fn admin_save_products(
             "at least one product is required".into(),
         ));
     }
-    tracing::info!(count = cmd.products.len(), "admin_save_products: building list");
+    tracing::info!(
+        count = cmd.products.len(),
+        "admin_save_products: building list"
+    );
     let mut products: Vec<ProductConfig> = Vec::new();
     let mut used_ids = std::collections::HashSet::new();
     {
@@ -719,11 +748,15 @@ async fn admin_save_products(
                 ));
             }
             // Preserve existing UUID if provided; look up from current config by id; fall back to new.
-            let uuid = p.uuid
+            let uuid = p
+                .uuid
                 .filter(|u| !u.trim().is_empty())
                 .or_else(|| {
                     let cfg = st.cfg.try_read().ok()?;
-                    cfg.products.iter().find(|ep| ep.id == id).map(|ep| ep.uuid.clone())
+                    cfg.products
+                        .iter()
+                        .find(|ep| ep.id == id)
+                        .map(|ep| ep.uuid.clone())
                 })
                 .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
             products.push(ProductConfig {
@@ -751,8 +784,6 @@ async fn admin_save_products(
             .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
         snap
     };
-    tracing::info!("admin_save_products: persisting to JSON");
-    persist_site_config(&st, cfg_snapshot).await?;
     tracing::info!("admin_save_products: persisting to DB");
     admin_queries::save_products_to_db(&st.pool, &products_for_db, &who)
         .await
@@ -760,6 +791,8 @@ async fn admin_save_products(
             tracing::error!(?e, "save_products_to_db failed");
             internal(e)
         })?;
+    tracing::info!("admin_save_products: persisting to JSON");
+    persist_site_config(&st, cfg_snapshot).await?;
     tracing::info!("admin_save_products: done");
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -833,10 +866,10 @@ async fn admin_save_position_nozzles(
             .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
         snap
     };
-    persist_site_config(&st, cfg_snapshot).await?;
     admin_queries::save_fp_nozzles_to_db(&st.pool, &fp_id, &nozzles_for_db, &who)
         .await
         .map_err(internal)?;
+    persist_site_config(&st, cfg_snapshot).await?;
     Ok(Json(serde_json::json!({ "ok": true, "fp_id": fp_id })))
 }
 

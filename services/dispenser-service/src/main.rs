@@ -132,10 +132,12 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
             let cfg_r = cfg.read().await;
             admin_queries::save_products_to_db(&pool, &cfg_r.products, "system").await?;
             for fp in &cfg_r.fueling_positions {
-                admin_queries::save_fp_nozzles_to_db(&pool, &fp.id, &fp.nozzles, "system")
-                    .await?;
+                admin_queries::save_fp_nozzles_to_db(&pool, &fp.id, &fp.nozzles, "system").await?;
             }
-            tracing::info!("seeded {} products from JSON config into DB", cfg_r.products.len());
+            tracing::info!(
+                "seeded {} products from JSON config into DB",
+                cfg_r.products.len()
+            );
         } else {
             let nozzles_db = admin_queries::load_fp_nozzles_from_db(&pool).await?;
             let mut w = cfg.write().await;
@@ -161,7 +163,8 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
 
     let (events_tx, _events_rx) = broadcast::channel::<types::WsEvent>(256);
     let (cmd_tx, cmd_rx) = mpsc::channel::<DispatchCommand>(64);
-    let tank_levels: atg::TankLevels = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
+    let tank_levels: atg::TankLevels =
+        Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 
     let shifts = Arc::new(ShiftCoordinator::new(pool.clone(), cfg_for_shifts.clone()));
     shifts.restore().await?;
@@ -225,16 +228,47 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
     // changes to ATG settings take effect without restarting the service.
     {
         let atg_cfg = cfg.read().await.atg.clone();
+        let (atg_sync_tx, mut atg_sync_rx) =
+            tokio::sync::mpsc::unbounded_channel::<atg::LocalTankReading>();
+        let atg_pool = pool.clone();
+        tokio::spawn(async move {
+            while let Some(reading) = atg_sync_rx.recv().await {
+                let payload = serde_json::json!({
+                    "tank_id": reading.tank_id,
+                    "product_id": reading.product_id,
+                    "volume_litres": reading.volume_litres,
+                    "level_mm": reading.level_mm,
+                    "temperature_c": reading.temperature_c,
+                    "water_mm": reading.water_mm,
+                    "fill_percent": reading.fill_percent,
+                    "reading_at": reading.reading_at_ms,
+                });
+                let entity_id = format!(
+                    "{}/{}",
+                    payload["tank_id"].as_str().unwrap_or("tank"),
+                    reading.reading_at_ms
+                );
+                if let Err(e) =
+                    crate::sync::enqueue(&atg_pool, "reservoir_reading", &entity_id, &payload).await
+                {
+                    tracing::warn!(?e, "ATG reservoir_reading sync enqueue failed");
+                }
+            }
+        });
         tracing::info!(
             enabled = atg_cfg.is_some(),
             branches = atg_cfg.as_ref().map(|a| a.branches.len()).unwrap_or(0),
-            interval_secs = atg_cfg.as_ref().map(|a| a.poll_interval_secs).unwrap_or(300),
+            interval_secs = atg_cfg
+                .as_ref()
+                .map(|a| a.poll_interval_secs)
+                .unwrap_or(300),
             "ATG task starting"
         );
         tokio::spawn(atg::run(
             cfg.clone(),
             tank_levels.clone(),
             events_tx.clone(),
+            Some(atg_sync_tx),
         ));
     }
 

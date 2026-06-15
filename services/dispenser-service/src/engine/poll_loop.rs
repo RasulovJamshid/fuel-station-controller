@@ -5,19 +5,22 @@ use std::time::Duration;
 use crate::engine::serial::ReconnectingSerial;
 use anyhow::Result;
 use chrono::Utc;
+use site_config::Protocol;
 use site_config::{FuelingPositionConfig, SiteConfig};
 use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
-use site_config::Protocol;
-use types::{preset_label, FpStatus, Preset, StopSource, Transaction, TxStatus, UpdatePriceCmd, WsEvent};
+use types::{
+    preset_label, FpStatus, Preset, StopSource, Transaction, TxStatus, UpdatePriceCmd, WsEvent,
+};
 use wayne_europump::{
     ack, authorise_cmd, authorize_config, authorize_initial, busy, done, encode_preset_limit_bcd,
-    parse_frame, poll, pre_authorise_price, stop_frame, stop_pre_frame, Frame,
-    FrameAccumulator,
+    parse_frame, poll, pre_authorise_price, stop_frame, stop_pre_frame, Frame, FrameAccumulator,
 };
 
-use super::state::{CurrentTx, FrameEffect, PreAuthContext, RuntimeFp, TxCompleteAction, DECEL_WINDOW_TIMEOUT_MS};
+use super::state::{
+    CurrentTx, FrameEffect, PreAuthContext, RuntimeFp, TxCompleteAction, DECEL_WINDOW_TIMEOUT_MS,
+};
 use crate::shifts::ShiftCoordinator;
 
 /// RS-485 needs quiet time between polls to different addresses (ms).
@@ -313,6 +316,9 @@ async fn dispatch_poll_frames(
 
 #[derive(Debug)]
 pub enum DispatchCommand {
+    ReloadConfig {
+        cfg: Arc<SiteConfig>,
+    },
     Authorize {
         byte: u8,
         price: u32,
@@ -421,29 +427,56 @@ pub fn write_serial(backend: &SerialBackend, out: &[u8]) -> Result<()> {
     }
 }
 
+fn active_positions_by_byte(cfg: &SiteConfig) -> HashMap<u8, FuelingPositionConfig> {
+    cfg.fueling_positions
+        .iter()
+        .filter(|fp| fp.active)
+        .map(|fp| (fp.address_byte, fp.clone()))
+        .collect()
+}
+
 pub async fn run_poll_loop(
-    cfg: Arc<SiteConfig>,
+    mut cfg: Arc<SiteConfig>,
     backend: SerialBackend,
     runtimes: Arc<RwLock<HashMap<u8, RuntimeFp>>>,
-    disp_by_byte: HashMap<u8, FuelingPositionConfig>,
+    mut disp_by_byte: HashMap<u8, FuelingPositionConfig>,
     events: broadcast::Sender<WsEvent>,
     mut commands: mpsc::Receiver<DispatchCommand>,
     pool: SqlitePool,
     shifts: Arc<ShiftCoordinator>,
 ) {
     if matches!(cfg.connection.protocol, Protocol::Gilbarco) {
-        return run_gilbarco_poll_loop(cfg, backend, runtimes, disp_by_byte, events, commands, pool, shifts).await;
+        return run_gilbarco_poll_loop(
+            cfg,
+            backend,
+            runtimes,
+            disp_by_byte,
+            events,
+            commands,
+            pool,
+            shifts,
+        )
+        .await;
     }
 
-    let addrs: Vec<u8> = cfg.active_addresses();
+    let mut addrs: Vec<u8> = cfg.active_addresses();
 
     let mut interval = tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let mut accum = FrameAccumulator::default();
 
-    loop {
+    'poll_loop: loop {
         while let Ok(cmd) = commands.try_recv() {
+            if let DispatchCommand::ReloadConfig { cfg: next_cfg } = cmd {
+                tracing::info!("poll loop reloaded site config");
+                cfg = next_cfg;
+                disp_by_byte = active_positions_by_byte(&cfg);
+                addrs = cfg.active_addresses();
+                interval = tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                continue 'poll_loop;
+            }
             apply_command(
                 &cfg,
                 &runtimes,
@@ -456,9 +489,19 @@ pub async fn run_poll_loop(
             .await;
         }
 
-        for &byte in &addrs {
+        for byte in addrs.clone() {
             interval.tick().await;
             while let Ok(cmd) = commands.try_recv() {
+                if let DispatchCommand::ReloadConfig { cfg: next_cfg } = cmd {
+                    tracing::info!("poll loop reloaded site config");
+                    cfg = next_cfg;
+                    disp_by_byte = active_positions_by_byte(&cfg);
+                    addrs = cfg.active_addresses();
+                    interval =
+                        tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
+                    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                    continue 'poll_loop;
+                }
                 apply_command(
                     &cfg,
                     &runtimes,
@@ -622,19 +665,29 @@ pub async fn run_poll_loop(
                         let effect = {
                             let mut map = runtimes.write().await;
                             map.get_mut(&byte).map(|rt| {
-                                let preset = rt.decel_pending_preset.take()
+                                let preset = rt
+                                    .decel_pending_preset
+                                    .take()
                                     .unwrap_or_else(|| rt.last_preset.clone());
                                 let ss = rt.decel_pending_stop_source;
                                 rt.clear_decel_window();
                                 rt.enter_stopped_state(
-                                    &fp_cfg, &cfg,
-                                    active_shift_id.clone(), active_operator_name.clone(),
-                                    preset, ss,
+                                    &fp_cfg,
+                                    &cfg,
+                                    active_shift_id.clone(),
+                                    active_operator_name.clone(),
+                                    preset,
+                                    ss,
                                 )
                             })
                         };
                         if let Some(FrameEffect::Paused {
-                            tx, fp_id, stopped_volume, stopped_amount, stopped_tx_id, stop_source,
+                            tx,
+                            fp_id,
+                            stopped_volume,
+                            stopped_amount,
+                            stopped_tx_id,
+                            stop_source,
                         }) = effect
                         {
                             let source_str = match stop_source {
@@ -649,7 +702,8 @@ pub async fn run_poll_loop(
                                 stopped_tx_id,
                                 stop_source: source_str.to_string(),
                             });
-                            if let Err(e) = crate::db::queries::insert_transaction(&pool, &tx).await {
+                            if let Err(e) = crate::db::queries::insert_transaction(&pool, &tx).await
+                            {
                                 warn!(?e, "db insert decel-timeout paused tx");
                             }
                             broadcast_status(byte, &runtimes, &events).await;
@@ -1020,6 +1074,7 @@ async fn apply_command(
     shifts: &ShiftCoordinator,
 ) {
     match cmd {
+        DispatchCommand::ReloadConfig { .. } => {}
         DispatchCommand::Authorize {
             byte,
             price,
@@ -1091,7 +1146,9 @@ async fn apply_command(
             if exchange_serial(backend, &auth).is_ok() {
                 let active_nozzle = {
                     let map = runtimes.read().await;
-                    map.get(&byte).and_then(|rt| rt.state.nozzle_index).unwrap_or(1)
+                    map.get(&byte)
+                        .and_then(|rt| rt.state.nozzle_index)
+                        .unwrap_or(1)
                 };
                 // Send CONFIG with the remaining limit immediately after AUTH so the pump
                 // uses the correct hardware limit when the customer lifts the nozzle.
@@ -1126,13 +1183,15 @@ async fn apply_command(
                 let rt = map.get(&byte);
                 (
                     rt.map_or(false, |r| r.state.status == FpStatus::Delivering),
-                    rt.map_or(false, |r| matches!(
-                        r.state.status,
-                        FpStatus::Delivering
-                            | FpStatus::Authorizing
-                            | FpStatus::NozzleUp
-                            | FpStatus::PreAuthorized
-                    ) || r.current_tx.is_some()),
+                    rt.map_or(false, |r| {
+                        matches!(
+                            r.state.status,
+                            FpStatus::Delivering
+                                | FpStatus::Authorizing
+                                | FpStatus::NozzleUp
+                                | FpStatus::PreAuthorized
+                        ) || r.current_tx.is_some()
+                    }),
                 )
             };
             // Only send the wire stop when there is an active session.
@@ -1154,8 +1213,16 @@ async fn apply_command(
             let (active_shift_id, active_operator_name) = shifts.active_info().await;
             let effect = {
                 let mut map = runtimes.write().await;
-                map.get_mut(&byte)
-                    .and_then(|rt| rt.apply_stop(&fp_cfg, cfg, active_shift_id, active_operator_name, cfg.ui.use_decel_window_on_stop, cfg.ui.use_stop_mode))
+                map.get_mut(&byte).and_then(|rt| {
+                    rt.apply_stop(
+                        &fp_cfg,
+                        cfg,
+                        active_shift_id,
+                        active_operator_name,
+                        cfg.ui.use_decel_window_on_stop,
+                        cfg.ui.use_stop_mode,
+                    )
+                })
             };
             if let Some(FrameEffect::Paused {
                 tx,
@@ -1199,7 +1266,9 @@ async fn apply_command(
                 // Read nozzle index while we still hold no locks.
                 let active_nozzle = {
                     let map = runtimes.read().await;
-                    map.get(&byte).and_then(|rt| rt.state.nozzle_index).unwrap_or(1)
+                    map.get(&byte)
+                        .and_then(|rt| rt.state.nozzle_index)
+                        .unwrap_or(1)
                 };
                 // Send CONFIG with the *remaining* limit immediately after AUTH, before the
                 // first BUSY frame starts the pump counting.  The pump resets its internal
@@ -1261,7 +1330,14 @@ async fn apply_command(
                 let mut map = runtimes.write().await;
                 for fp in cfg.active_positions() {
                     if let Some(rt) = map.get_mut(&fp.address_byte) {
-                        if let Some(effect) = rt.apply_stop(fp, cfg, active_shift_id.clone(), active_operator_name.clone(), false, false) {
+                        if let Some(effect) = rt.apply_stop(
+                            fp,
+                            cfg,
+                            active_shift_id.clone(),
+                            active_operator_name.clone(),
+                            false,
+                            false,
+                        ) {
                             stopped_effects.push((fp.address_byte, fp.id.clone(), effect));
                         }
                     }
@@ -1485,10 +1561,10 @@ async fn apply_command(
 // ── Gilbarco Two-Wire Protocol (TWOTP-IS-1.0-S) poll loop ────────────────────
 
 async fn run_gilbarco_poll_loop(
-    cfg: Arc<SiteConfig>,
+    mut cfg: Arc<SiteConfig>,
     backend: SerialBackend,
     runtimes: Arc<RwLock<HashMap<u8, RuntimeFp>>>,
-    disp_by_byte: HashMap<u8, FuelingPositionConfig>,
+    mut disp_by_byte: HashMap<u8, FuelingPositionConfig>,
     events: broadcast::Sender<WsEvent>,
     mut commands: mpsc::Receiver<DispatchCommand>,
     pool: SqlitePool,
@@ -1496,21 +1572,42 @@ async fn run_gilbarco_poll_loop(
 ) {
     use gilbarco::GilbarcoStatus;
 
-    let addrs: Vec<u8> = cfg.active_addresses();
+    let mut addrs: Vec<u8> = cfg.active_addresses();
     // Flag each address for a price sync on its first Idle observation.
     let mut pending_prices: HashMap<u8, bool> = addrs.iter().map(|&a| (a, true)).collect();
 
     let mut interval = tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-    loop {
+    'poll_loop: loop {
         while let Ok(cmd) = commands.try_recv() {
+            if let DispatchCommand::ReloadConfig { cfg: next_cfg } = cmd {
+                tracing::info!("Gilbarco poll loop reloaded site config");
+                cfg = next_cfg;
+                disp_by_byte = active_positions_by_byte(&cfg);
+                addrs = cfg.active_addresses();
+                pending_prices = addrs.iter().map(|&a| (a, true)).collect();
+                interval = tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                continue 'poll_loop;
+            }
             gbr_apply_command(&cfg, &runtimes, &events, &backend, cmd, &mut pending_prices).await;
         }
 
-        for &byte in &addrs {
+        for byte in addrs.clone() {
             interval.tick().await;
             while let Ok(cmd) = commands.try_recv() {
+                if let DispatchCommand::ReloadConfig { cfg: next_cfg } = cmd {
+                    tracing::info!("Gilbarco poll loop reloaded site config");
+                    cfg = next_cfg;
+                    disp_by_byte = active_positions_by_byte(&cfg);
+                    addrs = cfg.active_addresses();
+                    pending_prices = addrs.iter().map(|&a| (a, true)).collect();
+                    interval =
+                        tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
+                    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                    continue 'poll_loop;
+                }
                 gbr_apply_command(&cfg, &runtimes, &events, &backend, cmd, &mut pending_prices)
                     .await;
             }
@@ -1579,8 +1676,7 @@ async fn run_gilbarco_poll_loop(
                         let map = runtimes.read().await;
                         map.get(&byte)
                             .map(|rt| {
-                                rt.pre_auth.is_some()
-                                    && rt.state.status == FpStatus::PreAuthorized
+                                rt.pre_auth.is_some() && rt.state.status == FpStatus::PreAuthorized
                             })
                             .unwrap_or(false)
                     };
@@ -1619,8 +1715,7 @@ async fn run_gilbarco_poll_loop(
                         let map = runtimes.read().await;
                         map.get(&byte)
                             .map(|rt| {
-                                rt.pre_auth.is_some()
-                                    || rt.state.status == FpStatus::PreAuthorized
+                                rt.pre_auth.is_some() || rt.state.status == FpStatus::PreAuthorized
                             })
                             .unwrap_or(false)
                     };
@@ -1664,8 +1759,7 @@ async fn run_gilbarco_poll_loop(
                         }
                         info!(
                             addr = format_args!("0x{byte:02X}"),
-                            nozzle,
-                            "Gilbarco: NozzleLifted + pending auth → Authorize sent"
+                            nozzle, "Gilbarco: NozzleLifted + pending auth → Authorize sent"
                         );
                     } else {
                         // No pending auth — notify UI and wait for operator.
@@ -1714,7 +1808,10 @@ async fn run_gilbarco_poll_loop(
                             let map = runtimes.read().await;
                             map.get(&byte)
                                 .map(|rt| {
-                                    rt.nozzle_prices.get(&nozzle).copied().unwrap_or(rt.state.price)
+                                    rt.nozzle_prices
+                                        .get(&nozzle)
+                                        .copied()
+                                        .unwrap_or(rt.state.price)
                                 })
                                 .unwrap_or(0)
                         };
@@ -1735,7 +1832,10 @@ async fn run_gilbarco_poll_loop(
                     } else {
                         let mut map = runtimes.write().await;
                         if let Some(rt) = map.get_mut(&byte) {
-                            if matches!(rt.state.status, FpStatus::NozzleUp | FpStatus::PreAuthorized) {
+                            if matches!(
+                                rt.state.status,
+                                FpStatus::NozzleUp | FpStatus::PreAuthorized
+                            ) {
                                 rt.state.status = FpStatus::Authorizing;
                                 rt.pre_auth = None;
                             }
@@ -1785,14 +1885,7 @@ async fn run_gilbarco_poll_loop(
 
                 GilbarcoStatus::TransactionComplete => {
                     gbr_close_transaction(
-                        byte,
-                        fp_cfg,
-                        &backend,
-                        &cfg,
-                        &runtimes,
-                        &events,
-                        &pool,
-                        &shifts,
+                        byte, fp_cfg, &backend, &cfg, &runtimes, &events, &pool, &shifts,
                     )
                     .await;
                 }
@@ -1995,9 +2088,7 @@ async fn gbr_close_transaction(
     }
     info!(
         addr = format_args!("0x{byte:02X}"),
-        volume,
-        amount,
-        "Gilbarco: transaction complete, Done emitted"
+        volume, amount, "Gilbarco: transaction complete, Done emitted"
     );
 }
 
@@ -2010,7 +2101,12 @@ async fn gbr_apply_command(
     pending_prices: &mut HashMap<u8, bool>,
 ) {
     match cmd {
-        DispatchCommand::Authorize { byte, price, preset } => {
+        DispatchCommand::ReloadConfig { .. } => {}
+        DispatchCommand::Authorize {
+            byte,
+            price,
+            preset,
+        } => {
             let fp_cfg = match cfg.position_by_address(byte) {
                 Some(p) => p.clone(),
                 None => return,
@@ -2045,7 +2141,10 @@ async fn gbr_apply_command(
                 let product_id = fp_cfg.nozzles.first().map(|n| n.product_id).unwrap_or(0);
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
-                    rt.pre_auth = Some(PreAuthContext { nozzle_index: 0, product_id });
+                    rt.pre_auth = Some(PreAuthContext {
+                        nozzle_index: 0,
+                        product_id,
+                    });
                     rt.state.price = price;
                     rt.set_last_preset(preset);
                 }
@@ -2068,7 +2167,10 @@ async fn gbr_apply_command(
             {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
-                    rt.pre_auth = Some(PreAuthContext { nozzle_index, product_id });
+                    rt.pre_auth = Some(PreAuthContext {
+                        nozzle_index,
+                        product_id,
+                    });
                     rt.state.price = price;
                     rt.state.nozzle_index = Some(nozzle_index);
                     rt.state.product_id = Some(product_id);
@@ -2164,7 +2266,10 @@ async fn gbr_apply_command(
             }
         }
 
-        DispatchCommand::UpdatePrices { updates, changed_by } => {
+        DispatchCommand::UpdatePrices {
+            updates,
+            changed_by,
+        } => {
             let mut map = runtimes.write().await;
             for u in updates {
                 let Some(fp) = cfg.position_by_id(&u.fp_id) else {

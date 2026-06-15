@@ -265,10 +265,12 @@ export interface Operator {
 
 export interface AtgSlotInfo {
   slot: number;
+  tank_id?: string;
   type: string;
   product_id?: number;
   label?: string;
   capacity_l?: number;
+  maxima?: Record<string, number>;
 }
 
 export interface AtgBranchInfo {
@@ -276,6 +278,10 @@ export interface AtgBranchInfo {
   name: string;
   host: string;
   port: number;
+  unit_id: number;
+  start_register: number;
+  address_base: number;
+  register_count: number;
   slots: AtgSlotInfo[];
 }
 
@@ -284,6 +290,12 @@ export interface AtgConfigSnapshot {
   poll_interval_secs: number;
   modbus_timeout_secs: number;
   api_url: string;
+  auth?: {
+    api_token?: string;
+    username?: string;
+    password?: string;
+    login_url?: string;
+  } | null;
   branches: AtgBranchInfo[];
 }
 

@@ -154,7 +154,10 @@ impl TxStatus {
     /// ContinuedFrom carries the segment volume only; caller must add it to the
     /// already-counted STOPPED parent to avoid double-counting.
     pub fn counts_toward_revenue(&self) -> bool {
-        matches!(self, Self::Completed | Self::Stopped | Self::ContinuedFrom(_))
+        matches!(
+            self,
+            Self::Completed | Self::Stopped | Self::ContinuedFrom(_)
+        )
     }
 }
 
@@ -660,4 +663,3 @@ pub struct TxSummary {
     pub total_volume: f64,
     pub total_amount: i64,
 }
-

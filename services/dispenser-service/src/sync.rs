@@ -40,16 +40,16 @@ pub type SharedSyncStatus = Arc<Mutex<SyncStatus>>;
 
 pub fn new_status(cfg: &site_config::SyncConfig) -> SharedSyncStatus {
     Arc::new(Mutex::new(SyncStatus {
-        enabled:                     cfg.enabled,
-        backend_url:                 cfg.backend_url.clone(),
-        last_sync_at:                None,
-        last_error:                  None,
-        pending_count:               0,
-        total_synced:                0,
-        connected:                   false,
-        last_price_pull_at:          None,
-        prices_updated:              0,
-        price_pull_interval_hours:   cfg.price_pull_interval_hours,
+        enabled: cfg.enabled,
+        backend_url: cfg.backend_url.clone(),
+        last_sync_at: None,
+        last_error: None,
+        pending_count: 0,
+        total_synced: 0,
+        connected: false,
+        last_price_pull_at: None,
+        prices_updated: 0,
+        price_pull_interval_hours: cfg.price_pull_interval_hours,
     }))
 }
 
@@ -57,11 +57,11 @@ pub fn new_status(cfg: &site_config::SyncConfig) -> SharedSyncStatus {
 
 #[derive(sqlx::FromRow)]
 struct QueueRow {
-    id:           String,
-    entity_type:  String,
-    entity_id:    String,
+    id: String,
+    entity_type: String,
+    entity_id: String,
     payload_json: String,
-    created_at:   i64,
+    created_at: i64,
 }
 
 // ── Backend response ──────────────────────────────────────────────────────────
@@ -134,7 +134,16 @@ pub async fn run(
     let mut last_price_pull: Option<std::time::Instant> = None;
 
     loop {
-        let (enabled, backend_url, api_key, station_id, interval, batch_size, max_retries, price_pull_interval_hours) = {
+        let (
+            enabled,
+            backend_url,
+            api_key,
+            station_id,
+            interval,
+            batch_size,
+            max_retries,
+            price_pull_interval_hours,
+        ) = {
             let r = cfg.read().await;
             (
                 r.sync.enabled,
@@ -151,27 +160,37 @@ pub async fn run(
         // Reflect config into status even when disabled
         {
             let mut s = status.lock().await;
-            s.enabled                   = enabled;
-            s.backend_url               = backend_url.clone();
+            s.enabled = enabled;
+            s.backend_url = backend_url.clone();
             s.price_pull_interval_hours = price_pull_interval_hours;
         }
 
         let skip = !enabled || backend_url.is_empty() || api_key.is_empty();
         if !skip {
             // Push pending local records to the backend
-            match do_batch(&pool, &client, &backend_url, &api_key, &station_id, batch_size, max_retries).await {
+            match do_batch(
+                &pool,
+                &client,
+                &backend_url,
+                &api_key,
+                &station_id,
+                batch_size,
+                max_retries,
+            )
+            .await
+            {
                 Ok(synced) => {
                     let mut s = status.lock().await;
-                    s.last_sync_at  = Some(chrono::Utc::now().timestamp_millis());
-                    s.last_error    = None;
-                    s.connected     = true;
+                    s.last_sync_at = Some(chrono::Utc::now().timestamp_millis());
+                    s.last_error = None;
+                    s.connected = true;
                     s.total_synced += synced as u64;
                     tracing::debug!(synced, "sync batch ok");
                 }
                 Err(err) => {
                     let mut s = status.lock().await;
                     s.last_error = Some(err.clone());
-                    s.connected  = false;
+                    s.connected = false;
                     tracing::warn!(%err, "sync batch failed — will retry");
                 }
             }
@@ -192,17 +211,29 @@ pub async fn run(
             };
 
             if should_pull {
-                match pull_prices(&pool, &client, &backend_url, &api_key, &station_id, &cfg, &config_path, &commands).await {
+                match pull_prices(
+                    &pool,
+                    &client,
+                    &backend_url,
+                    &api_key,
+                    &station_id,
+                    &cfg,
+                    &config_path,
+                    &commands,
+                )
+                .await
+                {
                     Ok(updated) if updated > 0 => {
                         last_price_pull = Some(std::time::Instant::now());
                         let mut s = status.lock().await;
                         s.last_price_pull_at = Some(chrono::Utc::now().timestamp_millis());
-                        s.prices_updated    += updated as u64;
+                        s.prices_updated += updated as u64;
                         tracing::info!(updated, "price pull: applied remote price changes");
                     }
                     Ok(_) => {
                         last_price_pull = Some(std::time::Instant::now());
-                        status.lock().await.last_price_pull_at = Some(chrono::Utc::now().timestamp_millis());
+                        status.lock().await.last_price_pull_at =
+                            Some(chrono::Utc::now().timestamp_millis());
                     }
                     Err(err) => {
                         tracing::warn!(%err, "price pull failed — will retry next tick");
@@ -217,12 +248,12 @@ pub async fn run(
 }
 
 async fn do_batch(
-    pool:        &SqlitePool,
-    client:      &Client,
+    pool: &SqlitePool,
+    client: &Client,
     backend_url: &str,
-    api_key:     &str,
-    station_id:  &str,
-    batch_size:  usize,
+    api_key: &str,
+    station_id: &str,
+    batch_size: usize,
     max_retries: u32,
 ) -> Result<usize, String> {
     let rows = sqlx::query_as::<_, QueueRow>(
@@ -319,24 +350,24 @@ async fn pending_count(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
 
 #[derive(Deserialize)]
 struct RemotePrice {
-    fp_id:        String,
+    fp_id: String,
     nozzle_index: u8,
-    product_id:   u8,
+    product_id: u8,
     product_name: String,
-    price:        u32,
+    price: u32,
 }
 
 /// Fetch current prices from the backend and apply any that differ from the local config.
 /// Returns the number of nozzle prices that were updated.
 async fn pull_prices(
-    pool:        &SqlitePool,
-    client:      &Client,
+    pool: &SqlitePool,
+    client: &Client,
     backend_url: &str,
-    api_key:     &str,
-    station_id:  &str,
-    cfg:         &Arc<RwLock<SiteConfig>>,
+    api_key: &str,
+    station_id: &str,
+    cfg: &Arc<RwLock<SiteConfig>>,
     config_path: &PathBuf,
-    commands:    &mpsc::Sender<DispatchCommand>,
+    commands: &mpsc::Sender<DispatchCommand>,
 ) -> Result<usize, String> {
     let url = format!(
         "{}/api/v1/sync/{}/prices",
@@ -361,7 +392,10 @@ async fn pull_prices(
         return Err(format!("price pull HTTP {code}: {body}"));
     }
 
-    let remote: Vec<RemotePrice> = resp.json().await.map_err(|e| format!("price pull parse: {e}"))?;
+    let remote: Vec<RemotePrice> = resp
+        .json()
+        .await
+        .map_err(|e| format!("price pull parse: {e}"))?;
     if remote.is_empty() {
         return Ok(0);
     }
@@ -372,17 +406,23 @@ async fn pull_prices(
         let cfg_r = cfg.read().await;
         for rp in &remote {
             let nozzle = cfg_r
-                .fueling_positions.iter()
+                .fueling_positions
+                .iter()
                 .find(|fp| fp.id == rp.fp_id)
                 .and_then(|fp| fp.nozzles.iter().find(|n| n.index == rp.nozzle_index));
 
             if nozzle.map(|n| n.price) != Some(rp.price) {
-                let product_id   = nozzle.map(|n| n.product_id).unwrap_or(rp.product_id);
-                let product_name = cfg_r.product(product_id)
+                let product_id = nozzle.map(|n| n.product_id).unwrap_or(rp.product_id);
+                let product_name = cfg_r
+                    .product(product_id)
                     .map(|p| p.name.clone())
                     .unwrap_or_else(|| rp.product_name.clone());
                 updates.push((
-                    UpdatePriceCmd { fp_id: rp.fp_id.clone(), nozzle_index: rp.nozzle_index, price: rp.price },
+                    UpdatePriceCmd {
+                        fp_id: rp.fp_id.clone(),
+                        nozzle_index: rp.nozzle_index,
+                        price: rp.price,
+                    },
                     product_id,
                     product_name,
                 ));
@@ -416,13 +456,28 @@ async fn pull_prices(
     // Persist to the local DB price history (0 for old_price — server-push, previous value unknown)
     for (u, product_id, product_name) in &updates {
         if let Err(e) = crate::db::admin_queries::insert_price_change(
-            pool, &u.fp_id, u.nozzle_index, *product_id, product_name, 0, u.price, "server",
-        ).await {
+            pool,
+            &u.fp_id,
+            u.nozzle_index,
+            *product_id,
+            product_name,
+            0,
+            u.price,
+            "server",
+        )
+        .await
+        {
             tracing::warn!(?e, "price pull: history insert failed");
         }
         if let Err(e) = crate::db::admin_queries::update_nozzle_price_in_db(
-            pool, &u.fp_id, u.nozzle_index, u.price, "server",
-        ).await {
+            pool,
+            &u.fp_id,
+            u.nozzle_index,
+            u.price,
+            "server",
+        )
+        .await
+        {
             tracing::warn!(?e, "price pull: nozzle DB update failed");
         }
     }

@@ -119,9 +119,7 @@ pub struct CurrentTx {
 
 /// Last sale recorded on this lane until the operator dismisses the DONE screen.
 #[derive(Debug, Clone)]
-pub struct CompletedSaleLatch {
-    pub nozzle_index: u8,
-}
+pub struct CompletedSaleLatch;
 
 impl RuntimeFp {
     pub fn new(fp: &FuelingPositionConfig, cfg: &SiteConfig) -> Self {
@@ -1732,40 +1730,32 @@ impl RuntimeFp {
                 let (cfg_idx, name, pid, color) =
                     resolve_wayne_nozzle(site, fp_cfg, *product, *nozzle);
                 if self.state.status == FpStatus::Done {
-                    let same_completed_nozzle = self
-                        .completed_sale
-                        .as_ref()
-                        .is_some_and(|l| l.nozzle_index == cfg_idx);
-                    if same_completed_nozzle {
-                        self.reset_to_idle();
-                        // reset_to_idle clears last_wire_hose_code/at_ms; restore the
-                        // lift code so nozzle_physically_up() stays true and spurious
-                        // DispenserIdle frames don't trigger a ghost-fill reset to Idle.
-                        self.note_wire_hose(*nozzle);
-                    } else {
-                        // Another hose lifted while a completed sale awaits dismiss.
-                        self.state.status = FpStatus::NozzleUp;
-                        self.zero_delivery_meters();
-                        self.state.nozzle_index = Some(cfg_idx);
-                        self.state.product_id = Some(pid);
-                        self.state.product_name = Some(name.clone());
-                        self.state.product_color = Some(color.clone());
-                        let p = self
-                            .nozzle_prices
-                            .get(&cfg_idx)
-                            .copied()
-                            .or_else(|| site.price_for(b, cfg_idx))
-                            .unwrap_or(self.state.price);
-                        self.state.price = p;
-                        self.touch();
-                        return FrameEffect::NozzleUp {
-                            nozzle_index: cfg_idx,
-                            product_id: pid,
-                            product_name: name,
-                            product_color: color,
-                            price: p,
-                        };
-                    }
+                    // A physical lift after DONE is a new customer session even when it is
+                    // the same hose as the completed sale.  Previously the same-hose path
+                    // reset to IDLE but left completed_sale latched, so the UI could keep
+                    // showing "filled" and later meter frames were ignored.
+                    self.clear_completed_sale_latch();
+                    self.state.status = FpStatus::NozzleUp;
+                    self.zero_delivery_meters();
+                    self.state.nozzle_index = Some(cfg_idx);
+                    self.state.product_id = Some(pid);
+                    self.state.product_name = Some(name.clone());
+                    self.state.product_color = Some(color.clone());
+                    let p = self
+                        .nozzle_prices
+                        .get(&cfg_idx)
+                        .copied()
+                        .or_else(|| site.price_for(b, cfg_idx))
+                        .unwrap_or(self.state.price);
+                    self.state.price = p;
+                    self.touch();
+                    return FrameEffect::NozzleUp {
+                        nozzle_index: cfg_idx,
+                        product_id: pid,
+                        product_name: name,
+                        product_color: color,
+                        price: p,
+                    };
                 }
                 if self.ghost_recovery_active() {
                     self.clear_ghost_recovery();
@@ -2392,7 +2382,7 @@ impl RuntimeFp {
         };
         self.continuation = None;
         if combined_volume > 0.01 && !matches!(status, TxStatus::Stopped) {
-            self.completed_sale = Some(CompletedSaleLatch { nozzle_index });
+            self.completed_sale = Some(CompletedSaleLatch);
         }
         Transaction {
             id,
@@ -2547,6 +2537,13 @@ impl RuntimeFp {
         self.nozzle_prices.clear();
         for n in fp.nozzles.iter().filter(|n| n.active) {
             self.nozzle_prices.insert(n.index, n.price);
+        }
+        if let Some(idx) = self.state.nozzle_index {
+            if let Some(price) = self.nozzle_prices.get(&idx).copied() {
+                self.state.price = price;
+            }
+        } else if matches!(self.state.status, FpStatus::Idle | FpStatus::Offline) {
+            self.state.price = fp.default_price().unwrap_or(0);
         }
         self.state.nozzle_count = fp.nozzle_count().min(u8::MAX as usize) as u8;
         self.state.label = fp.label.clone();

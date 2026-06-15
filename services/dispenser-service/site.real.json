@@ -270,9 +270,10 @@
   "atg": {
     "poll_interval_secs": 300,
     "modbus_timeout_secs": 10.0,
+    "api_url": "https://ps.ung.uz/api/integration/fuel-levels",
     "branches": [
       {
-        "id": 0,
+        "id": 1,
         "name": "Bostonliquid AZS",
         "host": "192.168.127.254",
         "port": 6400,
@@ -283,6 +284,7 @@
         "slots": [
           {
             "slot": 1,
+            "tank_id": "1",
             "type": "AI-92",
             "product_id": 1,
             "label": null,
@@ -291,6 +293,7 @@
           },
           {
             "slot": 2,
+            "tank_id": "2",
             "type": "AI-95",
             "product_id": 2,
             "label": null,
@@ -299,6 +302,7 @@
           },
           {
             "slot": 3,
+            "tank_id": "3",
             "type": "Diesel",
             "product_id": 3,
             "label": null,
@@ -307,6 +311,7 @@
           },
           {
             "slot": 4,
+            "tank_id": "4",
             "type": "AI-91",
             "product_id": 4,
             "label": null,

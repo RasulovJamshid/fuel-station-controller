@@ -221,7 +221,9 @@ pub async fn save_products_to_db(
     tracing::info!("save_products_to_db: acquiring transaction");
     let mut tx = pool.begin().await?;
     tracing::info!("save_products_to_db: deleting old rows");
-    sqlx::query("DELETE FROM products").execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM products")
+        .execute(&mut *tx)
+        .await?;
     for p in products {
         sqlx::query(
             "INSERT INTO products (id, uuid, name, color, unit, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)",

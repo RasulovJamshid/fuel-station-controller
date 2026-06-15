@@ -192,7 +192,7 @@ function toDateInputVal(ms: number) {
 // ── status config ─────────────────────────────────────────────────────────────
 
 const STATUS_FILTERS = [
-  { id: "main",     labelKey: "history.statusMain",    statuses: "COMPLETED,CONTINUED_FROM" },
+  { id: "main",     labelKey: "history.statusMain",    statuses: "COMPLETED,STOPPED,CONTINUED_FROM" },
   { id: "all",      labelKey: "history.statusAll",     statuses: "" },
   { id: "aborted",  labelKey: "history.statusAborted", statuses: "ABORTED" },
   { id: "stopped",  labelKey: "history.statusStopped", statuses: "STOPPED" },
@@ -396,6 +396,7 @@ export function HistoryPanel(props: {
         limit:    2000,
         offset:   0,
         statuses: statusesParam || null,
+        shiftId:  filterShiftId ?? null,
         fromMs:   fromMs  ?? null,
         untilMs:  untilMs ?? null,
       });

@@ -205,10 +205,18 @@ pub struct SyncConfig {
     pub price_pull_interval_hours: u64,
 }
 
-fn default_retry_interval_secs() -> u64 { 30 }
-fn default_batch_size() -> usize { 100 }
-fn default_max_retries() -> u32 { 10 }
-fn default_price_pull_interval_hours() -> u64 { 12 }
+fn default_retry_interval_secs() -> u64 {
+    30
+}
+fn default_batch_size() -> usize {
+    100
+}
+fn default_max_retries() -> u32 {
+    10
+}
+fn default_price_pull_interval_hours() -> u64 {
+    12
+}
 
 // ── Shift configuration (SHIFT_MANAGEMENT.md) ─────────────────────────────
 
@@ -342,8 +350,12 @@ pub struct AtgConfig {
     pub branches: Vec<AtgBranch>,
 }
 
-fn default_atg_poll_interval() -> u64 { 300 }
-fn default_atg_modbus_timeout() -> f64 { 10.0 }
+fn default_atg_poll_interval() -> u64 {
+    300
+}
+fn default_atg_modbus_timeout() -> f64 {
+    10.0
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AtgAuth {
@@ -382,11 +394,21 @@ pub struct AtgBranch {
     pub slots: Vec<AtgSlot>,
 }
 
-fn default_atg_port() -> u16 { 502 }
-fn default_atg_unit_id() -> u8 { 1 }
-fn default_atg_start_register() -> u16 { 1000 }
-fn default_atg_address_base() -> u16 { 1 }
-fn default_atg_register_count() -> u16 { 12 }
+fn default_atg_port() -> u16 {
+    502
+}
+fn default_atg_unit_id() -> u8 {
+    1
+}
+fn default_atg_start_register() -> u16 {
+    1000
+}
+fn default_atg_address_base() -> u16 {
+    1
+}
+fn default_atg_register_count() -> u16 {
+    12
+}
 
 impl AtgBranch {
     /// 0-based PDU register address for the Modbus request.
@@ -403,6 +425,9 @@ impl AtgBranch {
 pub struct AtgSlot {
     /// 1-based tank slot number (1–4).
     pub slot: u8,
+    /// Optional backend reservoir tankId. Defaults to product_id when omitted.
+    #[serde(default)]
+    pub tank_id: Option<String>,
     /// Fuel type label used in the integration payload, e.g. "AI-92".
     #[serde(rename = "type")]
     pub fuel_type: String,
@@ -611,7 +636,11 @@ impl SiteConfig {
         let mut tank_products = HashSet::new();
         for t in &self.tanks {
             if !product_ids.contains(&t.product_id) {
-                bail!("Tank '{}' references unknown product_id {}", t.label, t.product_id);
+                bail!(
+                    "Tank '{}' references unknown product_id {}",
+                    t.label,
+                    t.product_id
+                );
             }
             if !tank_products.insert(t.product_id) {
                 bail!("Duplicate tank for product_id {}", t.product_id);
@@ -667,7 +696,11 @@ impl SiteConfig {
             let mut slots = HashSet::new();
             for slot in &branch.slots {
                 if !(1..=4).contains(&slot.slot) {
-                    bail!("ATG branch {} slot must be 1..=4, got {}", branch.id, slot.slot);
+                    bail!(
+                        "ATG branch {} slot must be 1..=4, got {}",
+                        branch.id,
+                        slot.slot
+                    );
                 }
                 if !slots.insert(slot.slot) {
                     bail!("ATG branch {} has duplicate slot {}", branch.id, slot.slot);
@@ -682,6 +715,13 @@ impl SiteConfig {
                 }
                 if slot.fuel_type.trim().is_empty() {
                     bail!("ATG branch {} slot {} has empty type", branch.id, slot.slot);
+                }
+                if matches!(slot.tank_id.as_deref(), Some(tank_id) if tank_id.trim().is_empty()) {
+                    bail!(
+                        "ATG branch {} slot {} has empty tank_id",
+                        branch.id,
+                        slot.slot
+                    );
                 }
                 if let Some(pid) = slot.product_id {
                     if !product_ids.contains(&pid) {
@@ -702,14 +742,26 @@ impl SiteConfig {
                     }
                 }
                 if matches!(slot.label.as_deref(), Some(label) if label.trim().is_empty()) {
-                    bail!("ATG branch {} slot {} has empty label", branch.id, slot.slot);
+                    bail!(
+                        "ATG branch {} slot {} has empty label",
+                        branch.id,
+                        slot.slot
+                    );
                 }
                 if matches!(slot.capacity_l, Some(capacity) if capacity <= 0.0) {
-                    bail!("ATG branch {} slot {} capacity_l must be > 0", branch.id, slot.slot);
+                    bail!(
+                        "ATG branch {} slot {} capacity_l must be > 0",
+                        branch.id,
+                        slot.slot
+                    );
                 }
                 for (key, value) in &slot.maxima {
                     if key.trim().is_empty() {
-                        bail!("ATG branch {} slot {} has empty maxima key", branch.id, slot.slot);
+                        bail!(
+                            "ATG branch {} slot {} has empty maxima key",
+                            branch.id,
+                            slot.slot
+                        );
                     }
                     if *value <= 0.0 {
                         bail!(

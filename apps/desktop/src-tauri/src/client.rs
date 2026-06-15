@@ -362,10 +362,7 @@ impl ServiceClient {
     }
 
     pub async fn get_current_shift(&self) -> Result<Option<Shift>, String> {
-        let url = self
-            .base
-            .join("shifts/current")
-            .map_err(fmt_err)?;
+        let url = self.base.join("shifts/current").map_err(fmt_err)?;
         self.http
             .get(url)
             .send()
@@ -380,7 +377,8 @@ impl ServiceClient {
 
     pub async fn start_shift(&self, cmd: StartShiftCmd) -> Result<Shift, String> {
         let url = self.base.join("shifts/start").map_err(fmt_err)?;
-        let resp = self.http
+        let resp = self
+            .http
             .post(url)
             .json(&cmd)
             .send()
@@ -394,7 +392,8 @@ impl ServiceClient {
 
     pub async fn end_shift(&self, cmd: EndShiftCmd) -> Result<Shift, String> {
         let url = self.base.join("shifts/end").map_err(fmt_err)?;
-        let resp = self.http
+        let resp = self
+            .http
             .post(url)
             .json(&cmd)
             .send()
@@ -407,11 +406,9 @@ impl ServiceClient {
     }
 
     pub async fn handover_shift(&self, cmd: HandoverCmd) -> Result<serde_json::Value, String> {
-        let url = self
-            .base
-            .join("shifts/handover")
-            .map_err(fmt_err)?;
-        let resp = self.http
+        let url = self.base.join("shifts/handover").map_err(fmt_err)?;
+        let resp = self
+            .http
             .post(url)
             .json(&cmd)
             .send()
@@ -511,10 +508,7 @@ impl ServiceClient {
     }
 
     pub async fn admin_apply_prices_now(&self, token: String, fp_id: String) -> Result<(), String> {
-        let url = self
-            .base
-            .join("admin/prices/apply-now")
-            .map_err(fmt_err)?;
+        let url = self.base.join("admin/prices/apply-now").map_err(fmt_err)?;
         self.admin_http
             .post(url)
             .headers(Self::auth_headers(&token))
@@ -532,10 +526,7 @@ impl ServiceClient {
         token: String,
         limit: Option<i64>,
     ) -> Result<Vec<PriceChange>, String> {
-        let url = self
-            .base
-            .join("admin/prices/history")
-            .map_err(fmt_err)?;
+        let url = self.base.join("admin/prices/history").map_err(fmt_err)?;
         let mut req = self.admin_http.get(url).headers(Self::auth_headers(&token));
         if let Some(l) = limit {
             req = req.query(&[("limit", l)]);
@@ -551,10 +542,7 @@ impl ServiceClient {
     }
 
     pub async fn admin_list_operators(&self, token: String) -> Result<Vec<Operator>, String> {
-        let url = self
-            .base
-            .join("admin/operators")
-            .map_err(fmt_err)?;
+        let url = self.base.join("admin/operators").map_err(fmt_err)?;
         self.admin_http
             .get(url)
             .headers(Self::auth_headers(&token))
@@ -573,10 +561,7 @@ impl ServiceClient {
         token: String,
         cmd: CreateOperatorCmd,
     ) -> Result<Operator, String> {
-        let url = self
-            .base
-            .join("admin/operators")
-            .map_err(fmt_err)?;
+        let url = self.base.join("admin/operators").map_err(fmt_err)?;
         self.admin_http
             .post(url)
             .timeout(std::time::Duration::from_secs(ADMIN_WRITE_TIMEOUT_SECS))
@@ -634,10 +619,7 @@ impl ServiceClient {
     }
 
     pub async fn admin_get_settings(&self, token: String) -> Result<AdminSettingsSnapshot, String> {
-        let url = self
-            .base
-            .join("admin/settings")
-            .map_err(fmt_err)?;
+        let url = self.base.join("admin/settings").map_err(fmt_err)?;
         self.admin_http
             .get(url)
             .headers(Self::auth_headers(&token))
@@ -656,10 +638,7 @@ impl ServiceClient {
         token: String,
         body: serde_json::Value,
     ) -> Result<(), String> {
-        let url = self
-            .base
-            .join("admin/settings")
-            .map_err(fmt_err)?;
+        let url = self.base.join("admin/settings").map_err(fmt_err)?;
         self.admin_http
             .post(url)
             .timeout(std::time::Duration::from_secs(ADMIN_WRITE_TIMEOUT_SECS))
@@ -678,10 +657,7 @@ impl ServiceClient {
         token: String,
         cmd: AdminShiftScheduleCmd,
     ) -> Result<(), String> {
-        let url = self
-            .base
-            .join("admin/shift-schedule")
-            .map_err(fmt_err)?;
+        let url = self.base.join("admin/shift-schedule").map_err(fmt_err)?;
         self.admin_http
             .post(url)
             .headers(Self::auth_headers(&token))
@@ -714,10 +690,7 @@ impl ServiceClient {
         token: String,
         cmd: SaveProductsCmd,
     ) -> Result<(), String> {
-        let url = self
-            .base
-            .join("admin/products")
-            .map_err(fmt_err)?;
+        let url = self.base.join("admin/products").map_err(fmt_err)?;
         let resp = self
             .admin_http
             .post(url)
@@ -765,10 +738,7 @@ impl ServiceClient {
         token: Option<String>,
         cmd: AdminChangePinCmd,
     ) -> Result<(), String> {
-        let url = self
-            .base
-            .join("admin/change-pin")
-            .map_err(fmt_err)?;
+        let url = self.base.join("admin/change-pin").map_err(fmt_err)?;
         let mut req = self.admin_http.post(url).json(&cmd);
         if let Some(t) = token {
             req = req.headers(Self::auth_headers(&t));
@@ -814,7 +784,8 @@ impl ServiceClient {
 
     pub async fn update_sync_config(&self, body: serde_json::Value) -> Result<(), String> {
         let url = self.base.join("admin/sync-config").map_err(fmt_err)?;
-        let resp = self.http
+        let resp = self
+            .http
             .post(url)
             .json(&body)
             .send()
@@ -841,10 +812,32 @@ impl ServiceClient {
             .map_err(fmt_err)
     }
 
-    pub async fn admin_atg_discover(&self, port: Option<u16>) -> Result<serde_json::Value, String> {
+    pub async fn admin_atg_discover(
+        &self,
+        port: Option<u16>,
+        unit_id: Option<u8>,
+        start_register: Option<u16>,
+        address_base: Option<u16>,
+        register_count: Option<u16>,
+    ) -> Result<serde_json::Value, String> {
         let mut url = self.base.join("admin/atg-discover").map_err(fmt_err)?;
-        if let Some(p) = port {
-            url.set_query(Some(&format!("port={p}")));
+        {
+            let mut query = url.query_pairs_mut();
+            if let Some(p) = port {
+                query.append_pair("port", &p.to_string());
+            }
+            if let Some(id) = unit_id {
+                query.append_pair("unit_id", &id.to_string());
+            }
+            if let Some(register) = start_register {
+                query.append_pair("start_register", &register.to_string());
+            }
+            if let Some(base) = address_base {
+                query.append_pair("address_base", &base.to_string());
+            }
+            if let Some(count) = register_count {
+                query.append_pair("register_count", &count.to_string());
+            }
         }
         self.http
             .get(url)
@@ -860,7 +853,8 @@ impl ServiceClient {
 
     pub async fn admin_save_atg_config(&self, body: serde_json::Value) -> Result<(), String> {
         let url = self.base.join("admin/atg-config").map_err(fmt_err)?;
-        let resp = self.http
+        let resp = self
+            .http
             .post(url)
             .json(&body)
             .send()
@@ -979,10 +973,7 @@ impl SimClient {
         product: u8,
         product_name: Option<String>,
     ) -> Result<(), String> {
-        let url = self
-            .base
-            .join("sim/preauth-expectation")
-            .map_err(fmt_err)?;
+        let url = self.base.join("sim/preauth-expectation").map_err(fmt_err)?;
         let body = SimPreauthExpectationBody {
             fp_id,
             nozzle,
@@ -1007,10 +998,7 @@ impl SimClient {
         product: u8,
         product_name: Option<String>,
     ) -> Result<(), String> {
-        let url = self
-            .base
-            .join("sim/prepare-preauth")
-            .map_err(fmt_err)?;
+        let url = self.base.join("sim/prepare-preauth").map_err(fmt_err)?;
         let body = SimPreauthExpectationBody {
             fp_id,
             nozzle,
@@ -1029,10 +1017,7 @@ impl SimClient {
     }
 
     pub async fn nozzle_down(&self, fp_id: String) -> Result<(), String> {
-        let url = self
-            .base
-            .join("sim/nozzle-down")
-            .map_err(fmt_err)?;
+        let url = self.base.join("sim/nozzle-down").map_err(fmt_err)?;
         let body = SimFpBody { fp_id };
         self.http
             .post(url)

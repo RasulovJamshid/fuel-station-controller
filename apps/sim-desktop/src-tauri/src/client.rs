@@ -224,8 +224,14 @@ impl SimClient {
     }
 
     pub async fn set_fill_rate(&self, fp_id: String, fill_rate_lps: f64) -> Result<(), String> {
-        self.post_json("sim/set-fill-rate", &SetFillRateBody { fp_id, fill_rate_lps })
-            .await
+        self.post_json(
+            "sim/set-fill-rate",
+            &SetFillRateBody {
+                fp_id,
+                fill_rate_lps,
+            },
+        )
+        .await
     }
 
     pub async fn estop_all(&self) -> Result<(), String> {

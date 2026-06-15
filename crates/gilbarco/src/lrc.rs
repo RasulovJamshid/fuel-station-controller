@@ -2,9 +2,7 @@
 /// Sum all bytes (full value, masked to 4 bits each step),
 /// then 2's complement of the nibble result, OR'd with 0xE0.
 pub fn gilbarco_lrc(bytes: &[u8]) -> u8 {
-    let sum = bytes
-        .iter()
-        .fold(0u8, |acc, &b| acc.wrapping_add(b) & 0x0F);
+    let sum = bytes.iter().fold(0u8, |acc, &b| acc.wrapping_add(b) & 0x0F);
     let lrc = (sum ^ 0x0F).wrapping_add(1) & 0x0F;
     0xE0 | lrc
 }
@@ -29,7 +27,9 @@ mod tests {
     fn roundtrip_frame_validates() {
         // A frame followed by its LRC should sum to a value where
         // re-applying the algorithm returns 0xE0 (identity).
-        let payload = [0xFF, 0xE5, 0xF4, 0xF6, 0xE0, 0xF7, 0xE0, 0xE5, 0xE0, 0xE1, 0xFB];
+        let payload = [
+            0xFF, 0xE5, 0xF4, 0xF6, 0xE0, 0xF7, 0xE0, 0xE5, 0xE0, 0xE1, 0xFB,
+        ];
         let lrc = gilbarco_lrc(&payload);
         let mut full = payload.to_vec();
         full.push(lrc);

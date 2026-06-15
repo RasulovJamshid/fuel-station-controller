@@ -163,7 +163,7 @@ export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; 
         const { invoke } = await import("@tauri-apps/api/core");
         const list = await invoke<Transaction[]>("get_transactions", {
           shiftId: shift.id,
-          statuses: "COMPLETED",
+          statuses: "COMPLETED,STOPPED,CONTINUED_FROM",
           limit: 2000,
           offset: 0,
         });
@@ -171,8 +171,14 @@ export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; 
           const map = new Map<string, {name: string, volume: number, amount: number, count: number}>();
           for (const tx of list) {
             const existing = map.get(tx.product_name) || { name: tx.product_name, volume: 0, amount: 0, count: 0 };
-            existing.volume += tx.volume;
-            existing.amount += tx.amount;
+            const isContinuation =
+              typeof tx.status === "object" && tx.status !== null && "CONTINUED_FROM" in tx.status;
+            existing.volume += isContinuation
+              ? tx.volume
+              : ((tx.combined_volume ?? 0) > 0 ? tx.combined_volume! : tx.volume);
+            existing.amount += isContinuation
+              ? tx.amount
+              : ((tx.combined_amount ?? 0) > 0 ? tx.combined_amount! : tx.amount);
             existing.count += 1;
             map.set(tx.product_name, existing);
           }

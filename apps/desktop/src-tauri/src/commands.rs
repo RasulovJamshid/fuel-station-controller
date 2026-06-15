@@ -251,7 +251,9 @@ pub async fn get_transactions(
     from_ms: Option<i64>,
     until_ms: Option<i64>,
 ) -> Result<Vec<types::Transaction>, String> {
-    client.get_transactions(limit, offset, fp_id, shift_id, statuses, from_ms, until_ms).await
+    client
+        .get_transactions(limit, offset, fp_id, shift_id, statuses, from_ms, until_ms)
+        .await
 }
 
 #[tauri::command]
@@ -263,7 +265,9 @@ pub async fn get_transactions_summary(
     from_ms: Option<i64>,
     until_ms: Option<i64>,
 ) -> Result<types::TxSummary, String> {
-    client.get_transactions_summary(fp_id, shift_id, statuses, from_ms, until_ms).await
+    client
+        .get_transactions_summary(fp_id, shift_id, statuses, from_ms, until_ms)
+        .await
 }
 
 #[tauri::command]
@@ -533,22 +537,44 @@ pub async fn update_sync_config(
     price_pull_interval_hours: Option<u64>,
 ) -> Result<(), String> {
     let mut body = serde_json::Map::new();
-    if let Some(v) = enabled                   { body.insert("enabled".into(),                    serde_json::json!(v)); }
-    if let Some(v) = backend_url               { body.insert("backend_url".into(),                serde_json::json!(v)); }
-    if let Some(v) = api_key                   { body.insert("api_key".into(),                    serde_json::json!(v)); }
-    if let Some(v) = retry_interval_secs       { body.insert("retry_interval_secs".into(),        serde_json::json!(v)); }
-    if let Some(v) = batch_size                { body.insert("batch_size".into(),                 serde_json::json!(v)); }
-    if let Some(v) = max_retries               { body.insert("max_retries".into(),                serde_json::json!(v)); }
-    if let Some(v) = price_pull_interval_hours { body.insert("price_pull_interval_hours".into(),  serde_json::json!(v)); }
-    client.update_sync_config(serde_json::Value::Object(body)).await
+    if let Some(v) = enabled {
+        body.insert("enabled".into(), serde_json::json!(v));
+    }
+    if let Some(v) = backend_url {
+        body.insert("backend_url".into(), serde_json::json!(v));
+    }
+    if let Some(v) = api_key {
+        body.insert("api_key".into(), serde_json::json!(v));
+    }
+    if let Some(v) = retry_interval_secs {
+        body.insert("retry_interval_secs".into(), serde_json::json!(v));
+    }
+    if let Some(v) = batch_size {
+        body.insert("batch_size".into(), serde_json::json!(v));
+    }
+    if let Some(v) = max_retries {
+        body.insert("max_retries".into(), serde_json::json!(v));
+    }
+    if let Some(v) = price_pull_interval_hours {
+        body.insert("price_pull_interval_hours".into(), serde_json::json!(v));
+    }
+    client
+        .update_sync_config(serde_json::Value::Object(body))
+        .await
 }
 
 #[tauri::command]
 pub async fn admin_atg_discover(
     client: tauri::State<'_, ServiceClient>,
     port: Option<u16>,
+    unit_id: Option<u8>,
+    start_register: Option<u16>,
+    address_base: Option<u16>,
+    register_count: Option<u16>,
 ) -> Result<serde_json::Value, String> {
-    client.admin_atg_discover(port).await
+    client
+        .admin_atg_discover(port, unit_id, start_register, address_base, register_count)
+        .await
 }
 
 #[tauri::command]
@@ -564,12 +590,28 @@ pub async fn admin_save_atg_config(
     poll_interval_secs: Option<u64>,
     modbus_timeout_secs: Option<f64>,
     api_url: Option<String>,
+    auth: Option<serde_json::Value>,
+    branches: Option<serde_json::Value>,
 ) -> Result<(), String> {
     let mut body = serde_json::Map::new();
-    if let Some(v) = poll_interval_secs  { body.insert("poll_interval_secs".into(),  serde_json::json!(v)); }
-    if let Some(v) = modbus_timeout_secs { body.insert("modbus_timeout_secs".into(), serde_json::json!(v)); }
-    if let Some(v) = api_url             { body.insert("api_url".into(),             serde_json::json!(v)); }
-    client.admin_save_atg_config(serde_json::Value::Object(body)).await
+    if let Some(v) = poll_interval_secs {
+        body.insert("poll_interval_secs".into(), serde_json::json!(v));
+    }
+    if let Some(v) = modbus_timeout_secs {
+        body.insert("modbus_timeout_secs".into(), serde_json::json!(v));
+    }
+    if let Some(v) = api_url {
+        body.insert("api_url".into(), serde_json::json!(v));
+    }
+    if let Some(v) = auth {
+        body.insert("auth".into(), v);
+    }
+    if let Some(v) = branches {
+        body.insert("branches".into(), v);
+    }
+    client
+        .admin_save_atg_config(serde_json::Value::Object(body))
+        .await
 }
 
 pub async fn ws_forward_loop(app: AppHandle, ws_url: String) {

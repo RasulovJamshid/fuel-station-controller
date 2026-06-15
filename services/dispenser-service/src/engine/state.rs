@@ -808,11 +808,13 @@ impl RuntimeFp {
                         self.touch();
                         return FrameEffect::StatusChanged;
                     }
-                    // CONFIG is on wire: Wayne firmware emits a spurious NozzleReturned
-                    // immediately after ACKing CONFIG as a state-confirmation artifact —
-                    // the same artifact already guarded in the PreAuthorized branch.
-                    // Stay armed; the preauth-timeout task cancels if no fuel flows.
-                    if self.preauth_config_on_wire {
+                    // CONFIG is on wire before the customer lifts during holstered preauth:
+                    // Wayne firmware can emit a holster/state-confirmation artifact there.
+                    //
+                    // Once a real arming session exists, a zero-volume holster is a real
+                    // customer abort (lifted then returned without fueling).  Cancel it
+                    // immediately so the lane does not remain stuck in Authorizing.
+                    if self.preauth_config_on_wire && self.current_tx.is_none() {
                         self.touch();
                         return FrameEffect::StatusChanged;
                     }
@@ -1077,9 +1079,18 @@ impl RuntimeFp {
                 let (vol, amt) = self.combined_totals();
                 if vol < 0.01 && amt == 0 {
                     // Preauth + lift: AUTH/CONFIG already sent; idle polls are BUSY only (no AUTH spam).
-                    if self.preauth_session_armed() || self.nozzle_physically_up() {
+                    if self.nozzle_physically_up() {
                         self.touch();
                         return FrameEffect::None;
+                    }
+                    if self.preauth_session_armed() && self.current_tx.is_none() {
+                        self.touch();
+                        return FrameEffect::None;
+                    }
+                    if self.current_tx.is_some() {
+                        self.cancel_zero_volume_session();
+                        self.touch();
+                        return FrameEffect::CompleteGhostFill;
                     }
                     self.touch();
                     return FrameEffect::ResendAuthorize;
@@ -1143,7 +1154,9 @@ impl RuntimeFp {
                 }
                 let (vol, amt) = self.combined_totals();
                 if vol < 0.01 && amt == 0 {
-                    if self.nozzle_physically_up() || self.preauth_session_armed() {
+                    if self.nozzle_physically_up()
+                        || (self.preauth_session_armed() && self.current_tx.is_none())
+                    {
                         self.touch();
                         return FrameEffect::None;
                     }
@@ -1653,9 +1666,10 @@ impl RuntimeFp {
                             if self.nozzle_physically_up() {
                                 self.touch();
                                 FrameEffect::StatusChanged
-                            } else if self.preauth_config_on_wire {
+                            } else if self.preauth_config_on_wire && self.current_tx.is_none() {
                                 // Same firmware artifact guard as apply_nozzle_holstered:
-                                // pump confirms nozzle state after CONFIG before delivery starts.
+                                // pump confirms nozzle state after CONFIG before a real
+                                // lifted-nozzle session starts.
                                 self.touch();
                                 FrameEffect::None
                             } else {

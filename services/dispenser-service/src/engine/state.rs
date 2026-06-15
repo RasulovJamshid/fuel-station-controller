@@ -1941,34 +1941,34 @@ impl RuntimeFp {
                             self.touch();
                             return FrameEffect::StatusChanged;
                         }
-                        // Zero-volume arm phase: use the staleness guard as before.
-                        if self.nozzle_physically_up()
+                        let (v, a) = self.combined_totals();
+                        if v < 0.01
+                            && a == 0
                             && matches!(
                                 self.state.status,
                                 FpStatus::Authorizing | FpStatus::Delivering
                             )
-                            && !self.pump_sale_complete
                         {
-                            self.last_wire_hose_at_ms = Utc::now().timestamp_millis();
-                            self.touch();
-                            return FrameEffect::StatusChanged;
-                        }
-                        self.note_wire_hose(*hh);
-                        // CONFIG is on wire (or pending in the deferred-config path) and
-                        // no fuel has flowed yet — the pump emits holster codes in compound
-                        // arm frames as a firmware artifact.  Guard both the immediate-CONFIG
-                        // path (preauth_config_on_wire) and the deferred-CONFIG path where we
-                        // are waiting for the pump to return to idle before sending CONFIG
-                        // (pending_authorize_config_repeat).
-                        if (self.preauth_config_on_wire || self.pending_authorize_config_repeat)
-                            && self.state.status == FpStatus::Authorizing
-                        {
-                            let (v, a) = self.combined_totals();
-                            if v < 0.01 && a == 0 {
+                            // CONFIG can make Wayne echo a zero-volume embedded holster
+                            // before the customer has lifted.  Once a real session exists,
+                            // the same wire shape means "lifted then returned with no fuel";
+                            // record HH first so stale lift state cannot keep Authorizing alive.
+                            if (self.preauth_config_on_wire || self.pending_authorize_config_repeat)
+                                && self.state.status == FpStatus::Authorizing
+                                && self.current_tx.is_none()
+                            {
                                 self.touch();
                                 return FrameEffect::StatusChanged;
                             }
+                            self.note_wire_hose(*hh);
+                            return self.apply_nozzle_holstered(
+                                fp_cfg,
+                                site,
+                                active_shift_id,
+                                active_operator_name.clone(),
+                            );
                         }
+                        self.note_wire_hose(*hh);
                         return self.apply_nozzle_holstered(
                             fp_cfg,
                             site,
@@ -2709,4 +2709,108 @@ pub fn initial_runtimes(cfg: &SiteConfig) -> HashMap<u8, RuntimeFp> {
         m.insert(fp.address_byte, RuntimeFp::new(fp, cfg));
     }
     m
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_site() -> SiteConfig {
+        serde_json::from_str(
+            r##"{
+                "site": { "id": "test", "name": "Test", "timezone": "UTC" },
+                "service": {
+                    "port": 3001,
+                    "log_level": "info",
+                    "log_file": "test.log",
+                    "db_path": "test.db"
+                },
+                "connection": {
+                    "protocol": "wayne_europump",
+                    "port": "COM3",
+                    "baud_rate": 9600,
+                    "parity": "odd",
+                    "data_bits": 8,
+                    "stop_bits": 1,
+                    "response_timeout_ms": 300
+                },
+                "polling": {
+                    "interval_ms": 140,
+                    "offline_threshold_polls": 32,
+                    "reconnect_settle_rounds": 0
+                },
+                "products": [
+                    { "id": 3, "name": "AI-92", "color": "#2196F3", "unit": "litre" }
+                ],
+                "fueling_positions": [
+                    {
+                        "id": "FP4",
+                        "label": "4",
+                        "address_byte": 83,
+                        "active": true,
+                        "nozzles": [
+                            {
+                                "index": 2,
+                                "product_id": 3,
+                                "price": 11000,
+                                "active": true,
+                                "wayne_code": 18,
+                                "wayne_product_code": 16
+                            }
+                        ]
+                    }
+                ],
+                "sync": {
+                    "enabled": false,
+                    "backend_url": "",
+                    "api_key": ""
+                }
+            }"##,
+        )
+        .expect("sample site config")
+    }
+
+    #[test]
+    fn zero_volume_embedded_holster_after_preauth_cancels_authorizing() {
+        let site = sample_site();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.state.status = FpStatus::PreAuthorized;
+        rt.state.nozzle_index = Some(2);
+        rt.state.product_id = Some(3);
+        rt.state.product_name = Some("AI-92".into());
+        rt.state.price = 11000;
+        rt.preauth_config_on_wire = true;
+        rt.current_tx = Some(CurrentTx {
+            id: "tx".into(),
+            started_at: Utc::now().timestamp_millis(),
+            product_id: 3,
+            product_name: "AI-92".into(),
+            nozzle_index: 2,
+        });
+        rt.state.status = FpStatus::Authorizing;
+        rt.note_wire_hose(0x12);
+
+        let frame = Frame::Data {
+            addr: 0x53,
+            seq: 0x31,
+            volume_x1: 0,
+            volume_x2: 0,
+            volume_l: 0,
+            volume_h: 0,
+            amount: [0, 0, 0],
+            sale_complete: false,
+            hose_product: Some(0x10),
+            hose_code: Some(0x02),
+        };
+
+        let effect = rt.apply_frame(&frame, &fp_cfg, &site, None, None);
+
+        assert!(matches!(effect, FrameEffect::CompleteGhostFill));
+        assert_eq!(rt.state.status, FpStatus::Idle);
+        assert!(rt.current_tx.is_none());
+        assert_eq!(rt.last_wire_hose_code, None);
+        assert!(rt.ghost_recovery);
+    }
 }

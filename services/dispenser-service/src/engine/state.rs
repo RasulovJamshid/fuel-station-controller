@@ -808,16 +808,6 @@ impl RuntimeFp {
                         self.touch();
                         return FrameEffect::StatusChanged;
                     }
-                    // CONFIG is on wire before the customer lifts during holstered preauth:
-                    // Wayne firmware can emit a holster/state-confirmation artifact there.
-                    //
-                    // Once a real arming session exists, a zero-volume holster is a real
-                    // customer abort (lifted then returned without fueling).  Cancel it
-                    // immediately so the lane does not remain stuck in Authorizing.
-                    if self.preauth_config_on_wire && self.current_tx.is_none() {
-                        self.touch();
-                        return FrameEffect::StatusChanged;
-                    }
                     self.cancel_zero_volume_session();
                     self.touch();
                     FrameEffect::CompleteGhostFill
@@ -1084,8 +1074,11 @@ impl RuntimeFp {
                         return FrameEffect::None;
                     }
                     if self.preauth_session_armed() && self.current_tx.is_none() {
+                        // nozzle_physically_up() is false here (checked above).
+                        // Genuine zero-volume holster after reactive AUTH — cancel.
+                        self.cancel_zero_volume_session();
                         self.touch();
-                        return FrameEffect::None;
+                        return FrameEffect::CompleteGhostFill;
                     }
                     if self.current_tx.is_some() {
                         self.cancel_zero_volume_session();
@@ -1666,12 +1659,6 @@ impl RuntimeFp {
                             if self.nozzle_physically_up() {
                                 self.touch();
                                 FrameEffect::StatusChanged
-                            } else if self.preauth_config_on_wire && self.current_tx.is_none() {
-                                // Same firmware artifact guard as apply_nozzle_holstered:
-                                // pump confirms nozzle state after CONFIG before a real
-                                // lifted-nozzle session starts.
-                                self.touch();
-                                FrameEffect::None
                             } else {
                                 self.cancel_zero_volume_session();
                                 self.touch();

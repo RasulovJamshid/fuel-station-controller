@@ -1,3 +1,4 @@
 site have  3 dispensers, 2 of them working, 1 not working.
 each dispenser have 2 sides (pumps) , and each side have 4 nozzles but 3 nozzle is used from each side 
 4th nozzle locked, because there is 3 tanks in site.
+note that when operator opens for 100000 sum price they enter on app it as 10000 one register less on pump same thing if there was filling for 100000 it shows on pump as 10000.

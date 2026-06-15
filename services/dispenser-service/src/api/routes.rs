@@ -1222,20 +1222,26 @@ async fn atg_discover(
 
     let octets = local.octets();
     let subnet = format!("{}.{}.{}", octets[0], octets[1], octets[2]);
-    let configured = {
+    let (configured, configured_host) = {
         let cfg = st.cfg.read().await;
-        cfg.atg.as_ref().and_then(|atg| {
+        match cfg.atg.as_ref().and_then(|atg| {
             atg.branches.first().map(|branch| {
                 (
-                    branch.port,
-                    branch.unit_id,
-                    branch.start_register,
-                    branch.address_base,
-                    branch.register_count,
-                    atg.modbus_timeout_secs,
+                    (
+                        branch.port,
+                        branch.unit_id,
+                        branch.start_register,
+                        branch.address_base,
+                        branch.register_count,
+                        atg.modbus_timeout_secs,
+                    ),
+                    branch.host.clone(),
                 )
             })
-        })
+        }) {
+            Some((cfg, host)) => (Some(cfg), Some(host)),
+            None => (None, None),
+        }
     };
     let port = params
         .port
@@ -1262,16 +1268,36 @@ async fn atg_discover(
         .map(|c| Duration::from_secs_f64(c.5.max(0.1)))
         .unwrap_or(scan_timeout);
 
-    let mut handles = Vec::with_capacity(254);
-    for host in 1u8..=254 {
-        let addr = format!("{}.{}:{}", subnet, host, port);
-        let subnet_clone = subnet.clone();
-        handles.push(tokio::spawn(async move {
-            match tokio::time::timeout(scan_timeout, tokio::net::TcpStream::connect(&addr)).await {
-                Ok(Ok(_)) => Some(format!("{}.{}", subnet_clone, host)),
-                _ => None,
-            }
-        }));
+    // If the configured branch host is on a different subnet than the local default-route
+    // interface, include that subnet in the scan. This is the common case when the server
+    // routes internet traffic via a VPN/WAN interface but the ATG device is on a local LAN.
+    let extra_subnet: Option<String> = configured_host
+        .as_deref()
+        .and_then(|h| h.parse::<std::net::Ipv4Addr>().ok())
+        .map(|ip| {
+            let o = ip.octets();
+            format!("{}.{}.{}", o[0], o[1], o[2])
+        })
+        .filter(|s| s != &subnet);
+
+    let subnets_to_scan: Vec<String> = std::iter::once(subnet.clone())
+        .chain(extra_subnet)
+        .collect();
+
+    let mut handles = Vec::with_capacity(subnets_to_scan.len() * 254);
+    for sn in &subnets_to_scan {
+        for host in 1u8..=254 {
+            let addr = format!("{}.{}:{}", sn, host, port);
+            let sn_clone = sn.clone();
+            handles.push(tokio::spawn(async move {
+                match tokio::time::timeout(scan_timeout, tokio::net::TcpStream::connect(&addr))
+                    .await
+                {
+                    Ok(Ok(_)) => Some(format!("{}.{}", sn_clone, host)),
+                    _ => None,
+                }
+            }));
+        }
     }
 
     let mut found = Vec::new();
@@ -1281,6 +1307,7 @@ async fn atg_discover(
         }
     }
     found.sort();
+    found.dedup();
 
     let mut probe_handles = Vec::with_capacity(found.len());
     for host in &found {

@@ -42,8 +42,9 @@ fn read_slot(floats: &[f32], slot_1based: u8) -> Option<(f64, f64, f64, f64, f64
         return None;
     }
     let current_l = floats[base + IDX_PRODUCT_VOLUME] as f64;
-    if current_l <= 0.0 {
-        return None; // bad Modbus read
+    // Reject only NaN/Inf — a zero-volume tank is a valid (empty) reading.
+    if !current_l.is_finite() {
+        return None;
     }
     let temperature_c = floats[base + IDX_TEMPERATURE] as f64;
     let water_l = floats[base + IDX_WATER_VOLUME] as f64;

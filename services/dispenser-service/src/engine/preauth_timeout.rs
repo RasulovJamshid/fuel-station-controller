@@ -10,6 +10,21 @@ use types::{FpStatus, WsEvent};
 use super::poll_loop::DispatchCommand;
 use super::state::RuntimeFp;
 
+fn timeout_started_at_for(status: &FpStatus, pre_auth_started_at: Option<i64>) -> Option<i64> {
+    // Only holstered pre-auth should auto-cancel.  Once the customer has lifted
+    // and the lane is Authorizing, Wayne can legitimately sit at zero volume for
+    // several seconds before first meter data; cancelling there loses preset/nozzle.
+    if matches!(status, FpStatus::PreAuthorized) {
+        pre_auth_started_at
+    } else {
+        None
+    }
+}
+
+fn timeout_started_at(rt: &RuntimeFp) -> Option<i64> {
+    timeout_started_at_for(&rt.state.status, rt.pre_auth_started_at)
+}
+
 pub fn spawn_preauth_timeout_task(
     cfg: Arc<SiteConfig>,
     runtimes: Arc<RwLock<std::collections::HashMap<u8, RuntimeFp>>>,
@@ -30,25 +45,7 @@ pub fn spawn_preauth_timeout_task(
                 let map = runtimes.read().await;
                 map.iter()
                     .filter_map(|(&byte, rt)| {
-                        // Primary case: holstered preauth waiting for customer lift.
-                        let started = if matches!(rt.state.status, FpStatus::PreAuthorized) {
-                            rt.pre_auth_started_at?
-                        } else if matches!(
-                            rt.state.status,
-                            FpStatus::Authorizing | FpStatus::NozzleUp
-                        ) && rt.preauth_config_on_wire
-                            && rt.state.volume < 0.01
-                            && rt.state.amount == 0
-                        {
-                            // CONFIG is on wire but no fuel has flowed — the arm-phase
-                            // firmware-artifact guard in apply_nozzle_holstered now keeps
-                            // the lane in Authorizing on spurious holster frames.  If the
-                            // customer genuinely holstered, time it out the same way so
-                            // the lane does not stay armed forever.
-                            rt.auth_session_started_at?
-                        } else {
-                            return None;
-                        };
+                        let started = timeout_started_at(rt)?;
                         if now.saturating_sub(started) >= timeout_ms as i64 {
                             Some((byte, rt.state.fp_id.clone()))
                         } else {
@@ -66,4 +63,25 @@ pub fn spawn_preauth_timeout_task(
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn timeout_only_applies_to_holstered_preauth() {
+        assert_eq!(
+            timeout_started_at_for(&FpStatus::PreAuthorized, Some(1000)),
+            Some(1000)
+        );
+        assert_eq!(
+            timeout_started_at_for(&FpStatus::Authorizing, Some(1000)),
+            None
+        );
+        assert_eq!(
+            timeout_started_at_for(&FpStatus::NozzleUp, Some(1000)),
+            None
+        );
+    }
 }

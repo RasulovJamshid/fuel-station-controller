@@ -59,23 +59,54 @@ pub fn encode_price(price_sum_per_litre: u32) -> [u8; 2] {
     [hi, lo]
 }
 
-/// CONFIG frame (§6) — product map, per-channel prices, and preset (sent on AUTH / pre-auth).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PresetBlock {
+    pub kind: u8,
+    pub value: [u8; 3],
+}
+
+impl PresetBlock {
+    pub fn volume_or_full(value: [u8; 3]) -> Self {
+        Self { kind: 0x03, value }
+    }
+
+    pub fn amount_sum(amount_sum: u64) -> Self {
+        Self {
+            kind: 0x04,
+            value: encode_bcd_3(amount_sum.min(999_999) as u32),
+        }
+    }
+}
+
+/// CONFIG frame (§6) — product/price map and preset (sent on AUTH / pre-auth).
 ///
 /// `product_codes` and `prices` must be in the same order: sorted by [`wayne_code`] (physical
 /// channel 1 = `0x11`, channel 2 = `0x12`, …), matching `02 04 01 02 03 04`.
 ///
 /// Sniffer product block: `05 0C` + `01 PP flag` × N (3 bytes each; last flag `0x30`).
-/// Price block: `05 [N×3]` + 3-byte BCD price × N per channel.  The pump's 4-digit display
-/// shows only the last 4 decimal digits, but the pump uses the full 6-digit value for its
-/// internal amount accumulator, so totals are always correct.
-/// Examples: 14300 → `[0x01, 0x43, 0x00]` (display "4300", internal 14300),
-///           10500 → `[0x01, 0x05, 0x00]` (display "0500", internal 10500),
-///           9200  → `[0x00, 0x92, 0x00]` (display "9200", internal 9200).
+///
+/// Preset block variants observed in sniffer logs:
+/// - `03 04 00` + BCD litres × 100, or `09 99 00` for full tank.
+/// - `04 04 00` + BCD money amount in sum.
 pub fn authorize_config(
     addr: u8,
     product_codes: &[u8],
     prices: &[u32],
     limit_bcd: [u8; 3],
+) -> Vec<u8> {
+    authorize_config_with_preset_block(
+        addr,
+        product_codes,
+        prices,
+        PresetBlock::volume_or_full(limit_bcd),
+    )
+}
+
+pub fn authorize_config_with_preset_block(
+    addr: u8,
+    product_codes: &[u8],
+    _prices: &[u32],
+    preset: PresetBlock,
 ) -> Vec<u8> {
     let n = product_codes.len().clamp(1, 4);
 
@@ -97,27 +128,18 @@ pub fn authorize_config(
         payload.extend([0x01, pp, flag]);
     }
 
-    // Per-channel prices: `05 [n×3]` + 3-byte BCD price per channel.
-    payload.push(0x05);
-    payload.push((n * 3) as u8);
-    for i in 0..n {
-        payload.extend(encode_bcd_3(*prices.get(i).unwrap_or(&0)));
-    }
-
-    // Preset limit (`03 04 00` + 3 BCD bytes — volume, amount, or `09 99 00` full).
-    payload.extend([0x03, 0x04, 0x00]);
-    payload.extend_from_slice(&limit_bcd);
+    // Preset limit (`03` = volume/full, `04` = amount).
+    payload.extend([preset.kind, 0x04, 0x00]);
+    payload.extend_from_slice(&preset.value);
 
     payload.extend([0x01, 0x01, 0x06]); // AUTHORISE
     build_frame(&payload)
 }
 
-/// Hardware preset bytes inside CONFIG (`03 04 00` + 3 BCD bytes).
+/// Volume/full preset bytes inside CONFIG (`03 04 00` + 3 BCD bytes).
 ///
-/// Amount presets are converted to a volume limit using `price_per_liter` (sum per litre,
-/// same unit as on the wire). The pump expects litres × 100 in BCD, not raw sum.
-/// Use ceiling so money presets do not stop below the requested amount when the target
-/// cannot be represented exactly in 0.01 L steps.
+/// PCC485 money presets use [`PresetBlock::amount_sum`] instead. This helper still supports
+/// amount-to-volume conversion for older DART paths that only accept a volume-style limit.
 pub fn encode_preset_limit_bcd(
     full_tank: bool,
     volume_liters: Option<f64>,
@@ -207,13 +229,6 @@ mod tests {
                 .any(|w| w
                     == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00, 0x01, 0x24, 0x00, 0x01, 0x43, 0x30])
         );
-        // Block 2: 3-byte BCD prices — 14300=[01 43 00], 10500=[01 05 00], 9200=[00 92 00]
-        assert!(frame
-            .windows(6)
-            .any(|w| w == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00]));
-        assert!(frame
-            .windows(6)
-            .any(|w| w == [0x00, 0x92, 0x00, 0x01, 0x43, 0x00]));
         assert!(frame
             .windows(6)
             .any(|w| w == [0x03, 0x04, 0x00, 0x00, 0x10, 0x00]));
@@ -235,41 +250,35 @@ mod tests {
                 .any(|w| w
                     == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00, 0x01, 0x24, 0x00, 0x01, 0x05, 0x30])
         );
-        // Block 2: 3-byte BCD prices — 14300=[01 43 00], 10500=[01 05 00], 12400=[01 24 00]
         assert!(frame
             .windows(6)
-            .any(|w| w == [0x01, 0x43, 0x00, 0x01, 0x05, 0x00]));
-        assert!(frame
-            .windows(6)
-            .any(|w| w == [0x01, 0x24, 0x00, 0x01, 0x05, 0x00]));
+            .any(|w| w == [0x03, 0x04, 0x00, 0x09, 0x99, 0x00]));
     }
 
     #[test]
-    fn config_amount_preset_converts_to_volume_bcd() {
-        // 10_500 sum at 10_500 sum/L → 1.00 L → `00 01 00`
-        let frame = authorize_config(
+    fn config_amount_preset_uses_money_block() {
+        let frame = authorize_config_with_preset_block(
             0x53,
             &[0x05],
             &[10_500],
-            encode_preset_limit_bcd(false, None, Some(10_500), Some(10_500)),
+            PresetBlock::amount_sum(10_000),
         );
         assert!(frame
             .windows(6)
-            .any(|w| w == [0x03, 0x04, 0x00, 0x00, 0x01, 0x00]));
+            .any(|w| w == [0x04, 0x04, 0x00, 0x01, 0x00, 0x00]));
     }
 
     #[test]
-    fn config_amount_preset_rounds_up_to_avoid_underfill() {
-        // 100_000 sum at 10_500 sum/L is 9.5238 L; send 9.53 L, not 9.52 L.
-        let frame = authorize_config(
+    fn config_amount_preset_matches_50000_sum_capture() {
+        let frame = authorize_config_with_preset_block(
             0x53,
             &[0x05],
             &[10_500],
-            encode_preset_limit_bcd(false, None, Some(100_000), Some(10_500)),
+            PresetBlock::amount_sum(50_000),
         );
         assert!(frame
             .windows(6)
-            .any(|w| w == [0x03, 0x04, 0x00, 0x00, 0x09, 0x53]));
+            .any(|w| w == [0x04, 0x04, 0x00, 0x05, 0x00, 0x00]));
     }
 
     #[test]
@@ -279,7 +288,5 @@ mod tests {
             .windows(6)
             .any(|w| w == [0x03, 0x04, 0x00, 0x09, 0x99, 0x00]));
         assert!(frame.windows(3).any(|w| w == [0x01, 0x05, 0x30]));
-        // 10500 as 3-byte BCD → [0x01, 0x05, 0x00]
-        assert!(frame.windows(3).any(|w| w == [0x01, 0x05, 0x00]));
     }
 }

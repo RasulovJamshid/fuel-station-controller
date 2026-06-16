@@ -5,8 +5,8 @@ mod frame;
 mod parser;
 
 pub use builder::{
-    ack, authorize_config, authorize_initial, busy, done, encode_preset_limit_bcd, encode_price,
-    poll, stop, stop_frame, stop_pre_frame,
+    ack, authorize_config, authorize_config_with_preset_block, authorize_initial, busy, done,
+    encode_preset_limit_bcd, encode_price, poll, stop, stop_frame, stop_pre_frame, PresetBlock,
 };
 pub use crc::{build_frame, crc16};
 pub use dart::{authorise_cmd, pre_authorise_price};

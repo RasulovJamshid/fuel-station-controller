@@ -10,5 +10,6 @@ pub use commands::{
 pub use frame::{GilbarcoStatus, TransactionData};
 pub use lrc::gilbarco_lrc;
 pub use parser::{
-    parse_display_response, parse_nozzle_response, parse_status_byte, parse_transaction_response,
+    parse_display_response, parse_nozzle_response, parse_status_byte, parse_totals_response,
+    parse_transaction_response,
 };

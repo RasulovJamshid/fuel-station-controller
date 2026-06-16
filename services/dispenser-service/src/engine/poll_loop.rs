@@ -14,8 +14,9 @@ use types::{
     preset_label, FpStatus, Preset, StopSource, Transaction, TxStatus, UpdatePriceCmd, WsEvent,
 };
 use wayne_europump::{
-    ack, authorise_cmd, authorize_config, authorize_initial, busy, done, encode_preset_limit_bcd,
-    parse_frame, poll, pre_authorise_price, stop_frame, stop_pre_frame, Frame, FrameAccumulator,
+    ack, authorise_cmd, authorize_config_with_preset_block, authorize_initial, busy, done,
+    encode_preset_limit_bcd, parse_frame, poll, pre_authorise_price, stop_frame, stop_pre_frame,
+    Frame, FrameAccumulator, PresetBlock,
 };
 
 use super::state::{
@@ -57,16 +58,16 @@ fn wayne_nozzle_prices(fp: &FuelingPositionConfig) -> Vec<u32> {
     nozzles.into_iter().map(|n| n.price).collect()
 }
 
-fn preset_limit_bcd(preset: &Preset, price_per_liter: u32) -> [u8; 3] {
+fn pcc485_preset_block(preset: &Preset) -> PresetBlock {
     match preset {
         Preset::Str(s) if s.eq_ignore_ascii_case("full") => {
-            encode_preset_limit_bcd(true, None, None, None)
+            PresetBlock::volume_or_full(encode_preset_limit_bcd(true, None, None, None))
         }
-        Preset::Volume(v) if *v > 0.0 => encode_preset_limit_bcd(false, Some(*v), None, None),
-        Preset::Amount(a) if *a > 0 => {
-            encode_preset_limit_bcd(false, None, Some(*a), Some(price_per_liter))
+        Preset::Volume(v) if *v > 0.0 => {
+            PresetBlock::volume_or_full(encode_preset_limit_bcd(false, Some(*v), None, None))
         }
-        _ => encode_preset_limit_bcd(true, None, None, None),
+        Preset::Amount(a) if *a > 0 => PresetBlock::amount_sum(*a),
+        _ => PresetBlock::volume_or_full(encode_preset_limit_bcd(true, None, None, None)),
     }
 }
 
@@ -113,8 +114,8 @@ fn send_auth_pair(
     } else {
         let products = wayne_product_codes(fp);
         let prices = wayne_nozzle_prices(fp);
-        let limit = preset_limit_bcd(preset, price_per_liter);
-        let cfg = authorize_config(byte, &products, &prices, limit);
+        let preset_block = pcc485_preset_block(preset);
+        let cfg = authorize_config_with_preset_block(byte, &products, &prices, preset_block);
         exchange_serial(backend, &cfg).unwrap_or_default()
     }
 }
@@ -1617,9 +1618,9 @@ async fn run_gilbarco_poll_loop(
                 None => continue,
             };
 
-            // Send single-byte status request; response: [echo][status]
+            // Send single-byte status request; response: [status] (echo stripped by serial.rs)
             let resp = match exchange_serial(&backend, &gilbarco::status(byte)) {
-                Ok(r) if r.len() >= 2 => r,
+                Ok(r) if r.len() >= 1 => r,
                 _ => {
                     let went_offline = {
                         let mut map = runtimes.write().await;
@@ -1645,7 +1646,7 @@ async fn run_gilbarco_poll_loop(
                 }
             }
 
-            let gbr_st = gilbarco::parse_status_byte(resp[1]);
+            let gbr_st = gilbarco::parse_status_byte(resp[0]);
 
             match gbr_st {
                 GilbarcoStatus::Offline => {
@@ -1851,15 +1852,17 @@ async fn run_gilbarco_poll_loop(
                                 let map = runtimes.read().await;
                                 map.get(&byte).map(|rt| rt.state.price).unwrap_or(1)
                             };
+                            // Pump display is ×10 less than real sum; scale up before computing.
+                            let real_amount = raw_amount * 10;
                             let volume = if price > 0 {
-                                raw_amount as f64 / price as f64
+                                real_amount as f64 / price as f64
                             } else {
                                 0.0
                             };
                             let mut map = runtimes.write().await;
                             if let Some(rt) = map.get_mut(&byte) {
                                 rt.state.status = FpStatus::Delivering;
-                                rt.state.amount = raw_amount;
+                                rt.state.amount = real_amount;
                                 rt.state.volume = volume;
                                 // Ensure a tx record exists if Delivering was first observed here.
                                 if rt.current_tx.is_none() {
@@ -1979,7 +1982,8 @@ async fn gbr_send_set_price(
             .collect()
     };
     for (nozzle_index, price) in prices {
-        let cmd = gilbarco::set_price(nozzle_index, price);
+        // Gilbarco pump register is 4 digits; real price is stored ×10 in config.
+        let cmd = gilbarco::set_price(nozzle_index, price / 10);
         if gbr_listen_then_send(backend, byte, &cmd).is_none() {
             return false;
         }
@@ -2024,6 +2028,17 @@ async fn gbr_close_transaction(
         )
     };
 
+    // Fetch pump totals immediately after transaction data (mirrors reference app behaviour).
+    if let Some((vol_total, price_total)) = exchange_serial(backend, &gilbarco::get_totals(byte))
+        .ok()
+        .and_then(|r| gilbarco::parse_totals_response(&r, nozzle_index))
+    {
+        info!(
+            addr = format_args!("0x{byte:02X}"),
+            nozzle_index, vol_total, price_total, "Gilbarco: pump totals after transaction"
+        );
+    }
+
     let ctx = match ctx {
         Some(c) => c,
         None => {
@@ -2040,7 +2055,7 @@ async fn gbr_close_transaction(
     };
 
     let (volume, amount) = match tx_data {
-        Some(td) => (td.volume_raw as f64 / 1000.0, td.amount_raw),
+        Some(td) => (td.volume_raw as f64 / 1000.0, td.amount_raw * 10),
         None => {
             let map = runtimes.read().await;
             map.get(&byte)

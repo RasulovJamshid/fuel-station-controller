@@ -52,10 +52,24 @@ fn wayne_product_codes(fp: &FuelingPositionConfig) -> Vec<u8> {
 }
 
 /// Per-nozzle prices for the Wayne CONFIG frame, sorted by wayne_code (same order as product codes).
-fn wayne_nozzle_prices(fp: &FuelingPositionConfig) -> Vec<u32> {
+fn wayne_nozzle_prices(
+    fp: &FuelingPositionConfig,
+    overrides: &HashMap<u8, u32>,
+    active_nozzle: u8,
+    active_price: u32,
+) -> Vec<u32> {
     let mut nozzles: Vec<_> = fp.nozzles.iter().collect();
     nozzles.sort_by_key(|n| n.wayne_code);
-    nozzles.into_iter().map(|n| n.price).collect()
+    nozzles
+        .into_iter()
+        .map(|n| {
+            if n.index == active_nozzle && active_price > 0 {
+                active_price
+            } else {
+                overrides.get(&n.index).copied().unwrap_or(n.price)
+            }
+        })
+        .collect()
 }
 
 fn pcc485_preset_block(preset: &Preset) -> PresetBlock {
@@ -72,10 +86,24 @@ fn pcc485_preset_block(preset: &Preset) -> PresetBlock {
 }
 
 /// DartV1: prices for all active nozzles sorted by 1-based index.
-fn dart_nozzle_prices(fp: &FuelingPositionConfig) -> Vec<u32> {
+fn dart_nozzle_prices(
+    fp: &FuelingPositionConfig,
+    overrides: &HashMap<u8, u32>,
+    active_nozzle: u8,
+    active_price: u32,
+) -> Vec<u32> {
     let mut nozzles: Vec<_> = fp.nozzles.iter().filter(|n| n.active).collect();
     nozzles.sort_by_key(|n| n.index);
-    nozzles.iter().map(|n| n.price).collect()
+    nozzles
+        .iter()
+        .map(|n| {
+            if n.index == active_nozzle && active_price > 0 {
+                active_price
+            } else {
+                overrides.get(&n.index).copied().unwrap_or(n.price)
+            }
+        })
+        .collect()
 }
 
 /// DartV1 full-tank BCD is `99 99 99`; volume/amount presets use the same BCD encoding as PCC485.
@@ -104,16 +132,17 @@ fn send_auth_pair(
     preset: &Preset,
     active_nozzle: u8,
     price_per_liter: u32,
+    nozzle_prices: &HashMap<u8, u32>,
     protocol: &Protocol,
 ) -> Vec<u8> {
     if matches!(protocol, Protocol::WayneDartV1) {
-        let prices = dart_nozzle_prices(fp);
+        let prices = dart_nozzle_prices(fp, nozzle_prices, active_nozzle, price_per_liter);
         let _ = exchange_serial(backend, &pre_authorise_price(byte, &prices, active_nozzle));
         let limit = dart_limit_bcd(preset, price_per_liter);
         exchange_serial(backend, &authorise_cmd(byte, active_nozzle, limit)).unwrap_or_default()
     } else {
         let products = wayne_product_codes(fp);
-        let prices = wayne_nozzle_prices(fp);
+        let prices = wayne_nozzle_prices(fp, nozzle_prices, active_nozzle, price_per_liter);
         let preset_block = pcc485_preset_block(preset);
         let cfg = authorize_config_with_preset_block(byte, &products, &prices, preset_block);
         exchange_serial(backend, &cfg).unwrap_or_default()
@@ -266,17 +295,17 @@ async fn dispatch_poll_frames(
                 .unwrap_or(false)
         };
         if allow_wire_config {
-            let (preset, price) = {
+            let (preset, price, nozzle_prices) = {
                 let map = runtimes.read().await;
-                let preset = map
-                    .get(&byte)
+                let rt = map.get(&byte);
+                let preset = rt
                     .map(|rt| rt.last_preset.clone())
                     .unwrap_or(Preset::Str("full".into()));
-                let price = map
-                    .get(&byte)
+                let price = rt
                     .map(|rt| rt.state.price)
                     .unwrap_or_else(|| fp_cfg.default_price().unwrap_or(0));
-                (preset, price)
+                let nozzle_prices = rt.map(|rt| rt.nozzle_prices.clone()).unwrap_or_default();
+                (preset, price, nozzle_prices)
             };
             let auth_resp = send_auth_pair(
                 backend,
@@ -285,6 +314,7 @@ async fn dispatch_poll_frames(
                 &preset,
                 lifted_nozzle,
                 price,
+                &nozzle_prices,
                 &cfg.connection.protocol,
             );
             {
@@ -1005,21 +1035,18 @@ async fn process_parsed_frame(
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::SendAuthorizeConfig => {
-            let (preset, active_nozzle, price) = {
+            let (preset, active_nozzle, price, nozzle_prices) = {
                 let map = runtimes.read().await;
-                let preset = map
-                    .get(&byte)
+                let rt = map.get(&byte);
+                let preset = rt
                     .map(|rt| rt.last_preset.clone())
                     .unwrap_or(Preset::Str("full".into()));
-                let nozzle = map
-                    .get(&byte)
-                    .and_then(|rt| rt.state.nozzle_index)
-                    .unwrap_or(1);
-                let price = map
-                    .get(&byte)
+                let nozzle = rt.and_then(|rt| rt.state.nozzle_index).unwrap_or(1);
+                let price = rt
                     .map(|rt| rt.state.price)
                     .unwrap_or_else(|| fp_cfg.default_price().unwrap_or(0));
-                (preset, nozzle, price)
+                let nozzle_prices = rt.map(|rt| rt.nozzle_prices.clone()).unwrap_or_default();
+                (preset, nozzle, price, nozzle_prices)
             };
             let auth_resp = send_auth_pair(
                 backend,
@@ -1028,6 +1055,7 @@ async fn process_parsed_frame(
                 &preset,
                 active_nozzle,
                 price,
+                &nozzle_prices,
                 &site.connection.protocol,
             );
             {
@@ -1145,11 +1173,13 @@ async fn apply_command(
             };
             let auth = authorize_initial(byte);
             if exchange_serial(backend, &auth).is_ok() {
-                let active_nozzle = {
+                let (active_nozzle, nozzle_prices) = {
                     let map = runtimes.read().await;
-                    map.get(&byte)
-                        .and_then(|rt| rt.state.nozzle_index)
-                        .unwrap_or(1)
+                    let rt = map.get(&byte);
+                    (
+                        rt.and_then(|rt| rt.state.nozzle_index).unwrap_or(1),
+                        rt.map(|rt| rt.nozzle_prices.clone()).unwrap_or_default(),
+                    )
                 };
                 // Send CONFIG with the remaining limit immediately after AUTH so the pump
                 // uses the correct hardware limit when the customer lifts the nozzle.
@@ -1160,6 +1190,7 @@ async fn apply_command(
                     &preset,
                     active_nozzle,
                     price,
+                    &nozzle_prices,
                     &cfg.connection.protocol,
                 );
                 {
@@ -1265,11 +1296,13 @@ async fn apply_command(
             let auth = authorize_initial(byte);
             if exchange_serial(backend, &auth).is_ok() {
                 // Read nozzle index while we still hold no locks.
-                let active_nozzle = {
+                let (active_nozzle, nozzle_prices) = {
                     let map = runtimes.read().await;
-                    map.get(&byte)
-                        .and_then(|rt| rt.state.nozzle_index)
-                        .unwrap_or(1)
+                    let rt = map.get(&byte);
+                    (
+                        rt.and_then(|rt| rt.state.nozzle_index).unwrap_or(1),
+                        rt.map(|rt| rt.nozzle_prices.clone()).unwrap_or_default(),
+                    )
                 };
                 // Send CONFIG with the *remaining* limit immediately after AUTH, before the
                 // first BUSY frame starts the pump counting.  The pump resets its internal
@@ -1281,6 +1314,7 @@ async fn apply_command(
                     &preset,
                     active_nozzle,
                     price,
+                    &nozzle_prices,
                     &cfg.connection.protocol,
                 );
                 {
@@ -1416,13 +1450,13 @@ async fn apply_command(
                 None => return,
             };
             let preset_label_str = preset_label(&preset);
-            let lift_confirmed = {
+            let (lift_confirmed, nozzle_prices) = {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
                     rt.apply_preauthorize_sent(&fp_cfg, cfg, nozzle_index, price, preset.clone());
-                    rt.preauth_nozzle_confirmed
+                    (rt.preauth_nozzle_confirmed, rt.nozzle_prices.clone())
                 } else {
-                    false
+                    (false, HashMap::new())
                 }
             };
             if lift_confirmed {
@@ -1436,6 +1470,7 @@ async fn apply_command(
                     &preset,
                     nozzle_index,
                     price,
+                    &nozzle_prices,
                     &cfg.connection.protocol,
                 );
                 {
@@ -1465,6 +1500,7 @@ async fn apply_command(
                     &preset,
                     nozzle_index,
                     price,
+                    &nozzle_prices,
                     &cfg.connection.protocol,
                 );
                 // Only mark config on wire when the pump actually ACKed it (C0 FA in

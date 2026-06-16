@@ -1082,11 +1082,12 @@ impl RuntimeFp {
                         return FrameEffect::None;
                     }
                     if self.preauth_session_armed() && self.current_tx.is_none() {
-                        // nozzle_physically_up() is false here (checked above).
-                        // Genuine zero-volume holster after reactive AUTH — cancel.
-                        self.cancel_zero_volume_session();
+                        // Lift-first authorization can sit on zero-volume IDLE frames
+                        // until Wayne accepts CONFIG and starts metering.  A real cancel
+                        // arrives as NozzleReturned, so don't clear the selected preset/nozzle
+                        // just because the lift timestamp aged out.
                         self.touch();
-                        return FrameEffect::CompleteGhostFill;
+                        return FrameEffect::None;
                     }
                     if self.current_tx.is_some() {
                         self.cancel_zero_volume_session();
@@ -1307,6 +1308,13 @@ impl RuntimeFp {
                     self.touch();
                     return FrameEffect::StatusChanged;
                 }
+                if self.state.status == FpStatus::Authorizing
+                    && self.preauth_session_armed()
+                    && self.current_tx.is_none()
+                {
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                }
                 self.cancel_zero_volume_session();
                 self.touch();
                 return FrameEffect::CompleteGhostFill;
@@ -1362,6 +1370,13 @@ impl RuntimeFp {
             let (vol, amt) = self.combined_totals();
             if vol < 0.01 && amt == 0 {
                 if self.nozzle_physically_up() {
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                }
+                if self.state.status == FpStatus::Authorizing
+                    && self.preauth_session_armed()
+                    && self.current_tx.is_none()
+                {
                     self.touch();
                     return FrameEffect::StatusChanged;
                 }
@@ -2778,6 +2793,70 @@ mod tests {
         .expect("sample site config")
     }
 
+    fn sample_site_two_nozzles() -> SiteConfig {
+        serde_json::from_str(
+            r##"{
+                "site": { "id": "test", "name": "Test", "timezone": "UTC" },
+                "service": {
+                    "port": 3001,
+                    "log_level": "info",
+                    "log_file": "test.log",
+                    "db_path": "test.db"
+                },
+                "connection": {
+                    "protocol": "wayne_europump",
+                    "port": "COM3",
+                    "baud_rate": 9600,
+                    "parity": "odd",
+                    "data_bits": 8,
+                    "stop_bits": 1,
+                    "response_timeout_ms": 300
+                },
+                "polling": {
+                    "interval_ms": 140,
+                    "offline_threshold_polls": 32,
+                    "reconnect_settle_rounds": 0
+                },
+                "products": [
+                    { "id": 3, "name": "AI-92", "color": "#2196F3", "unit": "litre" },
+                    { "id": 5, "name": "AI-95", "color": "#4CAF50", "unit": "litre" }
+                ],
+                "fueling_positions": [
+                    {
+                        "id": "FP4",
+                        "label": "4",
+                        "address_byte": 83,
+                        "active": true,
+                        "nozzles": [
+                            {
+                                "index": 2,
+                                "product_id": 3,
+                                "price": 11000,
+                                "active": true,
+                                "wayne_code": 18,
+                                "wayne_product_code": 16
+                            },
+                            {
+                                "index": 3,
+                                "product_id": 5,
+                                "price": 13000,
+                                "active": true,
+                                "wayne_code": 19,
+                                "wayne_product_code": 17
+                            }
+                        ]
+                    }
+                ],
+                "sync": {
+                    "enabled": false,
+                    "backend_url": "",
+                    "api_key": ""
+                }
+            }"##,
+        )
+        .expect("sample site config")
+    }
+
     #[test]
     fn zero_volume_embedded_holster_after_preauth_cancels_authorizing() {
         let site = sample_site();
@@ -2820,6 +2899,79 @@ mod tests {
         assert!(rt.current_tx.is_none());
         assert_eq!(rt.last_wire_hose_code, None);
         assert!(rt.ghost_recovery);
+    }
+
+    #[test]
+    fn lift_after_done_keeps_authorized_nozzle_while_waiting_for_first_meter_data() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.state.status = FpStatus::Done;
+        rt.completed_sale = Some(CompletedSaleLatch);
+        rt.state.nozzle_index = Some(3);
+        rt.state.product_id = Some(5);
+        rt.state.product_name = Some("AI-95".into());
+
+        let lift = Frame::NozzleUp {
+            addr: 0x53,
+            seq: 0x31,
+            product: 0x10,
+            nozzle: 0x12,
+        };
+        let effect = rt.apply_frame(&lift, &fp_cfg, &site, None, None);
+        assert!(matches!(
+            effect,
+            FrameEffect::NozzleUp {
+                nozzle_index: 2,
+                ..
+            }
+        ));
+        assert_eq!(rt.state.status, FpStatus::NozzleUp);
+        assert_eq!(rt.state.product_name.as_deref(), Some("AI-92"));
+        assert!(rt.completed_sale.is_none());
+
+        rt.state.price = 11000;
+        rt.set_last_preset(Preset::Amount(10_000));
+        rt.apply_nozzle_lift_deferred_config();
+
+        rt.last_wire_hose_at_ms = 0;
+        let effect = rt.apply_idle_response(&fp_cfg, &site, None, None);
+        assert!(matches!(effect, FrameEffect::SendAuthorizeConfig));
+
+        rt.mark_preauth_config_on_wire();
+        rt.last_wire_hose_at_ms = 0;
+        let effect = rt.apply_idle_response(&fp_cfg, &site, None, None);
+        assert!(matches!(effect, FrameEffect::None));
+        assert_eq!(rt.state.status, FpStatus::Authorizing);
+        assert_eq!(rt.state.nozzle_index, Some(2));
+        assert_eq!(
+            rt.snapshot_state().pre_auth_preset.as_deref(),
+            Some("10000 sum")
+        );
+
+        let data = Frame::Data {
+            addr: 0x53,
+            seq: 0x32,
+            volume_x1: 0x00,
+            volume_x2: 0x00,
+            volume_l: 0x00,
+            volume_h: 0x90,
+            amount: [0x00, 0x99, 0x00],
+            sale_complete: false,
+            // Deliberately misleading wire hose/product. The active authorization must win.
+            hose_product: Some(0x11),
+            hose_code: Some(0x13),
+        };
+        let effect = rt.apply_frame(&data, &fp_cfg, &site, None, None);
+
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert_eq!(rt.state.status, FpStatus::Delivering);
+        assert_eq!(rt.state.nozzle_index, Some(2));
+        assert_eq!(rt.state.product_name.as_deref(), Some("AI-92"));
+        let tx = rt.current_tx.as_ref().expect("current transaction");
+        assert_eq!(tx.nozzle_index, 2);
+        assert_eq!(tx.product_name, "AI-92");
     }
 
     #[test]

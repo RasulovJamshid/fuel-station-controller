@@ -1642,6 +1642,19 @@ impl RuntimeFp {
         self.missed += 1;
         self.state.missed_polls = self.missed;
         self.touch();
+        if matches!(
+            self.state.status,
+            FpStatus::NozzleUp
+                | FpStatus::PreAuthorized
+                | FpStatus::Authorizing
+                | FpStatus::Delivering
+                | FpStatus::Done
+        ) || self.preauth_session_armed()
+            || self.current_tx.is_some()
+            || self.completed_sale.is_some()
+        {
+            return false;
+        }
         if self.missed >= threshold && self.state.status != FpStatus::Offline {
             self.state.status = FpStatus::Offline;
             return true;
@@ -2086,10 +2099,12 @@ impl RuntimeFp {
                         let lifted_nozzle = self.state.nozzle_index;
 
                         // Pump still holds another hose's transaction — ignore for this lift.
-                        if let (Some(wn), Some(ln)) = (wire_nozzle, lifted_nozzle) {
-                            if wn != ln {
-                                self.touch();
-                                return FrameEffect::StatusChanged;
+                        if !self.preauth_session_armed() {
+                            if let (Some(wn), Some(ln)) = (wire_nozzle, lifted_nozzle) {
+                                if wn != ln {
+                                    self.touch();
+                                    return FrameEffect::StatusChanged;
+                                }
                             }
                         }
 
@@ -2116,7 +2131,11 @@ impl RuntimeFp {
                             return FrameEffect::StatusChanged;
                         }
 
-                        let nozzle_index = wire_nozzle.or(lifted_nozzle).unwrap_or(1);
+                        let nozzle_index = if self.preauth_session_armed() {
+                            lifted_nozzle.or(wire_nozzle).unwrap_or(1)
+                        } else {
+                            wire_nozzle.or(lifted_nozzle).unwrap_or(1)
+                        };
                         let (pname, pid, color) = lookup_nozzle(site, fp_cfg, nozzle_index);
                         self.state.nozzle_index = Some(nozzle_index);
                         self.state.product_id = Some(pid);
@@ -2960,6 +2979,69 @@ mod tests {
             amount: [0x00, 0x99, 0x00],
             sale_complete: false,
             // Deliberately misleading wire hose/product. The active authorization must win.
+            hose_product: Some(0x11),
+            hose_code: Some(0x13),
+        };
+        let effect = rt.apply_frame(&data, &fp_cfg, &site, None, None);
+
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert_eq!(rt.state.status, FpStatus::Delivering);
+        assert_eq!(rt.state.nozzle_index, Some(2));
+        assert_eq!(rt.state.product_name.as_deref(), Some("AI-92"));
+        let tx = rt.current_tx.as_ref().expect("current transaction");
+        assert_eq!(tx.nozzle_index, 2);
+        assert_eq!(tx.product_name, "AI-92");
+    }
+
+    #[test]
+    fn missed_polls_do_not_drop_armed_authorization_to_offline() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.state.status = FpStatus::Authorizing;
+        rt.state.nozzle_index = Some(2);
+        rt.state.product_id = Some(3);
+        rt.state.product_name = Some("AI-92".into());
+        rt.state.price = 11100;
+        rt.set_last_preset(Preset::Volume(1.0));
+        rt.mark_preauth_config_on_wire();
+
+        for _ in 0..10 {
+            assert!(!rt.on_poll_missed(6));
+        }
+
+        assert_eq!(rt.state.status, FpStatus::Authorizing);
+        assert_eq!(rt.state.nozzle_index, Some(2));
+        assert_eq!(
+            rt.snapshot_state().pre_auth_preset.as_deref(),
+            Some("1.00 L")
+        );
+    }
+
+    #[test]
+    fn late_data_after_offline_prefers_armed_nozzle_over_wire_guess() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.state.status = FpStatus::Offline;
+        rt.state.nozzle_index = Some(2);
+        rt.state.product_id = Some(3);
+        rt.state.product_name = Some("AI-92".into());
+        rt.state.price = 11100;
+        rt.set_last_preset(Preset::Volume(1.0));
+        rt.mark_preauth_config_on_wire();
+
+        let data = Frame::Data {
+            addr: 0x53,
+            seq: 0x32,
+            volume_x1: 0x00,
+            volume_x2: 0x00,
+            volume_l: 0x00,
+            volume_h: 0x90,
+            amount: [0x00, 0x99, 0x90],
+            sale_complete: false,
             hose_product: Some(0x11),
             hose_code: Some(0x13),
         };

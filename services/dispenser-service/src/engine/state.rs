@@ -312,6 +312,13 @@ impl RuntimeFp {
         (vol * price as f64).round() as u64
     }
 
+    fn metered_amount(&self, vol: f64, pump_amount: u64) -> u64 {
+        match self.last_preset {
+            Preset::Amount(_) if pump_amount > 0 => pump_amount,
+            _ => self.amount_from_volume(vol),
+        }
+    }
+
     fn apply_metering(&mut self, raw_vol: f64, raw_amt: u64) {
         if let Some(c) = self.continuation.as_mut() {
             c.segment_volume = raw_vol;
@@ -370,7 +377,7 @@ impl RuntimeFp {
     fn holster_ends_sale_early(&self) -> bool {
         // If the pump hardware already signalled sale_complete, the preset was reached
         // (the shortfall vs cap_amount is only BCD rounding, ≤ price × 0.01 L).
-        // Route to complete_sale_from_holster so it can snap the amount to the preset value.
+        // Route to complete_sale_from_holster so pump-reported completion is preserved.
         if self.pump_sale_complete {
             return false;
         }
@@ -406,13 +413,14 @@ impl RuntimeFp {
     ) -> FrameEffect {
         let (vol, _) = self.combined_totals();
         self.pending_holster_close = false;
+        let hardware_complete = self.pump_sale_complete;
         self.pump_sale_complete = false;
         // Guard: if a PAUSE decel window was open but we reach holster-completion
         // (e.g. via an unhandled code path), disarm the timer so it cannot fire a
         // second save after this one.
         self.clear_decel_window();
         self.state.status = FpStatus::Done;
-        let completed = self.sale_target_met() || vol < 0.01;
+        let completed = hardware_complete || self.sale_target_met() || vol < 0.01;
         self.clear_deliver_caps();
         let tx = self.close_transaction(
             completed,
@@ -1905,7 +1913,7 @@ impl RuntimeFp {
                             )
                         {
                             self.note_wire_hose(*hh);
-                            self.apply_metering(raw_vol, self.amount_from_volume(raw_vol));
+                            self.apply_metering(raw_vol, self.metered_amount(raw_vol, raw_amt));
                             self.pump_sale_complete = true;
                             self.pending_holster_close = false;
                             if self.holster_ends_sale_early() {
@@ -2109,7 +2117,7 @@ impl RuntimeFp {
                                 nozzle_index,
                             });
                         }
-                        self.apply_metering(raw_vol, self.amount_from_volume(raw_vol));
+                        self.apply_metering(raw_vol, self.metered_amount(raw_vol, raw_amt));
                         self.state.status = FpStatus::Delivering;
                         self.touch();
                         return FrameEffect::StatusChanged;
@@ -2166,12 +2174,12 @@ impl RuntimeFp {
                             );
                         }
                         // Still within window — update display with frozen value, wait.
-                        self.apply_metering(raw_vol, self.amount_from_volume(raw_vol));
+                        self.apply_metering(raw_vol, self.metered_amount(raw_vol, raw_amt));
                         self.touch();
                         return FrameEffect::StatusChanged;
                     }
                 }
-                self.apply_metering(raw_vol, self.amount_from_volume(raw_vol));
+                self.apply_metering(raw_vol, self.metered_amount(raw_vol, raw_amt));
                 let vol = self.state.volume;
                 let amt = self.state.amount;
                 // First non-zero data frame starts delivery. Zero-volume frames are
@@ -2812,5 +2820,86 @@ mod tests {
         assert!(rt.current_tx.is_none());
         assert_eq!(rt.last_wire_hose_code, None);
         assert!(rt.ghost_recovery);
+    }
+
+    #[test]
+    fn amount_preset_uses_pump_reported_money_when_exact() {
+        let site = sample_site();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.state.status = FpStatus::Delivering;
+        rt.state.nozzle_index = Some(2);
+        rt.state.price = 11000;
+        rt.set_last_preset(Preset::Amount(10_000));
+        rt.current_tx = Some(CurrentTx {
+            id: "tx".into(),
+            started_at: Utc::now().timestamp_millis(),
+            product_id: 3,
+            product_name: "AI-92".into(),
+            nozzle_index: 2,
+        });
+        let amount = rt.metered_amount(0.90, 10_000);
+        rt.apply_metering(0.90, amount);
+
+        assert_eq!(rt.state.amount, 10_000);
+        assert!(rt.sale_target_met());
+
+        rt.pump_sale_complete = true;
+        let effect = rt.complete_sale_from_holster(&fp_cfg, &site, None, None);
+        let FrameEffect::TransactionDone { tx, .. } = effect else {
+            panic!("expected completed transaction");
+        };
+
+        assert_eq!(tx.volume, 0.90);
+        assert_eq!(tx.amount, 10_000);
+        assert!(matches!(tx.status, TxStatus::Completed));
+    }
+
+    #[test]
+    fn amount_preset_keeps_pump_reported_shortfall_without_rounding() {
+        let site = sample_site();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.state.status = FpStatus::Delivering;
+        rt.state.nozzle_index = Some(2);
+        rt.state.price = 11000;
+        rt.set_last_preset(Preset::Amount(10_000));
+        rt.current_tx = Some(CurrentTx {
+            id: "tx".into(),
+            started_at: Utc::now().timestamp_millis(),
+            product_id: 3,
+            product_name: "AI-92".into(),
+            nozzle_index: 2,
+        });
+        let amount = rt.metered_amount(0.90, 9_900);
+        rt.apply_metering(0.90, amount);
+
+        assert_eq!(rt.state.amount, 9_900);
+        assert!(!rt.sale_target_met());
+
+        rt.pump_sale_complete = true;
+        let effect = rt.complete_sale_from_holster(&fp_cfg, &site, None, None);
+        let FrameEffect::TransactionDone { tx, .. } = effect else {
+            panic!("expected completed transaction");
+        };
+
+        assert_eq!(tx.volume, 0.90);
+        assert_eq!(tx.amount, 9_900);
+        assert!(matches!(tx.status, TxStatus::Completed));
+    }
+
+    #[test]
+    fn volume_preset_ignores_pump_amount_field() {
+        let site = sample_site();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.state.nozzle_index = Some(2);
+        rt.state.price = 11000;
+        rt.set_last_preset(Preset::Volume(1.0));
+
+        assert_eq!(rt.metered_amount(0.90, 10_000), 9_900);
     }
 }

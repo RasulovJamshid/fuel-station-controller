@@ -1026,6 +1026,7 @@ async fn process_parsed_frame(
             lifted_nozzle_index,
             lifted_product_name,
         } => {
+            let _ = exchange_serial(backend, &stop_frame(byte));
             let _ = events.send(WsEvent::PreAuthNozzleMismatch {
                 fp_id: fp_cfg.id.clone(),
                 expected_nozzle_index,

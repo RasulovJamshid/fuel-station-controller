@@ -1474,6 +1474,12 @@ impl RuntimeFp {
         self.touch();
     }
 
+    fn cancel_pre_auth_after_nozzle_mismatch(&mut self) {
+        self.cancel_pre_auth();
+        self.ghost_recovery = true;
+        self.consecutive_idle_polls = 0;
+    }
+
     pub fn apply_preauthorize_sent(
         &mut self,
         fp_cfg: &FuelingPositionConfig,
@@ -1518,8 +1524,10 @@ impl RuntimeFp {
     }
 
     /// Returns `Some(mismatch effect)` when the lifted nozzle does not match pre-authorization.
+    /// A mismatch cancels the old preauth immediately so the pump cannot continue
+    /// delivering with stale operator-entered fill data.
     fn check_preauth_nozzle(
-        &self,
+        &mut self,
         lifted_product: u8,
         lifted_wayne_code: u8,
         fp_cfg: &FuelingPositionConfig,
@@ -1532,8 +1540,10 @@ impl RuntimeFp {
             return None;
         }
         let (expected_name, _, _) = lookup_nozzle(site, fp_cfg, pre.nozzle_index);
+        let expected_nozzle_index = pre.nozzle_index;
+        self.cancel_pre_auth_after_nozzle_mismatch();
         Some(FrameEffect::PreAuthNozzleMismatch {
-            expected_nozzle_index: pre.nozzle_index,
+            expected_nozzle_index,
             expected_product_name: expected_name,
             lifted_nozzle_index: lifted_idx,
             lifted_product_name: lifted_name,
@@ -2934,6 +2944,59 @@ mod tests {
         assert!(rt.current_tx.is_none());
         assert_eq!(rt.last_wire_hose_code, None);
         assert!(rt.ghost_recovery);
+    }
+
+    #[test]
+    fn wrong_nozzle_lift_cancels_preauth_and_ignores_stale_meter_data() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.apply_preauthorize_sent(&fp_cfg, &site, 2, 11000, Preset::Amount(10_000));
+        rt.mark_preauth_config_on_wire();
+
+        let wrong_lift = Frame::NozzleUp {
+            addr: 0x53,
+            seq: 0x31,
+            product: 0x11,
+            nozzle: 0x13,
+        };
+        let effect = rt.apply_frame(&wrong_lift, &fp_cfg, &site, None, None);
+
+        assert!(matches!(
+            effect,
+            FrameEffect::PreAuthNozzleMismatch {
+                expected_nozzle_index: 2,
+                lifted_nozzle_index: 3,
+                ..
+            }
+        ));
+        assert_eq!(rt.state.status, FpStatus::Idle);
+        assert!(rt.pre_auth.is_none());
+        assert!(rt.current_tx.is_none());
+        assert!(rt.state.pre_auth_preset.is_none());
+        assert!(rt.ghost_recovery);
+
+        let stale_wrong_nozzle_data = Frame::Data {
+            addr: 0x53,
+            seq: 0x32,
+            volume_x1: 0x00,
+            volume_x2: 0x00,
+            volume_l: 0x01,
+            volume_h: 0x00,
+            amount: [0x00, 0x10, 0x00],
+            sale_complete: false,
+            hose_product: Some(0x11),
+            hose_code: Some(0x13),
+        };
+        let effect = rt.apply_frame(&stale_wrong_nozzle_data, &fp_cfg, &site, None, None);
+
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert_eq!(rt.state.status, FpStatus::Idle);
+        assert_eq!(rt.state.volume, 0.0);
+        assert_eq!(rt.state.amount, 0);
+        assert!(rt.current_tx.is_none());
+        assert!(rt.completed_sale.is_none());
     }
 
     #[test]

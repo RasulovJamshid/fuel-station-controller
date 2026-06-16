@@ -105,7 +105,7 @@ pub fn authorize_config(
 pub fn authorize_config_with_preset_block(
     addr: u8,
     product_codes: &[u8],
-    _prices: &[u32],
+    prices: &[u32],
     preset: PresetBlock,
 ) -> Vec<u8> {
     let n = product_codes.len().clamp(1, 4);
@@ -120,10 +120,17 @@ pub fn authorize_config_with_preset_block(
         payload.push(i);
     }
 
-    // Product map (sniffer): `05 [n×3]` + `01 PP flag` per channel.
+    // Product/price map (sniffer): `05 [n×3]` + `01 PP flag` per channel.
+    // PP is the pump's price/display byte: 10500 -> 0x05, 11000 -> 0x10, 14300 -> 0x43.
     payload.push(0x05);
     payload.push((n * 3) as u8);
-    for (i, &pp) in product_codes.iter().take(n).enumerate() {
+    for i in 0..n {
+        let pp = prices
+            .get(i)
+            .copied()
+            .filter(|p| *p > 0)
+            .map(|p| encode_price(p)[0])
+            .unwrap_or_else(|| product_codes.get(i).copied().unwrap_or(0));
         let flag = if i == n - 1 { 0x30 } else { 0x00 };
         payload.extend([0x01, pp, flag]);
     }
@@ -218,7 +225,7 @@ mod tests {
         let frame = authorize_config(
             0x52,
             &[0x43, 0x05, 0x24, 0x43],
-            &[14300, 10500, 9200, 14300],
+            &[14300, 10500, 12400, 14300],
             encode_bcd_3(1000),
         );
         assert!(frame.starts_with(&[0x52, 0x30, 0x01, 0x01, 0x05]));
@@ -253,6 +260,14 @@ mod tests {
         assert!(frame
             .windows(6)
             .any(|w| w == [0x03, 0x04, 0x00, 0x09, 0x99, 0x00]));
+    }
+
+    #[test]
+    fn config_price_change_11000_updates_wire_pp_byte() {
+        let frame = authorize_config(0x52, &[0x05, 0x05], &[10_500, 11_000], encode_bcd_3(100));
+        assert!(frame
+            .windows(6)
+            .any(|w| w == [0x01, 0x05, 0x00, 0x01, 0x10, 0x30]));
     }
 
     #[test]

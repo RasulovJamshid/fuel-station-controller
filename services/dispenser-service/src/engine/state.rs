@@ -292,6 +292,14 @@ impl RuntimeFp {
             || self.state.pre_auth_preset.is_some()
     }
 
+    fn owns_meter_data(&self) -> bool {
+        self.current_tx.is_some()
+            || self.pre_auth.is_some()
+            || self.preauth_session_armed()
+            || self.auth_session_started_at.is_some()
+            || self.continuation.is_some()
+    }
+
     /// Effective price for the currently active nozzle (falls back to state.price).
     fn active_nozzle_price(&self) -> u32 {
         let idx = self.state.nozzle_index.unwrap_or(1);
@@ -2098,6 +2106,14 @@ impl RuntimeFp {
                             self.wire_transaction_nozzle(*hose_product, *hose_code, fp_cfg, site);
                         let lifted_nozzle = self.state.nozzle_index;
 
+                        if !self.owns_meter_data() {
+                            self.touch();
+                            if *sale_complete && !self.nozzle_physically_up() {
+                                return FrameEffect::CompleteGhostFill;
+                            }
+                            return FrameEffect::StatusChanged;
+                        }
+
                         // Pump still holds another hose's transaction — ignore for this lift.
                         if !self.preauth_session_armed() {
                             if let (Some(wn), Some(ln)) = (wire_nozzle, lifted_nozzle) {
@@ -2991,6 +3007,63 @@ mod tests {
         let tx = rt.current_tx.as_ref().expect("current transaction");
         assert_eq!(tx.nozzle_index, 2);
         assert_eq!(tx.product_name, "AI-92");
+    }
+
+    #[test]
+    fn stale_nonzero_data_after_clean_lift_does_not_create_transaction() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.state.status = FpStatus::Idle;
+
+        let lift = Frame::NozzleUp {
+            addr: 0x53,
+            seq: 0x31,
+            product: 0x10,
+            nozzle: 0x12,
+        };
+        let effect = rt.apply_frame(&lift, &fp_cfg, &site, None, None);
+        assert!(matches!(
+            effect,
+            FrameEffect::NozzleUp {
+                nozzle_index: 2,
+                ..
+            }
+        ));
+
+        let stale_data = Frame::Data {
+            addr: 0x53,
+            seq: 0x32,
+            volume_x1: 0x00,
+            volume_x2: 0x00,
+            volume_l: 0x05,
+            volume_h: 0x00,
+            amount: [0x00, 0x55, 0x00],
+            sale_complete: true,
+            hose_product: Some(0x10),
+            hose_code: Some(0x12),
+        };
+        let effect = rt.apply_frame(&stale_data, &fp_cfg, &site, None, None);
+
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert_eq!(rt.state.status, FpStatus::NozzleUp);
+        assert_eq!(rt.state.volume, 0.0);
+        assert_eq!(rt.state.amount, 0);
+        assert!(rt.current_tx.is_none());
+        assert!(rt.completed_sale.is_none());
+
+        let returned = Frame::NozzleReturned {
+            addr: 0x53,
+            seq: 0x33,
+            product: 0x10,
+            hose: 0x02,
+        };
+        let effect = rt.apply_frame(&returned, &fp_cfg, &site, None, None);
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert_eq!(rt.state.status, FpStatus::Idle);
+        assert!(rt.current_tx.is_none());
+        assert!(rt.completed_sale.is_none());
     }
 
     #[test]

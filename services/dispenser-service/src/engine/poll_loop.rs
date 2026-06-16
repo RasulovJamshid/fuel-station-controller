@@ -63,10 +63,12 @@ fn wayne_nozzle_prices(
     nozzles
         .into_iter()
         .map(|n| {
-            if n.index == active_nozzle && active_price > 0 {
+            if let Some(price) = overrides.get(&n.index).copied() {
+                price
+            } else if n.index == active_nozzle && active_price > 0 {
                 active_price
             } else {
-                overrides.get(&n.index).copied().unwrap_or(n.price)
+                n.price
             }
         })
         .collect()
@@ -97,10 +99,12 @@ fn dart_nozzle_prices(
     nozzles
         .iter()
         .map(|n| {
-            if n.index == active_nozzle && active_price > 0 {
+            if let Some(price) = overrides.get(&n.index).copied() {
+                price
+            } else if n.index == active_nozzle && active_price > 0 {
                 active_price
             } else {
-                overrides.get(&n.index).copied().unwrap_or(n.price)
+                n.price
             }
         })
         .collect()
@@ -137,12 +141,14 @@ fn send_auth_pair(
 ) -> Vec<u8> {
     if matches!(protocol, Protocol::WayneDartV1) {
         let prices = dart_nozzle_prices(fp, nozzle_prices, active_nozzle, price_per_liter);
+        debug!(byte, active_nozzle, ?prices, "WayneDartV1 auth prices");
         let _ = exchange_serial(backend, &pre_authorise_price(byte, &prices, active_nozzle));
         let limit = dart_limit_bcd(preset, price_per_liter);
         exchange_serial(backend, &authorise_cmd(byte, active_nozzle, limit)).unwrap_or_default()
     } else {
         let products = wayne_product_codes(fp);
         let prices = wayne_nozzle_prices(fp, nozzle_prices, active_nozzle, price_per_liter);
+        debug!(byte, active_nozzle, ?prices, "Wayne PCC485 auth prices");
         let preset_block = pcc485_preset_block(preset);
         let cfg = authorize_config_with_preset_block(byte, &products, &prices, preset_block);
         exchange_serial(backend, &cfg).unwrap_or_default()
@@ -295,7 +301,7 @@ async fn dispatch_poll_frames(
                 .unwrap_or(false)
         };
         if allow_wire_config {
-            let (preset, price, nozzle_prices) = {
+            let (preset, price) = {
                 let map = runtimes.read().await;
                 let rt = map.get(&byte);
                 let preset = rt
@@ -304,9 +310,9 @@ async fn dispatch_poll_frames(
                 let price = rt
                     .map(|rt| rt.state.price)
                     .unwrap_or_else(|| fp_cfg.default_price().unwrap_or(0));
-                let nozzle_prices = rt.map(|rt| rt.nozzle_prices.clone()).unwrap_or_default();
-                (preset, price, nozzle_prices)
+                (preset, price)
             };
+            let nozzle_prices = refresh_nozzle_prices_from_db(pool, &fp_cfg, byte, runtimes).await;
             let auth_resp = send_auth_pair(
                 backend,
                 byte,
@@ -464,6 +470,43 @@ fn active_positions_by_byte(cfg: &SiteConfig) -> HashMap<u8, FuelingPositionConf
         .filter(|fp| fp.active)
         .map(|fp| (fp.address_byte, fp.clone()))
         .collect()
+}
+
+async fn refresh_nozzle_prices_from_db(
+    pool: &SqlitePool,
+    fp: &FuelingPositionConfig,
+    byte: u8,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+) -> HashMap<u8, u32> {
+    let Ok(nozzles_by_fp) = crate::db::admin_queries::load_fp_nozzles_from_db(pool).await else {
+        let map = runtimes.read().await;
+        return map
+            .get(&byte)
+            .map(|rt| rt.nozzle_prices.clone())
+            .unwrap_or_default();
+    };
+    let Some(nozzles) = nozzles_by_fp.get(&fp.id) else {
+        let map = runtimes.read().await;
+        return map
+            .get(&byte)
+            .map(|rt| rt.nozzle_prices.clone())
+            .unwrap_or_default();
+    };
+    let fresh: HashMap<u8, u32> = nozzles
+        .iter()
+        .filter(|n| n.active)
+        .map(|n| (n.index, n.price))
+        .collect();
+    let mut map = runtimes.write().await;
+    if let Some(rt) = map.get_mut(&byte) {
+        rt.nozzle_prices = fresh.clone();
+        if let Some(idx) = rt.state.nozzle_index {
+            if let Some(price) = fresh.get(&idx).copied() {
+                rt.state.price = price;
+            }
+        }
+    }
+    fresh
 }
 
 pub async fn run_poll_loop(
@@ -1035,7 +1078,7 @@ async fn process_parsed_frame(
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::SendAuthorizeConfig => {
-            let (preset, active_nozzle, price, nozzle_prices) = {
+            let (preset, active_nozzle, price) = {
                 let map = runtimes.read().await;
                 let rt = map.get(&byte);
                 let preset = rt
@@ -1045,9 +1088,9 @@ async fn process_parsed_frame(
                 let price = rt
                     .map(|rt| rt.state.price)
                     .unwrap_or_else(|| fp_cfg.default_price().unwrap_or(0));
-                let nozzle_prices = rt.map(|rt| rt.nozzle_prices.clone()).unwrap_or_default();
-                (preset, nozzle, price, nozzle_prices)
+                (preset, nozzle, price)
             };
+            let nozzle_prices = refresh_nozzle_prices_from_db(pool, &fp_cfg, byte, runtimes).await;
             let auth_resp = send_auth_pair(
                 backend,
                 byte,
@@ -1173,14 +1216,13 @@ async fn apply_command(
             };
             let auth = authorize_initial(byte);
             if exchange_serial(backend, &auth).is_ok() {
-                let (active_nozzle, nozzle_prices) = {
+                let active_nozzle = {
                     let map = runtimes.read().await;
                     let rt = map.get(&byte);
-                    (
-                        rt.and_then(|rt| rt.state.nozzle_index).unwrap_or(1),
-                        rt.map(|rt| rt.nozzle_prices.clone()).unwrap_or_default(),
-                    )
+                    rt.and_then(|rt| rt.state.nozzle_index).unwrap_or(1)
                 };
+                let nozzle_prices =
+                    refresh_nozzle_prices_from_db(pool, &fp_cfg, byte, runtimes).await;
                 // Send CONFIG with the remaining limit immediately after AUTH so the pump
                 // uses the correct hardware limit when the customer lifts the nozzle.
                 let _ = send_auth_pair(
@@ -1296,14 +1338,13 @@ async fn apply_command(
             let auth = authorize_initial(byte);
             if exchange_serial(backend, &auth).is_ok() {
                 // Read nozzle index while we still hold no locks.
-                let (active_nozzle, nozzle_prices) = {
+                let active_nozzle = {
                     let map = runtimes.read().await;
                     let rt = map.get(&byte);
-                    (
-                        rt.and_then(|rt| rt.state.nozzle_index).unwrap_or(1),
-                        rt.map(|rt| rt.nozzle_prices.clone()).unwrap_or_default(),
-                    )
+                    rt.and_then(|rt| rt.state.nozzle_index).unwrap_or(1)
                 };
+                let nozzle_prices =
+                    refresh_nozzle_prices_from_db(pool, &fp_cfg, byte, runtimes).await;
                 // Send CONFIG with the *remaining* limit immediately after AUTH, before the
                 // first BUSY frame starts the pump counting.  The pump resets its internal
                 // counter on AUTH, so without this it would count against the old 2 L CONFIG.
@@ -1450,15 +1491,16 @@ async fn apply_command(
                 None => return,
             };
             let preset_label_str = preset_label(&preset);
-            let (lift_confirmed, nozzle_prices) = {
+            let lift_confirmed = {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
                     rt.apply_preauthorize_sent(&fp_cfg, cfg, nozzle_index, price, preset.clone());
-                    (rt.preauth_nozzle_confirmed, rt.nozzle_prices.clone())
+                    rt.preauth_nozzle_confirmed
                 } else {
-                    (false, HashMap::new())
+                    false
                 }
             };
+            let nozzle_prices = refresh_nozzle_prices_from_db(pool, &fp_cfg, byte, runtimes).await;
             if lift_confirmed {
                 // Nozzle was already up when the operator pressed preauthorize.
                 // Send CONFIG immediately (same as the reactive NozzleUp path) so the

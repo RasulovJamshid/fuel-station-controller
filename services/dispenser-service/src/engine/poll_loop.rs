@@ -1392,14 +1392,11 @@ async fn apply_command(
             }
         }
         DispatchCommand::EStop => {
-            // §8.2: broadcast 0x31 pre-commands to all addresses first (write-
-            // only, no wait), then send the 0x30 stop to each in turn.
+            // §8.2: per-address: PRE (31) → read C1 FA → ACK → STOP (30) → read C0 FA.
             for &addr in &cfg.active_addresses() {
-                let _ = write_serial(backend, &stop_pre_frame(addr));
-            }
-            for &addr in &cfg.active_addresses() {
-                let f = stop_frame(addr);
-                let _ = exchange_serial(backend, &f);
+                let _ = exchange_serial(backend, &stop_pre_frame(addr));
+                let _ = write_serial(backend, &ack(addr));
+                let _ = exchange_serial(backend, &stop_frame(addr));
             }
             let (active_shift_id, active_operator_name) = shifts.active_info().await;
             let mut stopped_effects = Vec::new();

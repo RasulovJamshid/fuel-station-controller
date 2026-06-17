@@ -1946,7 +1946,7 @@ impl RuntimeFp {
             } if *addr == b => {
                 self.state.seq = *seq;
                 let raw_vol = decode_volume(*volume_x1, *volume_x2, *volume_l, *volume_h);
-                let raw_amt = decode_amount(amount[0], amount[1], amount[2]);
+                let raw_amt = decode_amount(amount[0], amount[1], amount[2], amount[3]);
 
                 if let (Some(_pp), Some(hh)) = (hose_product, hose_code) {
                     if Frame::is_nozzle_holster_code(*hh)
@@ -2117,6 +2117,36 @@ impl RuntimeFp {
                         let lifted_nozzle = self.state.nozzle_index;
 
                         if !self.owns_meter_data() {
+                            if matches!(self.state.status, FpStatus::Idle | FpStatus::Offline)
+                                && !self.ghost_recovery_active()
+                                && !*sale_complete
+                                && wire_nozzle.is_some()
+                            {
+                                let nozzle_index = wire_nozzle.unwrap_or(1);
+                                let (pname, pid, color) = lookup_nozzle(site, fp_cfg, nozzle_index);
+                                self.state.nozzle_index = Some(nozzle_index);
+                                self.state.product_id = Some(pid);
+                                self.state.product_name = Some(pname.clone());
+                                self.state.product_color = Some(color);
+                                self.state.price = self
+                                    .nozzle_prices
+                                    .get(&nozzle_index)
+                                    .copied()
+                                    .or_else(|| site.price_for(b, nozzle_index))
+                                    .unwrap_or(self.state.price);
+                                self.current_tx = Some(CurrentTx {
+                                    id: Uuid::new_v4().to_string(),
+                                    started_at: Utc::now().timestamp_millis(),
+                                    product_id: pid,
+                                    product_name: pname,
+                                    nozzle_index,
+                                });
+                                self.auth_session_started_at = Some(Utc::now().timestamp_millis());
+                                self.apply_metering(raw_vol, self.metered_amount(raw_vol, raw_amt));
+                                self.state.status = FpStatus::Delivering;
+                                self.touch();
+                                return FrameEffect::StatusChanged;
+                            }
                             self.touch();
                             if *sale_complete && !self.nozzle_physically_up() {
                                 return FrameEffect::CompleteGhostFill;
@@ -2931,7 +2961,7 @@ mod tests {
             volume_x2: 0,
             volume_l: 0,
             volume_h: 0,
-            amount: [0, 0, 0],
+            amount: [0, 0, 0, 0],
             sale_complete: false,
             hose_product: Some(0x10),
             hose_code: Some(0x02),
@@ -2984,7 +3014,7 @@ mod tests {
             volume_x2: 0x00,
             volume_l: 0x01,
             volume_h: 0x00,
-            amount: [0x00, 0x10, 0x00],
+            amount: [0x00, 0x00, 0x10, 0x00],
             sale_complete: false,
             hose_product: Some(0x11),
             hose_code: Some(0x13),
@@ -3055,7 +3085,7 @@ mod tests {
             volume_x2: 0x00,
             volume_l: 0x00,
             volume_h: 0x90,
-            amount: [0x00, 0x99, 0x00],
+            amount: [0x00, 0x00, 0x99, 0x00],
             sale_complete: false,
             // Deliberately misleading wire hose/product. The active authorization must win.
             hose_product: Some(0x11),
@@ -3102,7 +3132,7 @@ mod tests {
             volume_x2: 0x00,
             volume_l: 0x05,
             volume_h: 0x00,
-            amount: [0x00, 0x55, 0x00],
+            amount: [0x00, 0x00, 0x55, 0x00],
             sale_complete: true,
             hose_product: Some(0x10),
             hose_code: Some(0x12),
@@ -3127,6 +3157,39 @@ mod tests {
         assert_eq!(rt.state.status, FpStatus::Idle);
         assert!(rt.current_tx.is_none());
         assert!(rt.completed_sale.is_none());
+    }
+
+    #[test]
+    fn idle_live_meter_data_after_restart_is_adopted() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.state.status = FpStatus::Idle;
+
+        let live_data = Frame::Data {
+            addr: 0x53,
+            seq: 0x32,
+            volume_x1: 0x00,
+            volume_x2: 0x00,
+            volume_l: 0x05,
+            volume_h: 0x00,
+            amount: [0x00, 0x00, 0x65, 0x00],
+            sale_complete: false,
+            hose_product: Some(0x11),
+            hose_code: Some(0x13),
+        };
+        let effect = rt.apply_frame(&live_data, &fp_cfg, &site, None, None);
+
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert_eq!(rt.state.status, FpStatus::Delivering);
+        assert_eq!(rt.state.nozzle_index, Some(3));
+        assert_eq!(rt.state.product_name.as_deref(), Some("AI-95"));
+        assert_eq!(rt.state.volume, 5.0);
+        assert_eq!(rt.state.amount, 65000);
+        let tx = rt.current_tx.as_ref().expect("adopted transaction");
+        assert_eq!(tx.nozzle_index, 3);
+        assert_eq!(tx.product_name, "AI-95");
     }
 
     #[test]
@@ -3176,7 +3239,7 @@ mod tests {
             volume_x2: 0x00,
             volume_l: 0x00,
             volume_h: 0x90,
-            amount: [0x00, 0x99, 0x90],
+            amount: [0x00, 0x00, 0x99, 0x90],
             sale_complete: false,
             hose_product: Some(0x11),
             hose_code: Some(0x13),

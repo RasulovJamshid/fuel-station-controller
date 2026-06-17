@@ -13,8 +13,8 @@ pub fn decode_volume(vx1: u8, vx2: u8, v1: u8, v2: u8) -> f64 {
     digits.parse::<f64>().unwrap_or(0.0) / 100.0
 }
 
-pub fn decode_amount(a1: u8, a2: u8, a3: u8) -> u64 {
-    let digits = format!("{:02X}{:02X}{:02X}", a1, a2, a3);
+pub fn decode_amount(p0: u8, a1: u8, a2: u8, a3: u8) -> u64 {
+    let digits = format!("{:02X}{:02X}{:02X}{:02X}", p0, a1, a2, a3);
     digits.parse::<u64>().unwrap_or(0)
 }
 
@@ -80,7 +80,7 @@ struct FillDataFields {
     volume_x2: u8,
     volume_l: u8,
     volume_h: u8,
-    amount: [u8; 3],
+    amount: [u8; 4],
     sale_complete: bool,
     hose_product: Option<u8>,
     hose_code: Option<u8>,
@@ -145,7 +145,7 @@ fn parse_fill_data_block(inner: &[u8]) -> Option<FillDataFields> {
         volume_x2: inner[off + 3],
         volume_l: inner[off + 4],
         volume_h: inner[off + 5],
-        amount: [inner[off + 7], inner[off + 8], inner[off + 9]],
+        amount: [inner[off + 6], inner[off + 7], inner[off + 8], inner[off + 9]],
         sale_complete,
         hose_product,
         hose_code,
@@ -938,7 +938,7 @@ mod tests {
                     decode_volume(volume_x1, volume_x2, volume_l, volume_h),
                     0.15
                 );
-                assert_eq!(decode_amount(amount[0], amount[1], amount[2]), 1575);
+                assert_eq!(decode_amount(amount[0], amount[1], amount[2], amount[3]), 1575);
             }
             f => panic!("expected Data, got {:?}", f),
         }
@@ -1054,7 +1054,7 @@ mod tests {
                 assert_eq!(addr, 0x52);
                 assert_eq!(seq, 0x33);
                 assert_eq!(decode_volume(volume_x1, volume_x2, volume_l, volume_h), 0.0);
-                assert_eq!(decode_amount(amount[0], amount[1], amount[2]), 0);
+                assert_eq!(decode_amount(amount[0], amount[1], amount[2], amount[3]), 0);
             }
             f => panic!("expected Data (CRC-fail fallback), got {:?}", f),
         }

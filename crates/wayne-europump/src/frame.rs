@@ -21,7 +21,7 @@ pub enum Frame {
         volume_x2: u8,
         volume_l: u8,
         volume_h: u8,
-        amount: [u8; 3],
+        amount: [u8; 4],
         /// Composite fill frame ends with `01 01 01` (sniffer DONE) after optional `01 01 05`.
         sale_complete: bool,
         /// Trailing `03 04 01 PP 00 HH` hose status when present in composite frames.

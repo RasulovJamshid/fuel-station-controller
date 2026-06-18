@@ -1,4 +1,5 @@
 use crate::frame::{GilbarcoStatus, TotalsData, TransactionData};
+use crate::lrc::gilbarco_lrc_valid;
 
 /// Live display amount scale.
 ///
@@ -198,6 +199,9 @@ pub fn parse_transaction_response(buf: &[u8]) -> Option<TransactionData> {
     if buf[16] != 0xF9 || buf[23] != 0xFA || buf[30] != 0xFB || buf[32] != 0xF0 {
         return None;
     }
+    if !gilbarco_lrc_valid(&buf[..31], buf[31]) {
+        return None;
+    }
     Some(TransactionData {
         unit_price_raw: decode_le_bcd(&buf[12..16])?,
         volume_raw: decode_le_bcd(&buf[17..23])?,
@@ -241,6 +245,13 @@ pub fn parse_totals_response(buf: &[u8], nozzle_index: u8) -> Option<TotalsData>
         || frame[section + 11] != 0xFA
         || frame[section + 20] != 0xF4
         || frame[section + 25] != 0xF5
+    {
+        return None;
+    }
+    if frame.len() >= 3
+        && frame[frame.len() - 1] == 0xF0
+        && frame[frame.len() - 3] == 0xFB
+        && !gilbarco_lrc_valid(&frame[..frame.len() - 2], frame[frame.len() - 2])
     {
         return None;
     }

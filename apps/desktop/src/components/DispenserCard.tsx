@@ -167,6 +167,7 @@ export interface DispenserCardProps {
   /** When true, show a Cancel button that stops + immediately closes the transaction. */
   useCancelMode?: boolean;
   onCancel?: (fpId: string) => void;
+  gilbarcoMode?: boolean;
 }
 
 export function DispenserCard({
@@ -189,6 +190,7 @@ export function DispenserCard({
   useStopMode = false,
   useCancelMode = false,
   onCancel,
+  gilbarcoMode = false,
 }: DispenserCardProps) {
   const { t } = useTranslation();
   const [setupOpen, setSetupOpen] = useState(false);
@@ -756,6 +758,24 @@ export function DispenserCard({
             <p className={`text-center font-semibold text-accent-amber-light ${compact ? "text-sm" : "text-sm"}`}>
               {t("dispenser.nozzleRemoved")}
             </p>
+          ) : gilbarcoMode && isPaused && paused ? (
+            <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
+              {!compact && (
+                <p className="text-center text-sm font-medium text-text-secondary">
+                  {t("dispenser.fillPaused")}
+                </p>
+              )}
+              <button
+                type="button"
+                className={`w-full rounded-xl bg-bg-secondary font-bold uppercase tracking-wide leading-tight text-text-secondary ring-1 ring-border-primary hover:bg-bg-tertiary ${compact ? "py-1.5 text-sm" : "px-4 py-3 text-sm"}`}
+                onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
+              >
+                <span className="flex items-center justify-center gap-1.5">
+                  <InlineIcon src={xCircleIcon} className={`shrink-0 ${compact ? "h-3 w-3" : "h-4 w-4"}`} />
+                  {t("dispenser.closeTransaction")}
+                </span>
+              </button>
+            </div>
           ) : isAppStop && paused ? (
             <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
               {!compact && (

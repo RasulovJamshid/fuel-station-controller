@@ -10,6 +10,8 @@ import {
 } from "./fpStateMerge";
 import type { AuthMode, FpState, Shift, ShiftMode, SiteSnapshot, WsEvent } from "./types/api";
 
+export type DispenserLayout = "modern" | "classic";
+
 function normalizeAuthMode(raw: string | undefined): AuthMode {
   const m = (raw ?? "reactive").toLowerCase();
   if (m === "preauth" || m === "reactive") return m;
@@ -70,6 +72,9 @@ interface AppState {
   /** Light/dark theme. Persisted to localStorage; applies html.light class. */
   theme: "dark" | "light";
   setTheme: (t: "dark" | "light") => void;
+  /** Dispenser workspace layout. Persisted to localStorage. */
+  dispenserLayout: DispenserLayout;
+  setDispenserLayout: (layout: DispenserLayout) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -106,6 +111,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       document.documentElement.classList.remove("light");
     }
     set({ theme: t });
+  },
+  dispenserLayout: (() => {
+    try {
+      return localStorage.getItem("azs_dispenser_layout") === "classic" ? "classic" : "modern";
+    } catch {
+      return "modern";
+    }
+  })() as DispenserLayout,
+  setDispenserLayout: (layout) => {
+    try { localStorage.setItem("azs_dispenser_layout", layout); } catch { /* ignore */ }
+    set({ dispenserLayout: layout });
   },
   setCurrentShift: (currentShift) => set({ currentShift }),
   setShiftWarningMinutes: (shiftWarningMinutes) => set({ shiftWarningMinutes }),

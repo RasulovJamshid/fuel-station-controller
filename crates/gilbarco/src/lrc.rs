@@ -7,6 +7,10 @@ pub fn gilbarco_lrc(bytes: &[u8]) -> u8 {
     0xE0 | lrc
 }
 
+pub fn gilbarco_lrc_valid(payload: &[u8], lrc: u8) -> bool {
+    gilbarco_lrc(payload) == lrc
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

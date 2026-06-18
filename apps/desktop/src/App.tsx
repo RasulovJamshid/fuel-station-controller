@@ -4,6 +4,7 @@ import { Header } from "./components/Header";
 import { WorkspaceNav, type WorkspaceTabId } from "./components/WorkspaceNav";
 import { DispenserCard, type AuthorizeRequest } from "./components/DispenserCard";
 import { DispenserRow } from "./components/DispenserRow";
+import { ClassicDispenserConsole } from "./components/ClassicDispenserConsole";
 import { ReservoirsPanel } from "./components/ReservoirsPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { DashboardRecentTransactions } from "./components/DashboardRecentTransactions";
@@ -66,6 +67,7 @@ export default function App() {
   const setInvokeError = useAppStore((s) => s.setInvokeError);
   const smallScreen = useAppStore((s) => s.smallScreen);
   const theme = useAppStore((s) => s.theme);
+  const dispenserLayoutMode = useAppStore((s) => s.dispenserLayout);
   const clearPreAuthNozzleMismatch = useAppStore((s) => s.clearPreAuthNozzleMismatch);
   const setStates = useAppStore((s) => s.setStates);
 
@@ -116,6 +118,7 @@ export default function App() {
   const defaultAuthMode = siteSnapshot?.default_auth_mode ?? "preauth";
   const useStopMode = siteSnapshot?.use_stop_mode ?? false;
   const useCancelMode = siteSnapshot?.use_cancel_mode ?? false;
+  const gilbarcoMode = (siteSnapshot?.protocol ?? "").toLowerCase().includes("gilbarco");
 
   // Shift requirement: operators must start a shift before authorizing dispensers.
   const shiftRequired = shift.mode !== "disabled" && !shift.currentShift;
@@ -315,14 +318,20 @@ export default function App() {
       const { invoke } = await import("@tauri-apps/api/core");
       try {
         setInvokeError(null);
-        await invoke("close_stopped_transaction", { fpId, stoppedTxId });
+        if (gilbarcoMode) {
+          await invoke("dismiss_sale", { fpId });
+          const rows = await invoke<import("./types/api").FpState[]>("get_all_status");
+          setStates(rows);
+        } else {
+          await invoke("close_stopped_transaction", { fpId, stoppedTxId });
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         setInvokeError(msg);
         console.error("close_stopped_transaction failed", e);
       }
     },
-    [setInvokeError],
+    [setInvokeError, gilbarcoMode, setStates],
   );
 
   const toggleHideFp = useCallback((fpId: string) => {
@@ -525,7 +534,29 @@ export default function App() {
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg-primary">
           {workspaceTab === "dispensers" ? (
             <div className={`min-h-0 flex-1 ${smallScreen ? "overflow-y-auto overscroll-contain p-2" : "overflow-hidden p-2 md:p-3"}`}>
-              {smallScreen ? (
+              {dispenserLayoutMode === "classic" ? (
+                <ClassicDispenserConsole
+                  states={visibleSorted}
+                  nozzlesByFp={nozzlesByFp}
+                  positionActiveByFp={positionActiveByFp}
+                  activeFpId={activeDispenserFpId}
+                  onSelectFp={setActiveDispenserFpId}
+                  defaultAuthMode={defaultAuthMode}
+                  onAuthorize={onAuthorize}
+                  onPreAuthorize={onPreAuthorize}
+                  onCancelPreAuth={onCancelPreAuth}
+                  onStop={onStop}
+                  onCancel={onCancel}
+                  onResumeFill={onResumeFill}
+                  onContinueFill={onContinueFill}
+                  onCloseStopped={onCloseStopped}
+                  shiftRequired={shiftRequired}
+                  onStartShift={openStartShift}
+                  useStopMode={useStopMode}
+                  useCancelMode={useCancelMode}
+                  gilbarcoMode={gilbarcoMode}
+                />
+              ) : smallScreen ? (
                 /* ── Compact rows, always single column ── */
                 <div className="flex w-full flex-col gap-4 p-1.5">
                   <div className="flex flex-wrap gap-1.5">
@@ -586,6 +617,7 @@ export default function App() {
                         onStartShift={openStartShift}
                         useStopMode={useStopMode}
                         useCancelMode={useCancelMode}
+                        gilbarcoMode={gilbarcoMode}
                       />
                     </div>
                   ))}
@@ -657,6 +689,7 @@ export default function App() {
                               onStartShift={openStartShift}
                               useStopMode={useStopMode}
                               useCancelMode={useCancelMode}
+                              gilbarcoMode={gilbarcoMode}
                             />
                           </div>
                         ))}

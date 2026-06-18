@@ -8,7 +8,7 @@ pub use commands::{
     get_transaction, get_transaction2, halt, preset_amount, set_price, status,
 };
 pub use frame::{GilbarcoStatus, TotalsData, TransactionData};
-pub use lrc::gilbarco_lrc;
+pub use lrc::{gilbarco_lrc, gilbarco_lrc_valid};
 pub use parser::{
     live_amount_raw_to_litres, live_amount_raw_to_soum, parse_all_nozzle_response,
     parse_display_response, parse_nozzle_response, parse_status_byte, parse_totals_response,

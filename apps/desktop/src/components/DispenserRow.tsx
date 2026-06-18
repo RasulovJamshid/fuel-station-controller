@@ -56,6 +56,7 @@ export function DispenserRow({
   onResumeFill, onContinueFill, onCloseStopped, onDismissSale,
   shiftRequired = false, onStartShift,
   useStopMode = false,
+  gilbarcoMode = false,
 }: DispenserCardProps) {
   const { t } = useTranslation();
   const [setupOpen, setSetupOpen] = useState(false);
@@ -225,6 +226,16 @@ export function DispenserRow({
           className="flex h-full w-full items-center justify-center rounded-lg border border-border-primary bg-bg-secondary text-text-secondary hover:bg-bg-tertiary">
           <Icon src={banIcon} className="h-7 w-7" />
         </button>
+      );
+    }
+    if (gilbarcoMode && isPaused && paused) {
+      return (
+        <div className="flex h-full w-full flex-col gap-1 py-1.5">
+          <button type="button" title={t("dispenser.closeTransaction")} onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
+            className="flex w-full flex-1 items-center justify-center rounded-md bg-bg-secondary text-text-secondary ring-1 ring-border-primary hover:bg-bg-tertiary">
+            <Icon src={xCircleIcon} className="h-4 w-4" />
+          </button>
+        </div>
       );
     }
     if (isAppStop && paused) {

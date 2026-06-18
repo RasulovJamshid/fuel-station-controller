@@ -130,6 +130,8 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
   const setSmallScreen = useAppStore((s) => s.setSmallScreen);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
+  const dispenserLayout = useAppStore((s) => s.dispenserLayout);
+  const setDispenserLayout = useAppStore((s) => s.setDispenserLayout);
   const states = useAppStore((s) => s.states);
 
   // Nozzles that are physically lifted right now (across all dispensers).
@@ -864,6 +866,40 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                 checked={smallScreen}
                 onChange={setSmallScreen}
               />
+            </div>
+            <div className="rounded-xl border border-border-primary/60 bg-bg-secondary/60 px-5 py-4 transition-colors hover:bg-bg-tertiary/40">
+              <div className="mb-3">
+                <p className="text-sm font-bold text-text-primary">{t("admin.display.dispenserLayout")}</p>
+                <p className="mt-0.5 text-xs font-medium text-text-muted">
+                  {t("admin.display.dispenserLayoutDesc")}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDispenserLayout("modern")}
+                  className={`rounded-lg border px-3 py-2 text-left transition-all ${
+                    dispenserLayout === "modern"
+                      ? "border-accent-blue bg-accent-blue/12 text-text-primary ring-1 ring-accent-blue/25"
+                      : "border-border-primary bg-bg-card/50 text-text-secondary hover:bg-bg-tertiary/40"
+                  }`}
+                >
+                  <span className="block text-sm font-bold">{t("admin.display.layoutModern")}</span>
+                  <span className="mt-0.5 block text-xs text-text-muted">{t("admin.display.layoutModernDesc")}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDispenserLayout("classic")}
+                  className={`rounded-lg border px-3 py-2 text-left transition-all ${
+                    dispenserLayout === "classic"
+                      ? "border-accent-blue bg-accent-blue/12 text-text-primary ring-1 ring-accent-blue/25"
+                      : "border-border-primary bg-bg-card/50 text-text-secondary hover:bg-bg-tertiary/40"
+                  }`}
+                >
+                  <span className="block text-sm font-bold">{t("admin.display.layoutClassic")}</span>
+                  <span className="mt-0.5 block text-xs text-text-muted">{t("admin.display.layoutClassicDesc")}</span>
+                </button>
+              </div>
             </div>
           </div>
         </section>

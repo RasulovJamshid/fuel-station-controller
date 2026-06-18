@@ -3,11 +3,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Wifi, WifiOff, RefreshCw, Activity, Droplets,
-  Receipt, Clock, AlertTriangle, CheckCircle, XCircle, Pause,
+  Receipt, Clock, AlertTriangle, CheckCircle, XCircle,
   TrendingUp, User,
 } from 'lucide-react';
 import { stationsApi } from '@/lib/api';
-import { fmtVolume, fmtMoney, fmtDate, fmtRelative, fmtDuration } from '@/lib/format';
+import { useFormats } from '@/hooks/use-formats';
+import { useT } from '@/hooks/use-t';
 import { Header } from '@/components/layout/header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,7 +37,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'brand' }: {
   );
 }
 
-function TankGauge({ tank }: { tank: any }) {
+function TankGauge({ tank, fmtVolume }: { tank: any; fmtVolume: (n: number) => string }) {
   const pct = Math.max(0, Math.min(100, tank.fillPercent ?? 0));
   const color = pct < 15 ? 'bg-red-500' : pct < 30 ? 'bg-amber-400' : 'bg-emerald-400';
   const textColor = pct < 15 ? 'text-red-600' : pct < 30 ? 'text-amber-600' : 'text-emerald-600';
@@ -55,9 +56,6 @@ function TankGauge({ tank }: { tank: any }) {
         <span>{tank.productName}</span>
         <span>{tank.volumeLitres != null ? fmtVolume(tank.volumeLitres) : '—'} / {fmtVolume(tank.capacity)}</span>
       </div>
-      {tank.readingAt && (
-        <p className="text-xs text-slate-300 mt-1">{fmtRelative(tank.readingAt)}</p>
-      )}
     </div>
   );
 }
@@ -72,6 +70,8 @@ const HEALTH_COLOR: Record<string, string> = {
 };
 
 export default function StationDetailPage() {
+  const t = useT();
+  const { fmtVolume, fmtMoney, fmtDate, fmtRelative, fmtDuration } = useFormats();
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
   const [data, setData]     = useState<any>(null);
@@ -84,7 +84,7 @@ export default function StationDetailPage() {
       const res: any = await stationsApi.detail(id);
       setData(res);
     } catch (e: any) {
-      setError(e?.response?.data?.message ?? 'Ошибка загрузки');
+      setError(e?.response?.data?.message ?? t('loadError'));
     } finally {
       setLoading(false);
     }
@@ -99,7 +99,7 @@ export default function StationDetailPage() {
   if (loading) {
     return (
       <div className="animate-fade-in">
-        <Header title="Загрузка..." />
+        <Header title={t('loading')} />
         <div className="p-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="panel-subtle p-5 h-24 animate-pulse" />
@@ -112,12 +112,12 @@ export default function StationDetailPage() {
   if (error || !data) {
     return (
       <div className="animate-fade-in">
-        <Header title="Ошибка" />
+        <Header title={t('error')} />
         <div className="p-6 flex flex-col items-center gap-4 py-16">
           <AlertTriangle size={40} className="text-red-400" />
-          <p className="text-slate-500">{error || 'Станция не найдена'}</p>
+          <p className="text-slate-500">{error || t('stationNotFound')}</p>
           <Button variant="outline" onClick={() => router.back()}>
-            <ArrowLeft size={16} /> Назад
+            <ArrowLeft size={16} /> {t('back')}
           </Button>
         </div>
       </div>
@@ -142,14 +142,14 @@ export default function StationDetailPage() {
             onClick={() => router.back()}
             className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 transition-colors"
           >
-            <ArrowLeft size={16} /> Все станции
+            <ArrowLeft size={16} /> {t('allStations')}
           </button>
           <div className="flex items-center gap-3">
             <Badge variant={isOnline ? 'success' : 'neutral'}>
-              {isOnline ? <><Wifi size={11} /> Онлайн</> : <><WifiOff size={11} /> Оффлайн</>}
+              {isOnline ? <><Wifi size={11} /> {t('online')}</> : <><WifiOff size={11} /> {t('offline')}</>}
             </Badge>
             {station.lastSyncAt && (
-              <span className="text-xs text-slate-400">Синхр. {fmtRelative(station.lastSyncAt)}</span>
+              <span className="text-xs text-slate-400">{t('syncAt')} {fmtRelative(station.lastSyncAt)}</span>
             )}
             <button
               onClick={load}
@@ -163,29 +163,14 @@ export default function StationDetailPage() {
 
         {/* Stat cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <StatCard
-            icon={Receipt}
-            label="Транзакций сегодня"
-            value={stats.todayTransactions}
-            color="brand"
-          />
-          <StatCard
-            icon={Droplets}
-            label="Объём сегодня"
-            value={fmtVolume(stats.todayVolume)}
-            color="emerald"
-          />
-          <StatCard
-            icon={TrendingUp}
-            label="Выручка сегодня"
-            value={fmtMoney(stats.todayAmount)}
-            color="amber"
-          />
+          <StatCard icon={Receipt}    label={t('todayTransactionsLabel')} value={stats.todayTransactions} color="brand" />
+          <StatCard icon={Droplets}   label={t('todayVolumeLabel')}       value={fmtVolume(stats.todayVolume)}  color="emerald" />
+          <StatCard icon={TrendingUp} label={t('todayRevenueLabel')}      value={fmtMoney(stats.todayAmount)}   color="amber" />
           <StatCard
             icon={User}
-            label="Активная смена"
-            value={activeShift ? activeShift.operatorName : 'Нет'}
-            sub={activeShift ? `Начата ${fmtRelative(activeShift.startedAt)}` : undefined}
+            label={t('activeShift')}
+            value={activeShift ? activeShift.operatorName : t('noActiveShift')}
+            sub={activeShift ? `${t('startedAt')} ${fmtRelative(activeShift.startedAt)}` : undefined}
             color={activeShift ? 'brand' : 'slate'}
           />
         </div>
@@ -198,25 +183,25 @@ export default function StationDetailPage() {
             {/* Recent transactions */}
             <div className="panel-subtle overflow-hidden">
               <div className="panel-header">
-                <h2 className="font-semibold text-slate-900">Последние транзакции</h2>
+                <h2 className="font-semibold text-slate-900">{t('recentTransactions')}</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="table-head-row">
-                      <th className="table-head-cell">КЗ</th>
-                      <th className="table-head-cell">Продукт</th>
-                      <th className="table-head-cell text-right">Объём</th>
-                      <th className="table-head-cell text-right">Сумма</th>
-                      <th className="table-head-cell">Статус</th>
-                      <th className="table-head-cell">Время</th>
+                      <th className="table-head-cell">{t('fp')}</th>
+                      <th className="table-head-cell">{t('product')}</th>
+                      <th className="table-head-cell text-right">{t('volume')}</th>
+                      <th className="table-head-cell text-right">{t('amount')}</th>
+                      <th className="table-head-cell">{t('status')}</th>
+                      <th className="table-head-cell">{t('time')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {transactions.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="table-cell py-10 text-center text-sm text-slate-400">
-                          Нет транзакций
+                          {t('noTxFound')}
                         </td>
                       </tr>
                     ) : transactions.map((tx: any) => (
@@ -237,24 +222,24 @@ export default function StationDetailPage() {
             {/* Current prices */}
             <div className="panel-subtle overflow-hidden">
               <div className="panel-header">
-                <h2 className="font-semibold text-slate-900">Текущие цены</h2>
+                <h2 className="font-semibold text-slate-900">{t('currentPrices')}</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="table-head-row">
-                      <th className="table-head-cell">КЗ</th>
-                      <th className="table-head-cell">Форсунка</th>
-                      <th className="table-head-cell">Продукт</th>
-                      <th className="table-head-cell text-right">Цена (тийин/л)</th>
-                      <th className="table-head-cell">Обновлено</th>
+                      <th className="table-head-cell">{t('fp')}</th>
+                      <th className="table-head-cell">{t('nozzle')}</th>
+                      <th className="table-head-cell">{t('product')}</th>
+                      <th className="table-head-cell text-right">{t('priceColLabel')}</th>
+                      <th className="table-head-cell">{t('updatedAt')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {prices.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="table-cell py-8 text-center text-sm text-slate-400">
-                          Цены не заданы
+                          {t('pricesNotSet')}
                         </td>
                       </tr>
                     ) : prices.map((p: any, i: number) => (
@@ -263,7 +248,7 @@ export default function StationDetailPage() {
                         <td className="table-cell text-slate-500">#{p.nozzleIndex}</td>
                         <td className="table-cell text-slate-700">{p.productName}</td>
                         <td className="table-cell text-right font-mono font-semibold text-slate-900">
-                          {new Intl.NumberFormat('ru-UZ').format(p.price)}
+                          {new Intl.NumberFormat('ru-UZ').format(p.price)} {t('sumPerLiter')}
                         </td>
                         <td className="table-cell text-xs text-slate-400">{fmtDate(p.updatedAt)}</td>
                       </tr>
@@ -282,13 +267,13 @@ export default function StationDetailPage() {
             <div className="panel-subtle overflow-hidden">
               <div className="panel-header flex items-center gap-2">
                 <Droplets size={15} className="text-blue-400" />
-                <h2 className="font-semibold text-slate-900">Резервуары</h2>
+                <h2 className="font-semibold text-slate-900">{t('tanks')}</h2>
               </div>
               <div className="p-4 space-y-3">
                 {tanks.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-4">Резервуары не настроены</p>
-                ) : tanks.map((t: any) => (
-                  <TankGauge key={t.id} tank={t} />
+                  <p className="text-sm text-slate-400 text-center py-4">{t('noTanks')}</p>
+                ) : tanks.map((tank: any) => (
+                  <TankGauge key={tank.id} tank={tank} fmtVolume={fmtVolume} />
                 ))}
               </div>
             </div>
@@ -298,31 +283,31 @@ export default function StationDetailPage() {
               <div className="panel-subtle overflow-hidden">
                 <div className="panel-header flex items-center gap-2">
                   <Clock size={15} className="text-brand-400" />
-                  <h2 className="font-semibold text-slate-900">Активная смена</h2>
+                  <h2 className="font-semibold text-slate-900">{t('activeShift')}</h2>
                 </div>
                 <div className="p-4 space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Оператор</span>
+                    <span className="text-slate-500">{t('operator')}</span>
                     <span className="font-medium text-slate-800">{activeShift.operatorName}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Начало</span>
+                    <span className="text-slate-500">{t('start')}</span>
                     <span className="text-slate-700">{fmtDate(activeShift.startedAt)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Длительность</span>
+                    <span className="text-slate-500">{t('duration')}</span>
                     <span className="text-slate-700">{fmtDuration(activeShift.startedAt)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Транзакций</span>
+                    <span className="text-slate-500">{t('totalTx')}</span>
                     <span className="font-medium text-slate-800">{activeShift.totalTransactions}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Объём</span>
+                    <span className="text-slate-500">{t('totalVolume')}</span>
                     <span className="font-mono text-slate-800">{fmtVolume(activeShift.totalVolume)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Сумма</span>
+                    <span className="text-slate-500">{t('totalAmount')}</span>
                     <span className="font-mono font-semibold text-slate-900">{fmtMoney(Number(activeShift.totalAmount))}</span>
                   </div>
                 </div>
@@ -333,11 +318,11 @@ export default function StationDetailPage() {
             <div className="panel-subtle overflow-hidden">
               <div className="panel-header flex items-center gap-2">
                 <Activity size={15} className="text-slate-400" />
-                <h2 className="font-semibold text-slate-900">События оборудования</h2>
+                <h2 className="font-semibold text-slate-900">{t('healthEvents')}</h2>
               </div>
               <div className="divide-y divide-slate-50">
                 {healthEvents.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-6">Нет событий</p>
+                  <p className="text-sm text-slate-400 text-center py-6">{t('noEvents')}</p>
                 ) : healthEvents.map((e: any) => {
                   const Icon = HEALTH_ICON[e.eventType] ?? AlertTriangle;
                   const color = HEALTH_COLOR[e.eventType] ?? 'text-amber-500';

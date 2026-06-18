@@ -5,7 +5,8 @@ import {
   ChevronDown, ChevronUp, RefreshCw, Eye, EyeOff,
 } from 'lucide-react';
 import { integrationsApi } from '@/lib/api';
-import { fmtDate, fmtRelative } from '@/lib/format';
+import { useT } from '@/hooks/use-t';
+import { useFormats } from '@/hooks/use-formats';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,19 +15,7 @@ import { Modal, Confirm } from '@/components/ui/modal';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { cn } from '@/lib/utils';
 
-const ALL_EVENTS = [
-  { id: 'transaction.completed', label: 'Транзакции',  desc: 'Каждая завершённая транзакция' },
-  { id: 'shift.closed',          label: 'Смены',       desc: 'Закрытие смены с итогами' },
-  { id: 'price.changed',         label: 'Цены',        desc: 'Изменение цены на форсунке' },
-  { id: 'health.event',          label: 'Оборудование',desc: 'Онлайн/оффлайн событие диспенсера' },
-  { id: 'tank.reading',          label: 'Резервуары',  desc: 'Новое показание уровня топлива' },
-];
-
-const AUTH_TYPES = [
-  { value: 'none',   label: 'Нет' },
-  { value: 'bearer', label: 'Bearer Token' },
-  { value: 'hmac',   label: 'HMAC-SHA256' },
-];
+type EventDef = { id: string; label: string; desc: string };
 
 const EMPTY_FORM = {
   name: '', url: '', authType: 'none', authSecret: '',
@@ -34,13 +23,14 @@ const EMPTY_FORM = {
 };
 
 function StatusChip({ status }: { status: string }) {
-  if (status === 'delivered') return <Badge variant="success"><CheckCircle size={10} /> Доставлено</Badge>;
-  if (status === 'failed')    return <Badge variant="danger"><XCircle size={10} /> Ошибка</Badge>;
-  return <Badge variant="neutral"><Clock size={10} /> Ожидание</Badge>;
+  const t = useT();
+  if (status === 'delivered') return <Badge variant="success"><CheckCircle size={10} /> {t('delivered')}</Badge>;
+  if (status === 'failed')    return <Badge variant="danger"><XCircle size={10} /> {t('failed')}</Badge>;
+  return <Badge variant="neutral"><Clock size={10} /> {t('pending')}</Badge>;
 }
 
-function EventChip({ event }: { event: string }) {
-  const e = ALL_EVENTS.find(x => x.id === event);
+function EventChip({ event, allEvents }: { event: string; allEvents: EventDef[] }) {
+  const e = allEvents.find(x => x.id === event);
   return (
     <span className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-2 py-0.5 text-xs font-medium text-brand-700">
       {e?.label ?? event}
@@ -49,7 +39,24 @@ function EventChip({ event }: { event: string }) {
 }
 
 export default function IntegrationsPage() {
+  const t = useT();
+  const { fmtRelative } = useFormats();
   const { connected } = useWebSocket();
+
+  const ALL_EVENTS: EventDef[] = [
+    { id: 'transaction.completed', label: t('transactions'),  desc: t('evtTransactionsDesc') },
+    { id: 'shift.closed',          label: t('shifts'),        desc: t('evtShiftsDesc') },
+    { id: 'price.changed',         label: t('navPrices'),     desc: t('evtPricesDesc') },
+    { id: 'health.event',          label: t('equipment'),     desc: t('evtHealthDesc') },
+    { id: 'tank.reading',          label: t('navTanks'),      desc: t('evtTanksDesc') },
+  ];
+
+  const AUTH_TYPES = [
+    { value: 'none',   label: t('no') },
+    { value: 'bearer', label: 'Bearer Token' },
+    { value: 'hmac',   label: 'HMAC-SHA256' },
+  ];
+
   const [integrations, setIntegrations] = useState<any[]>([]);
   const [loading, setLoading]   = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -61,7 +68,6 @@ export default function IntegrationsPage() {
   const [error, setError]       = useState('');
   const [showSecret, setShowSecret] = useState(false);
 
-  // Delivery log drawer state
   const [openDeliveries, setOpenDeliveries] = useState<string | null>(null);
   const [deliveries, setDeliveries]         = useState<any[]>([]);
   const [deliveriesLoading, setDeliveriesLoading] = useState(false);
@@ -94,8 +100,8 @@ export default function IntegrationsPage() {
   }
 
   async function save(isCreate: boolean) {
-    if (!form.name || !form.url) { setError('Название и URL обязательны'); return; }
-    if (form.events.length === 0) { setError('Выберите хотя бы одно событие'); return; }
+    if (!form.name || !form.url) { setError(t('nameAndUrlRequired')); return; }
+    if (form.events.length === 0) { setError(t('eventsRequired')); return; }
     setSaving(true); setError('');
     const payload = {
       name: form.name, url: form.url,
@@ -113,7 +119,7 @@ export default function IntegrationsPage() {
         setEditing(null);
       }
       load();
-    } catch (e: any) { setError(e?.response?.data?.message ?? 'Ошибка'); }
+    } catch (e: any) { setError(e?.response?.data?.message ?? t('error')); }
     finally { setSaving(false); }
   }
 
@@ -128,9 +134,9 @@ export default function IntegrationsPage() {
     try {
       const res: any = await integrationsApi.test(id);
       alert(res?.status === 'delivered'
-        ? `✓ Тест доставлен (HTTP ${res.responseStatus})`
-        : `✗ Ошибка: ${res?.error ?? 'unknown'}`);
-    } catch { alert('Ошибка теста'); }
+        ? `✓ ${t('delivered')} (HTTP ${res.responseStatus})`
+        : `✗ ${t('error')}: ${res?.error ?? 'unknown'}`);
+    } catch { alert(t('error')); }
     finally { setTesting(null); }
   }
 
@@ -148,12 +154,11 @@ export default function IntegrationsPage() {
   function renderForm(isCreate: boolean) {
     return (
       <div className="space-y-5">
-        <Input label="Название" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="ERP система" />
+        <Input label={t('name')} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="ERP" />
         <Input label="URL" value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://erp.company.com/webhooks/fuel" />
 
-        {/* Auth */}
         <div className="flex flex-col gap-1.5">
-          <label className="control-label">Аутентификация</label>
+          <label className="control-label">{t('authType')}</label>
           <select
             value={form.authType}
             onChange={e => setForm(f => ({ ...f, authType: e.target.value }))}
@@ -169,7 +174,6 @@ export default function IntegrationsPage() {
               value={form.authSecret}
               type={showSecret ? 'text' : 'password'}
               onChange={e => setForm(f => ({ ...f, authSecret: e.target.value }))}
-              placeholder={form.authType === 'bearer' ? 'eyJ...' : 'секрет для подписи'}
             />
             <button
               type="button"
@@ -181,9 +185,8 @@ export default function IntegrationsPage() {
           </div>
         )}
 
-        {/* Events */}
         <div>
-          <p className="control-label mb-2">События для отправки</p>
+          <p className="control-label mb-2">{t('eventsToSend')}</p>
           <div className="space-y-2">
             {ALL_EVENTS.map(ev => (
               <label key={ev.id} className="flex items-start gap-3 cursor-pointer group">
@@ -204,10 +207,9 @@ export default function IntegrationsPage() {
           </div>
         </div>
 
-        {/* Advanced */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="control-label">Попытки (0–10)</label>
+            <label className="control-label">{t('retryLimit')} (0–10)</label>
             <input
               type="number" min={0} max={10} value={form.retryLimit}
               onChange={e => setForm(f => ({ ...f, retryLimit: Number(e.target.value) }))}
@@ -215,7 +217,7 @@ export default function IntegrationsPage() {
             />
           </div>
           <div>
-            <label className="control-label">Таймаут (мс)</label>
+            <label className="control-label">{t('timeout')}</label>
             <input
               type="number" min={1000} max={30000} step={500} value={form.timeoutMs}
               onChange={e => setForm(f => ({ ...f, timeoutMs: Number(e.target.value) }))}
@@ -230,13 +232,13 @@ export default function IntegrationsPage() {
             onChange={e => setForm(f => ({ ...f, active: e.target.checked }))}
             className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
           />
-          <span className="text-sm text-slate-700">Активна</span>
+          <span className="text-sm text-slate-700">{t('active')}</span>
         </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-3 pt-2">
-          <Button variant="outline" onClick={() => isCreate ? setShowCreate(false) : setEditing(null)}>Отмена</Button>
-          <Button loading={saving} onClick={() => save(isCreate)}>Сохранить</Button>
+          <Button variant="outline" onClick={() => isCreate ? setShowCreate(false) : setEditing(null)}>{t('cancel')}</Button>
+          <Button loading={saving} onClick={() => save(isCreate)}>{t('save')}</Button>
         </div>
       </div>
     );
@@ -245,14 +247,14 @@ export default function IntegrationsPage() {
   return (
     <div className="animate-fade-in">
       <Header
-        title="Интеграции"
-        subtitle="Вебхуки для передачи данных во внешние системы"
+        title={t('navIntegrations')}
+        subtitle={t('integrationsSubtitle')}
         connected={connected}
       />
 
       <div className="p-2 sm:p-4">
         <div className="mb-6 flex justify-end">
-          <Button onClick={openCreate}><Plus size={16} /> Добавить интеграцию</Button>
+          <Button onClick={openCreate}><Plus size={16} /> {t('addIntegration')}</Button>
         </div>
 
         {loading ? (
@@ -267,15 +269,14 @@ export default function IntegrationsPage() {
               <Zap size={28} className="text-slate-400" />
             </div>
             <p className="text-slate-400 text-center max-w-sm">
-              Интеграций пока нет. Добавьте вебхук чтобы передавать данные о транзакциях, сменах и ценах во внешние системы.
+              {t('noIntegrationsDesc')}
             </p>
-            <Button onClick={openCreate}><Plus size={16} /> Добавить первую</Button>
+            <Button onClick={openCreate}><Plus size={16} /> {t('addFirst')}</Button>
           </div>
         ) : (
           <div className="space-y-4">
             {integrations.map((i: any) => (
               <div key={i.id} className="panel overflow-hidden">
-                {/* Header row */}
                 <div className="flex items-start gap-4 p-5">
                   <div className={cn(
                     'h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0',
@@ -287,7 +288,7 @@ export default function IntegrationsPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-semibold text-slate-900">{i.name}</h3>
                       <Badge variant={i.active ? 'success' : 'neutral'}>
-                        {i.active ? 'Активна' : 'Выключена'}
+                        {i.active ? t('active') : t('inactive')}
                       </Badge>
                       <span className="text-xs text-slate-400 capitalize">{
                         AUTH_TYPES.find(a => a.value === i.authType)?.label ?? i.authType
@@ -295,14 +296,14 @@ export default function IntegrationsPage() {
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5 truncate font-mono">{i.url}</p>
                     <div className="flex flex-wrap gap-1.5 mt-2">
-                      {i.events.map((ev: string) => <EventChip key={ev} event={ev} />)}
+                      {i.events.map((ev: string) => <EventChip key={ev} event={ev} allEvents={ALL_EVENTS} />)}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => sendTest(i.id)}
                       disabled={testing === i.id}
-                      title="Отправить тест"
+                      title={t('sendTest')}
                       className="p-2 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
                     >
                       <RefreshCw size={14} className={testing === i.id ? 'animate-spin' : ''} />
@@ -322,38 +323,36 @@ export default function IntegrationsPage() {
                   </div>
                 </div>
 
-                {/* Footer — delivery log toggle */}
                 <div className="border-t border-slate-100 bg-slate-50 px-5 py-2.5 flex items-center justify-between">
                   <span className="text-xs text-slate-400">
-                    Попытки: {i.retryLimit} · Таймаут: {i.timeoutMs / 1000}с
+                    {t('retryLimit')}: {i.retryLimit} · {t('timeout')}: {i.timeoutMs / 1000}s
                   </span>
                   <button
                     onClick={() => loadDeliveries(i.id)}
                     className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-brand-600 transition-colors"
                   >
                     {openDeliveries === i.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                    Лог доставок
+                    {t('deliveryLog')}
                   </button>
                 </div>
 
-                {/* Delivery log drawer */}
                 {openDeliveries === i.id && (
                   <div className="border-t border-slate-100">
                     {deliveriesLoading ? (
-                      <div className="p-4 text-center text-sm text-slate-400">Загрузка...</div>
+                      <div className="p-4 text-center text-sm text-slate-400">{t('loading')}</div>
                     ) : deliveries.length === 0 ? (
-                      <div className="p-4 text-center text-sm text-slate-400">Нет доставок</div>
+                      <div className="p-4 text-center text-sm text-slate-400">{t('noDeliveries')}</div>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="table-head-row">
-                              <th className="table-head-cell">Событие</th>
-                              <th className="table-head-cell">Статус</th>
+                              <th className="table-head-cell">{t('event')}</th>
+                              <th className="table-head-cell">{t('status')}</th>
                               <th className="table-head-cell">HTTP</th>
-                              <th className="table-head-cell">Попыток</th>
-                              <th className="table-head-cell">Ошибка</th>
-                              <th className="table-head-cell">Создан</th>
+                              <th className="table-head-cell">{t('retriesCount')}</th>
+                              <th className="table-head-cell">{t('error')}</th>
+                              <th className="table-head-cell">{t('date')}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
@@ -379,10 +378,10 @@ export default function IntegrationsPage() {
         )}
       </div>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Новая интеграция">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('newIntegration')}>
         {renderForm(true)}
       </Modal>
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Редактировать интеграцию">
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={t('editIntegration')}>
         {renderForm(false)}
       </Modal>
       <Confirm
@@ -390,9 +389,9 @@ export default function IntegrationsPage() {
         onClose={() => setDeleting(null)}
         onConfirm={confirmDelete}
         loading={saving}
-        title="Удалить интеграцию"
-        message={`Удалить "${deleting?.name}"? Все записи о доставках также будут удалены.`}
-        confirmLabel="Удалить"
+        title={t('deleteIntegration')}
+        message={`${t('deleteIntegration')} "${deleting?.name}"?`}
+        confirmLabel={t('delete')}
         danger
       />
     </div>

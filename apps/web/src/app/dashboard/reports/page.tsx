@@ -2,19 +2,23 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Download } from 'lucide-react';
 import { reportsApi } from '@/lib/api';
-import { fmtVolume, fmtMoney } from '@/lib/format';
+import { useFormats } from '@/hooks/use-formats';
+import { useT } from '@/hooks/use-t';
 import { Header } from '@/components/layout/header';
 import { RevenueChart } from '@/components/dashboard/revenue-chart';
 import { Button } from '@/components/ui/button';
 import { useOilBases } from '@/hooks/use-oil-bases';
 
-const PRESETS = [
-  { label: '7 дней',  days: 7 },
-  { label: '30 дней', days: 30 },
-  { label: '90 дней', days: 90 },
-];
-
 export default function ReportsPage() {
+  const t = useT();
+  const { fmtVolume, fmtMoney } = useFormats();
+
+  const PRESETS = [
+    { label: t('days7'),  days: 7 },
+    { label: t('days30'), days: 30 },
+    { label: t('days90'), days: 90 },
+  ];
+
   const [preset, setPreset]         = useState(30);
   const [oilBaseId, setOilBaseId]   = useState('');
   const [revenue, setRevenue]       = useState<any[]>([]);
@@ -63,7 +67,6 @@ export default function ReportsPage() {
 
   useEffect(() => { load(preset); }, [preset, oilBaseId, load]);
 
-  // Aggregate revenue by period
   const chartData = revenue.reduce((acc: any[], row: any) => {
     const ex = acc.find(a => a.period === row.period);
     if (ex) {
@@ -78,7 +81,7 @@ export default function ReportsPage() {
 
   return (
     <div className="animate-fade-in">
-      <Header title="Отчёты" />
+      <Header title={t('navReports')} />
 
       <div className="p-2 sm:p-4 space-y-6">
         {/* Period + oil-base selector + export */}
@@ -99,16 +102,16 @@ export default function ReportsPage() {
               onChange={e => setOilBaseId(e.target.value)}
               className="field-control appearance-none ml-2"
             >
-              <option value="">Все нефтебазы</option>
+              <option value="">{t('all')} {t('navOilBases').toLowerCase()}</option>
               {oilBases.map(ob => <option key={ob.id} value={ob.id}>{ob.name}</option>)}
             </select>
           )}
           <div className="ml-auto flex items-center gap-2">
             <Button size="sm" variant="outline" loading={exporting} onClick={() => doExport('transactions', 'xlsx')}>
-              <Download size={14} /> Транзакции XLSX
+              <Download size={14} /> {t('exportTransactions')} XLSX
             </Button>
             <Button size="sm" variant="outline" loading={exporting} onClick={() => doExport('shifts', 'xlsx')}>
-              <Download size={14} /> Смены XLSX
+              <Download size={14} /> {t('exportShifts')} XLSX
             </Button>
           </div>
         </div>
@@ -120,15 +123,15 @@ export default function ReportsPage() {
           {/* Products */}
           <div className="panel-subtle">
             <div className="panel-header">
-              <h2 className="font-semibold text-slate-900">По продуктам</h2>
+              <h2 className="font-semibold text-slate-900">{t('byProduct')}</h2>
             </div>
             <table className="w-full text-sm">
               <thead>
                 <tr className="table-head-row">
-                  <th className="table-head-cell">Продукт</th>
-                  <th className="table-head-cell text-right">Транзакций</th>
-                  <th className="table-head-cell text-right">Объём</th>
-                  <th className="table-head-cell text-right">Сумма</th>
+                  <th className="table-head-cell">{t('product')}</th>
+                  <th className="table-head-cell text-right">{t('transactions')}</th>
+                  <th className="table-head-cell text-right">{t('volume')}</th>
+                  <th className="table-head-cell text-right">{t('amount')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -142,6 +145,10 @@ export default function ReportsPage() {
                       ))}
                     </tr>
                   ))
+                ) : products.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="table-cell py-8 text-center text-sm text-slate-400">{t('noProductData')}</td>
+                  </tr>
                 ) : products.map((p: any, i) => (
                   <tr key={i} className="table-row-hover">
                     <td className="table-cell font-medium text-slate-800">{p.productName}</td>
@@ -157,15 +164,15 @@ export default function ReportsPage() {
           {/* Operators */}
           <div className="panel-subtle">
             <div className="panel-header">
-              <h2 className="font-semibold text-slate-900">По операторам</h2>
+              <h2 className="font-semibold text-slate-900">{t('byOperator')}</h2>
             </div>
             <table className="w-full text-sm">
               <thead>
                 <tr className="table-head-row">
-                  <th className="table-head-cell">Оператор</th>
-                  <th className="table-head-cell text-right">Транзакций</th>
-                  <th className="table-head-cell text-right">Объём</th>
-                  <th className="table-head-cell text-right">Сумма</th>
+                  <th className="table-head-cell">{t('operator')}</th>
+                  <th className="table-head-cell text-right">{t('transactions')}</th>
+                  <th className="table-head-cell text-right">{t('volume')}</th>
+                  <th className="table-head-cell text-right">{t('amount')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -181,7 +188,7 @@ export default function ReportsPage() {
                   ))
                 ) : operators.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="table-cell py-8 text-center text-sm text-slate-400">Нет данных</td>
+                    <td colSpan={4} className="table-cell py-8 text-center text-sm text-slate-400">{t('noOperatorData')}</td>
                   </tr>
                 ) : operators.map((o: any, i) => (
                   <tr key={i} className="table-row-hover">

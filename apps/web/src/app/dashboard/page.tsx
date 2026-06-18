@@ -4,7 +4,8 @@ import { Droplets, Receipt, Gauge, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { dashboardApi, transactionsApi, reportsApi } from '@/lib/api';
-import { fmtVolume, fmtMoney, fmtDate } from '@/lib/format';
+import { useFormats } from '@/hooks/use-formats';
+import { useT } from '@/hooks/use-t';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { Header } from '@/components/layout/header';
 import { StatCard } from '@/components/dashboard/stat-card';
@@ -12,10 +13,13 @@ import { RevenueChart } from '@/components/dashboard/revenue-chart';
 import { TxStatusBadge, StatusDot } from '@/components/ui/badge';
 
 export default function OverviewPage() {
+  const t = useT();
+  const { fmtVolume, fmtMoney, fmtDate } = useFormats();
+
   const [overview, setOverview] = useState<any>(null);
-  const [recent, setRecent] = useState<any[]>([]);
-  const [chart, setChart] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [recent, setRecent]     = useState<any[]>([]);
+  const [chart, setChart]       = useState<any[]>([]);
+  const [loading, setLoading]   = useState(true);
 
   const load = useCallback(async () => {
     try {
@@ -44,7 +48,6 @@ export default function OverviewPage() {
 
   const today = format(new Date(), 'EEEE, d MMMM yyyy', { locale: ru });
 
-  // Aggregate chart data by period
   const chartAgg = chart.reduce((acc: any[], row: any) => {
     const ex = acc.find(a => a.period === row.period);
     if (ex) {
@@ -59,34 +62,34 @@ export default function OverviewPage() {
 
   return (
     <div className="animate-fade-in">
-      <Header title="Обзор" subtitle={today} connected={connected} />
+      <Header title={t('navOverview')} subtitle={today} connected={connected} />
 
       <div className="p-2 space-y-6">
         {/* KPI cards */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           <StatCard
-            label="Объём сегодня"
+            label={t('todayVolume')}
             value={loading ? '—' : fmtVolume(overview?.todayVolume ?? 0)}
             icon={Droplets}
             color="blue"
             loading={loading}
           />
           <StatCard
-            label="Транзакций сегодня"
+            label={t('todayTransactions')}
             value={loading ? '—' : String(overview?.todayTransactions ?? 0)}
             icon={Receipt}
             color="green"
             loading={loading}
           />
           <StatCard
-            label="Станций онлайн"
+            label={t('stationsOnline')}
             value={loading ? '—' : String(overview?.stations ?? 0)}
             icon={Gauge}
             color="purple"
             loading={loading}
           />
           <StatCard
-            label="Активных смен"
+            label={t('activeShifts')}
             value={loading ? '—' : String(overview?.activeShifts ?? 0)}
             icon={Clock}
             color="orange"
@@ -102,7 +105,7 @@ export default function OverviewPage() {
 
           {/* Station status */}
           <div className="panel p-5">
-            <h2 className="font-semibold text-slate-900 mb-3">Станции</h2>
+            <h2 className="font-semibold text-slate-900 mb-3">{t('stations')}</h2>
             {loading ? (
               <div className="space-y-2">
                 {[1,2,3].map(i => (
@@ -122,7 +125,7 @@ export default function OverviewPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-800 truncate">{s.name}</p>
                         <p className="text-xs text-slate-400">
-                          {s.lastSyncAt ? `${Math.round(lag)} мин. назад` : 'нет синхр.'}
+                          {s.lastSyncAt ? `${Math.round(lag)} ${t('minAgo')}` : t('noSync')}
                         </p>
                       </div>
                     </div>
@@ -136,13 +139,13 @@ export default function OverviewPage() {
         {/* Recent transactions */}
         <div className="panel-subtle">
           <div className="panel-header flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900 text-lg">Последние транзакции</h2>
+            <h2 className="font-semibold text-slate-900 text-lg">{t('recentTransactions')}</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="table-head-row">
-                  {['Время', 'Станция', 'КЗ', 'Продукт', 'Объём', 'Сумма', 'Статус'].map(h => (
+                  {[t('time'), t('station'), t('fp'), t('product'), t('volume'), t('amount'), t('status')].map(h => (
                     <th key={h} className="table-head-cell">{h}</th>
                   ))}
                 </tr>
@@ -161,7 +164,7 @@ export default function OverviewPage() {
                 ) : recent.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="table-cell py-8 text-center text-sm text-slate-400">
-                      Транзакций пока нет
+                      {t('noTransactions')}
                     </td>
                   </tr>
                 ) : (

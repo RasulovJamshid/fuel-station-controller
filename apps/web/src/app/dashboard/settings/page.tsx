@@ -3,6 +3,7 @@ import { useState, FormEvent } from 'react';
 import { User, Lock, CheckCircle } from 'lucide-react';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
+import { useT } from '@/hooks/use-t';
 import { Header } from '@/components/layout/header';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -20,9 +21,9 @@ function Section({ title, icon: Icon, children }: { title: string; icon: any; ch
 }
 
 export default function SettingsPage() {
+  const t = useT();
   const { user } = useAuthStore();
 
-  // Password form
   const [currentPw, setCurrentPw]   = useState('');
   const [newPw, setNewPw]           = useState('');
   const [confirmPw, setConfirmPw]   = useState('');
@@ -34,15 +35,15 @@ export default function SettingsPage() {
     e.preventDefault();
     setPwError('');
     setPwSuccess(false);
-    if (newPw !== confirmPw) { setPwError('Пароли не совпадают'); return; }
-    if (newPw.length < 8)    { setPwError('Минимум 8 символов'); return; }
+    if (newPw !== confirmPw) { setPwError(t('passwordMismatch')); return; }
+    if (newPw.length < 8)    { setPwError(t('passwordTooShort')); return; }
     setPwLoading(true);
     try {
       await authApi.changePassword(currentPw, newPw);
       setPwSuccess(true);
       setCurrentPw(''); setNewPw(''); setConfirmPw('');
     } catch (err: any) {
-      setPwError(err?.response?.data?.message ?? 'Ошибка смены пароля');
+      setPwError(err?.response?.data?.message ?? t('error'));
     } finally {
       setPwLoading(false);
     }
@@ -50,12 +51,12 @@ export default function SettingsPage() {
 
   return (
     <div className="animate-fade-in">
-      <Header title="Настройки" />
+      <Header title={t('navSettings')} />
 
       <div className="p-2 sm:p-4 space-y-6 w-full">
 
         {/* Profile */}
-        <Section title="Профиль" icon={User}>
+        <Section title={t('profileSection')} icon={User}>
           <div className="flex items-center gap-3 sm:gap-4">
             <div className="h-16 w-16 rounded-full bg-gradient-to-br from-brand-500/20 to-brand-600/20 shadow-sm border border-brand-500/10 flex items-center justify-center text-brand-600 font-bold text-2xl flex-shrink-0">
               {user?.name?.charAt(0).toUpperCase()}
@@ -71,10 +72,10 @@ export default function SettingsPage() {
         </Section>
 
         {/* Change password */}
-        <Section title="Сменить пароль" icon={Lock}>
+        <Section title={t('changePassword')} icon={Lock}>
           <form onSubmit={handlePasswordChange} className="space-y-4">
             <Input
-              label="Текущий пароль"
+              label={t('currentPassword')}
               type="password"
               value={currentPw}
               onChange={e => setCurrentPw(e.target.value)}
@@ -82,7 +83,7 @@ export default function SettingsPage() {
               autoComplete="current-password"
             />
             <Input
-              label="Новый пароль"
+              label={t('newPassword')}
               type="password"
               value={newPw}
               onChange={e => setNewPw(e.target.value)}
@@ -90,7 +91,7 @@ export default function SettingsPage() {
               autoComplete="new-password"
             />
             <Input
-              label="Подтвердите новый пароль"
+              label={t('confirmPassword')}
               type="password"
               value={confirmPw}
               onChange={e => setConfirmPw(e.target.value)}
@@ -101,13 +102,13 @@ export default function SettingsPage() {
             {pwSuccess && (
               <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 rounded-lg px-3 py-2.5">
                 <CheckCircle size={16} />
-                Пароль успешно изменён
+                {t('passwordChanged')}
               </div>
             )}
 
             <div className="flex justify-end">
               <Button type="submit" loading={pwLoading}>
-                Сохранить пароль
+                {t('save')}
               </Button>
             </div>
           </form>

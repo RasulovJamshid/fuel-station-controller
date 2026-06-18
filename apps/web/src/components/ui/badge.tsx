@@ -1,4 +1,6 @@
+'use client';
 import { cn } from '@/lib/utils';
+import { useT } from '@/hooks/use-t';
 
 type Variant = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
@@ -18,13 +20,7 @@ interface BadgeProps {
 
 export function Badge({ variant = 'neutral', children, className }: BadgeProps) {
   return (
-    <span
-      className={cn(
-        'badge',
-        styles[variant],
-        className,
-      )}
-    >
+    <span className={cn('badge', styles[variant], className)}>
       {children}
     </span>
   );
@@ -37,15 +33,16 @@ export function StatusDot({ online }: { online: boolean }) {
 }
 
 export function TxStatusBadge({ status }: { status: string }) {
+  const t = useT();
   const map: Record<string, Variant> = {
     COMPLETED: 'success',
     STOPPED:   'warning',
     ABORTED:   'danger',
   };
   const labels: Record<string, string> = {
-    COMPLETED: 'Завершено',
-    STOPPED:   'Остановлено',
-    ABORTED:   'Отменено',
+    COMPLETED: t('completed'),
+    STOPPED:   t('stopped'),
+    ABORTED:   t('aborted'),
   };
   return <Badge variant={map[status] ?? 'neutral'}>{labels[status] ?? status}</Badge>;
 }

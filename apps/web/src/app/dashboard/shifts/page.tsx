@@ -2,7 +2,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { shiftsApi } from '@/lib/api';
-import { fmtDate, fmtDuration, fmtVolume, fmtMoney } from '@/lib/format';
+import { useFormats } from '@/hooks/use-formats';
+import { useT } from '@/hooks/use-t';
 import { Header } from '@/components/layout/header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,8 @@ import { useWebSocket } from '@/hooks/use-websocket';
 import { useOilBases } from '@/hooks/use-oil-bases';
 
 export default function ShiftsPage() {
+  const t = useT();
+  const { fmtDate, fmtDuration, fmtVolume, fmtMoney } = useFormats();
   const [active, setActive]       = useState<any[]>([]);
   const [history, setHistory]     = useState<any[]>([]);
   const [total, setTotal]         = useState(0);
@@ -47,25 +50,25 @@ export default function ShiftsPage() {
 
   return (
     <div className="animate-fade-in">
-      <Header title="Смены" subtitle={`${total} смен всего`} connected={connected} />
+      <Header title={t('navShifts')} subtitle={`${total} ${t('shiftsTotal')}`} connected={connected} />
 
       <div className="p-2 sm:p-4 space-y-8">
         {/* Filter bar */}
         {oilBases.length > 0 && (
           <div className="panel p-4 flex flex-wrap items-end gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500">Нефтебаза</label>
+              <label className="text-xs font-medium text-slate-500">{t('oilBase')}</label>
               <select
                 value={oilBaseId}
                 onChange={e => setOilBaseId(e.target.value)}
                 className="field-control appearance-none"
               >
-                <option value="">Все</option>
+                <option value="">{t('all')}</option>
                 {oilBases.map(ob => <option key={ob.id} value={ob.id}>{ob.name}</option>)}
               </select>
             </div>
             {oilBaseId && (
-              <Button variant="ghost" size="sm" onClick={() => setOilBaseId('')}>Сбросить</Button>
+              <Button variant="ghost" size="sm" onClick={() => setOilBaseId('')}>{t('reset')}</Button>
             )}
           </div>
         )}
@@ -73,7 +76,7 @@ export default function ShiftsPage() {
         {/* Active shifts */}
         {active.length > 0 && (
           <div>
-            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">Активные смены</h2>
+            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">{t('activeShiftsSection')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {active.map((s: any) => (
                 <div key={s.id} className="panel border-l-4 border-l-emerald-400 p-6 transition-all duration-200 hover:shadow-md group">
@@ -82,15 +85,15 @@ export default function ShiftsPage() {
                       <p className="font-semibold text-slate-900">{s.operatorName}</p>
                       <p className="text-xs text-slate-500">{s.stationId}</p>
                     </div>
-                    <Badge variant="success">Активна</Badge>
+                    <Badge variant="success">{t('activeShift')}</Badge>
                   </div>
                   <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <p className="text-slate-400">Начало</p>
+                      <p className="text-slate-400">{t('shiftStart')}</p>
                       <p className="font-medium text-slate-700">{fmtDate(s.startedAt)}</p>
                     </div>
                     <div>
-                      <p className="text-slate-400">Длительность</p>
+                      <p className="text-slate-400">{t('shiftDuration')}</p>
                       <p className="font-medium text-slate-700">{fmtDuration(s.startedAt)}</p>
                     </div>
                   </div>
@@ -102,13 +105,13 @@ export default function ShiftsPage() {
 
         {/* History table */}
         <div>
-          <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">История смен</h2>
+          <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">{t('shiftHistory')}</h2>
           <div className="panel-subtle">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="table-head-row">
-                    {['Оператор', 'Станция', 'Начало', 'Конец', 'Транзакций', 'Объём', 'Сумма', 'Статус'].map(h => (
+                    {[t('shiftOperator'), t('station'), t('shiftStart'), t('shiftEnd'), t('shiftTx'), t('shiftVolume'), t('shiftAmount'), t('status')].map(h => (
                       <th key={h} className="table-head-cell whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -126,7 +129,7 @@ export default function ShiftsPage() {
                     ))
                   ) : history.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="table-cell py-12 text-center text-sm text-slate-400">Нет данных</td>
+                      <td colSpan={8} className="table-cell py-12 text-center text-sm text-slate-400">{t('noData')}</td>
                     </tr>
                   ) : (
                     history.map((s: any) => (
@@ -140,7 +143,7 @@ export default function ShiftsPage() {
                         <td className="table-cell font-mono text-slate-700 whitespace-nowrap">{fmtMoney(s.totalAmount)}</td>
                         <td className="table-cell">
                           <Badge variant={s.status === 'ACTIVE' ? 'success' : 'neutral'}>
-                            {s.status === 'ACTIVE' ? 'Активна' : 'Закрыта'}
+                            {s.status === 'ACTIVE' ? t('activeShift') : t('done')}
                           </Badge>
                         </td>
                       </tr>
@@ -150,7 +153,7 @@ export default function ShiftsPage() {
               </table>
             </div>
             <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50">
-              <p className="text-xs text-slate-500">Показано {history.length} из {total}</p>
+              <p className="text-xs text-slate-500">{t('showing')} {history.length} {t('of')} {total}</p>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
                   <ChevronLeft size={14} />

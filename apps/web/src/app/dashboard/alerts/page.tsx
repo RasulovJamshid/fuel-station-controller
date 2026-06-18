@@ -2,23 +2,26 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, Trash2, Bell, BellOff } from 'lucide-react';
 import { alertRulesApi } from '@/lib/api';
+import { useT } from '@/hooks/use-t';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Modal, Confirm } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
 
-const TYPES = [
-  { value: 'tank_low',           label: 'Низкий уровень топлива',    unit: '%' },
-  { value: 'sync_lag',           label: 'Задержка синхронизации',     unit: 'мин' },
-  { value: 'station_offline',    label: 'Станция оффлайн',            unit: 'мин' },
-  { value: 'dispenser_offline',  label: 'Колонка оффлайн',            unit: 'мин' },
-];
-
 const EMPTY_FORM = { type: 'tank_low', threshold: 20, stationId: '', notifyTelegram: true, notifyEmail: false };
 
 export default function AlertsPage() {
+  const t = useT();
   const toast = useToast();
+
+  const TYPES = [
+    { value: 'tank_low',          label: t('tankLow'),          unit: '%' },
+    { value: 'sync_lag',          label: t('syncLag'),           unit: 'min' },
+    { value: 'station_offline',   label: t('stationOffline'),    unit: 'min' },
+    { value: 'dispenser_offline', label: t('dispenserOffline'),  unit: 'min' },
+  ];
+
   const [rules, setRules]     = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -49,9 +52,9 @@ export default function AlertsPage() {
       });
       setShowCreate(false);
       load();
-      toast.success('Правило создано');
+      toast.success(t('done'));
     } catch (e: any) {
-      toast.error(e?.response?.data?.message ?? 'Ошибка создания');
+      toast.error(e?.response?.data?.message ?? t('error'));
     } finally { setSaving(false); }
   }
 
@@ -60,7 +63,7 @@ export default function AlertsPage() {
     try {
       await alertRulesApi.update(rule.id, { enabled: !rule.enabled });
       load();
-    } catch { toast.error('Не удалось обновить'); }
+    } catch { toast.error(t('error')); }
     finally { setToggling(null); }
   }
 
@@ -70,23 +73,21 @@ export default function AlertsPage() {
       await alertRulesApi.delete(deleting.id);
       setDeleting(null);
       load();
-      toast.success('Правило удалено');
+      toast.success(t('done'));
     } finally { setSaving(false); }
   }
 
-  const typeInfo = (type: string) => TYPES.find(t => t.value === type);
+  const typeInfo = (type: string) => TYPES.find(tp => tp.value === type);
 
   return (
     <div className="animate-fade-in">
-      <Header title="Оповещения" subtitle={`${rules.length} правил`} />
+      <Header title={t('navAlerts')} subtitle={`${rules.length} ${t('alertRules').toLowerCase()}`} />
 
       <div className="p-6">
         <div className="flex items-start justify-between mb-6">
-          <p className="text-sm text-slate-500 max-w-lg">
-            Правила автоматически проверяются каждые 10 минут. Уведомления отправляются в Telegram и/или на email.
-          </p>
+          <p className="text-sm text-slate-500 max-w-lg"></p>
           <Button onClick={() => { setForm(EMPTY_FORM); setShowCreate(true); }} size="sm">
-            <Plus size={16} /> Добавить правило
+            <Plus size={16} /> {t('addRule')}
           </Button>
         </div>
 
@@ -97,9 +98,9 @@ export default function AlertsPage() {
         ) : rules.length === 0 ? (
           <div className="flex flex-col items-center py-16 text-slate-400">
             <Bell size={40} className="mb-3 opacity-30" />
-            <p>Правил оповещений нет</p>
+            <p>{t('noAlerts')}</p>
             <Button onClick={() => setShowCreate(true)} size="sm" className="mt-4">
-              <Plus size={16} /> Добавить первое правило
+              <Plus size={16} /> {t('addRule')}
             </Button>
           </div>
         ) : (
@@ -118,7 +119,7 @@ export default function AlertsPage() {
                         <Badge variant="info">&lt; {r.threshold}{info?.unit}</Badge>
                       )}
                       {r.stationId && <Badge variant="neutral">{r.stationId}</Badge>}
-                      {!r.stationId && <Badge variant="neutral">Все станции</Badge>}
+                      {!r.stationId && <Badge variant="neutral">{t('allStationsOption')}</Badge>}
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
                       {r.notifyTelegram && <span>Telegram</span>}
@@ -147,26 +148,26 @@ export default function AlertsPage() {
         )}
       </div>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Новое правило оповещения">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('newRule')}>
         <div className="space-y-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">Тип события</label>
+            <label className="text-sm font-medium text-slate-700">{t('alertType')}</label>
             <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
               className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none">
-              {TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              {TYPES.map(tp => <option key={tp.value} value={tp.value}>{tp.label}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-700">
-              Порог ({typeInfo(form.type)?.unit})
+              {t('alertThreshold')} ({typeInfo(form.type)?.unit})
             </label>
             <input type="number" value={form.threshold}
               onChange={e => setForm(f => ({ ...f, threshold: Number(e.target.value) }))}
               className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-slate-700">Станция (пусто = все)</label>
-            <input type="text" value={form.stationId} placeholder="ID станции"
+            <label className="text-sm font-medium text-slate-700">{t('alertStation')}</label>
+            <input type="text" value={form.stationId} placeholder={t('allStationsOption')}
               onChange={e => setForm(f => ({ ...f, stationId: e.target.value }))}
               className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
           </div>
@@ -175,25 +176,25 @@ export default function AlertsPage() {
               <input type="checkbox" checked={form.notifyTelegram}
                 onChange={e => setForm(f => ({ ...f, notifyTelegram: e.target.checked }))}
                 className="rounded" />
-              Telegram
+              {t('alertTelegram')}
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={form.notifyEmail}
                 onChange={e => setForm(f => ({ ...f, notifyEmail: e.target.checked }))}
                 className="rounded" />
-              Email
+              {t('alertEmail')}
             </label>
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Отмена</Button>
-            <Button loading={saving} onClick={saveCreate}>Создать</Button>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>{t('cancel')}</Button>
+            <Button loading={saving} onClick={saveCreate}>{t('confirm')}</Button>
           </div>
         </div>
       </Modal>
 
       <Confirm open={!!deleting} onClose={() => setDeleting(null)} onConfirm={confirmDelete}
-        loading={saving} title="Удалить правило"
-        message={`Удалить правило "${typeInfo(deleting?.type)?.label}"?`} confirmLabel="Удалить" danger />
+        loading={saving} title={t('deleteRule')}
+        message={`${t('deleteRule')} "${typeInfo(deleting?.type)?.label}"?`} confirmLabel={t('delete')} danger />
     </div>
   );
 }

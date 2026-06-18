@@ -2,7 +2,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { transactionsApi, reportsApi } from '@/lib/api';
-import { fmtVolume, fmtMoney, fmtDate } from '@/lib/format';
+import { useFormats } from '@/hooks/use-formats';
+import { useT } from '@/hooks/use-t';
 import { Header } from '@/components/layout/header';
 import { TxStatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,8 @@ import { useOilBases } from '@/hooks/use-oil-bases';
 const STATUSES = ['', 'COMPLETED', 'STOPPED', 'ABORTED'];
 
 export default function TransactionsPage() {
+  const t = useT();
+  const { fmtVolume, fmtMoney, fmtDate } = useFormats();
   const toast = useToast();
   const [data, setData]         = useState<any[]>([]);
   const [total, setTotal]       = useState(0);
@@ -61,34 +64,34 @@ export default function TransactionsPage() {
       a.download = `transactions_${Date.now()}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success(`Файл ${format.toUpperCase()} скачан`);
+      toast.success(`${format.toUpperCase()} downloaded`);
     } catch {
-      toast.error('Ошибка экспорта');
+      toast.error(t('error'));
     } finally { setExporting(false); }
   }
 
   return (
     <div className="animate-fade-in">
-      <Header title="Транзакции" subtitle={`${total.toLocaleString()} записей`} connected={connected} />
+      <Header title={t('navTransactions')} subtitle={`${total.toLocaleString()} ${t('records')}`} connected={connected} />
 
       <div className="p-2 sm:p-4 space-y-6">
         {/* Filters */}
         <div className="panel p-5 flex flex-wrap items-end gap-4">
           {oilBases.length > 0 && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500">Нефтебаза</label>
+              <label className="text-xs font-medium text-slate-500">{t('oilBase')}</label>
               <select
                 value={oilBaseId}
                 onChange={e => setOilBaseId(e.target.value)}
                 className="field-control appearance-none"
               >
-                <option value="">Все</option>
+                <option value="">{t('all')}</option>
                 {oilBases.map(ob => <option key={ob.id} value={ob.id}>{ob.name}</option>)}
               </select>
             </div>
           )}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-500">С</label>
+            <label className="text-xs font-medium text-slate-500">{t('from')}</label>
             <input
               type="date"
               value={from}
@@ -97,7 +100,7 @@ export default function TransactionsPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-500">По</label>
+            <label className="text-xs font-medium text-slate-500">{t('to')}</label>
             <input
               type="date"
               value={to}
@@ -106,20 +109,20 @@ export default function TransactionsPage() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-500">Статус</label>
+            <label className="text-xs font-medium text-slate-500">{t('status')}</label>
             <select
               value={status}
               onChange={e => setStatus(e.target.value)}
               className="field-control appearance-none"
             >
               {STATUSES.map(s => (
-                <option key={s} value={s}>{s || 'Все'}</option>
+                <option key={s} value={s}>{s || t('all')}</option>
               ))}
             </select>
           </div>
           <div className="ml-auto flex gap-2">
             <Button variant="ghost" size="sm" onClick={() => { setFrom(''); setTo(''); setStatus(''); setOilBaseId(''); }}>
-              Сбросить
+              {t('reset')}
             </Button>
             <Button variant="outline" size="sm" loading={exporting} onClick={() => handleExport('csv')}>
               <Download size={14} /> CSV
@@ -136,7 +139,7 @@ export default function TransactionsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="table-head-row">
-                  {['Время', 'Станция', 'КЗ', 'Продукт', 'Объём', 'Цена', 'Сумма', 'Оператор', 'Статус'].map(h => (
+                  {[t('time'), t('station'), t('fp'), t('product'), t('volume'), t('price'), t('amount'), t('operator'), t('status')].map(h => (
                     <th key={h} className="table-head-cell whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -155,7 +158,7 @@ export default function TransactionsPage() {
                 ) : data.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="table-cell py-12 text-center text-sm text-slate-400">
-                      Транзакций не найдено
+                      {t('noTxResults')}
                     </td>
                   </tr>
                 ) : (
@@ -180,7 +183,7 @@ export default function TransactionsPage() {
           {/* Pagination */}
           <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50">
             <p className="text-xs text-slate-500">
-              Показано {data.length} из {total}
+              {t('showing')} {data.length} {t('of')} {total}
             </p>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>

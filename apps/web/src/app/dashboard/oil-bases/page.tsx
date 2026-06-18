@@ -6,7 +6,8 @@ import {
   MapPin, Zap,
 } from 'lucide-react';
 import { oilBasesApi, stationsApi } from '@/lib/api';
-import { fmtRelative } from '@/lib/format';
+import { useT } from '@/hooks/use-t';
+import { useFormats } from '@/hooks/use-formats';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,30 +18,24 @@ import { cn } from '@/lib/utils';
 
 const EMPTY_FORM = { name: '', address: '' };
 
-function fmtVolume(v: number) {
-  if (v >= 1000) return `${(v / 1000).toFixed(1)} м³`;
-  return `${v.toFixed(0)} л`;
-}
-
 export default function OilBasesPage() {
-  const [oilBases, setOilBases]     = useState<any[]>([]);
-  const [standalone, setStandalone] = useState<any[]>([]);
+  const t = useT();
+  const { fmtVolume, fmtRelative } = useFormats();
+  const [oilBases, setOilBases]       = useState<any[]>([]);
+  const [standalone, setStandalone]   = useState<any[]>([]);
   const [allStations, setAllStations] = useState<any[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [expanded, setExpanded]     = useState<Record<string, boolean>>({});
+  const [loading, setLoading]         = useState(true);
+  const [expanded, setExpanded]       = useState<Record<string, boolean>>({});
 
-  // Create / Edit
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing]       = useState<any>(null);
   const [form, setForm]             = useState(EMPTY_FORM);
   const [formErr, setFormErr]       = useState('');
   const [saving, setSaving]         = useState(false);
 
-  // Delete
   const [deleting, setDeleting]     = useState<any>(null);
 
-  // Assign modal
-  const [assignTarget, setAssignTarget] = useState<any>(null); // oil base
+  const [assignTarget, setAssignTarget] = useState<any>(null);
   const [assigning, setAssigning]       = useState(false);
 
   const { connected } = useWebSocket();
@@ -64,41 +59,37 @@ export default function OilBasesPage() {
     setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
   }
 
-  // ── Create ──
   function openCreate() { setForm(EMPTY_FORM); setFormErr(''); setShowCreate(true); }
   async function saveCreate() {
-    if (!form.name.trim()) { setFormErr('Название обязательно'); return; }
+    if (!form.name.trim()) { setFormErr(t('nameRequired')); return; }
     setSaving(true); setFormErr('');
     try {
       await oilBasesApi.create({ name: form.name.trim(), address: form.address.trim() || undefined });
       setShowCreate(false); load();
-    } catch (e: any) { setFormErr(e?.response?.data?.message ?? 'Ошибка'); }
+    } catch (e: any) { setFormErr(e?.response?.data?.message ?? t('error')); }
     finally { setSaving(false); }
   }
 
-  // ── Edit ──
   function openEdit(ob: any) {
     setForm({ name: ob.name, address: ob.address ?? '' });
     setFormErr(''); setEditing(ob);
   }
   async function saveEdit() {
-    if (!form.name.trim()) { setFormErr('Название обязательно'); return; }
+    if (!form.name.trim()) { setFormErr(t('nameRequired')); return; }
     setSaving(true); setFormErr('');
     try {
       await oilBasesApi.update(editing.id, { name: form.name.trim(), address: form.address.trim() || undefined });
       setEditing(null); load();
-    } catch (e: any) { setFormErr(e?.response?.data?.message ?? 'Ошибка'); }
+    } catch (e: any) { setFormErr(e?.response?.data?.message ?? t('error')); }
     finally { setSaving(false); }
   }
 
-  // ── Delete ──
   async function confirmDelete() {
     setSaving(true);
     try { await oilBasesApi.delete(deleting.id); setDeleting(null); load(); }
     finally { setSaving(false); }
   }
 
-  // ── Assign station ──
   async function assignStation(stationId: string) {
     if (!assignTarget) return;
     setAssigning(true);
@@ -115,33 +106,24 @@ export default function OilBasesPage() {
     } catch {}
   }
 
-  // Stations not yet assigned to this oil base (for the assign picker)
-  const unassigned = allStations.filter(
-    (s: any) => !s.oilBaseId || (assignTarget && s.oilBaseId === assignTarget.id)
-      ? !s.oilBaseId
-      : true,
-  );
-
   const isOnline = (s: any) =>
     s.lastSyncAt && (Date.now() - new Date(s.lastSyncAt).getTime()) < 10 * 60_000;
 
   function renderFormFields(isCreate: boolean) {
     return (
       <div className="space-y-5">
-        <Input label="Название нефтебазы" value={form.name}
-          onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-          placeholder="Нефтебаза №1 Ташкент" />
-        <Input label="Адрес" value={form.address}
-          onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-          placeholder="ул. Навои 5, Ташкент" />
+        <Input label={t('oilBaseName')} value={form.name}
+          onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+        <Input label={t('address')} value={form.address}
+          onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
         {formErr && <p className="text-sm text-red-600">{formErr}</p>}
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="outline"
             onClick={() => isCreate ? setShowCreate(false) : setEditing(null)}>
-            Отмена
+            {t('cancel')}
           </Button>
           <Button loading={saving} onClick={isCreate ? saveCreate : saveEdit}>
-            Сохранить
+            {t('save')}
           </Button>
         </div>
       </div>
@@ -154,16 +136,15 @@ export default function OilBasesPage() {
   return (
     <div className="animate-fade-in">
       <Header
-        title="Нефтебазы"
-        subtitle={loading ? undefined : `${oilBases.length} нефтебаз · ${totalStations} станций`}
+        title={t('navOilBases')}
+        subtitle={loading ? undefined : `${oilBases.length} ${t('navOilBases').toLowerCase()} · ${totalStations} ${t('stations').toLowerCase()}`}
         connected={connected}
       />
 
       <div className="p-2 sm:p-4">
-        {/* Toolbar */}
         <div className="mb-6 flex justify-end">
           <Button onClick={openCreate} size="md" className="shadow-brand-500/30 shadow-lg">
-            <Plus size={18} /> Добавить нефтебазу
+            <Plus size={18} /> {t('addOilBase')}
           </Button>
         </div>
 
@@ -175,12 +156,11 @@ export default function OilBasesPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Oil base cards */}
             {oilBases.length === 0 && standalone.length === 0 ? (
               <div className="flex flex-col items-center py-20">
                 <Building2 size={40} className="text-slate-300 mb-4" />
-                <p className="text-slate-400 mb-4">Нефтебаз пока нет</p>
-                <Button onClick={openCreate} size="sm"><Plus size={16} /> Создать первую</Button>
+                <p className="text-slate-400 mb-4">{t('noOilBases')}</p>
+                <Button onClick={openCreate} size="sm"><Plus size={16} /> {t('createFirst')}</Button>
               </div>
             ) : (
               <>
@@ -188,7 +168,6 @@ export default function OilBasesPage() {
                   const open = expanded[ob.id] ?? true;
                   return (
                     <div key={ob.id} className="panel overflow-hidden">
-                      {/* Header row */}
                       <div className="flex items-center gap-3 px-5 py-4 cursor-pointer select-none"
                         onClick={() => toggle(ob.id)}>
                         <button className="text-slate-400 hover:text-slate-600 flex-shrink-0">
@@ -206,31 +185,29 @@ export default function OilBasesPage() {
                           )}
                         </div>
 
-                        {/* Stats */}
                         <div className="hidden sm:flex items-center gap-4 text-xs text-slate-500 mr-2">
                           <span className="flex items-center gap-1">
-                            <Layers size={13} /> {ob.stations?.length ?? 0} ст.
+                            <Layers size={13} /> {ob.stations?.length ?? 0} {t('stationsCount')}
                           </span>
                           <span className="flex items-center gap-1">
-                            <Zap size={13} /> {ob.todayTransactions} тр/день
+                            <Zap size={13} /> {ob.todayTransactions} {t('txPerDay')}
                           </span>
                           <span className="font-medium text-slate-700">
                             {fmtVolume(ob.todayVolume ?? 0)}
                           </span>
                           {ob.activeShifts > 0 && (
-                            <Badge variant="success">{ob.activeShifts} смен</Badge>
+                            <Badge variant="success">{ob.activeShifts} {t('shiftsUnit')}</Badge>
                           )}
                         </div>
 
-                        {/* Actions */}
                         <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
                           <button
                             onClick={() => setAssignTarget(ob)}
                             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-brand-600 hover:bg-brand-50 transition-colors"
-                            title="Привязать станцию"
+                            title={t('assignStation')}
                           >
                             <LinkIcon size={14} />
-                            <span className="hidden sm:inline">Станция</span>
+                            <span className="hidden sm:inline">{t('station')}</span>
                           </button>
                           <button onClick={() => openEdit(ob)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors">
@@ -243,16 +220,15 @@ export default function OilBasesPage() {
                         </div>
                       </div>
 
-                      {/* Stations list */}
                       {open && (
                         <div className="border-t border-slate-100">
                           {ob.stations?.length === 0 ? (
                             <div className="px-5 py-4 text-sm text-slate-400 flex items-center gap-2">
                               <Layers size={14} />
-                              Нет привязанных станций —
+                              {t('noStationsInBase')} —
                               <button onClick={() => setAssignTarget(ob)}
                                 className="text-brand-600 hover:underline">
-                                привязать
+                                {t('attach')}
                               </button>
                             </div>
                           ) : (
@@ -267,16 +243,16 @@ export default function OilBasesPage() {
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-slate-800 truncate">{s.name}</p>
                                     <p className="text-xs text-slate-400">
-                                      {s.lastSyncAt ? fmtRelative(s.lastSyncAt) : 'нет синхр.'}
+                                      {s.lastSyncAt ? fmtRelative(s.lastSyncAt) : t('noSync')}
                                     </p>
                                   </div>
                                   <Badge variant={isOnline(s) ? 'success' : 'neutral'} className="hidden sm:flex">
-                                    {isOnline(s) ? <><Wifi size={10} /> Онлайн</> : <><WifiOff size={10} /> Офлайн</>}
+                                    {isOnline(s) ? <><Wifi size={10} /> {t('online')}</> : <><WifiOff size={10} /> {t('offline')}</>}
                                   </Badge>
                                   <button
                                     onClick={() => detachStation(ob.id, s.id)}
                                     className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                    title="Отвязать от нефтебазы"
+                                    title={t('unassignStation')}
                                   >
                                     <Unlink size={14} />
                                   </button>
@@ -290,7 +266,6 @@ export default function OilBasesPage() {
                   );
                 })}
 
-                {/* Standalone stations */}
                 {standalone.length > 0 && (
                   <div className="panel overflow-hidden opacity-80">
                     <div className="flex items-center gap-3 px-5 py-4 cursor-pointer select-none"
@@ -304,8 +279,8 @@ export default function OilBasesPage() {
                         <Layers size={18} className="text-slate-500" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-slate-600">Без нефтебазы</p>
-                        <p className="text-xs text-slate-400">{standalone.length} станций</p>
+                        <p className="font-semibold text-slate-600">{t('noOilBase')}</p>
+                        <p className="text-xs text-slate-400">{standalone.length} {t('stations').toLowerCase()}</p>
                       </div>
                     </div>
                     {(expanded['__standalone__'] ?? true) && (
@@ -320,11 +295,11 @@ export default function OilBasesPage() {
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-slate-700 truncate">{s.name}</p>
                               <p className="text-xs text-slate-400">
-                                {s.lastSyncAt ? fmtRelative(s.lastSyncAt) : 'нет синхр.'}
+                                {s.lastSyncAt ? fmtRelative(s.lastSyncAt) : t('noSync')}
                               </p>
                             </div>
                             <Badge variant={isOnline(s) ? 'success' : 'neutral'} className="hidden sm:flex">
-                              {isOnline(s) ? <><Wifi size={10} /> Онлайн</> : <><WifiOff size={10} /> Офлайн</>}
+                              {isOnline(s) ? <><Wifi size={10} /> {t('online')}</> : <><WifiOff size={10} /> {t('offline')}</>}
                             </Badge>
                           </div>
                         ))}
@@ -338,33 +313,29 @@ export default function OilBasesPage() {
         )}
       </div>
 
-      {/* Create modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Новая нефтебаза">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('newOilBase')}>
         {renderFormFields(true)}
       </Modal>
 
-      {/* Edit modal */}
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Редактировать нефтебазу">
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={t('editOilBase')}>
         {renderFormFields(false)}
       </Modal>
 
-      {/* Delete confirm */}
       <Confirm
         open={!!deleting}
         onClose={() => setDeleting(null)}
         onConfirm={confirmDelete}
         loading={saving}
-        title="Удалить нефтебазу"
-        message={`Удалить "${deleting?.name}"? Станции будут отвязаны, но не удалены.`}
-        confirmLabel="Удалить"
+        title={t('deleteOilBase')}
+        message={`${t('deleteOilBase')} "${deleting?.name}"? ${t('deleteOilBaseMsg')}`}
+        confirmLabel={t('delete')}
         danger
       />
 
-      {/* Assign station modal */}
       <Modal
         open={!!assignTarget}
         onClose={() => setAssignTarget(null)}
-        title={`Привязать станцию → ${assignTarget?.name ?? ''}`}
+        title={`${t('assignStation')} → ${assignTarget?.name ?? ''}`}
         size="md"
       >
         <AssignStationPicker
@@ -378,8 +349,6 @@ export default function OilBasesPage() {
   );
 }
 
-// ── Assign picker sub-component ───────────────────────────────────────────────
-
 function AssignStationPicker({
   oilBase, allStations, onAssign, assigning,
 }: {
@@ -388,11 +357,11 @@ function AssignStationPicker({
   onAssign: (stationId: string) => void;
   assigning: boolean;
 }) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const isOnline = (s: any) =>
     s.lastSyncAt && (Date.now() - new Date(s.lastSyncAt).getTime()) < 10 * 60_000;
 
-  // Stations not yet in this oil base
   const candidates = allStations.filter(s =>
     s.oilBaseId !== oilBase?.id &&
     (query.trim() === '' ||
@@ -405,13 +374,13 @@ function AssignStationPicker({
   return (
     <div className="space-y-4">
       <Input
-        placeholder="Поиск по названию или ID"
+        placeholder={t('searchByNameOrId')}
         value={query}
         onChange={e => setQuery(e.target.value)}
       />
       <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto rounded-lg border border-slate-200">
         {candidates.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-400">Нет доступных станций</p>
+          <p className="py-8 text-center text-sm text-slate-400">{t('noAvailableStations')}</p>
         ) : (
           candidates.map(s => (
             <div key={s.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
@@ -423,11 +392,11 @@ function AssignStationPicker({
                 <p className="text-sm font-medium text-slate-800">{s.name}</p>
                 <p className="text-xs text-slate-400">{s.id}</p>
                 {s.oilBaseId && (
-                  <p className="text-xs text-amber-600">Уже в другой нефтебазе</p>
+                  <p className="text-xs text-amber-600">{t('inOtherOilBase')}</p>
                 )}
               </div>
               <Button size="sm" loading={assigning} onClick={() => onAssign(s.id)}>
-                <LinkIcon size={13} /> Привязать
+                <LinkIcon size={13} /> {t('attach')}
               </Button>
             </div>
           ))

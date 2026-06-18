@@ -8,29 +8,26 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
+import { useT } from '@/hooks/use-t';
 
-const nav = [
-  { href: '/dashboard',              label: 'Обзор',         icon: LayoutDashboard },
-  { href: '/dashboard/transactions', label: 'Транзакции',    icon: ArrowLeftRight },
-  { href: '/dashboard/shifts',       label: 'Смены',         icon: Clock },
-  { href: '/dashboard/stations',     label: 'Станции',       icon: Gauge },
-  { href: '/dashboard/oil-bases',    label: 'Нефтебазы',     icon: Building2 },
-  { href: '/dashboard/tanks',        label: 'Резервуары',    icon: Droplets },
-  { href: '/dashboard/prices',       label: 'Цены',          icon: DollarSign },
-  { href: '/dashboard/reports',      label: 'Отчёты',        icon: BarChart3 },
-  { href: '/dashboard/alerts',        label: 'Оповещения',    icon: Bell },
-  { href: '/dashboard/integrations',  label: 'Интеграции',    icon: Zap },
-  { href: '/dashboard/users',         label: 'Пользователи',  icon: Users },
-];
-
-interface SidebarProps {
-  open?: boolean;
-  onClose?: () => void;
-}
-
-export function Sidebar({ open = false, onClose }: SidebarProps) {
+export function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: () => void }) {
   const path = usePathname();
   const { user, logout } = useAuthStore();
+  const t = useT();
+
+  const nav = [
+    { href: '/dashboard',              label: t('navOverview'),      icon: LayoutDashboard },
+    { href: '/dashboard/transactions', label: t('navTransactions'),  icon: ArrowLeftRight },
+    { href: '/dashboard/shifts',       label: t('navShifts'),        icon: Clock },
+    { href: '/dashboard/stations',     label: t('navStations'),      icon: Gauge },
+    { href: '/dashboard/oil-bases',    label: t('navOilBases'),      icon: Building2 },
+    { href: '/dashboard/tanks',        label: t('navTanks'),         icon: Droplets },
+    { href: '/dashboard/prices',       label: t('navPrices'),        icon: DollarSign },
+    { href: '/dashboard/reports',      label: t('navReports'),       icon: BarChart3 },
+    { href: '/dashboard/alerts',       label: t('navAlerts'),        icon: Bell },
+    { href: '/dashboard/integrations', label: t('navIntegrations'),  icon: Zap },
+    { href: '/dashboard/users',        label: t('navUsers'),         icon: Users },
+  ];
 
   return (
     <>
@@ -87,20 +84,16 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             className="group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 transition-colors"
           >
             <Settings size={18} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-            Настройки
+            {t('navSettings')}
           </Link>
           <button
-            onClick={() => {
-              logout();
-              onClose?.();
-            }}
+            onClick={() => { logout(); onClose?.(); }}
             className="group w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
           >
             <LogOut size={18} className="text-slate-500 group-hover:text-red-400 transition-colors" />
-            Выйти
+            {t('logout')}
           </button>
 
-          {/* User chip */}
           {user && (
             <div className="mt-2 flex items-center gap-3 px-3 py-2.5">
               <div className="h-8 w-8 rounded-md bg-slate-800 flex items-center justify-center text-slate-300 font-medium text-sm flex-shrink-0 border border-slate-700">

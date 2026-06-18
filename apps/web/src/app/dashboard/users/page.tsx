@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Plus, Pencil, Trash2, ShieldCheck, Search, Building2 } from 'lucide-react';
 import { usersApi, stationsApi, usersApi2 } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
+import { useT } from '@/hooks/use-t';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,7 @@ const ROLE_BADGE: Record<string, 'info' | 'warning' | 'neutral' | 'success'> = {
 const EMPTY_FORM = { name: '', email: '', password: '', role: 'STATION_MANAGER' };
 
 export default function UsersPage() {
+  const t = useT();
   const { user: me } = useAuthStore();
   const [users, setUsers]           = useState<any[]>([]);
   const [total, setTotal]           = useState(0);
@@ -92,26 +94,26 @@ export default function UsersPage() {
   }
 
   async function saveCreate() {
-    if (!form.name || !form.email || !form.password) { setError('Заполните все поля'); return; }
+    if (!form.name || !form.email || !form.password) { setError(t('nameRequired')); return; }
     setSaving(true); setError('');
     try {
       await usersApi.create({ ...form, companyId: me?.companyId });
       setShowCreate(false);
       load();
     } catch (e: any) {
-      setError(e?.response?.data?.message ?? 'Ошибка создания');
+      setError(e?.response?.data?.message ?? t('error'));
     } finally { setSaving(false); }
   }
 
   async function saveEdit() {
-    if (!form.name) { setError('Заполните имя'); return; }
+    if (!form.name) { setError(t('nameRequired')); return; }
     setSaving(true); setError('');
     try {
       await usersApi.update(editing.id, { name: form.name, role: form.role });
       setEditing(null);
       load();
     } catch (e: any) {
-      setError(e?.response?.data?.message ?? 'Ошибка обновления');
+      setError(e?.response?.data?.message ?? t('error'));
     } finally { setSaving(false); }
   }
 
@@ -137,15 +139,15 @@ export default function UsersPage() {
   function renderUserForm(isCreate: boolean) {
     return (
       <div className="space-y-5">
-        <Input label="Имя" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+        <Input label={t('name')} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
         {isCreate && (
           <>
-            <Input label="Email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-            <Input label="Пароль" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+            <Input label={t('email')} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+            <Input label={t('password')} type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
           </>
         )}
         <div className="flex flex-col gap-1.5">
-          <label className="control-label">Роль</label>
+          <label className="control-label">{t('role')}</label>
           <select
             value={form.role}
             onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
@@ -156,8 +158,8 @@ export default function UsersPage() {
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-3 pt-2">
-          <Button variant="outline" onClick={() => isCreate ? setShowCreate(false) : setEditing(null)}>Отмена</Button>
-          <Button loading={saving} onClick={isCreate ? saveCreate : saveEdit}>Сохранить</Button>
+          <Button variant="outline" onClick={() => isCreate ? setShowCreate(false) : setEditing(null)}>{t('cancel')}</Button>
+          <Button loading={saving} onClick={isCreate ? saveCreate : saveEdit}>{t('save')}</Button>
         </div>
       </div>
     );
@@ -165,20 +167,20 @@ export default function UsersPage() {
 
   return (
     <div className="animate-fade-in">
-      <Header title="Пользователи" subtitle={query ? `${visibleUsers.length} из ${total} пользователей` : `${total} пользователей`} />
+      <Header title={t('navUsers')} subtitle={`${total} ${t('users').toLowerCase()}`} />
 
       <div className="p-2 sm:p-4">
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="w-full sm:max-w-sm">
             <Input
-              placeholder="Поиск по имени, email, роли"
+              placeholder={t('searchUsers')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               icon={<Search size={16} />}
             />
           </div>
           <Button onClick={openCreate} size="md" className="shadow-brand-500/30 shadow-lg">
-            <Plus size={18} /> Добавить пользователя
+            <Plus size={18} /> {t('addUser')}
           </Button>
         </div>
 
@@ -186,7 +188,7 @@ export default function UsersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="table-head-row">
-                {['Имя', 'Email', 'Роль', 'Статус', 'Последний вход', ''].map(h => (
+                {[t('name'), t('email'), t('role'), t('status'), t('lastReading'), ''].map(h => (
                   <th key={h} className="table-head-cell">{h}</th>
                 ))}
               </tr>
@@ -201,7 +203,7 @@ export default function UsersPage() {
                   </tr>
                 ))
               ) : visibleUsers.length === 0 ? (
-                <tr><td colSpan={6} className="table-cell py-12 text-center text-sm text-slate-400">Нет пользователей</td></tr>
+                <tr><td colSpan={6} className="table-cell py-12 text-center text-sm text-slate-400">{t('noUsers')}</td></tr>
               ) : (
                 visibleUsers.map((u: any) => (
                   <tr key={u.id} className="table-row-hover group">
@@ -222,7 +224,7 @@ export default function UsersPage() {
                     </td>
                     <td className="table-cell">
                       <Badge variant={u.active ? 'success' : 'neutral'}>
-                        {u.active ? 'Активен' : 'Отключён'}
+                        {u.active ? t('active') : t('offline')}
                       </Badge>
                     </td>
                     <td className="table-cell text-xs text-slate-400">
@@ -234,7 +236,7 @@ export default function UsersPage() {
                           <button
                             onClick={() => setAccessUser(u)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
-                            title="Доступ к станциям"
+                            title={t('stationAccess')}
                           >
                             <Building2 size={14} />
                           </button>
@@ -261,11 +263,11 @@ export default function UsersPage() {
         </div>
       </div>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Новый пользователь">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={t('newUser')}>
         {renderUserForm(true)}
       </Modal>
 
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Редактировать пользователя">
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={t('editUser')}>
         {renderUserForm(false)}
       </Modal>
 
@@ -274,22 +276,18 @@ export default function UsersPage() {
         onClose={() => setDeleting(null)}
         onConfirm={confirmDelete}
         loading={saving}
-        title="Удалить пользователя"
-        message={`Удалить пользователя ${deleting?.name}? Действие необратимо.`}
-        confirmLabel="Удалить"
+        title={t('deleteUser')}
+        message={`${t('deleteUser')} ${deleting?.name}?`}
+        confirmLabel={t('delete')}
         danger
       />
 
       {/* Station access modal */}
-      <Modal open={!!accessUser} onClose={() => setAccessUser(null)} title={`Доступ к станциям — ${accessUser?.name}`}>
+      <Modal open={!!accessUser} onClose={() => setAccessUser(null)} title={`${t('stationAccess')} — ${accessUser?.name}`}>
         {accessUser && (
           <div className="space-y-3">
-            <p className="text-sm text-slate-500">
-              Отметьте станции, к которым пользователь должен иметь доступ.
-              Для ролей COMPANY_ADMIN и SUPER_ADMIN доступ ко всем станциям предоставляется автоматически.
-            </p>
             {allStations.length === 0 ? (
-              <p className="text-sm text-slate-400 py-4 text-center">Нет станций</p>
+              <p className="text-sm text-slate-400 py-4 text-center">{t('noStations')}</p>
             ) : (
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                 {allStations.map((s: any) => {
@@ -313,7 +311,7 @@ export default function UsersPage() {
               </div>
             )}
             <div className="flex justify-end pt-2">
-              <Button variant="outline" onClick={() => setAccessUser(null)}>Закрыть</Button>
+              <Button variant="outline" onClick={() => setAccessUser(null)}>{t('done')}</Button>
             </div>
           </div>
         )}

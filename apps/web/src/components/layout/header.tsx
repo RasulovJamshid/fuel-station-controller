@@ -2,6 +2,7 @@
 import { Bell, Sun, Moon, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
+import { useT } from '@/hooks/use-t';
 
 interface HeaderProps {
   title: string;
@@ -11,8 +12,9 @@ interface HeaderProps {
 
 export function Header({ title, subtitle, connected }: HeaderProps) {
   const { user, setUser } = useAuthStore();
-  
-  const theme = (user?.preferences as any)?.theme || 'light';
+  const t = useT();
+
+  const theme    = (user?.preferences as any)?.theme    || 'light';
   const language = (user?.preferences as any)?.language || 'ru';
 
   const toggleTheme = () => {
@@ -42,10 +44,10 @@ export function Header({ title, subtitle, connected }: HeaderProps) {
             'h-2 w-2 rounded-full',
             connected ? 'bg-emerald-400 animate-pulse_dot' : 'bg-slate-300',
           )} />
-          <span className="text-xs text-slate-500">{connected ? 'Live' : 'Offline'}</span>
+          <span className="text-xs text-slate-500">{connected ? t('live') : t('offline')}</span>
         </div>
 
-        <button 
+        <button
           onClick={toggleLang}
           className="icon-button flex items-center gap-1.5 uppercase text-xs font-medium"
         >
@@ -53,10 +55,7 @@ export function Header({ title, subtitle, connected }: HeaderProps) {
           {language}
         </button>
 
-        <button 
-          onClick={toggleTheme}
-          className="icon-button"
-        >
+        <button onClick={toggleTheme} className="icon-button">
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
 

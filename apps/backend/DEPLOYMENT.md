@@ -694,7 +694,7 @@ docker compose logs frontend | grep "ready"
 ### WebSocket not connecting
 
 1. `CORS_ORIGINS` in `.env` must be exactly `https://fillingstation.ung.uz` (no trailing slash).
-2. nginx `/dashboard` block must have `proxy_set_header Upgrade $http_upgrade;`.
+2. nginx `/socket.io/` block must have `proxy_set_header Upgrade $http_upgrade;`.
 3. Browser DevTools → Network → WS tab for the error.
 
 ### Database connection pool exhausted

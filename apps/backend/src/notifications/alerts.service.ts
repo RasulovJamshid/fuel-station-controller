@@ -102,7 +102,7 @@ export class AlertsService {
     private async checkTankLevels() {
         const latestReadings: any[] = await this.prisma.$queryRaw`
             SELECT DISTINCT ON (r.id)
-                r.id, r."stationId", r."companyId", r.label, r."productName",
+                r.id, r."stationId", rr."companyId" AS "companyId", r.label, r."productName",
                 rr."fillPercent"
             FROM "Reservoir" r
             JOIN "ReservoirReading" rr ON rr."reservoirId" = r.id

@@ -31,7 +31,7 @@ services:
       # build args, not runtime environment. Setting them in environment: has
       # no effect on the already-compiled browser bundle.
       args:
-        NEXT_PUBLIC_API_URL: https://fillingstation.ung.uz/api
+        NEXT_PUBLIC_API_URL: https://fillingstation.ung.uz
         NEXT_PUBLIC_WS_URL: wss://fillingstation.ung.uz
     restart: unless-stopped
     expose:

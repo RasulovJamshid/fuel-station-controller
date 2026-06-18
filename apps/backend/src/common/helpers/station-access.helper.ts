@@ -16,9 +16,13 @@ export async function resolveStationIds(
     const isAdmin = adminRoles.includes(user.role);
 
     if (isAdmin) {
-        if (requestedIds.length > 0) return requestedIds;
         const stations = await prisma.station.findMany({
-            where: { companyId: user.companyId, deletedAt: null, active: true },
+            where: {
+                companyId: user.companyId,
+                deletedAt: null,
+                active: true,
+                ...(requestedIds.length > 0 ? { id: { in: requestedIds } } : {}),
+            },
             select: { id: true },
         });
         return stations.map(s => s.id);

@@ -1,31 +1,46 @@
-/// Pump status decoded from the second byte of a status response.
+/// Pump status decoded from the response byte of a status poll.
+///
+/// Encoding for 9600 baud: `0xN0 | addr`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GilbarcoStatus {
-    /// 0x61..0x6F — pump idle, ready for a new transaction.
+    /// Pump idle, ready for a new transaction (`0x60 | addr`).
     Idle,
-    /// 0x71..0x7F — nozzle lifted, waiting for authorization.
+    /// Customer lifted a nozzle, waiting for authorization (`0x70 | addr`).
     NozzleLifted,
-    /// 0x81..0x8F — authorized and armed, customer has not opened trigger yet.
-    Authorized,
-    /// 0x91..0x9F — fuel is flowing.
+    /// Pump is authorized/ready, but fuel may not be flowing yet (`0x80 | addr`).
+    Ready,
+    /// Fuel is flowing (`0x90 | addr`).
     Delivering,
-    /// 0xA1..0xBF — delivery finished, transaction data ready.
+    /// Delivery finished, transaction data available (`0xA0 | addr`).
     TransactionComplete,
-    /// 0xC1..0xCF — pump was halted mid-delivery.
+    /// Pump was halted mid-delivery (`0xC0 | addr`).
     Stopped,
-    /// 0xD1..0xDF — listen mode, ready to accept SetPrice / GetNozzle commands.
+    /// Listen mode / extended command acknowledgement (`0xD0 | addr`).
     ListenMode,
     /// No valid response or unknown status byte.
     Offline,
 }
 
 /// Final transaction data returned by the GetTransaction command.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TransactionData {
-    /// Raw 4-digit BCD integer — unit price (pump's internal representation).
+    /// Price per litre as decoded from the pump frame (×10 → soum/L).
     pub unit_price_raw: u64,
-    /// Raw 6-digit BCD integer — dispensed volume (÷1000 → litres when 3 dp configured).
+    /// Dispensed volume in millilitres (÷1000.0 → litres).
     pub volume_raw: u64,
-    /// Raw 6-digit BCD integer — total amount charged.
+    /// Amount in units of 10 soum (×10 → soum).
     pub amount_raw: u64,
+}
+
+/// Per-nozzle totals returned by the GetTotals command (`0x50 | addr`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TotalsData {
+    /// 1-based nozzle index.
+    pub nozzle_index: u8,
+    /// Accumulated volume total, raw pump decimal digits.
+    pub volume_total_raw: u64,
+    /// Accumulated amount total, raw pump decimal digits.
+    pub amount_total_raw: u64,
+    /// Nozzle price register, raw 4-digit value (×10 → soum/L on this site).
+    pub unit_price_raw: u64,
 }

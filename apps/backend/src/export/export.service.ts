@@ -20,10 +20,10 @@ export class ExportService {
 
     constructor(private prisma: PrismaService) {}
 
-    async generate(companyId: string, params: ExportParams) {
+    async generate(companyId: string, params: ExportParams, allowedStationIds?: string[]) {
         await fs.mkdir(this.outDir, { recursive: true });
 
-        const data = await this.fetchData(companyId, params);
+        const data = await this.fetchData(companyId, params, allowedStationIds);
         const filename = `${params.type}_${Date.now()}.${params.format}`;
         const filePath = path.join(this.outDir, filename);
 
@@ -36,13 +36,15 @@ export class ExportService {
         return { filename, path: filePath };
     }
 
-    private async fetchData(companyId: string, params: ExportParams) {
+    private async fetchData(companyId: string, params: ExportParams, allowedStationIds?: string[]) {
+        if (allowedStationIds && allowedStationIds.length === 0) return [];
         if (params.type === 'transactions') {
             return this.prisma.transaction.findMany({
                 where: {
                     companyId,
                     deletedAt: null,
-                    ...(params.stationId ? { stationId: params.stationId } : {}),
+                    ...(allowedStationIds ? { stationId: { in: allowedStationIds } } :
+                        params.stationId ? { stationId: params.stationId } : {}),
                     ...(params.from || params.to ? {
                         startedAt: {
                             ...(params.from ? { gte: new Date(params.from) } : {}),
@@ -58,7 +60,8 @@ export class ExportService {
             where: {
                 companyId,
                 deletedAt: null,
-                ...(params.stationId ? { stationId: params.stationId } : {}),
+                ...(allowedStationIds ? { stationId: { in: allowedStationIds } } :
+                    params.stationId ? { stationId: params.stationId } : {}),
             },
             include: { positionTotals: true },
             orderBy: { startedAt: 'asc' },

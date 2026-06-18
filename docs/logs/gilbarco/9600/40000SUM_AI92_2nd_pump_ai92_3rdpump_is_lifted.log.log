@@ -1,0 +1,4074 @@
+connected
+[T+523264414us][CH1-Dispenser] 06
+[T+523264281us][CH2-Pc    ] 06
+[T+523438280us][CH2-Pc    ] 01
+[T+523443280us][CH1-Dispenser] 01 61
+[T+523517281us][CH2-Pc    ] 02
+[T+523526281us][CH1-Dispenser] 02 62
+[T+523595280us][CH2-Pc    ] 03
+[T+523606280us][CH1-Dispenser] 03 63
+[T+523673280us][CH2-Pc    ] 04
+[T+523678280us][CH1-Dispenser] 04 64
+[T+523751970us][CH1-Dispenser] 05
+[T+523751823us][CH2-Pc    ] 05
+[T+523926413us][CH1-Dispenser] 06
+[T+523926281us][CH2-Pc    ] 06
+[T+524090281us][CH2-Pc    ] 01
+[T+524094309us][CH1-Dispenser] 01 61
+[T+524157281us][CH2-Pc    ] 02
+[T+524166336us][CH1-Dispenser] 02 62
+[T+524235280us][CH2-Pc    ] 03
+[T+524244280us][CH1-Dispenser] 03 63
+[T+524317310us][CH1-Dispenser] 04 64
+[T+524313280us][CH2-Pc    ] 04
+[T+524381414us][CH1-Dispenser] 05
+[T+524381281us][CH2-Pc    ] 05
+[T+524567981us][CH1-Dispenser] 06
+[T+524567746us][CH2-Pc    ] 06
+[T+524730280us][CH2-Pc    ] 01
+[T+524735280us][CH1-Dispenser] 01 61
+[T+524809280us][CH2-Pc    ] 02
+[T+524815378us][CH1-Dispenser] 02 62
+[T+524887304us][CH2-Pc    ] 03
+[T+524892280us][CH1-Dispenser] 03 63
+[T+524965281us][CH2-Pc    ] 04
+[T+524973321us][CH1-Dispenser] 04 64
+[T+525043412us][CH1-Dispenser] 05
+[T+525043281us][CH2-Pc    ] 05
+[T+525218414us][CH1-Dispenser] 06
+[T+525218281us][CH2-Pc    ] 06
+[T+525392280us][CH2-Pc    ] 01
+[T+525400321us][CH1-Dispenser] 01 61
+[T+525470281us][CH2-Pc    ] 02
+[T+525480281us][CH1-Dispenser] 02 62
+[T+525549280us][CH2-Pc    ] 03
+[T+525557305us][CH1-Dispenser] 03 63
+[T+525627280us][CH2-Pc    ] 04
+[T+525634281us][CH1-Dispenser] 04 64
+[T+525705413us][CH1-Dispenser] 05
+[T+525705281us][CH2-Pc    ] 05
+[T+525880415us][CH1-Dispenser] 06
+[T+525880281us][CH2-Pc    ] 06
+[T+526044305us][CH2-Pc    ] 01
+[T+526049280us][CH1-Dispenser] 01 61
+[T+526122280us][CH2-Pc    ] 02
+[T+526130305us][CH1-Dispenser] 02 62
+[T+526200280us][CH2-Pc    ] 03
+[T+526209280us][CH1-Dispenser] 03 63
+[T+526278280us][CH2-Pc    ] 04
+[T+526283280us][CH1-Dispenser] 04 64
+[T+526356415us][CH1-Dispenser] 05
+[T+526356281us][CH2-Pc    ] 05
+[T+526531414us][CH1-Dispenser] 06
+[T+526531281us][CH2-Pc    ] 06
+[T+526706280us][CH2-Pc    ] 01
+[T+526715850us][CH1-Dispenser] 01 61
+[T+526787307us][CH2-Pc    ] 02
+[T+526797369us][CH1-Dispenser] 02 62
+[T+526865304us][CH2-Pc    ] 03
+[T+526872897us][CH1-Dispenser] 03 63
+[T+526943281us][CH2-Pc    ] 04
+[T+526948281us][CH1-Dispenser] 04 64
+[T+527021413us][CH1-Dispenser] 05
+[T+527021281us][CH2-Pc    ] 05
+[T+527207414us][CH1-Dispenser] 06
+[T+527207281us][CH2-Pc    ] 06
+[T+527371304us][CH2-Pc    ] 01
+[T+527382280us][CH1-Dispenser] 01 61
+[T+527449280us][CH2-Pc    ] 02
+[T+527454280us][CH1-Dispenser] 02 62
+[T+527527280us][CH2-Pc    ] 03
+[T+527534280us][CH1-Dispenser] 03 63
+[T+527605280us][CH2-Pc    ] 04
+[T+527613950us][CH1-Dispenser] 04 64
+[T+527683415us][CH1-Dispenser] 05
+[T+527683281us][CH2-Pc    ] 05
+[T+527858413us][CH1-Dispenser] 06
+[T+527858281us][CH2-Pc    ] 06
+[T+528033280us][CH2-Pc    ] 01
+[T+528040930us][CH1-Dispenser] 01 61
+[T+528111281us][CH2-Pc    ] 02
+[T+528119321us][CH1-Dispenser] 02 62
+[T+528189280us][CH2-Pc    ] 03
+[T+528199281us][CH1-Dispenser] 03 63
+[T+528268165us][CH2-Pc    ] 04
+[T+528272326us][CH1-Dispenser] 04 64
+[T+528346416us][CH1-Dispenser] 05
+[T+528346281us][CH2-Pc    ] 05
+[T+528520413us][CH1-Dispenser] 06
+[T+528520281us][CH2-Pc    ] 06
+[T+528684304us][CH2-Pc    ] 01
+[T+528690280us][CH1-Dispenser] 01 61
+[T+528754304us][CH2-Pc    ] 02
+[T+528761941us][CH1-Dispenser] 02 62
+[T+528832280us][CH2-Pc    ] 03
+[T+528840305us][CH1-Dispenser] 03 63
+[T+528910280us][CH2-Pc    ] 04
+[T+528919280us][CH1-Dispenser] 04 64
+[T+528988413us][CH1-Dispenser] 05
+[T+528988281us][CH2-Pc    ] 05
+[T+529152414us][CH1-Dispenser] 06
+[T+529152281us][CH2-Pc    ] 06
+[T+529327280us][CH2-Pc    ] 01
+[T+529339281us][CH1-Dispenser] 01 61
+[T+529405280us][CH2-Pc    ] 02
+[T+529409309us][CH1-Dispenser] 02 62
+[T+529489280us][CH1-Dispenser] 03 63
+[T+529484288us][CH2-Pc    ] 03
+[T+529561281us][CH2-Pc    ] 04
+[T+529570280us][CH1-Dispenser] 04 64
+[T+529639415us][CH1-Dispenser] 05
+[T+529639281us][CH2-Pc    ] 05
+[T+529814415us][CH1-Dispenser] 06
+[T+529814282us][CH2-Pc    ] 06
+[T+529989281us][CH2-Pc    ] 01
+[T+529995935us][CH1-Dispenser] 01 61
+[T+530067307us][CH2-Pc    ] 02
+[T+530074288us][CH1-Dispenser] 02 62
+[T+530145708us][CH2-Pc    ] 03
+[T+530155205us][CH1-Dispenser] 03 63
+[T+530224280us][CH2-Pc    ] 04
+[T+530227280us][CH1-Dispenser] 04 64
+[T+530291413us][CH1-Dispenser] 05
+[T+530291281us][CH2-Pc    ] 05
+[T+530466415us][CH1-Dispenser] 06
+[T+530466281us][CH2-Pc    ] 06
+[T+530640280us][CH2-Pc    ] 01
+[T+530645280us][CH1-Dispenser] 01 61
+[T+530718281us][CH2-Pc    ] 02
+[T+530725288us][CH1-Dispenser] 02 62
+[T+530797933us][CH2-Pc    ] 03
+[T+530804288us][CH1-Dispenser] 03 63
+[T+530875281us][CH2-Pc    ] 04
+[T+530883403us][CH1-Dispenser] 04 64
+[T+530953413us][CH1-Dispenser] 05
+[T+530953281us][CH2-Pc    ] 05
+[T+531130413us][CH1-Dispenser] 06
+[T+531130281us][CH2-Pc    ] 06
+[T+531294304us][CH2-Pc    ] 01
+[T+531299929us][CH1-Dispenser] 01 61
+[T+531372280us][CH2-Pc    ] 02
+[T+531381921us][CH1-Dispenser] 02 62
+[T+531450280us][CH2-Pc    ] 03
+[T+531460318us][CH1-Dispenser] 03 63
+[T+531528288us][CH2-Pc    ] 04
+[T+531532327us][CH1-Dispenser] 04 64
+[T+531596411us][CH1-Dispenser] 05
+[T+531596282us][CH2-Pc    ] 05
+[T+531770412us][CH1-Dispenser] 06
+[T+531770281us][CH2-Pc    ] 06
+[T+531934308us][CH2-Pc    ] 01
+[T+531941929us][CH1-Dispenser] 01 61
+[T+532012281us][CH2-Pc    ] 02
+[T+532020356us][CH1-Dispenser] 02 62
+[T+532090281us][CH2-Pc    ] 03
+[T+532098374us][CH1-Dispenser] 03 63
+[T+532173309us][CH1-Dispenser] 04 64
+[T+532169280us][CH2-Pc    ] 04
+[T+532247414us][CH1-Dispenser] 05
+[T+532247281us][CH2-Pc    ] 05
+[T+532422414us][CH1-Dispenser] 06
+[T+532422281us][CH2-Pc    ] 06
+[T+532596280us][CH2-Pc    ] 01
+[T+532606281us][CH1-Dispenser] 01 61
+[T+532674305us][CH2-Pc    ] 02
+[T+532680280us][CH1-Dispenser] 02 62
+[T+532753281us][CH2-Pc    ] 03
+[T+532757309us][CH1-Dispenser] 03 63
+[T+532831281us][CH2-Pc    ] 04
+[T+532838288us][CH1-Dispenser] 04 64
+[T+532909412us][CH1-Dispenser] 05
+[T+532909281us][CH2-Pc    ] 05
+[T+533073414us][CH1-Dispenser] 06
+[T+533073281us][CH2-Pc    ] 06
+[T+533248281us][CH2-Pc    ] 01
+[T+533254927us][CH1-Dispenser] 01 61
+[T+533326307us][CH2-Pc    ] 02
+[T+533330309us][CH1-Dispenser] 02 62
+[T+533393281us][CH2-Pc    ] 03
+[T+533399896us][CH1-Dispenser] 03 63
+[T+533472280us][CH2-Pc    ] 04
+[T+533478280us][CH1-Dispenser] 04 64
+[T+533549412us][CH1-Dispenser] 05
+[T+533549281us][CH2-Pc    ] 05
+[T+533714414us][CH1-Dispenser] 06
+[T+533714281us][CH2-Pc    ] 06
+[T+533888280us][CH2-Pc    ] 01
+[T+533896321us][CH1-Dispenser] 01 61
+[T+533967492us][CH2-Pc    ] 02
+[T+533976280us][CH1-Dispenser] 02 62
+[T+534045280us][CH2-Pc    ] 03
+[T+534053957us][CH1-Dispenser] 03 63
+[T+534123280us][CH2-Pc    ] 04
+[T+534128280us][CH1-Dispenser] 04 64
+[T+534201413us][CH1-Dispenser] 05
+[T+534201281us][CH2-Pc    ] 05
+[T+534377413us][CH1-Dispenser] 06
+[T+534377281us][CH2-Pc    ] 06
+[T+534542281us][CH2-Pc    ] 01
+[T+534552280us][CH1-Dispenser] 01 61
+[T+534620306us][CH2-Pc    ] 02
+[T+534626288us][CH1-Dispenser] 02 62
+[T+534698308us][CH2-Pc    ] 03
+[T+534705280us][CH1-Dispenser] 03 63
+[T+534776280us][CH2-Pc    ] 04
+[T+534782280us][CH1-Dispenser] 04 64
+[T+534854413us][CH1-Dispenser] 05
+[T+534854281us][CH2-Pc    ] 05
+[T+535029412us][CH1-Dispenser] 06
+[T+535029281us][CH2-Pc    ] 06
+[T+535205306us][CH2-Pc    ] 01
+[T+535209314us][CH1-Dispenser] 01 61
+[T+535283280us][CH2-Pc    ] 02
+[T+535291305us][CH1-Dispenser] 02 62
+[T+535361280us][CH2-Pc    ] 03
+[T+535370280us][CH1-Dispenser] 03 63
+[T+535439280us][CH2-Pc    ] 04
+[T+535444280us][CH1-Dispenser] 04 64
+[T+535517417us][CH1-Dispenser] 05
+[T+535517282us][CH2-Pc    ] 05
+[T+535695417us][CH1-Dispenser] 06
+[T+535695282us][CH2-Pc    ] 06
+[T+535879305us][CH2-Pc    ] 01
+[T+535885280us][CH1-Dispenser] 01 61
+[T+535958281us][CH2-Pc    ] 02
+[T+535964923us][CH1-Dispenser] 02 62
+[T+536036305us][CH2-Pc    ] 03
+[T+536044321us][CH1-Dispenser] 03 63
+[T+536118310us][CH1-Dispenser] 04 64
+[T+536114280us][CH2-Pc    ] 04
+[T+536181413us][CH1-Dispenser] 05
+[T+536181281us][CH2-Pc    ] 05
+[T+536356418us][CH1-Dispenser] 06
+[T+536356282us][CH2-Pc    ] 06
+[T+536531281us][CH2-Pc    ] 01
+[T+536536281us][CH1-Dispenser] 01 61
+[T+536609281us][CH2-Pc    ] 02
+[T+536617874us][CH1-Dispenser] 02 62
+[T+536687280us][CH2-Pc    ] 03
+[T+536694288us][CH1-Dispenser] 03 63
+[T+536766305us][CH2-Pc    ] 04
+[T+536773281us][CH1-Dispenser] 04 64
+[T+536844411us][CH1-Dispenser] 05
+[T+536844281us][CH2-Pc    ] 05
+[T+537019410us][CH1-Dispenser] 06
+[T+537019281us][CH2-Pc    ] 06
+[T+537183304us][CH2-Pc    ] 01
+[T+537191305us][CH1-Dispenser] 01 61
+[T+537261280us][CH2-Pc    ] 02
+[T+537273315us][CH1-Dispenser] 02 62
+[T+537339280us][CH2-Pc    ] 03
+[T+537350285us][CH1-Dispenser] 03 63
+[T+537418281us][CH2-Pc    ] 04
+[T+537424288us][CH1-Dispenser] 04 64
+[T+537496412us][CH1-Dispenser] 05
+[T+537496281us][CH2-Pc    ] 05
+[T+537670412us][CH1-Dispenser] 06
+[T+537670281us][CH2-Pc    ] 06
+[T+537846305us][CH2-Pc    ] 01
+[T+537856288us][CH1-Dispenser] 01 61
+[T+537924304us][CH2-Pc    ] 02
+[T+537930280us][CH1-Dispenser] 02 62
+[T+538003281us][CH2-Pc    ] 03
+[T+538010288us][CH1-Dispenser] 03 63
+[T+538092280us][CH2-Pc    ] 04
+[T+538098280us][CH1-Dispenser] 04 64
+[T+538170412us][CH1-Dispenser] 05
+[T+538170281us][CH2-Pc    ] 05
+[T+538345413us][CH1-Dispenser] 06
+[T+538345282us][CH2-Pc    ] 06
+[T+538520280us][CH2-Pc    ] 01
+[T+538525280us][CH1-Dispenser] 01 61
+[T+538598280us][CH2-Pc    ] 02
+[T+538606321us][CH1-Dispenser] 02 62
+[T+538676281us][CH2-Pc    ] 03
+[T+538684288us][CH1-Dispenser] 03 63
+[T+538755280us][CH2-Pc    ] 04
+[T+538763305us][CH1-Dispenser] 04 64
+[T+538833413us][CH1-Dispenser] 05
+[T+538833281us][CH2-Pc    ] 05
+[T+538997419us][CH1-Dispenser] 06
+[T+538997281us][CH2-Pc    ] 06
+[T+539171280us][CH2-Pc    ] 01
+[T+539181305us][CH1-Dispenser] 01 61
+[T+539250280us][CH2-Pc    ] 02
+[T+539256280us][CH1-Dispenser] 02 62
+[T+539328306us][CH2-Pc    ] 03
+[T+539334281us][CH1-Dispenser] 03 63
+[T+539406308us][CH2-Pc    ] 04
+[T+539413288us][CH1-Dispenser] 04 64
+[T+539484416us][CH1-Dispenser] 05
+[T+539484281us][CH2-Pc    ] 05
+[T+539659417us][CH1-Dispenser] 06
+[T+539659283us][CH2-Pc    ] 06
+[T+539823304us][CH2-Pc    ] 01
+[T+539831321us][CH1-Dispenser] 01 61
+[T+539905310us][CH1-Dispenser] 02 62
+[T+539901280us][CH2-Pc    ] 02
+[T+539968280us][CH2-Pc    ] 03
+[T+539975491us][CH1-Dispenser] 03 63
+[T+540046280us][CH2-Pc    ] 04
+[T+540053280us][CH1-Dispenser] 04 64
+[T+540125417us][CH1-Dispenser] 05
+[T+540125282us][CH2-Pc    ] 05
+[T+540300412us][CH1-Dispenser] 06
+[T+540300281us][CH2-Pc    ] 06
+[T+540464307us][CH2-Pc    ] 01
+[T+540473280us][CH1-Dispenser] 01 61
+[T+540542281us][CH2-Pc    ] 02
+[T+540552280us][CH1-Dispenser] 02 62
+[T+540621280us][CH2-Pc    ] 03
+[T+540630903us][CH1-Dispenser] 03 63
+[T+540699280us][CH2-Pc    ] 04
+[T+540703310us][CH1-Dispenser] 04 64
+[T+540766413us][CH1-Dispenser] 05
+[T+540766281us][CH2-Pc    ] 05
+[T+540957415us][CH1-Dispenser] 06
+[T+540957281us][CH2-Pc    ] 06
+[T+541121305us][CH2-Pc    ] 01
+[T+541125309us][CH1-Dispenser] 01 61
+[T+541199281us][CH2-Pc    ] 02
+[T+541206288us][CH1-Dispenser] 02 62
+[T+541277280us][CH2-Pc    ] 03
+[T+541284730us][CH1-Dispenser] 03 63
+[T+541355280us][CH2-Pc    ] 04
+[T+541363890us][CH1-Dispenser] 04 64
+[T+541433416us][CH1-Dispenser] 05
+[T+541433281us][CH2-Pc    ] 05
+[T+541608414us][CH1-Dispenser] 06
+[T+541608281us][CH2-Pc    ] 06
+[T+541783280us][CH2-Pc    ] 01
+[T+541790281us][CH1-Dispenser] 01 61
+[T+541861280us][CH2-Pc    ] 02
+[T+541865318us][CH1-Dispenser] 02 62
+[T+541939281us][CH2-Pc    ] 03
+[T+541943310us][CH1-Dispenser] 03 63
+[T+542006281us][CH2-Pc    ] 04
+[T+542013288us][CH1-Dispenser] 04 64
+[T+542084415us][CH1-Dispenser] 05
+[T+542084281us][CH2-Pc    ] 05
+[T+542270416us][CH1-Dispenser] 06
+[T+542270281us][CH2-Pc    ] 06
+[T+542434306us][CH2-Pc    ] 01
+[T+542442701us][CH1-Dispenser] 01 61
+[T+542512280us][CH2-Pc    ] 02
+[T+542521281us][CH1-Dispenser] 02 62
+[T+542590280us][CH2-Pc    ] 03
+[T+542599933us][CH1-Dispenser] 03 63
+[T+542668280us][CH2-Pc    ] 04
+[T+542674280us][CH1-Dispenser] 04 64
+[T+542747415us][CH1-Dispenser] 05
+[T+542747281us][CH2-Pc    ] 05
+[T+542916415us][CH1-Dispenser] 06
+[T+542916281us][CH2-Pc    ] 06
+[T+543091280us][CH2-Pc    ] 01
+[T+543096280us][CH1-Dispenser] 01 61
+[T+543169281us][CH2-Pc    ] 02
+[T+543175886us][CH1-Dispenser] 02 62
+[T+543247305us][CH2-Pc    ] 03
+[T+543255321us][CH1-Dispenser] 03 63
+[T+543327321us][CH2-Pc    ] 04
+[T+543335721us][CH1-Dispenser] 04 64
+[T+543404414us][CH1-Dispenser] 05
+[T+543404281us][CH2-Pc    ] 05
+[T+543579413us][CH1-Dispenser] 06
+[T+543579281us][CH2-Pc    ] 06
+[T+543753280us][CH2-Pc    ] 01
+[T+543761321us][CH1-Dispenser] 01 61
+[T+543835309us][CH1-Dispenser] 02 62
+[T+543831280us][CH2-Pc    ] 02
+[T+543899306us][CH2-Pc    ] 03
+[T+543903309us][CH1-Dispenser] 03 63
+[T+543977280us][CH2-Pc    ] 04
+[T+543984887us][CH1-Dispenser] 04 64
+[T+544055430us][CH1-Dispenser] 05
+[T+544055289us][CH2-Pc    ] 05
+[T+544239414us][CH1-Dispenser] 06
+[T+544239281us][CH2-Pc    ] 06
+[T+544403304us][CH2-Pc    ] 01
+[T+544412287us][CH1-Dispenser] 01 61
+[T+544485310us][CH1-Dispenser] 02 62
+[T+544481280us][CH2-Pc    ] 02
+[T+544559280us][CH2-Pc    ] 03
+[T+544565452us][CH1-Dispenser] 03 63
+[T+544637304us][CH2-Pc    ] 04
+[T+544644918us][CH1-Dispenser] 04 64
+[T+544715412us][CH1-Dispenser] 05
+[T+544715281us][CH2-Pc    ] 05
+[T+544886413us][CH1-Dispenser] 06
+[T+544886281us][CH2-Pc    ] 06
+[T+545060280us][CH2-Pc    ] 01
+[T+545066288us][CH1-Dispenser] 01 61
+[T+545138306us][CH2-Pc    ] 02
+[T+545145280us][CH1-Dispenser] 02 62
+[T+545216280us][CH2-Pc    ] 03
+[T+545224929us][CH1-Dispenser] 03 63
+[T+545294280us][CH2-Pc    ] 04
+[T+545298309us][CH1-Dispenser] 04 64
+[T+545363330us][CH1-Dispenser] 05
+[T+545362282us][CH2-Pc    ] 05
+[T+545526414us][CH1-Dispenser] 06
+[T+545526281us][CH2-Pc    ] 06
+[T+545701280us][CH2-Pc    ] 01
+[T+545707280us][CH1-Dispenser] 01 61
+[T+545779305us][CH2-Pc    ] 02
+[T+545786921us][CH1-Dispenser] 02 62
+[T+545857281us][CH2-Pc    ] 03
+[T+545864288us][CH1-Dispenser] 03 63
+[T+545935280us][CH2-Pc    ] 04
+[T+545943321us][CH1-Dispenser] 04 64
+[T+546014412us][CH1-Dispenser] 05
+[T+546014281us][CH2-Pc    ] 05
+[T+546189415us][CH1-Dispenser] 06
+[T+546189281us][CH2-Pc    ] 06
+[T+546354280us][CH2-Pc    ] 01
+[T+546361281us][CH1-Dispenser] 01 61
+[T+546432280us][CH2-Pc    ] 02
+[T+546440939us][CH1-Dispenser] 02 62
+[T+546510280us][CH2-Pc    ] 03
+[T+546520284us][CH1-Dispenser] 03 63
+[T+546588306us][CH2-Pc    ] 04
+[T+546594927us][CH1-Dispenser] 04 64
+[T+546666414us][CH1-Dispenser] 05
+[T+546666283us][CH2-Pc    ] 05
+[T+546841415us][CH1-Dispenser] 06
+[T+546841281us][CH2-Pc    ] 06
+[T+547016280us][CH2-Pc    ] 01
+[T+547021280us][CH1-Dispenser] 01 61
+[T+547094280us][CH2-Pc    ] 02
+[T+547102978us][CH1-Dispenser] 02 62
+[T+547172280us][CH2-Pc    ] 03
+[T+547179892us][CH1-Dispenser] 03 63
+[T+547250281us][CH2-Pc    ] 04
+[T+547258321us][CH1-Dispenser] 04 64
+[T+547329414us][CH1-Dispenser] 05
+[T+547329281us][CH2-Pc    ] 05
+[T+547503413us][CH1-Dispenser] 06
+[T+547503281us][CH2-Pc    ] 06
+[T+547667306us][CH2-Pc    ] 01
+[T+547677281us][CH1-Dispenser] 01 61
+[T+547745306us][CH2-Pc    ] 02
+[T+547750280us][CH1-Dispenser] 02 62
+[T+547824280us][CH2-Pc    ] 03
+[T+547830281us][CH1-Dispenser] 03 63
+[T+547902305us][CH2-Pc    ] 04
+[T+547909288us][CH1-Dispenser] 04 64
+[T+547980412us][CH1-Dispenser] 05
+[T+547980281us][CH2-Pc    ] 05
+[T+548155417us][CH1-Dispenser] 06
+[T+548155281us][CH2-Pc    ] 06
+[T+548329280us][CH2-Pc    ] 01
+[T+548336288us][CH1-Dispenser] 01 61
+[T+548408304us][CH2-Pc    ] 02
+[T+548417280us][CH1-Dispenser] 02 62
+[T+548486280us][CH2-Pc    ] 03
+[T+548495385us][CH1-Dispenser] 03 63
+[T+548564281us][CH2-Pc    ] 04
+[T+548568310us][CH1-Dispenser] 04 64
+[T+548642414us][CH1-Dispenser] 05
+[T+548642281us][CH2-Pc    ] 05
+[T+548817414us][CH1-Dispenser] 06
+[T+548817281us][CH2-Pc    ] 06
+[T+548981281us][CH2-Pc    ] 01
+[T+548986281us][CH1-Dispenser] 01 61
+[T+549059280us][CH2-Pc    ] 02
+[T+549066288us][CH1-Dispenser] 02 62
+[T+549137280us][CH2-Pc    ] 03
+[T+549143280us][CH1-Dispenser] 03 63
+[T+549215306us][CH2-Pc    ] 04
+[T+549224280us][CH1-Dispenser] 04 64
+[T+549293414us][CH1-Dispenser] 05
+[T+549293282us][CH2-Pc    ] 05
+[T+549469122us][CH1-Dispenser] 06
+[T+549468980us][CH2-Pc    ] 06
+[T+549643414us][CH2-Pc    ] 01
+[T+549651321us][CH1-Dispenser] 01 61
+[T+549721280us][CH2-Pc    ] 02
+[T+549725310us][CH1-Dispenser] 02 62
+[T+549788280us][CH2-Pc    ] 03
+[T+549794289us][CH1-Dispenser] 03 63
+[T+549866306us][CH2-Pc    ] 04
+[T+549875903us][CH1-Dispenser] 04 64
+[T+549945412us][CH1-Dispenser] 05
+[T+549945281us][CH2-Pc    ] 05
+[T+550120412us][CH1-Dispenser] 06
+[T+550120281us][CH2-Pc    ] 06
+[T+550294280us][CH2-Pc    ] 01
+[T+550302305us][CH1-Dispenser] 01 61
+[T+550372280us][CH2-Pc    ] 02
+[T+550381280us][CH1-Dispenser] 02 62
+[T+550451281us][CH2-Pc    ] 03
+[T+550461280us][CH1-Dispenser] 03 63
+[T+550529304us][CH2-Pc    ] 04
+[T+550534890us][CH1-Dispenser] 04 64
+[T+550607414us][CH1-Dispenser] 05
+[T+550607281us][CH2-Pc    ] 05
+[T+550783413us][CH1-Dispenser] 06
+[T+550783281us][CH2-Pc    ] 06
+[T+550949281us][CH2-Pc    ] 01
+[T+550956288us][CH1-Dispenser] 01 61
+[T+551027280us][CH2-Pc    ] 02
+[T+551032923us][CH1-Dispenser] 02 62
+[T+551109309us][CH1-Dispenser] 03 63
+[T+551105280us][CH2-Pc    ] 03
+[T+551172280us][CH2-Pc    ] 04
+[T+551179280us][CH1-Dispenser] 04 64
+[T+551250413us][CH1-Dispenser] 05
+[T+551250281us][CH2-Pc    ] 05
+[T+551425414us][CH1-Dispenser] 06
+[T+551425281us][CH2-Pc    ] 06
+[T+551589280us][CH2-Pc    ] 01
+[T+551597305us][CH1-Dispenser] 01 61
+[T+551667280us][CH2-Pc    ] 02
+[T+551677590us][CH1-Dispenser] 02 62
+[T+551746281us][CH2-Pc    ] 03
+[T+551754411us][CH1-Dispenser] 03 63
+[T+551823281us][CH2-Pc    ] 04
+[T+551830288us][CH1-Dispenser] 04 64
+[T+551902414us][CH1-Dispenser] 05
+[T+551902281us][CH2-Pc    ] 05
+[T+552077412us][CH1-Dispenser] 06
+[T+552077281us][CH2-Pc    ] 06
+[T+552252280us][CH2-Pc    ] 01
+[T+552262763us][CH1-Dispenser] 01 61
+[T+552330305us][CH2-Pc    ] 02
+[T+552338305us][CH1-Dispenser] 02 62
+[T+552409280us][CH2-Pc    ] 03
+[T+552415281us][CH1-Dispenser] 03 63
+[T+552487305us][CH2-Pc    ] 04
+[T+552495322us][CH1-Dispenser] 04 64
+[T+552565581us][CH1-Dispenser] 05
+[T+552565448us][CH2-Pc    ] 05
+[T+552729416us][CH1-Dispenser] 06
+[T+552729281us][CH2-Pc    ] 06
+[T+552904281us][CH2-Pc    ] 01
+[T+552911288us][CH1-Dispenser] 01 61
+[T+552982280us][CH2-Pc    ] 02
+[T+552986309us][CH1-Dispenser] 02 62
+[T+553064309us][CH1-Dispenser] 03 63
+[T+553060280us][CH2-Pc    ] 03
+[T+553127283us][CH2-Pc    ] 04
+[T+553134280us][CH1-Dispenser] 04 64
+[T+553206415us][CH1-Dispenser] 05
+[T+553206281us][CH2-Pc    ] 05
+[T+553370414us][CH1-Dispenser] 06
+[T+553370281us][CH2-Pc    ] 06
+[T+553545280us][CH2-Pc    ] 01
+[T+553554330us][CH1-Dispenser] 01 61
+[T+553623281us][CH2-Pc    ] 02
+[T+553632280us][CH1-Dispenser] 02 62
+[T+553701280us][CH2-Pc    ] 03
+[T+553711281us][CH1-Dispenser] 03 63
+[T+553780280us][CH2-Pc    ] 04
+[T+553785280us][CH1-Dispenser] 04 64
+[T+553858412us][CH1-Dispenser] 05
+[T+553858281us][CH2-Pc    ] 05
+[T+554033412us][CH1-Dispenser] 06
+[T+554033281us][CH2-Pc    ] 06
+[T+554222280us][CH2-Pc    ] 01
+[T+554228281us][CH1-Dispenser] 01 61
+[T+554300305us][CH2-Pc    ] 02
+[T+554305281us][CH1-Dispenser] 02 62
+[T+554378280us][CH2-Pc    ] 03
+[T+554385301us][CH1-Dispenser] 03 63
+[T+554456280us][CH2-Pc    ] 04
+[T+554464305us][CH1-Dispenser] 04 64
+[T+554535413us][CH1-Dispenser] 05
+[T+554535281us][CH2-Pc    ] 05
+[T+554698418us][CH1-Dispenser] 06
+[T+554698281us][CH2-Pc    ] 06
+[T+554873280us][CH2-Pc    ] 01
+[T+554882280us][CH1-Dispenser] 01 61
+[T+554951280us][CH2-Pc    ] 02
+[T+554956280us][CH1-Dispenser] 02 62
+[T+555029281us][CH2-Pc    ] 03
+[T+555035923us][CH1-Dispenser] 03 63
+[T+555109280us][CH2-Pc    ] 04
+[T+555114280us][CH1-Dispenser] 04 64
+[T+555187412us][CH1-Dispenser] 05
+[T+555187281us][CH2-Pc    ] 05
+[T+555354413us][CH1-Dispenser] 06
+[T+555354281us][CH2-Pc    ] 06
+[T+555529280us][CH2-Pc    ] 01
+[T+555538922us][CH1-Dispenser] 01 61
+[T+555607280us][CH2-Pc    ] 02
+[T+555612280us][CH1-Dispenser] 02 62
+[T+555685280us][CH2-Pc    ] 03
+[T+555691281us][CH1-Dispenser] 03 63
+[T+555763305us][CH2-Pc    ] 04
+[T+555770288us][CH1-Dispenser] 04 64
+[T+555841414us][CH1-Dispenser] 05
+[T+555841282us][CH2-Pc    ] 05
+[T+556016412us][CH1-Dispenser] 06
+[T+556016281us][CH2-Pc    ] 06
+[T+556185280us][CH2-Pc    ] 01
+[T+556194281us][CH1-Dispenser] 01 61
+[T+556263280us][CH2-Pc    ] 02
+[T+556275321us][CH1-Dispenser] 02 62
+[T+556341280us][CH2-Pc    ] 03
+[T+556351280us][CH1-Dispenser] 03 63
+[T+556419305us][CH2-Pc    ] 04
+[T+556424280us][CH1-Dispenser] 04 64
+[T+556497412us][CH1-Dispenser] 05
+[T+556497281us][CH2-Pc    ] 05
+[T+556672414us][CH1-Dispenser] 06
+[T+556672281us][CH2-Pc    ] 06
+[T+556847280us][CH2-Pc    ] 01
+[T+556853288us][CH1-Dispenser] 01 61
+[T+556925305us][CH2-Pc    ] 02
+[T+556933281us][CH1-Dispenser] 02 62
+[T+557003280us][CH2-Pc    ] 03
+[T+557012280us][CH1-Dispenser] 03 63
+[T+557081280us][CH2-Pc    ] 04
+[T+557091285us][CH1-Dispenser] 04 64
+[T+557159413us][CH1-Dispenser] 05
+[T+557159281us][CH2-Pc    ] 05
+[T+557323416us][CH1-Dispenser] 06
+[T+557323282us][CH2-Pc    ] 06
+[T+557498281us][CH2-Pc    ] 01
+[T+557510281us][CH1-Dispenser] 01 61
+[T+557576280us][CH2-Pc    ] 02
+[T+557581896us][CH1-Dispenser] 02 62
+[T+557654280us][CH2-Pc    ] 03
+[T+557661280us][CH1-Dispenser] 03 63
+[T+557733304us][CH2-Pc    ] 04
+[T+557740930us][CH1-Dispenser] 04 64
+[T+557811412us][CH1-Dispenser] 05
+[T+557811281us][CH2-Pc    ] 05
+[T+557986412us][CH1-Dispenser] 06
+[T+557986281us][CH2-Pc    ] 06
+[T+558160281us][CH2-Pc    ] 01
+[T+558167288us][CH1-Dispenser] 01 61
+[T+558238280us][CH2-Pc    ] 02
+[T+558246337us][CH1-Dispenser] 02 62
+[T+558317280us][CH2-Pc    ] 03
+[T+558326074us][CH1-Dispenser] 03 63
+[T+558395280us][CH2-Pc    ] 04
+[T+558401281us][CH1-Dispenser] 04 64
+[T+558473413us][CH1-Dispenser] 05
+[T+558473281us][CH2-Pc    ] 05
+[T+558637414us][CH1-Dispenser] 06
+[T+558637281us][CH2-Pc    ] 06
+[T+558823281us][CH2-Pc    ] 01
+[T+558832280us][CH1-Dispenser] 01 61
+[T+558901280us][CH2-Pc    ] 02
+[T+558907288us][CH1-Dispenser] 02 62
+[T+558980280us][CH2-Pc    ] 03
+[T+558985280us][CH1-Dispenser] 03 63
+[T+559063280us][CH2-Pc    ] 04
+[T+559070948us][CH1-Dispenser] 04 64
+[T+559149411us][CH1-Dispenser] 05
+[T+559149281us][CH2-Pc    ] 05
+[T+559323415us][CH1-Dispenser] 06
+[T+559323281us][CH2-Pc    ] 06
+[T+559498280us][CH2-Pc    ] 01
+[T+559507280us][CH1-Dispenser] 01 61
+[T+559576280us][CH2-Pc    ] 02
+[T+559583938us][CH1-Dispenser] 02 62
+[T+559654281us][CH2-Pc    ] 03
+[T+559661288us][CH1-Dispenser] 03 63
+[T+559733281us][CH2-Pc    ] 04
+[T+559742925us][CH1-Dispenser] 04 64
+[T+559811412us][CH1-Dispenser] 05
+[T+559811281us][CH2-Pc    ] 05
+[T+559985414us][CH1-Dispenser] 06
+[T+559985281us][CH2-Pc    ] 06
+[T+560160280us][CH2-Pc    ] 01
+[T+560167281us][CH1-Dispenser] 01 61
+[T+560238280us][CH2-Pc    ] 02
+[T+560248285us][CH1-Dispenser] 02 62
+[T+560317280us][CH2-Pc    ] 03
+[T+560326281us][CH1-Dispenser] 03 63
+[T+560399316us][CH1-Dispenser] 04 64
+[T+560395280us][CH2-Pc    ] 04
+[T+560473413us][CH1-Dispenser] 05
+[T+560473281us][CH2-Pc    ] 05
+[T+560637414us][CH1-Dispenser] 06
+[T+560637281us][CH2-Pc    ] 06
+[T+560812280us][CH2-Pc    ] 01
+[T+560817280us][CH1-Dispenser] 01 61
+[T+560890280us][CH2-Pc    ] 02
+[T+560897281us][CH1-Dispenser] 02 62
+[T+560968280us][CH2-Pc    ] 03
+[T+560974281us][CH1-Dispenser] 03 63
+[T+561046306us][CH2-Pc    ] 04
+[T+561055280us][CH1-Dispenser] 04 64
+[T+561124415us][CH1-Dispenser] 05
+[T+561124282us][CH2-Pc    ] 05
+[T+561299412us][CH1-Dispenser] 06
+[T+561299281us][CH2-Pc    ] 06
+[T+561463307us][CH2-Pc    ] 01
+[T+561472280us][CH1-Dispenser] 01 61
+[T+561541280us][CH2-Pc    ] 02
+[T+561547280us][CH1-Dispenser] 02 62
+[T+561619306us][CH2-Pc    ] 03
+[T+561625280us][CH1-Dispenser] 03 63
+[T+561709310us][CH1-Dispenser] 04 64
+[T+561705304us][CH2-Pc    ] 04
+[T+561782414us][CH1-Dispenser] 05
+[T+561782282us][CH2-Pc    ] 05
+[T+561957415us][CH1-Dispenser] 06
+[T+561957281us][CH2-Pc    ] 06
+[T+562121306us][CH2-Pc    ] 01
+[T+562127280us][CH1-Dispenser] 01 61
+[T+562199306us][CH2-Pc    ] 02
+[T+562207884us][CH1-Dispenser] 02 62
+[T+562277280us][CH2-Pc    ] 03
+[T+562286576us][CH1-Dispenser] 03 63
+[T+562355281us][CH2-Pc    ] 04
+[T+562360281us][CH1-Dispenser] 04 64
+[T+562423416us][CH1-Dispenser] 05
+[T+562423281us][CH2-Pc    ] 05
+[T+562598413us][CH1-Dispenser] 06
+[T+562598281us][CH2-Pc    ] 06
+[T+562762307us][CH2-Pc    ] 01
+[T+562769299us][CH1-Dispenser] 01 61
+[T+562842280us][CH2-Pc    ] 02
+[T+562848280us][CH1-Dispenser] 02 62
+[T+562920304us][CH2-Pc    ] 03
+[T+562926281us][CH1-Dispenser] 03 63
+[T+562998305us][CH2-Pc    ] 04
+[T+563005296us][CH1-Dispenser] 04 64
+[T+563076414us][CH1-Dispenser] 05
+[T+563076281us][CH2-Pc    ] 05
+[T+563251413us][CH1-Dispenser] 06
+[T+563251281us][CH2-Pc    ] 06
+[T+563426281us][CH2-Pc    ] 01
+[T+563432921us][CH1-Dispenser] 01 61
+[T+563504305us][CH2-Pc    ] 02
+[T+563513280us][CH1-Dispenser] 02 62
+[T+563582280us][CH2-Pc    ] 03
+[T+563590305us][CH1-Dispenser] 03 63
+[T+563660280us][CH2-Pc    ] 04
+[T+563666280us][CH1-Dispenser] 04 64
+[T+563738412us][CH1-Dispenser] 05
+[T+563738281us][CH2-Pc    ] 05
+[T+563902416us][CH1-Dispenser] 06
+[T+563902283us][CH2-Pc    ] 06
+[T+564077280us][CH2-Pc    ] 01
+[T+564082280us][CH1-Dispenser] 01 61
+[T+564156320us][CH2-Pc    ] 02
+[T+564162280us][CH1-Dispenser] 02 62
+[T+564233280us][CH2-Pc    ] 03
+[T+564241971us][CH1-Dispenser] 03 63
+[T+564312281us][CH2-Pc    ] 04
+[T+564322482us][CH1-Dispenser] 04 64
+[T+564390418us][CH1-Dispenser] 05
+[T+564390282us][CH2-Pc    ] 05
+[T+564564412us][CH1-Dispenser] 06
+[T+564564281us][CH2-Pc    ] 06
+[T+564729281us][CH2-Pc    ] 01
+[T+564738280us][CH1-Dispenser] 01 61
+[T+564807280us][CH2-Pc    ] 02
+[T+564812919us][CH1-Dispenser] 02 62
+[T+564885280us][CH2-Pc    ] 03
+[T+564891280us][CH1-Dispenser] 03 63
+[T+564963304us][CH2-Pc    ] 04
+[T+564970281us][CH1-Dispenser] 04 64
+[T+565041412us][CH1-Dispenser] 05
+[T+565041281us][CH2-Pc    ] 05
+[T+565218415us][CH1-Dispenser] 06
+[T+565218281us][CH2-Pc    ] 06
+[T+565393280us][CH2-Pc    ] 01
+[T+565398280us][CH1-Dispenser] 01 61
+[T+565473281us][CH2-Pc    ] 02
+[T+565477309us][CH1-Dispenser] 02 62
+[T+565540281us][CH2-Pc    ] 03
+[T+565545281us][CH1-Dispenser] 03 63
+[T+565618280us][CH2-Pc    ] 04
+[T+565625288us][CH1-Dispenser] 04 64
+[T+565696413us][CH1-Dispenser] 05
+[T+565696281us][CH2-Pc    ] 05
+[T+565871415us][CH1-Dispenser] 06
+[T+565871281us][CH2-Pc    ] 06
+[T+566046280us][CH2-Pc    ] 01
+[T+566052280us][CH1-Dispenser] 01 61
+[T+566124305us][CH2-Pc    ] 02
+[T+566135280us][CH1-Dispenser] 02 62
+[T+566202281us][CH2-Pc    ] 03
+[T+566212281us][CH1-Dispenser] 03 63
+[T+566280305us][CH2-Pc    ] 04
+[T+566286288us][CH1-Dispenser] 04 64
+[T+566359281us][CH1-Dispenser] 05
+[T+566358280us][CH2-Pc    ] 05
+[T+566529413us][CH1-Dispenser] 06
+[T+566529281us][CH2-Pc    ] 06
+[T+566704280us][CH2-Pc    ] 01
+[T+566715280us][CH1-Dispenser] 01 61
+[T+566788281us][CH2-Pc    ] 02
+[T+566792309us][CH1-Dispenser] 02 62
+[T+566865281us][CH2-Pc    ] 03
+[T+566870281us][CH1-Dispenser] 03 63
+[T+566933280us][CH2-Pc    ] 04
+[T+566944280us][CH1-Dispenser] 04 64
+[T+567011413us][CH1-Dispenser] 05
+[T+567011281us][CH2-Pc    ] 05
+[T+567185414us][CH1-Dispenser] 06
+[T+567185281us][CH2-Pc    ] 06
+[T+567360280us][CH2-Pc    ] 01
+[T+567369911us][CH1-Dispenser] 01 61
+[T+567438280us][CH2-Pc    ] 02
+[T+567448490us][CH1-Dispenser] 02 62
+[T+567517281us][CH2-Pc    ] 03
+[T+567526281us][CH1-Dispenser] 03 63
+[T+567595280us][CH2-Pc    ] 04
+[T+567601288us][CH1-Dispenser] 04 64
+[T+567673415us][CH1-Dispenser] 05
+[T+567673281us][CH2-Pc    ] 05
+[T+567848416us][CH1-Dispenser] 06
+[T+567848281us][CH2-Pc    ] 06
+[T+568012305us][CH2-Pc    ] 01
+[T+568019288us][CH1-Dispenser] 01 61
+[T+568096280us][CH2-Pc    ] 02
+[T+568102280us][CH1-Dispenser] 02 62
+[T+568174304us][CH2-Pc    ] 03
+[T+568183716us][CH1-Dispenser] 03 63
+[T+568252281us][CH2-Pc    ] 04
+[T+568263281us][CH1-Dispenser] 04 64
+[T+568330412us][CH1-Dispenser] 05
+[T+568330281us][CH2-Pc    ] 05
+[T+568494412us][CH1-Dispenser] 06
+[T+568494281us][CH2-Pc    ] 06
+[T+568669280us][CH2-Pc    ] 01
+[T+568677321us][CH1-Dispenser] 01 61
+[T+568747280us][CH2-Pc    ] 02
+[T+568753280us][CH1-Dispenser] 02 62
+[T+568825306us][CH2-Pc    ] 03
+[T+568830280us][CH1-Dispenser] 03 63
+[T+568903280us][CH2-Pc    ] 04
+[T+568911305us][CH1-Dispenser] 04 64
+[T+568982411us][CH1-Dispenser] 05
+[T+568982281us][CH2-Pc    ] 05
+[T+569156416us][CH1-Dispenser] 06
+[T+569156281us][CH2-Pc    ] 06
+[T+569331280us][CH2-Pc    ] 01
+[T+569338919us][CH1-Dispenser] 01 61
+[T+569409284us][CH2-Pc    ] 02
+[T+569418280us][CH1-Dispenser] 02 62
+[T+569487280us][CH2-Pc    ] 03
+[T+569495321us][CH1-Dispenser] 03 63
+[T+569565445us][CH2-Pc    ] 04
+[T+569571280us][CH1-Dispenser] 04 64
+[T+569643563us][CH1-Dispenser] 05
+[T+569643429us][CH2-Pc    ] 05
+[T+569822420us][CH1-Dispenser] 06
+[T+569822282us][CH2-Pc    ] 06
+[T+569997280us][CH2-Pc    ] 01
+[T+570003280us][CH1-Dispenser] 01 61
+[T+570075307us][CH2-Pc    ] 02
+[T+570082921us][CH1-Dispenser] 02 62
+[T+570153281us][CH2-Pc    ] 03
+[T+570160288us][CH1-Dispenser] 03 63
+[T+570247280us][CH2-Pc    ] 04
+[T+570257288us][CH1-Dispenser] 04 64
+[T+570324413us][CH1-Dispenser] 05
+[T+570324281us][CH2-Pc    ] 05
+[T+570499413us][CH1-Dispenser] 06
+[T+570499281us][CH2-Pc    ] 06
+[T+570674304us][CH2-Pc    ] 01
+[T+570682902us][CH1-Dispenser] 01 61
+[T+570753290us][CH2-Pc    ] 02
+[T+570759270us][CH1-Dispenser] 02 62
+[T+570831581us][CH2-Pc    ] 03
+[T+570836280us][CH1-Dispenser] 03 63
+[T+570908306us][CH2-Pc    ] 04
+[T+570915289us][CH1-Dispenser] 04 64
+[T+570986412us][CH1-Dispenser] 05
+[T+570986281us][CH2-Pc    ] 05
+[T+571160412us][CH1-Dispenser] 06
+[T+571160281us][CH2-Pc    ] 06
+[T+571324304us][CH2-Pc    ] 01
+[T+571333281us][CH1-Dispenser] 01 61
+[T+571402280us][CH2-Pc    ] 02
+[T+571407280us][CH1-Dispenser] 02 62
+[T+571480280us][CH2-Pc    ] 03
+[T+571486280us][CH1-Dispenser] 03 63
+[T+571559280us][CH2-Pc    ] 04
+[T+571565281us][CH1-Dispenser] 04 64
+[T+571637414us][CH1-Dispenser] 05
+[T+571637281us][CH2-Pc    ] 05
+[T+571812413us][CH1-Dispenser] 06
+[T+571812281us][CH2-Pc    ] 06
+[T+571980304us][CH2-Pc    ] 01
+[T+571989280us][CH1-Dispenser] 01 61
+[T+572059281us][CH2-Pc    ] 02
+[T+572068280us][CH1-Dispenser] 02 62
+[T+572137280us][CH2-Pc    ] 03
+[T+572146281us][CH1-Dispenser] 03 63
+[T+572215280us][CH2-Pc    ] 04
+[T+572221280us][CH1-Dispenser] 04 64
+[T+572293412us][CH1-Dispenser] 05
+[T+572293281us][CH2-Pc    ] 05
+[T+572468413us][CH1-Dispenser] 06
+[T+572468281us][CH2-Pc    ] 06
+[T+572642280us][CH2-Pc    ] 01
+[T+572648280us][CH1-Dispenser] 01 61
+[T+572721281us][CH2-Pc    ] 02
+[T+572728288us][CH1-Dispenser] 02 62
+[T+572799280us][CH2-Pc    ] 03
+[T+572807321us][CH1-Dispenser] 03 63
+[T+572886280us][CH2-Pc    ] 04
+[T+572892024us][CH1-Dispenser] 04 64
+[T+572964416us][CH1-Dispenser] 05
+[T+572964281us][CH2-Pc    ] 05
+[T+573139413us][CH1-Dispenser] 06
+[T+573139282us][CH2-Pc    ] 06
+[T+573313280us][CH2-Pc    ] 01
+[T+573320680us][CH1-Dispenser] 01 61
+[T+573391280us][CH2-Pc    ] 02
+[T+573398280us][CH1-Dispenser] 02 62
+[T+573470281us][CH2-Pc    ] 03
+[T+573475280us][CH1-Dispenser] 03 63
+[T+573548281us][CH2-Pc    ] 04
+[T+573556549us][CH1-Dispenser] 04 64
+[T+573626413us][CH1-Dispenser] 05
+[T+573626281us][CH2-Pc    ] 05
+[T+573801414us][CH1-Dispenser] 06
+[T+573801281us][CH2-Pc    ] 06
+[T+573965306us][CH2-Pc    ] 01
+[T+573974280us][CH1-Dispenser] 01 61
+[T+574043281us][CH2-Pc    ] 02
+[T+574048281us][CH1-Dispenser] 02 62
+[T+574121283us][CH2-Pc    ] 03
+[T+574128508us][CH1-Dispenser] 03 63
+[T+574199280us][CH2-Pc    ] 04
+[T+574205280us][CH1-Dispenser] 04 64
+[T+574277412us][CH1-Dispenser] 05
+[T+574277281us][CH2-Pc    ] 05
+[T+574452415us][CH1-Dispenser] 06
+[T+574452281us][CH2-Pc    ] 06
+[T+574627280us][CH2-Pc    ] 01
+[T+574634944us][CH1-Dispenser] 01 61
+[T+574705281us][CH2-Pc    ] 02
+[T+574713883us][CH1-Dispenser] 02 62
+[T+574785306us][CH2-Pc    ] 03
+[T+574791280us][CH1-Dispenser] 03 63
+[T+574861280us][CH2-Pc    ] 04
+[T+574866280us][CH1-Dispenser] 04 64
+[T+574939424us][CH1-Dispenser] 05
+[T+574939288us][CH2-Pc    ] 05
+[T+575103414us][CH1-Dispenser] 06
+[T+575103282us][CH2-Pc    ] 06
+[T+575278280us][CH2-Pc    ] 01
+[T+575283919us][CH1-Dispenser] 01 61
+[T+575365280us][CH2-Pc    ] 02
+[T+575373321us][CH1-Dispenser] 02 62
+[T+575445305us][CH2-Pc    ] 03
+[T+575452924us][CH1-Dispenser] 03 63
+[T+575523281us][CH2-Pc    ] 04
+[T+575531322us][CH1-Dispenser] 04 64
+[T+575601413us][CH1-Dispenser] 05
+[T+575601281us][CH2-Pc    ] 05
+[T+575776413us][CH1-Dispenser] 06
+[T+575776281us][CH2-Pc    ] 06
+[T+575951280us][CH2-Pc    ] 01
+[T+575958781us][CH1-Dispenser] 01 61
+[T+576029280us][CH2-Pc    ] 02
+[T+576038887us][CH1-Dispenser] 02 62
+[T+576107280us][CH2-Pc    ] 03
+[T+576117319us][CH1-Dispenser] 03 63
+[T+576185304us][CH2-Pc    ] 04
+[T+576191281us][CH1-Dispenser] 04 64
+[T+576263413us][CH1-Dispenser] 05
+[T+576263281us][CH2-Pc    ] 05
+[T+576438416us][CH1-Dispenser] 06
+[T+576438281us][CH2-Pc    ] 06
+[T+576613281us][CH2-Pc    ] 01
+[T+576618281us][CH1-Dispenser] 01 61
+[T+576691280us][CH2-Pc    ] 02
+[T+576697288us][CH1-Dispenser] 02 72
+[T+576741412us][CH1-Dispenser] 22 D2 FF E9
+[T+576741281us][CH2-Pc    ] 22 FF E9
+[T+576755422us][CH1-Dispenser] FE
+[T+576755284us][CH2-Pc    ] FE
+[T+576768281us][CH1-Dispenser] E0
+[T+576767288us][CH2-Pc    ] E0
+[T+576780436us][CH1-Dispenser] E1
+[T+576780288us][CH2-Pc    ] E1
+[T+576793414us][CH1-Dispenser] E0
+[T+576793282us][CH2-Pc    ] E0
+[T+576809411us][CH1-Dispenser] FB
+[T+576809281us][CH2-Pc    ] FB
+[T+576823423us][CH1-Dispenser] EE
+[T+576823284us][CH2-Pc    ] EE
+[T+576835319us][CH2-Pc    ] F0
+[T+576866280us][CH1-Dispenser] F0 BA B0 B3 B2 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B2 C1 B9 8D 8A
+[T+576887280us][CH2-Pc    ] 22
+[T+576893281us][CH1-Dispenser] 22 D2
+[T+576920413us][CH1-Dispenser] FF E5
+[T+576920281us][CH2-Pc    ] FF E5
+[T+576933415us][CH1-Dispenser] F4
+[T+576933282us][CH2-Pc    ] F4
+[T+576946416us][CH1-Dispenser] F6
+[T+576946282us][CH2-Pc    ] F6
+[T+576959413us][CH1-Dispenser] E1
+[T+576959281us][CH2-Pc    ] E1
+[T+576972280us][CH1-Dispenser] F7
+[T+576971281us][CH2-Pc    ] F7
+[T+576984425us][CH1-Dispenser] E0
+[T+576984288us][CH2-Pc    ] E0
+[T+576997409us][CH1-Dispenser] E0
+[T+576997281us][CH2-Pc    ] E0
+[T+577009412us][CH1-Dispenser] E1
+[T+577009281us][CH2-Pc    ] E1
+[T+577022416us][CH1-Dispenser] E1
+[T+577022282us][CH2-Pc    ] E1
+[T+577035414us][CH1-Dispenser] FB
+[T+577035282us][CH2-Pc    ] FB
+[T+577048412us][CH1-Dispenser] ED
+[T+577048281us][CH2-Pc    ] ED
+[T+577060412us][CH1-Dispenser] F0
+[T+577060281us][CH2-Pc    ] F0
+[T+577149280us][CH2-Pc    ] 02
+[T+577159281us][CH1-Dispenser] 02 72
+[T+577177280us][CH2-Pc    ] 22
+[T+577184280us][CH1-Dispenser] 22 D2
+[T+577210416us][CH1-Dispenser] FF E5
+[T+577210281us][CH2-Pc    ] FF E5
+[T+577225420us][CH1-Dispenser] F2
+[T+577225284us][CH2-Pc    ] F2
+[T+577237425us][CH1-Dispenser] F8
+[T+577237285us][CH2-Pc    ] F8
+[T+577250287us][CH1-Dispenser] E0
+[T+577250426us][CH2-Pc    ] E0
+[T+577261416us][CH1-Dispenser] E0
+[T+577261283us][CH2-Pc    ] E0
+[T+577274422us][CH1-Dispenser] E0
+[T+577274284us][CH2-Pc    ] E0
+[T+577287421us][CH1-Dispenser] E4
+[T+577287284us][CH2-Pc    ] E4
+[T+577300421us][CH1-Dispenser] E0
+[T+577300283us][CH2-Pc    ] E0
+[T+577312410us][CH1-Dispenser] E0
+[T+577312281us][CH2-Pc    ] E0
+[T+577325412us][CH1-Dispenser] FB
+[T+577325281us][CH2-Pc    ] FB
+[T+577338414us][CH1-Dispenser] E3
+[T+577338282us][CH2-Pc    ] E3
+[T+577350522us][CH1-Dispenser] F0
+[T+577350384us][CH2-Pc    ] F0
+[T+577439280us][CH2-Pc    ] 02
+[T+577448935us][CH1-Dispenser] 02 72
+[T+577467415us][CH1-Dispenser] 12
+[T+577467282us][CH2-Pc    ] 12
+[T+577553280us][CH2-Pc    ] 02
+[T+577560288us][CH1-Dispenser] 02 92
+[T+577632304us][CH2-Pc    ] 03
+[T+577636309us][CH1-Dispenser] 03 63
+[T+577699280us][CH2-Pc    ] 04
+[T+577706282us][CH1-Dispenser] 04 64
+[T+577777412us][CH1-Dispenser] 05
+[T+577777281us][CH2-Pc    ] 05
+[T+577952416us][CH1-Dispenser] 06
+[T+577952282us][CH2-Pc    ] 06
+[T+578127280us][CH2-Pc    ] 01
+[T+578133281us][CH1-Dispenser] 01 61
+[T+578206280us][CH2-Pc    ] 02
+[T+578216586us][CH1-Dispenser] 02 92
+[T+578787281us][CH2-Pc    ] 03
+[T+578796284us][CH1-Dispenser] 03 63
+[T+578865280us][CH2-Pc    ] 04
+[T+578870926us][CH1-Dispenser] 04 64
+[T+578950412us][CH1-Dispenser] 05
+[T+578950281us][CH2-Pc    ] 05
+[T+579125414us][CH1-Dispenser] 06
+[T+579125281us][CH2-Pc    ] 06
+[T+579299280us][CH2-Pc    ] 01
+[T+579308280us][CH1-Dispenser] 01 61
+[T+579380280us][CH2-Pc    ] 02
+[T+579391322us][CH1-Dispenser] 02 92
+[T+579407304us][CH2-Pc    ] 62
+[T+579420280us][CH1-Dispenser] 62 E0 E0 E0 E0 E0 E0
+[T+579486280us][CH2-Pc    ] 03
+[T+579492281us][CH1-Dispenser] 03 63
+[T+579564306us][CH2-Pc    ] 04
+[T+579571289us][CH1-Dispenser] 04 64
+[T+579642413us][CH1-Dispenser] 05
+[T+579642281us][CH2-Pc    ] 05
+[T+579806413us][CH1-Dispenser] 06
+[T+579806281us][CH2-Pc    ] 06
+[T+579983280us][CH2-Pc    ] 01
+[T+579988280us][CH1-Dispenser] 01 61
+[T+580061280us][CH2-Pc    ] 02
+[T+580069962us][CH1-Dispenser] 02 92
+[T+580089304us][CH2-Pc    ] 62
+[T+580100287us][CH1-Dispenser] 62 E0 E0 E0 E0 E0 E0
+[T+580170280us][CH2-Pc    ] 03
+[T+580176280us][CH1-Dispenser] 03 63
+[T+580250280us][CH2-Pc    ] 04
+[T+580257393us][CH1-Dispenser] 04 64
+[T+580328413us][CH1-Dispenser] 05
+[T+580328281us][CH2-Pc    ] 05
+[T+580503413us][CH1-Dispenser] 06
+[T+580503281us][CH2-Pc    ] 06
+[T+580667304us][CH2-Pc    ] 01
+[T+580675311us][CH1-Dispenser] 01 61
+[T+580745280us][CH2-Pc    ] 02
+[T+580754280us][CH1-Dispenser] 02 92
+[T+580772280us][CH2-Pc    ] 62
+[T+580787280us][CH1-Dispenser] 62 E0 E0 E0 E0 E0 E0
+[T+580865280us][CH2-Pc    ] 03
+[T+580872887us][CH1-Dispenser] 03 63
+[T+580945280us][CH2-Pc    ] 04
+[T+580951280us][CH1-Dispenser] 04 64
+[T+581023412us][CH1-Dispenser] 05
+[T+581023281us][CH2-Pc    ] 05
+[T+581198416us][CH1-Dispenser] 06
+[T+581198281us][CH2-Pc    ] 06
+[T+581373280us][CH2-Pc    ] 01
+[T+581378280us][CH1-Dispenser] 01 61
+[T+581451280us][CH2-Pc    ] 02
+[T+581457280us][CH1-Dispenser] 02 92
+[T+581478280us][CH2-Pc    ] 62
+[T+581488288us][CH1-Dispenser] 62 E4 E5 E1 E0 E0 E0
+[T+581557280us][CH2-Pc    ] 03
+[T+581568285us][CH1-Dispenser] 03 63
+[T+581635281us][CH2-Pc    ] 04
+[T+581641923us][CH1-Dispenser] 04 64
+[T+581714413us][CH1-Dispenser] 05
+[T+581714281us][CH2-Pc    ] 05
+[T+581888419us][CH1-Dispenser] 06
+[T+581888281us][CH2-Pc    ] 06
+[T+582063280us][CH2-Pc    ] 01
+[T+582069288us][CH1-Dispenser] 01 61
+[T+582141305us][CH2-Pc    ] 02
+[T+582148280us][CH1-Dispenser] 02 92
+[T+582169280us][CH2-Pc    ] 62
+[T+582181309us][CH1-Dispenser] 62 E5 E7 E2 E0 E0 E0
+[T+582247280us][CH2-Pc    ] 03
+[T+582252280us][CH1-Dispenser] 03 63
+[T+582325281us][CH2-Pc    ] 04
+[T+582331914us][CH1-Dispenser] 04 64
+[T+582403413us][CH1-Dispenser] 05
+[T+582403281us][CH2-Pc    ] 05
+[T+582578412us][CH1-Dispenser] 06
+[T+582578281us][CH2-Pc    ] 06
+[T+582753280us][CH2-Pc    ] 01
+[T+582760280us][CH1-Dispenser] 01 61
+[T+582831288us][CH2-Pc    ] 02
+[T+582840204us][CH1-Dispenser] 02 92
+[T+582858365us][CH2-Pc    ] 62
+[T+582871288us][CH1-Dispenser] 62 E2 E5 E3 E0 E0 E0
+[T+582936280us][CH2-Pc    ] 03
+[T+582942280us][CH1-Dispenser] 03 63
+[T+583014305us][CH2-Pc    ] 04
+[T+583023280us][CH1-Dispenser] 04 64
+[T+583092411us][CH1-Dispenser] 05
+[T+583092282us][CH2-Pc    ] 05
+[T+583263413us][CH1-Dispenser] 06
+[T+583263281us][CH2-Pc    ] 06
+[T+583437280us][CH2-Pc    ] 01
+[T+583443288us][CH1-Dispenser] 01 61
+[T+583515304us][CH2-Pc    ] 02
+[T+583524886us][CH1-Dispenser] 02 92
+[T+583543281us][CH2-Pc    ] 62
+[T+583555315us][CH1-Dispenser] 62 E3 E7 E4 E0 E0 E0
+[T+583622281us][CH2-Pc    ] 03
+[T+583627281us][CH1-Dispenser] 03 63
+[T+583700280us][CH2-Pc    ] 04
+[T+583706288us][CH1-Dispenser] 04 64
+[T+583779412us][CH1-Dispenser] 05
+[T+583779281us][CH2-Pc    ] 05
+[T+583953418us][CH1-Dispenser] 06
+[T+583953282us][CH2-Pc    ] 06
+[T+584128280us][CH2-Pc    ] 01
+[T+584134280us][CH1-Dispenser] 01 61
+[T+584206305us][CH2-Pc    ] 02
+[T+584213919us][CH1-Dispenser] 02 92
+[T+584233304us][CH2-Pc    ] 62
+[T+584246280us][CH1-Dispenser] 62 E4 E9 E5 E0 E0 E0
+[T+584334304us][CH2-Pc    ] 03
+[T+584343281us][CH1-Dispenser] 03 63
+[T+584412280us][CH2-Pc    ] 04
+[T+584416309us][CH1-Dispenser] 04 64
+[T+584480413us][CH1-Dispenser] 05
+[T+584480281us][CH2-Pc    ] 05
+[T+584654410us][CH1-Dispenser] 06
+[T+584654281us][CH2-Pc    ] 06
+[T+584829280us][CH2-Pc    ] 01
+[T+584835281us][CH1-Dispenser] 01 61
+[T+584907306us][CH2-Pc    ] 02
+[T+584916282us][CH1-Dispenser] 02 92
+[T+584934281us][CH2-Pc    ] 62
+[T+584946304us][CH1-Dispenser] 62 E4 E0 E7 E0 E0 E0
+[T+585013280us][CH2-Pc    ] 03
+[T+585022926us][CH1-Dispenser] 03 63
+[T+585091280us][CH2-Pc    ] 04
+[T+585095309us][CH1-Dispenser] 04 64
+[T+585159412us][CH1-Dispenser] 05
+[T+585159281us][CH2-Pc    ] 05
+[T+585323414us][CH1-Dispenser] 06
+[T+585323282us][CH2-Pc    ] 06
+[T+585518280us][CH2-Pc    ] 01
+[T+585523280us][CH1-Dispenser] 01 61
+[T+585586281us][CH2-Pc    ] 02
+[T+585593288us][CH1-Dispenser] 02 92
+[T+585613305us][CH2-Pc    ] 62
+[T+585625304us][CH1-Dispenser] 62 E5 E2 E8 E0 E0 E0
+[T+585692280us][CH2-Pc    ] 03
+[T+585697280us][CH1-Dispenser] 03 63
+[T+585770280us][CH2-Pc    ] 04
+[T+585776280us][CH1-Dispenser] 04 64
+[T+585848415us][CH1-Dispenser] 05
+[T+585848281us][CH2-Pc    ] 05
+[T+586035412us][CH1-Dispenser] 06
+[T+586035281us][CH2-Pc    ] 06
+[T+586199305us][CH2-Pc    ] 01
+[T+586204282us][CH1-Dispenser] 01 61
+[T+586277280us][CH2-Pc    ] 02
+[T+586283289us][CH1-Dispenser] 02 92
+[T+586304283us][CH2-Pc    ] 62
+[T+586315280us][CH1-Dispenser] 62 E6 E4 E9 E0 E0 E0
+[T+586383304us][CH2-Pc    ] 03
+[T+586391924us][CH1-Dispenser] 03 63
+[T+586462281us][CH2-Pc    ] 04
+[T+586467281us][CH1-Dispenser] 04 64
+[T+586540412us][CH1-Dispenser] 05
+[T+586540281us][CH2-Pc    ] 05
+[T+586714419us][CH1-Dispenser] 06
+[T+586714281us][CH2-Pc    ] 06
+[T+586890304us][CH2-Pc    ] 01
+[T+586898305us][CH1-Dispenser] 01 61
+[T+586969280us][CH2-Pc    ] 02
+[T+586974280us][CH1-Dispenser] 02 92
+[T+586997281us][CH2-Pc    ] 62
+[T+587012403us][CH1-Dispenser] 62 E7 E6 E0 E1 E0 E0
+[T+587086281us][CH2-Pc    ] 03
+[T+587092910us][CH1-Dispenser] 03 63
+[T+587165280us][CH2-Pc    ] 04
+[T+587171280us][CH1-Dispenser] 04 64
+[T+587244413us][CH1-Dispenser] 05
+[T+587244281us][CH2-Pc    ] 05
+[T+587419280us][CH1-Dispenser] 06
+[T+587418281us][CH2-Pc    ] 06
+[T+587610281us][CH2-Pc    ] 01
+[T+587618348us][CH1-Dispenser] 01 61
+[T+587688280us][CH2-Pc    ] 02
+[T+587694288us][CH1-Dispenser] 02 92
+[T+587715280us][CH2-Pc    ] 62
+[T+587730281us][CH1-Dispenser] 62 E8 E8 E1 E1 E0 E0
+[T+587793280us][CH2-Pc    ] 03
+[T+587802890us][CH1-Dispenser] 03 63
+[T+587872280us][CH2-Pc    ] 04
+[T+587877280us][CH1-Dispenser] 04 64
+[T+587950413us][CH1-Dispenser] 05
+[T+587950281us][CH2-Pc    ] 05
+[T+588125414us][CH1-Dispenser] 06
+[T+588125281us][CH2-Pc    ] 06
+[T+588299280us][CH2-Pc    ] 01
+[T+588303309us][CH1-Dispenser] 01 61
+[T+588367306us][CH2-Pc    ] 02
+[T+588377280us][CH1-Dispenser] 02 92
+[T+588394281us][CH2-Pc    ] 62
+[T+588405281us][CH1-Dispenser] 62 E8 E9 E2 E1 E0 E0
+[T+588473305us][CH2-Pc    ] 03
+[T+588481305us][CH1-Dispenser] 03 63
+[T+588551280us][CH2-Pc    ] 04
+[T+588557284us][CH1-Dispenser] 04 64
+[T+588630415us][CH1-Dispenser] 05
+[T+588630281us][CH2-Pc    ] 05
+[T+588815415us][CH1-Dispenser] 06
+[T+588815282us][CH2-Pc    ] 06
+[T+588979304us][CH2-Pc    ] 01
+[T+588985281us][CH1-Dispenser] 01 61
+[T+589057305us][CH2-Pc    ] 02
+[T+589064288us][CH1-Dispenser] 02 92
+[T+589084305us][CH2-Pc    ] 62
+[T+589095281us][CH1-Dispenser] 62 E9 E1 E4 E1 E0 E0
+[T+589165280us][CH2-Pc    ] 03
+[T+589171455us][CH1-Dispenser] 03 63
+[T+589243304us][CH2-Pc    ] 04
+[T+589252280us][CH1-Dispenser] 04 64
+[T+589321414us][CH1-Dispenser] 05
+[T+589321282us][CH2-Pc    ] 05
+[T+589496414us][CH1-Dispenser] 06
+[T+589496282us][CH2-Pc    ] 06
+[T+589670281us][CH2-Pc    ] 01
+[T+589680280us][CH1-Dispenser] 01 61
+[T+589749280us][CH2-Pc    ] 02
+[T+589755280us][CH1-Dispenser] 02 92
+[T+589776280us][CH2-Pc    ] 62
+[T+589792281us][CH1-Dispenser] 62 E0 E4 E5 E1 E0 E0
+[T+589866281us][CH2-Pc    ] 03
+[T+589872880us][CH1-Dispenser] 03 63
+[T+589944305us][CH2-Pc    ] 04
+[T+589951568us][CH1-Dispenser] 04 64
+[T+590022414us][CH1-Dispenser] 05
+[T+590022281us][CH2-Pc    ] 05
+[T+590197421us][CH1-Dispenser] 06
+[T+590197282us][CH2-Pc    ] 06
+[T+590372280us][CH2-Pc    ] 01
+[T+590379281us][CH1-Dispenser] 01 61
+[T+590450280us][CH2-Pc    ] 02
+[T+590455280us][CH1-Dispenser] 02 92
+[T+590477280us][CH2-Pc    ] 62
+[T+590493304us][CH1-Dispenser] 62 E2 E7 E6 E1 E0 E0
+[T+590571309us][CH1-Dispenser] 03 63
+[T+590567443us][CH2-Pc    ] 03
+[T+590634280us][CH2-Pc    ] 04
+[T+590641280us][CH1-Dispenser] 04 64
+[T+590712416us][CH1-Dispenser] 05
+[T+590712282us][CH2-Pc    ] 05
+[T+590888281us][CH1-Dispenser] 06
+[T+590887282us][CH2-Pc    ] 06
+[T+591063280us][CH2-Pc    ] 01
+[T+591070916us][CH1-Dispenser] 01 61
+[T+591141281us][CH2-Pc    ] 02
+[T+591149495us][CH1-Dispenser] 02 92
+[T+591163281us][CH2-Pc    ] 62
+[T+591175304us][CH1-Dispenser] 62 E2 E8 E7 E1 E0 E0
+[T+591242280us][CH2-Pc    ] 03
+[T+591247280us][CH1-Dispenser] 03 63
+[T+591320280us][CH2-Pc    ] 04
+[T+591326280us][CH1-Dispenser] 04 64
+[T+591398412us][CH1-Dispenser] 05
+[T+591398281us][CH2-Pc    ] 05
+[T+591573416us][CH1-Dispenser] 06
+[T+591573282us][CH2-Pc    ] 06
+[T+591748281us][CH2-Pc    ] 01
+[T+591753281us][CH1-Dispenser] 01 61
+[T+591826280us][CH2-Pc    ] 02
+[T+591836281us][CH1-Dispenser] 02 92
+[T+591853280us][CH2-Pc    ] 62
+[T+591865316us][CH1-Dispenser] 62 E3 E0 E9 E1 E0 E0
+[T+591932280us][CH2-Pc    ] 03
+[T+591939282us][CH1-Dispenser] 03 63
+[T+592010280us][CH2-Pc    ] 04
+[T+592018321us][CH1-Dispenser] 04 64
+[T+592088411us][CH1-Dispenser] 05
+[T+592088281us][CH2-Pc    ] 05
+[T+592263412us][CH1-Dispenser] 06
+[T+592263281us][CH2-Pc    ] 06
+[T+592444280us][CH2-Pc    ] 01
+[T+592449280us][CH1-Dispenser] 01 61
+[T+592522280us][CH2-Pc    ] 02
+[T+592530933us][CH1-Dispenser] 02 92
+[T+592549280us][CH2-Pc    ] 62
+[T+592560281us][CH1-Dispenser] 62 E3 E1 E0 E2 E0 E0
+[T+592629280us][CH2-Pc    ] 03
+[T+592636340us][CH1-Dispenser] 03 73
+[T+592656311us][CH2-Pc    ] 23
+[T+592663288us][CH1-Dispenser] 23 D3
+[T+592677412us][CH1-Dispenser] FF
+[T+592677281us][CH2-Pc    ] FF
+[T+592703427us][CH1-Dispenser] E9 FE
+[T+592703287us][CH2-Pc    ] E9 FE
+[T+592716425us][CH1-Dispenser] E0
+[T+592716285us][CH2-Pc    ] E0
+[T+592729423us][CH1-Dispenser] E1
+[T+592729284us][CH2-Pc    ] E1
+[T+592742423us][CH1-Dispenser] E0
+[T+592742284us][CH2-Pc    ] E0
+[T+592754411us][CH1-Dispenser] FB
+[T+592754281us][CH2-Pc    ] FB
+[T+592782281us][CH2-Pc    ] EE F0
+[T+592809281us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+592873305us][CH2-Pc    ] 04
+[T+592881962us][CH1-Dispenser] 04 64
+[T+592952412us][CH1-Dispenser] 05
+[T+592952281us][CH2-Pc    ] 05
+[T+593126414us][CH1-Dispenser] 06
+[T+593126281us][CH2-Pc    ] 06
+[T+593290305us][CH2-Pc    ] 01
+[T+593300288us][CH1-Dispenser] 01 61
+[T+593369280us][CH2-Pc    ] 02
+[T+593374280us][CH1-Dispenser] 02 92
+[T+593396280us][CH2-Pc    ] 62
+[T+593411280us][CH1-Dispenser] 62 E7 E6 E1 E2 E0 E0
+[T+593475312us][CH2-Pc    ] 03
+[T+593481288us][CH1-Dispenser] 03 73
+[T+593502280us][CH2-Pc    ] 23
+[T+593508288us][CH1-Dispenser] 23 D3
+[T+593536409us][CH1-Dispenser] FF E9
+[T+593536281us][CH2-Pc    ] FF E9
+[T+593550425us][CH1-Dispenser] FE
+[T+593550285us][CH2-Pc    ] FE
+[T+593564282us][CH1-Dispenser] E0
+[T+593563283us][CH2-Pc    ] E0
+[T+593575428us][CH1-Dispenser] E1
+[T+593575289us][CH2-Pc    ] E1
+[T+593588281us][CH1-Dispenser] E0
+[T+593587282us][CH2-Pc    ] E0
+[T+593600411us][CH1-Dispenser] FB
+[T+593600281us][CH2-Pc    ] FB
+[T+593613416us][CH1-Dispenser] EE
+[T+593613282us][CH2-Pc    ] EE
+[T+593625313us][CH2-Pc    ] F0
+[T+593654280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+593728281us][CH2-Pc    ] 04
+[T+593739281us][CH1-Dispenser] 04 64
+[T+593806413us][CH1-Dispenser] 05
+[T+593806281us][CH2-Pc    ] 05
+[T+593981413us][CH1-Dispenser] 06
+[T+593981281us][CH2-Pc    ] 06
+[T+594156280us][CH2-Pc    ] 01
+[T+594164321us][CH1-Dispenser] 01 61
+[T+594234280us][CH2-Pc    ] 02
+[T+594240280us][CH1-Dispenser] 02 92
+[T+594261913us][CH2-Pc    ] 62
+[T+594274281us][CH1-Dispenser] 62 E0 E1 E3 E2 E0 E0
+[T+594339280us][CH2-Pc    ] 03
+[T+594348280us][CH1-Dispenser] 03 73
+[T+594367280us][CH2-Pc    ] 23
+[T+594375321us][CH1-Dispenser] 23 D3
+[T+594388412us][CH1-Dispenser] FF
+[T+594388281us][CH2-Pc    ] FF
+[T+594402423us][CH1-Dispenser] E9
+[T+594402284us][CH2-Pc    ] E9
+[T+594413428us][CH1-Dispenser] FE
+[T+594413289us][CH2-Pc    ] FE
+[T+594426427us][CH1-Dispenser] E0
+[T+594426288us][CH2-Pc    ] E0
+[T+594439422us][CH1-Dispenser] E1
+[T+594439283us][CH2-Pc    ] E1
+[T+594452424us][CH1-Dispenser] E0
+[T+594452284us][CH2-Pc    ] E0
+[T+594465423us][CH1-Dispenser] FB
+[T+594465284us][CH2-Pc    ] FB
+[T+594478418us][CH1-Dispenser] EE
+[T+594478284us][CH2-Pc    ] EE
+[T+594491280us][CH2-Pc    ] F0
+[T+594519304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+594592281us][CH2-Pc    ] 04
+[T+594596310us][CH1-Dispenser] 04 64
+[T+594660414us][CH1-Dispenser] 05
+[T+594660282us][CH2-Pc    ] 05
+[T+594825415us][CH1-Dispenser] 06
+[T+594825281us][CH2-Pc    ] 06
+[T+595004309us][CH1-Dispenser] 01 61
+[T+595000280us][CH2-Pc    ] 01
+[T+595078280us][CH2-Pc    ] 02
+[T+595085280us][CH1-Dispenser] 02 92
+[T+595105304us][CH2-Pc    ] 62
+[T+595115288us][CH1-Dispenser] 62 E3 E5 E4 E2 E0 E0
+[T+595183304us][CH2-Pc    ] 03
+[T+595193280us][CH1-Dispenser] 03 73
+[T+595211280us][CH2-Pc    ] 23
+[T+595218919us][CH1-Dispenser] 23 D3
+[T+595232412us][CH1-Dispenser] FF
+[T+595232281us][CH2-Pc    ] FF
+[T+595245429us][CH1-Dispenser] E9
+[T+595245288us][CH2-Pc    ] E9
+[T+595257288us][CH1-Dispenser] FE
+[T+595257425us][CH2-Pc    ] FE
+[T+595270420us][CH1-Dispenser] E0
+[T+595270284us][CH2-Pc    ] E0
+[T+595283562us][CH1-Dispenser] E1
+[T+595283415us][CH2-Pc    ] E1
+[T+595295417us][CH1-Dispenser] E0
+[T+595295284us][CH2-Pc    ] E0
+[T+595308424us][CH1-Dispenser] FB
+[T+595308285us][CH2-Pc    ] FB
+[T+595321420us][CH1-Dispenser] EE
+[T+595321283us][CH2-Pc    ] EE
+[T+595354281us][CH2-Pc    ] F0
+[T+595387280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+595454280us][CH2-Pc    ] 04
+[T+595465285us][CH1-Dispenser] 04 64
+[T+595533413us][CH1-Dispenser] 05
+[T+595533281us][CH2-Pc    ] 05
+[T+595697416us][CH1-Dispenser] 06
+[T+595697281us][CH2-Pc    ] 06
+[T+595871280us][CH2-Pc    ] 01
+[T+595881759us][CH1-Dispenser] 01 61
+[T+595950281us][CH2-Pc    ] 02
+[T+595955281us][CH1-Dispenser] 02 92
+[T+595977281us][CH2-Pc    ] 62
+[T+595991280us][CH1-Dispenser] 62 E7 E0 E6 E2 E0 E0
+[T+596056280us][CH2-Pc    ] 03
+[T+596061280us][CH1-Dispenser] 03 73
+[T+596083280us][CH2-Pc    ] 23
+[T+596105281us][CH1-Dispenser] 23 D3 FF
+[T+596105413us][CH2-Pc    ] FF
+[T+596118280us][CH1-Dispenser] E9
+[T+596117288us][CH2-Pc    ] E9
+[T+596130428us][CH1-Dispenser] FE
+[T+596130288us][CH2-Pc    ] FE
+[T+596143428us][CH1-Dispenser] E0
+[T+596143288us][CH2-Pc    ] E0
+[T+596156422us][CH1-Dispenser] E1
+[T+596156284us][CH2-Pc    ] E1
+[T+596180413us][CH1-Dispenser] E0 FB
+[T+596180281us][CH2-Pc    ] E0 FB
+[T+596194428us][CH1-Dispenser] EE
+[T+596194288us][CH2-Pc    ] EE
+[T+596206321us][CH2-Pc    ] F0
+[T+596234304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+596298304us][CH2-Pc    ] 04
+[T+596308285us][CH1-Dispenser] 04 64
+[T+596376417us][CH1-Dispenser] 05
+[T+596376282us][CH2-Pc    ] 05
+[T+596542413us][CH1-Dispenser] 06
+[T+596542281us][CH2-Pc    ] 06
+[T+596717281us][CH2-Pc    ] 01
+[T+596725468us][CH1-Dispenser] 01 61
+[T+596795280us][CH2-Pc    ] 02
+[T+596804281us][CH1-Dispenser] 02 92
+[T+596823280us][CH2-Pc    ] 62
+[T+596835321us][CH1-Dispenser] 62 E0 E5 E7 E2 E0 E0
+[T+596901280us][CH2-Pc    ] 03
+[T+596906280us][CH1-Dispenser] 03 73
+[T+596928280us][CH2-Pc    ] 23
+[T+596937280us][CH1-Dispenser] 23 D3
+[T+596950408us][CH1-Dispenser] FF
+[T+596950281us][CH2-Pc    ] FF
+[T+596962424us][CH1-Dispenser] E9
+[T+596962288us][CH2-Pc    ] E9
+[T+596976423us][CH1-Dispenser] FE
+[T+596976284us][CH2-Pc    ] FE
+[T+596988427us][CH1-Dispenser] E0
+[T+596988289us][CH2-Pc    ] E0
+[T+597000416us][CH1-Dispenser] E1
+[T+597000284us][CH2-Pc    ] E1
+[T+597025282us][CH1-Dispenser] E0 FB
+[T+597025417us][CH2-Pc    ] E0 FB
+[T+597038410us][CH1-Dispenser] EE
+[T+597038281us][CH2-Pc    ] EE
+[T+597051280us][CH2-Pc    ] F0
+[T+597079304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+597153280us][CH2-Pc    ] 04
+[T+597157309us][CH1-Dispenser] 04 64
+[T+597220412us][CH1-Dispenser] 05
+[T+597220281us][CH2-Pc    ] 05
+[T+597384414us][CH1-Dispenser] 06
+[T+597384281us][CH2-Pc    ] 06
+[T+597559281us][CH2-Pc    ] 01
+[T+597567695us][CH1-Dispenser] 01 61
+[T+597637280us][CH2-Pc    ] 02
+[T+597646281us][CH1-Dispenser] 02 92
+[T+597666304us][CH2-Pc    ] 62
+[T+597680280us][CH1-Dispenser] 62 E3 E9 E8 E2 E0 E0
+[T+597745281us][CH2-Pc    ] 03
+[T+597753922us][CH1-Dispenser] 03 73
+[T+597773304us][CH2-Pc    ] 23
+[T+597778927us][CH1-Dispenser] 23 D3
+[T+597794412us][CH1-Dispenser] FF
+[T+597794281us][CH2-Pc    ] FF
+[T+597807421us][CH1-Dispenser] E9
+[T+597807285us][CH2-Pc    ] E9
+[T+597820424us][CH1-Dispenser] FE
+[T+597820285us][CH2-Pc    ] FE
+[T+597833425us][CH1-Dispenser] E0
+[T+597833285us][CH2-Pc    ] E0
+[T+597845422us][CH1-Dispenser] E1
+[T+597845284us][CH2-Pc    ] E1
+[T+597858424us][CH1-Dispenser] E0
+[T+597858284us][CH2-Pc    ] E0
+[T+597871416us][CH1-Dispenser] FB
+[T+597871282us][CH2-Pc    ] FB
+[T+597896280us][CH2-Pc    ] EE F0
+[T+597925281us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+597998280us][CH2-Pc    ] 04
+[T+598007906us][CH1-Dispenser] 04 64
+[T+598076412us][CH1-Dispenser] 05
+[T+598076281us][CH2-Pc    ] 05
+[T+598251414us][CH1-Dispenser] 06
+[T+598251281us][CH2-Pc    ] 06
+[T+598415305us][CH2-Pc    ] 01
+[T+598425322us][CH1-Dispenser] 01 61
+[T+598494281us][CH2-Pc    ] 02
+[T+598499281us][CH1-Dispenser] 02 92
+[T+598521829us][CH2-Pc    ] 62
+[T+598537305us][CH1-Dispenser] 62 E7 E4 E0 E3 E0 E0
+[T+598610280us][CH2-Pc    ] 03
+[T+598616280us][CH1-Dispenser] 03 73
+[T+598649412us][CH1-Dispenser] 23 D3 FF
+[T+598649281us][CH2-Pc    ] 23 FF
+[T+598691412us][CH1-Dispenser] E9 FE
+[T+598691281us][CH2-Pc    ] E9 FE
+[T+598705423us][CH1-Dispenser] E0
+[T+598705285us][CH2-Pc    ] E0
+[T+598718423us][CH1-Dispenser] E1
+[T+598718284us][CH2-Pc    ] E1
+[T+598731281us][CH1-Dispenser] E0
+[T+598730283us][CH2-Pc    ] E0
+[T+598742422us][CH1-Dispenser] FB
+[T+598742288us][CH2-Pc    ] FB
+[T+598755417us][CH1-Dispenser] EE
+[T+598755283us][CH2-Pc    ] EE
+[T+598769281us][CH2-Pc    ] F0
+[T+598795281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+598866281us][CH2-Pc    ] 04
+[T+598872887us][CH1-Dispenser] 04 64
+[T+598945412us][CH1-Dispenser] 05
+[T+598945281us][CH2-Pc    ] 05
+[T+599119414us][CH1-Dispenser] 06
+[T+599119281us][CH2-Pc    ] 06
+[T+599294281us][CH2-Pc    ] 01
+[T+599299281us][CH1-Dispenser] 01 61
+[T+599373280us][CH2-Pc    ] 02
+[T+599393280us][CH2-Pc    ] 62
+[T+599406280us][CH1-Dispenser] 02 92 62 E0 E9 E1 E3 E0 E0
+[T+599472280us][CH2-Pc    ] 03
+[T+599479288us][CH1-Dispenser] 03 73
+[T+599499306us][CH2-Pc    ] 23
+[T+599508280us][CH1-Dispenser] 23 D3
+[T+599521413us][CH1-Dispenser] FF
+[T+599521281us][CH2-Pc    ] FF
+[T+599534428us][CH1-Dispenser] E9
+[T+599534289us][CH2-Pc    ] E9
+[T+599546288us][CH1-Dispenser] FE
+[T+599546428us][CH2-Pc    ] FE
+[T+599559427us][CH1-Dispenser] E0
+[T+599559288us][CH2-Pc    ] E0
+[T+599572427us][CH1-Dispenser] E1
+[T+599572288us][CH2-Pc    ] E1
+[T+599584427us][CH1-Dispenser] E0
+[T+599584288us][CH2-Pc    ] E0
+[T+599597420us][CH1-Dispenser] FB
+[T+599597284us][CH2-Pc    ] FB
+[T+599622280us][CH2-Pc    ] EE F0
+[T+599651280us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+599718281us][CH2-Pc    ] 04
+[T+599723281us][CH1-Dispenser] 04 64
+[T+599796416us][CH1-Dispenser] 05
+[T+599796281us][CH2-Pc    ] 05
+[T+599971415us][CH1-Dispenser] 06
+[T+599971281us][CH2-Pc    ] 06
+[T+600135304us][CH2-Pc    ] 01
+[T+600140280us][CH1-Dispenser] 01 61
+[T+600213281us][CH2-Pc    ] 02
+[T+600219877us][CH1-Dispenser] 02 92
+[T+600241280us][CH2-Pc    ] 62
+[T+600257304us][CH1-Dispenser] 62 E4 E4 E3 E3 E0 E0
+[T+600330280us][CH2-Pc    ] 03
+[T+600339280us][CH1-Dispenser] 03 73
+[T+600357280us][CH2-Pc    ] 23
+[T+600362280us][CH1-Dispenser] 23 D3
+[T+600378412us][CH1-Dispenser] FF
+[T+600378281us][CH2-Pc    ] FF
+[T+600391427us][CH1-Dispenser] E9
+[T+600391289us][CH2-Pc    ] E9
+[T+600404428us][CH1-Dispenser] FE
+[T+600404288us][CH2-Pc    ] FE
+[T+600416422us][CH1-Dispenser] E0
+[T+600416288us][CH2-Pc    ] E0
+[T+600430281us][CH1-Dispenser] E1
+[T+600429283us][CH2-Pc    ] E1
+[T+600442493us][CH1-Dispenser] E0
+[T+600442352us][CH2-Pc    ] E0
+[T+600455424us][CH1-Dispenser] FB
+[T+600455286us][CH2-Pc    ] FB
+[T+600468425us][CH1-Dispenser] EE
+[T+600468285us][CH2-Pc    ] EE
+[T+600480291us][CH2-Pc    ] F0
+[T+600510280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+600581280us][CH2-Pc    ] 04
+[T+600588281us][CH1-Dispenser] 04 64
+[T+600660414us][CH1-Dispenser] 05
+[T+600660281us][CH2-Pc    ] 05
+[T+600823415us][CH1-Dispenser] 06
+[T+600823281us][CH2-Pc    ] 06
+[T+600994281us][CH2-Pc    ] 01
+[T+601000917us][CH1-Dispenser] 01 61
+[T+601072306us][CH2-Pc    ] 02
+[T+601079289us][CH1-Dispenser] 02 92
+[T+601099307us][CH2-Pc    ] 62
+[T+601110280us][CH1-Dispenser] 62 E7 E8 E4 E3 E0 E0
+[T+601177280us][CH2-Pc    ] 03
+[T+601182280us][CH1-Dispenser] 03 73
+[T+601204280us][CH2-Pc    ] 23
+[T+601213884us][CH1-Dispenser] 23 D3
+[T+601238412us][CH1-Dispenser] FF E9
+[T+601238281us][CH2-Pc    ] FF E9
+[T+601251424us][CH1-Dispenser] FE
+[T+601251285us][CH2-Pc    ] FE
+[T+601264421us][CH1-Dispenser] E0
+[T+601264284us][CH2-Pc    ] E0
+[T+601277411us][CH1-Dispenser] E1
+[T+601277281us][CH2-Pc    ] E1
+[T+601290123us][CH1-Dispenser] E0
+[T+601289976us][CH2-Pc    ] E0
+[T+601302414us][CH1-Dispenser] FB
+[T+601302282us][CH2-Pc    ] FB
+[T+601315410us][CH1-Dispenser] EE
+[T+601315281us][CH2-Pc    ] EE
+[T+601327328us][CH2-Pc    ] F0
+[T+601355304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+601419304us][CH2-Pc    ] 04
+[T+601427305us][CH1-Dispenser] 04 64
+[T+601497414us][CH1-Dispenser] 05
+[T+601497281us][CH2-Pc    ] 05
+[T+601672417us][CH1-Dispenser] 06
+[T+601672283us][CH2-Pc    ] 06
+[T+601847280us][CH2-Pc    ] 01
+[T+601856280us][CH1-Dispenser] 01 61
+[T+601925281us][CH2-Pc    ] 02
+[T+601930281us][CH1-Dispenser] 02 92
+[T+601960280us][CH2-Pc    ] 62
+[T+601970679us][CH1-Dispenser] 62 E7 E9 E5 E3 E0 E0
+[T+602038305us][CH2-Pc    ] 03
+[T+602042309us][CH1-Dispenser] 03 73
+[T+602055280us][CH2-Pc    ] 23
+[T+602063321us][CH1-Dispenser] 23 D3
+[T+602076419us][CH1-Dispenser] FF
+[T+602076282us][CH2-Pc    ] FF
+[T+602090424us][CH1-Dispenser] E9
+[T+602090285us][CH2-Pc    ] E9
+[T+602102286us][CH1-Dispenser] FE
+[T+602102425us][CH2-Pc    ] FE
+[T+602115281us][CH1-Dispenser] E0
+[T+602114282us][CH2-Pc    ] E0
+[T+602128424us][CH1-Dispenser] E1
+[T+602128286us][CH2-Pc    ] E1
+[T+602151413us][CH1-Dispenser] E0
+[T+602151281us][CH2-Pc    ] E0
+[T+602183428us][CH1-Dispenser] FB EE
+[T+602183288us][CH2-Pc    ] FB EE
+[T+602197281us][CH2-Pc    ] F0
+[T+602225305us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+602297305us][CH2-Pc    ] 04
+[T+602303280us][CH1-Dispenser] 04 64
+[T+602375412us][CH1-Dispenser] 05
+[T+602375281us][CH2-Pc    ] 05
+[T+602540414us][CH1-Dispenser] 06
+[T+602540281us][CH2-Pc    ] 06
+[T+602715280us][CH2-Pc    ] 01
+[T+602724559us][CH1-Dispenser] 01 61
+[T+602793281us][CH2-Pc    ] 02
+[T+602799923us][CH1-Dispenser] 02 92
+[T+602815306us][CH2-Pc    ] 62
+[T+602827304us][CH1-Dispenser] 62 E9 E1 E6 E3 E0 E0
+[T+602893281us][CH2-Pc    ] 03
+[T+602898919us][CH1-Dispenser] 03 73
+[T+602920280us][CH2-Pc    ] 23
+[T+602928321us][CH1-Dispenser] 23 D3
+[T+602942413us][CH1-Dispenser] FF
+[T+602942281us][CH2-Pc    ] FF
+[T+602954413us][CH1-Dispenser] E9
+[T+602954281us][CH2-Pc    ] E9
+[T+602967415us][CH1-Dispenser] FE
+[T+602967282us][CH2-Pc    ] FE
+[T+602980410us][CH1-Dispenser] E0
+[T+602980281us][CH2-Pc    ] E0
+[T+602993280us][CH1-Dispenser] E1
+[T+602992288us][CH2-Pc    ] E1
+[T+603005288us][CH1-Dispenser] E0
+[T+603005428us][CH2-Pc    ] E0
+[T+603018290us][CH1-Dispenser] FB
+[T+603018427us][CH2-Pc    ] FB
+[T+603066304us][CH2-Pc    ] EE F0
+[T+603097566us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+603168280us][CH2-Pc    ] 04
+[T+603173280us][CH1-Dispenser] 04 64
+[T+603246413us][CH1-Dispenser] 05
+[T+603246281us][CH2-Pc    ] 05
+[T+603421415us][CH1-Dispenser] 06
+[T+603421281us][CH2-Pc    ] 06
+[T+603596280us][CH2-Pc    ] 01
+[T+603605281us][CH1-Dispenser] 01 61
+[T+603674280us][CH2-Pc    ] 02
+[T+603679280us][CH1-Dispenser] 02 92
+[T+603701280us][CH2-Pc    ] 62
+[T+603715281us][CH1-Dispenser] 62 E2 E5 E6 E3 E0 E0
+[T+603779305us][CH2-Pc    ] 03
+[T+603788876us][CH1-Dispenser] 03 73
+[T+603807280us][CH2-Pc    ] 23
+[T+603813280us][CH1-Dispenser] 23 D3
+[T+603828412us][CH1-Dispenser] FF
+[T+603828281us][CH2-Pc    ] FF
+[T+603841422us][CH1-Dispenser] E9
+[T+603841288us][CH2-Pc    ] E9
+[T+603854421us][CH1-Dispenser] FE
+[T+603854284us][CH2-Pc    ] FE
+[T+603866765us][CH1-Dispenser] E0
+[T+603866625us][CH2-Pc    ] E0
+[T+603879410us][CH1-Dispenser] E1
+[T+603879281us][CH2-Pc    ] E1
+[T+603904413us][CH1-Dispenser] E0 FB
+[T+603904282us][CH2-Pc    ] E0 FB
+[T+603917418us][CH1-Dispenser] EE
+[T+603917284us][CH2-Pc    ] EE
+[T+603930281us][CH2-Pc    ] F0
+[T+603961280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+604031280us][CH2-Pc    ] 04
+[T+604038281us][CH1-Dispenser] 04 64
+[T+604110413us][CH1-Dispenser] 05
+[T+604110282us][CH2-Pc    ] 05
+[T+604286611us][CH1-Dispenser] 06
+[T+604286471us][CH2-Pc    ] 06
+[T+604449280us][CH2-Pc    ] 01
+[T+604456932us][CH1-Dispenser] 01 61
+[T+604527281us][CH2-Pc    ] 02
+[T+604536280us][CH1-Dispenser] 02 92
+[T+604554281us][CH2-Pc    ] 62
+[T+604566305us][CH1-Dispenser] 62 E5 E8 E6 E3 E0 E0
+[T+604632280us][CH2-Pc    ] 03
+[T+604640321us][CH1-Dispenser] 03 73
+[T+604659280us][CH2-Pc    ] 23
+[T+604667321us][CH1-Dispenser] 23 D3
+[T+604681413us][CH1-Dispenser] FF
+[T+604681281us][CH2-Pc    ] FF
+[T+604693413us][CH1-Dispenser] E9
+[T+604693281us][CH2-Pc    ] E9
+[T+604706420us][CH1-Dispenser] FE
+[T+604706283us][CH2-Pc    ] FE
+[T+604719428us][CH1-Dispenser] E0
+[T+604719289us][CH2-Pc    ] E0
+[T+604732427us][CH1-Dispenser] E1
+[T+604732288us][CH2-Pc    ] E1
+[T+604744424us][CH1-Dispenser] E0
+[T+604744288us][CH2-Pc    ] E0
+[T+604757410us][CH1-Dispenser] FB
+[T+604757281us][CH2-Pc    ] FB
+[T+604770428us][CH1-Dispenser] EE
+[T+604770289us][CH2-Pc    ] EE
+[T+604783280us][CH2-Pc    ] F0
+[T+604811305us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+604878281us][CH2-Pc    ] 04
+[T+604883281us][CH1-Dispenser] 04 64
+[T+604956414us][CH1-Dispenser] 05
+[T+604956281us][CH2-Pc    ] 05
+[T+605120414us][CH1-Dispenser] 06
+[T+605120282us][CH2-Pc    ] 06
+[T+605310281us][CH2-Pc    ] 01
+[T+605316928us][CH1-Dispenser] 01 61
+[T+605392306us][CH2-Pc    ] 02
+[T+605403281us][CH1-Dispenser] 02 92
+[T+605419306us][CH2-Pc    ] 62
+[T+605432280us][CH1-Dispenser] 62 E9 E2 E7 E3 E0 E0
+[T+605497280us][CH2-Pc    ] 03
+[T+605503288us][CH1-Dispenser] 03 73
+[T+605525280us][CH2-Pc    ] 23
+[T+605533305us][CH1-Dispenser] 23 D3
+[T+605546417us][CH1-Dispenser] FF
+[T+605546283us][CH2-Pc    ] FF
+[T+605559427us][CH1-Dispenser] E9
+[T+605559288us][CH2-Pc    ] E9
+[T+605571428us][CH1-Dispenser] FE
+[T+605571288us][CH2-Pc    ] FE
+[T+605584413us][CH1-Dispenser] E0
+[T+605584281us][CH2-Pc    ] E0
+[T+605597430us][CH1-Dispenser] E1
+[T+605597290us][CH2-Pc    ] E1
+[T+605610483us][CH1-Dispenser] E0
+[T+605610343us][CH2-Pc    ] E0
+[T+605622458us][CH1-Dispenser] FB
+[T+605622318us][CH2-Pc    ] FB
+[T+605653280us][CH2-Pc    ] EE F0
+[T+605681304us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+605750280us][CH2-Pc    ] 04
+[T+605757288us][CH1-Dispenser] 04 64
+[T+605828413us][CH1-Dispenser] 05
+[T+605828281us][CH2-Pc    ] 05
+[T+606003412us][CH1-Dispenser] 06
+[T+606003281us][CH2-Pc    ] 06
+[T+606167305us][CH2-Pc    ] 01
+[T+606175308us][CH1-Dispenser] 01 61
+[T+606245280us][CH2-Pc    ] 02
+[T+606250280us][CH1-Dispenser] 02 92
+[T+606273280us][CH2-Pc    ] 62
+[T+606287280us][CH1-Dispenser] 62 E3 E7 E7 E3 E0 E0
+[T+606351305us][CH2-Pc    ] 03
+[T+606357880us][CH1-Dispenser] 03 73
+[T+606378281us][CH2-Pc    ] 23
+[T+606382320us][CH1-Dispenser] 23 D3
+[T+606400416us][CH1-Dispenser] FF
+[T+606400281us][CH2-Pc    ] FF
+[T+606412413us][CH1-Dispenser] E9
+[T+606412281us][CH2-Pc    ] E9
+[T+606425416us][CH1-Dispenser] FE
+[T+606425281us][CH2-Pc    ] FE
+[T+606438410us][CH1-Dispenser] E0
+[T+606438281us][CH2-Pc    ] E0
+[T+606450427us][CH1-Dispenser] E1
+[T+606450288us][CH2-Pc    ] E1
+[T+606463427us][CH1-Dispenser] E0
+[T+606463289us][CH2-Pc    ] E0
+[T+606476626us][CH1-Dispenser] FB
+[T+606476288us][CH2-Pc    ] FB
+[T+606489280us][CH1-Dispenser] EE
+[T+606488288us][CH2-Pc    ] EE
+[T+606501340us][CH2-Pc    ] F0
+[T+606530281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+606603280us][CH2-Pc    ] 04
+[T+606608280us][CH1-Dispenser] 04 64
+[T+606681413us][CH1-Dispenser] 05
+[T+606681281us][CH2-Pc    ] 05
+[T+606856416us][CH1-Dispenser] 06
+[T+606856282us][CH2-Pc    ] 06
+[T+607025280us][CH2-Pc    ] 01
+[T+607031288us][CH1-Dispenser] 01 61
+[T+607104280us][CH2-Pc    ] 02
+[T+607110280us][CH1-Dispenser] 02 92
+[T+607131280us][CH2-Pc    ] 62
+[T+607147304us][CH1-Dispenser] 62 E6 E0 E8 E3 E0 E0
+[T+607225281us][CH2-Pc    ] 03
+[T+607233802us][CH1-Dispenser] 03 73
+[T+607252281us][CH2-Pc    ] 23
+[T+607258883us][CH1-Dispenser] 23 D3
+[T+607274415us][CH1-Dispenser] FF
+[T+607274281us][CH2-Pc    ] FF
+[T+607287426us][CH1-Dispenser] E9
+[T+607287287us][CH2-Pc    ] E9
+[T+607300428us][CH1-Dispenser] FE
+[T+607300288us][CH2-Pc    ] FE
+[T+607312427us][CH1-Dispenser] E0
+[T+607312288us][CH2-Pc    ] E0
+[T+607324429us][CH1-Dispenser] E1
+[T+607324290us][CH2-Pc    ] E1
+[T+607346415us][CH1-Dispenser] E0
+[T+607346282us][CH2-Pc    ] E0
+[T+607367412us][CH1-Dispenser] FB
+[T+607367281us][CH2-Pc    ] FB
+[T+607380412us][CH1-Dispenser] EE
+[T+607380281us][CH2-Pc    ] EE
+[T+607393356us][CH2-Pc    ] F0
+[T+607420280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+607513281us][CH2-Pc    ] 04
+[T+607518281us][CH1-Dispenser] 04 64
+[T+607591414us][CH1-Dispenser] 05
+[T+607591282us][CH2-Pc    ] 05
+[T+607766414us][CH1-Dispenser] 06
+[T+607766281us][CH2-Pc    ] 06
+[T+607941280us][CH2-Pc    ] 01
+[T+607945309us][CH1-Dispenser] 01 61
+[T+608019280us][CH2-Pc    ] 02
+[T+608024280us][CH1-Dispenser] 02 92
+[T+608046280us][CH2-Pc    ] 62
+[T+608061608us][CH1-Dispenser] 62 E9 E3 E8 E3 E0 E0
+[T+608138280us][CH2-Pc    ] 03
+[T+608143914us][CH1-Dispenser] 03 73
+[T+608165280us][CH2-Pc    ] 23
+[T+608173321us][CH1-Dispenser] 23 D3
+[T+608187427us][CH1-Dispenser] FF
+[T+608187289us][CH2-Pc    ] FF
+[T+608200416us][CH1-Dispenser] E9
+[T+608200282us][CH2-Pc    ] E9
+[T+608212424us][CH1-Dispenser] FE
+[T+608212284us][CH2-Pc    ] FE
+[T+608225419us][CH1-Dispenser] E0
+[T+608225283us][CH2-Pc    ] E0
+[T+608237419us][CH1-Dispenser] E1
+[T+608237284us][CH2-Pc    ] E1
+[T+608250280us][CH1-Dispenser] E0
+[T+608251281us][CH2-Pc    ] E0
+[T+608264281us][CH1-Dispenser] FB
+[T+608263290us][CH2-Pc    ] FB
+[T+608276422us][CH1-Dispenser] EE
+[T+608276284us][CH2-Pc    ] EE
+[T+608288305us][CH2-Pc    ] F0
+[T+608316304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+608380305us][CH2-Pc    ] 04
+[T+608388321us][CH1-Dispenser] 04 64
+[T+608458412us][CH1-Dispenser] 05
+[T+608458281us][CH2-Pc    ] 05
+[T+608634414us][CH1-Dispenser] 06
+[T+608634281us][CH2-Pc    ] 06
+[T+608809280us][CH2-Pc    ] 01
+[T+608814280us][CH1-Dispenser] 01 61
+[T+608904309us][CH1-Dispenser] 02 92
+[T+608900280us][CH2-Pc    ] 02
+[T+608927280us][CH2-Pc    ] 62
+[T+608943307us][CH1-Dispenser] 62 E3 E8 E8 E3 E0 E0
+[T+609016280us][CH2-Pc    ] 03
+[T+609026284us][CH1-Dispenser] 03 73
+[T+609054412us][CH1-Dispenser] 23 D3 FF
+[T+609054281us][CH2-Pc    ] 23 FF
+[T+609066412us][CH1-Dispenser] E9
+[T+609066281us][CH2-Pc    ] E9
+[T+609079411us][CH1-Dispenser] FE
+[T+609079281us][CH2-Pc    ] FE
+[T+609092416us][CH1-Dispenser] E0
+[T+609092282us][CH2-Pc    ] E0
+[T+609105416us][CH1-Dispenser] E1
+[T+609105282us][CH2-Pc    ] E1
+[T+609117411us][CH1-Dispenser] E0
+[T+609117281us][CH2-Pc    ] E0
+[T+609130412us][CH1-Dispenser] FB
+[T+609130281us][CH2-Pc    ] FB
+[T+609143425us][CH1-Dispenser] EE
+[T+609143288us][CH2-Pc    ] EE
+[T+609155616us][CH2-Pc    ] F0
+[T+609186280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+609258305us][CH2-Pc    ] 04
+[T+609264280us][CH1-Dispenser] 04 64
+[T+609336415us][CH1-Dispenser] 05
+[T+609336282us][CH2-Pc    ] 05
+[T+609511411us][CH1-Dispenser] 06
+[T+609511281us][CH2-Pc    ] 06
+[T+609696280us][CH2-Pc    ] 01
+[T+609707287us][CH1-Dispenser] 01 61
+[T+609774281us][CH2-Pc    ] 02
+[T+609781288us][CH1-Dispenser] 02 92
+[T+609802280us][CH2-Pc    ] 62
+[T+609817281us][CH1-Dispenser] 62 E7 E2 E9 E3 E0 E0
+[T+609891280us][CH2-Pc    ] 03
+[T+609898281us][CH1-Dispenser] 03 73
+[T+609918305us][CH2-Pc    ] 23
+[T+609923280us][CH1-Dispenser] 23 D3
+[T+609940418us][CH1-Dispenser] FF
+[T+609940281us][CH2-Pc    ] FF
+[T+609952426us][CH1-Dispenser] E9
+[T+609952288us][CH2-Pc    ] E9
+[T+609965427us][CH1-Dispenser] FE
+[T+609965288us][CH2-Pc    ] FE
+[T+609978424us][CH1-Dispenser] E0
+[T+609978288us][CH2-Pc    ] E0
+[T+609991425us][CH1-Dispenser] E1
+[T+609991285us][CH2-Pc    ] E1
+[T+610015413us][CH1-Dispenser] E0 FB
+[T+610015281us][CH2-Pc    ] E0 FB
+[T+610050280us][CH2-Pc    ] EE F0
+[T+610081280us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+610152280us][CH2-Pc    ] 04
+[T+610159281us][CH1-Dispenser] 04 64
+[T+610236413us][CH1-Dispenser] 05
+[T+610236281us][CH2-Pc    ] 05
+[T+610400415us][CH1-Dispenser] 06
+[T+610400281us][CH2-Pc    ] 06
+[T+610575281us][CH2-Pc    ] 01
+[T+610583974us][CH1-Dispenser] 01 61
+[T+610653280us][CH2-Pc    ] 02
+[T+610661321us][CH1-Dispenser] 02 92
+[T+610681306us][CH2-Pc    ] 62
+[T+610692281us][CH1-Dispenser] 62 E0 E6 E9 E3 E0 E0
+[T+610782280us][CH2-Pc    ] 03
+[T+610788281us][CH1-Dispenser] 03 73
+[T+610809280us][CH2-Pc    ] 23
+[T+610813309us][CH1-Dispenser] 23 D3
+[T+610842412us][CH1-Dispenser] FF E9
+[T+610842281us][CH2-Pc    ] FF E9
+[T+610855411us][CH1-Dispenser] FE
+[T+610855282us][CH2-Pc    ] FE
+[T+610868415us][CH1-Dispenser] E0
+[T+610868281us][CH2-Pc    ] E0
+[T+610881418us][CH1-Dispenser] E1
+[T+610881282us][CH2-Pc    ] E1
+[T+610894430us][CH1-Dispenser] E0
+[T+610894285us][CH2-Pc    ] E0
+[T+610919412us][CH1-Dispenser] FB EE
+[T+610919281us][CH2-Pc    ] FB EE
+[T+610932281us][CH2-Pc    ] F0
+[T+610963281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+611034281us][CH2-Pc    ] 04
+[T+611044280us][CH1-Dispenser] 04 64
+[T+611112414us][CH1-Dispenser] 05
+[T+611112281us][CH2-Pc    ] 05
+[T+611276413us][CH1-Dispenser] 06
+[T+611276281us][CH2-Pc    ] 06
+[T+611451280us][CH2-Pc    ] 01
+[T+611460280us][CH1-Dispenser] 01 61
+[T+611529280us][CH2-Pc    ] 02
+[T+611535280us][CH1-Dispenser] 02 92
+[T+611557280us][CH2-Pc    ] 62
+[T+611572280us][CH1-Dispenser] 62 E0 E0 E0 E4 E0 E0
+[T+611646281us][CH2-Pc    ] 03
+[T+611653289us][CH1-Dispenser] 03 73
+[T+611673305us][CH2-Pc    ] 23
+[T+611678281us][CH1-Dispenser] 23 D3
+[T+611694416us][CH1-Dispenser] FF
+[T+611694281us][CH2-Pc    ] FF
+[T+611707419us][CH1-Dispenser] E9
+[T+611707284us][CH2-Pc    ] E9
+[T+611720410us][CH1-Dispenser] FE
+[T+611720281us][CH2-Pc    ] FE
+[T+611749413us][CH1-Dispenser] E0 E1
+[T+611749281us][CH2-Pc    ] E0 E1
+[T+611762425us][CH1-Dispenser] E0
+[T+611762288us][CH2-Pc    ] E0
+[T+611775427us][CH1-Dispenser] FB
+[T+611775288us][CH2-Pc    ] FB
+[T+611787539us][CH1-Dispenser] EE
+[T+611787398us][CH2-Pc    ] EE
+[T+611800285us][CH2-Pc    ] F0
+[T+611833280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+611925304us][CH2-Pc    ] 04
+[T+611932280us][CH1-Dispenser] 04 64
+[T+612003415us][CH1-Dispenser] 05
+[T+612003281us][CH2-Pc    ] 05
+[T+612167414us][CH1-Dispenser] 06
+[T+612167281us][CH2-Pc    ] 06
+[T+612342280us][CH2-Pc    ] 01
+[T+612350963us][CH1-Dispenser] 01 61
+[T+612420280us][CH2-Pc    ] 02
+[T+612426281us][CH1-Dispenser] 02 92
+[T+612447280us][CH2-Pc    ] 62
+[T+612460280us][CH1-Dispenser] 62 E0 E0 E0 E4 E0 E0
+[T+612525281us][CH2-Pc    ] 03
+[T+612534281us][CH1-Dispenser] 03 73
+[T+612553280us][CH2-Pc    ] 23
+[T+612559288us][CH1-Dispenser] 23 D3
+[T+612574413us][CH1-Dispenser] FF
+[T+612574281us][CH2-Pc    ] FF
+[T+612587425us][CH1-Dispenser] E9
+[T+612587287us][CH2-Pc    ] E9
+[T+612600412us][CH1-Dispenser] FE
+[T+612600281us][CH2-Pc    ] FE
+[T+612612411us][CH1-Dispenser] E0
+[T+612612281us][CH2-Pc    ] E0
+[T+612625424us][CH1-Dispenser] E1
+[T+612625285us][CH2-Pc    ] E1
+[T+612638427us][CH1-Dispenser] E0
+[T+612638289us][CH2-Pc    ] E0
+[T+612650355us][CH2-Pc    ] FB
+[T+612651280us][CH1-Dispenser] FB
+[T+612663407us][CH1-Dispenser] EE
+[T+612663281us][CH2-Pc    ] EE
+[T+612676354us][CH2-Pc    ] F0
+[T+612707280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+612778280us][CH2-Pc    ] 04
+[T+612783280us][CH1-Dispenser] 04 64
+[T+612855412us][CH1-Dispenser] 05
+[T+612855281us][CH2-Pc    ] 05
+[T+613024413us][CH1-Dispenser] 06
+[T+613024281us][CH2-Pc    ] 06
+[T+613201306us][CH2-Pc    ] 01
+[T+613210311us][CH1-Dispenser] 01 61
+[T+613290306us][CH2-Pc    ] 02
+[T+613297288us][CH1-Dispenser] 02 92
+[T+613317305us][CH2-Pc    ] 62
+[T+613335280us][CH1-Dispenser] 62 E0 E0 E0 E4 E0 E0
+[T+613406280us][CH2-Pc    ] 03
+[T+613413280us][CH1-Dispenser] 03 73
+[T+613434280us][CH2-Pc    ] 23
+[T+613438310us][CH1-Dispenser] 23 D3
+[T+613467412us][CH1-Dispenser] FF E9
+[T+613467281us][CH2-Pc    ] FF E9
+[T+613480427us][CH1-Dispenser] FE
+[T+613480287us][CH2-Pc    ] FE
+[T+613493425us][CH1-Dispenser] E0
+[T+613493285us][CH2-Pc    ] E0
+[T+613506416us][CH1-Dispenser] E1
+[T+613506284us][CH2-Pc    ] E1
+[T+613519281us][CH1-Dispenser] E0
+[T+613518280us][CH2-Pc    ] E0
+[T+613532281us][CH1-Dispenser] FB
+[T+613531283us][CH2-Pc    ] FB
+[T+613544533us][CH1-Dispenser] EE
+[T+613544288us][CH2-Pc    ] EE
+[T+613557280us][CH2-Pc    ] F0
+[T+613586281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+613658305us][CH2-Pc    ] 04
+[T+613664288us][CH1-Dispenser] 04 64
+[T+613736416us][CH1-Dispenser] 05
+[T+613736281us][CH2-Pc    ] 05
+[T+613901415us][CH1-Dispenser] 06
+[T+613901281us][CH2-Pc    ] 06
+[T+614079310us][CH1-Dispenser] 01 61
+[T+614075280us][CH2-Pc    ] 01
+[T+614143307us][CH2-Pc    ] 02
+[T+614150281us][CH1-Dispenser] 02 92
+[T+614170304us][CH2-Pc    ] 62
+[T+614182320us][CH1-Dispenser] 62 E0 E0 E0 E4 E0 E0
+[T+614248280us][CH2-Pc    ] 03
+[T+614253280us][CH1-Dispenser] 03 73
+[T+614275280us][CH2-Pc    ] 23
+[T+614283442us][CH1-Dispenser] 23 D3
+[T+614297408us][CH1-Dispenser] FF
+[T+614297281us][CH2-Pc    ] FF
+[T+614310425us][CH1-Dispenser] E9
+[T+614310285us][CH2-Pc    ] E9
+[T+614323285us][CH1-Dispenser] FE
+[T+614323424us][CH2-Pc    ] FE
+[T+614335422us][CH1-Dispenser] E0
+[T+614335284us][CH2-Pc    ] E0
+[T+614348422us][CH1-Dispenser] E1
+[T+614348284us][CH2-Pc    ] E1
+[T+614360417us][CH1-Dispenser] E0
+[T+614360282us][CH2-Pc    ] E0
+[T+614373417us][CH1-Dispenser] FB
+[T+614373282us][CH2-Pc    ] FB
+[T+614398280us][CH2-Pc    ] EE F0
+[T+614426304us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+614490305us][CH2-Pc    ] 04
+[T+614498305us][CH1-Dispenser] 04 64
+[T+614568693us][CH1-Dispenser] 05
+[T+614568556us][CH2-Pc    ] 05
+[T+614743413us][CH1-Dispenser] 06
+[T+614743281us][CH2-Pc    ] 06
+[T+614918280us][CH2-Pc    ] 01
+[T+614925281us][CH1-Dispenser] 01 61
+[T+614996280us][CH2-Pc    ] 02
+[T+615001280us][CH1-Dispenser] 02 92
+[T+615023280us][CH2-Pc    ] 62
+[T+615041280us][CH1-Dispenser] 62 E0 E0 E0 E4 E0 E0
+[T+615113306us][CH2-Pc    ] 03
+[T+615118280us][CH1-Dispenser] 03 73
+[T+615141341us][CH2-Pc    ] 23
+[T+615162281us][CH1-Dispenser] 23 D3 FF
+[T+615162412us][CH2-Pc    ] FF
+[T+615175418us][CH1-Dispenser] E9
+[T+615175283us][CH2-Pc    ] E9
+[T+615188425us][CH1-Dispenser] FE
+[T+615188286us][CH2-Pc    ] FE
+[T+615200420us][CH1-Dispenser] E0
+[T+615200284us][CH2-Pc    ] E0
+[T+615213425us][CH1-Dispenser] E1
+[T+615213284us][CH2-Pc    ] E1
+[T+615226281us][CH1-Dispenser] E0
+[T+615225287us][CH2-Pc    ] E0
+[T+615238412us][CH1-Dispenser] FB
+[T+615238281us][CH2-Pc    ] FB
+[T+615251416us][CH1-Dispenser] EE
+[T+615251281us][CH2-Pc    ] EE
+[T+615264280us][CH2-Pc    ] F0
+[T+615291280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+615355304us][CH2-Pc    ] 04
+[T+615365281us][CH1-Dispenser] 04 64
+[T+615434414us][CH1-Dispenser] 05
+[T+615434281us][CH2-Pc    ] 05
+[T+615608413us][CH1-Dispenser] 06
+[T+615608281us][CH2-Pc    ] 06
+[T+615783280us][CH2-Pc    ] 01
+[T+615791321us][CH1-Dispenser] 01 61
+[T+615861280us][CH2-Pc    ] 02
+[T+615866280us][CH1-Dispenser] 02 A2
+[T+616440280us][CH2-Pc    ] 03
+[T+616448972us][CH1-Dispenser] 03 73
+[T+616467280us][CH2-Pc    ] 23
+[T+616474281us][CH1-Dispenser] 23 D3
+[T+616500412us][CH1-Dispenser] FF E9
+[T+616500281us][CH2-Pc    ] FF E9
+[T+616514446us][CH1-Dispenser] FE
+[T+616514306us][CH2-Pc    ] FE
+[T+616526423us][CH1-Dispenser] E0
+[T+616526286us][CH2-Pc    ] E0
+[T+616539424us][CH1-Dispenser] E1
+[T+616539284us][CH2-Pc    ] E1
+[T+616552427us][CH1-Dispenser] E0
+[T+616552287us][CH2-Pc    ] E0
+[T+616577412us][CH1-Dispenser] FB EE
+[T+616577281us][CH2-Pc    ] FB EE
+[T+616590280us][CH2-Pc    ] F0
+[T+616620281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+616691281us][CH2-Pc    ] 04
+[T+616698289us][CH1-Dispenser] 04 64
+[T+616769412us][CH1-Dispenser] 05
+[T+616769281us][CH2-Pc    ] 05
+[T+616951416us][CH1-Dispenser] 06
+[T+616951282us][CH2-Pc    ] 06
+[T+617126280us][CH2-Pc    ] 01
+[T+617131287us][CH1-Dispenser] 01 61
+[T+617204280us][CH2-Pc    ] 02
+[T+617210280us][CH1-Dispenser] 02 62
+[T+617782304us][CH2-Pc    ] 03
+[T+617788281us][CH1-Dispenser] 03 73
+[T+617810281us][CH2-Pc    ] 23
+[T+617819281us][CH1-Dispenser] 23 D3
+[T+617831417us][CH1-Dispenser] FF
+[T+617831281us][CH2-Pc    ] FF
+[T+617847422us][CH1-Dispenser] E9
+[T+617847283us][CH2-Pc    ] E9
+[T+617859428us][CH1-Dispenser] FE
+[T+617859288us][CH2-Pc    ] FE
+[T+617872427us][CH1-Dispenser] E0
+[T+617872288us][CH2-Pc    ] E0
+[T+617885431us][CH1-Dispenser] E1
+[T+617885288us][CH2-Pc    ] E1
+[T+617897427us][CH1-Dispenser] E0
+[T+617897288us][CH2-Pc    ] E0
+[T+617911286us][CH1-Dispenser] FB
+[T+617911425us][CH2-Pc    ] FB
+[T+617924284us][CH1-Dispenser] EE
+[T+617924423us][CH2-Pc    ] EE
+[T+617935288us][CH2-Pc    ] F0
+[T+617966280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+618037280us][CH2-Pc    ] 04
+[T+618044281us][CH1-Dispenser] 04 64
+[T+618115412us][CH1-Dispenser] 05
+[T+618115281us][CH2-Pc    ] 05
+[T+618290412us][CH1-Dispenser] 06
+[T+618290281us][CH2-Pc    ] 06
+[T+618465280us][CH2-Pc    ] 01
+[T+618470280us][CH1-Dispenser] 01 61
+[T+618543281us][CH2-Pc    ] 02
+[T+618551322us][CH1-Dispenser] 02 62
+[T+618570281us][CH2-Pc    ] 42
+[T+618620280us][CH1-Dispenser] 42 FF F1 F8 EB E1 E0 E0 E0 F6 E1 F4 F7 E0 E0 E1 E1 F9 E0 E4 E6 E3 E0 E0 FA E0 E0 E0 E4 E0 E0 FB E9 F0
+[T+618640413us][CH1-Dispenser] 52
+[T+618640281us][CH2-Pc    ] 52
+[T+618770281us][CH1-Dispenser] FF F6 E0 F9 E4 E4 E8 E2 E5 E0 E7 E2 FA E6 E1 E4 E2 E0 E5 E7 E8 F4 E0 E3 E1 E1 F5 E0 E0 E0 E0 F6 E1 F9 E6 E9 E8 E0 E4 E0 E6 E3 FA E2 E4 E6 E5 E1 E0 E7 E8 F4 E0 E0 E1 E1 F5 E0 E0 E0 E0 F6 E2 F9 E2 E1 E3 E5 E8 E4 E9 E9 FA E0 E5 E9 E6 E3 E2 E2 E8 F4 E0 E3 E4 E1 F5 E0 E0 E0 E0 FB EC F0
+[T+618859280us][CH2-Pc    ] 03
+[T+618864280us][CH1-Dispenser] 03 73
+[T+618887280us][CH2-Pc    ] 23
+[T+618894280us][CH1-Dispenser] 23 D3
+[T+618920416us][CH1-Dispenser] FF E9
+[T+618920281us][CH2-Pc    ] FF E9
+[T+618934424us][CH1-Dispenser] FE
+[T+618934285us][CH2-Pc    ] FE
+[T+618947423us][CH1-Dispenser] E0
+[T+618947284us][CH2-Pc    ] E0
+[T+618959416us][CH1-Dispenser] E1
+[T+618959284us][CH2-Pc    ] E1
+[T+618973478us][CH1-Dispenser] E0
+[T+618973336us][CH2-Pc    ] E0
+[T+618984427us][CH1-Dispenser] FB
+[T+618984288us][CH2-Pc    ] FB
+[T+618997428us][CH1-Dispenser] EE
+[T+618997288us][CH2-Pc    ] EE
+[T+619010280us][CH2-Pc    ] F0
+[T+619042306us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+619111280us][CH2-Pc    ] 04
+[T+619120918us][CH1-Dispenser] 04 64
+[T+619189412us][CH1-Dispenser] 05
+[T+619189281us][CH2-Pc    ] 05
+[T+619359418us][CH1-Dispenser] 06
+[T+619359282us][CH2-Pc    ] 06
+[T+619534280us][CH2-Pc    ] 01
+[T+619543280us][CH1-Dispenser] 01 61
+[T+619612280us][CH2-Pc    ] 02
+[T+619622285us][CH1-Dispenser] 02 62
+[T+619640281us][CH2-Pc    ] 42
+[T+619689280us][CH1-Dispenser] 42 FF F1 F8 EB E1 E0 E0 E0 F6 E1 F4 F7 E0 E0 E1 E1 F9 E0 E4 E6 E3 E0 E0 FA E0 E0 E0 E4 E0 E0 FB E9 F0
+[T+619712412us][CH1-Dispenser] 52
+[T+619712281us][CH2-Pc    ] 52
+[T+619848304us][CH1-Dispenser] FF F6 E0 F9 E4 E4 E8 E2 E5 E0 E7 E2 FA E6 E1 E4 E2 E0 E5 E7 E8 F4 E0 E3 E1 E1 F5 E0 E0 E0 E0 F6 E1 F9 E6 E9 E8 E0 E4 E0 E6 E3 FA E2 E4 E6 E5 E1 E0 E7 E8 F4 E0 E0 E1 E1 F5 E0 E0 E0 E0 F6 E2 F9 E2 E1 E3 E5 E8 E4 E9 E9 FA E0 E5 E9 E6 E3 E2 E2 E8 F4 E0 E3 E4 E1 F5 E0 E0 E0 E0 FB EC F0
+[T+619930280us][CH2-Pc    ] 03
+[T+619934309us][CH1-Dispenser] 03 73
+[T+619957280us][CH2-Pc    ] 23
+[T+619978280us][CH1-Dispenser] 23 D3 FF
+[T+619991299us][CH1-Dispenser] E9
+[T+619990281us][CH2-Pc    ] FF E9
+[T+620004413us][CH1-Dispenser] FE
+[T+620004281us][CH2-Pc    ] FE
+[T+620017414us][CH1-Dispenser] E0
+[T+620017282us][CH2-Pc    ] E0
+[T+620029419us][CH1-Dispenser] E1
+[T+620029285us][CH2-Pc    ] E1
+[T+620051410us][CH1-Dispenser] E0 FB
+[T+620051281us][CH2-Pc    ] E0 FB
+[T+620066422us][CH1-Dispenser] EE
+[T+620066284us][CH2-Pc    ] EE
+[T+620079282us][CH2-Pc    ] F0
+[T+620107304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+620180280us][CH2-Pc    ] 04
+[T+620188321us][CH1-Dispenser] 04 64
+[T+620258414us][CH1-Dispenser] 05
+[T+620258282us][CH2-Pc    ] 05
+[T+620433414us][CH1-Dispenser] 06
+[T+620433281us][CH2-Pc    ] 06
+[T+620607280us][CH2-Pc    ] 01
+[T+620615321us][CH1-Dispenser] 01 61
+[T+620686280us][CH2-Pc    ] 02
+[T+620691896us][CH1-Dispenser] 02 62
+[T+620763304us][CH2-Pc    ] 03
+[T+620768920us][CH1-Dispenser] 03 73
+[T+620791280us][CH2-Pc    ] 23
+[T+620799305us][CH1-Dispenser] 23 D3
+[T+620812707us][CH1-Dispenser] FF
+[T+620812282us][CH2-Pc    ] FF
+[T+620834412us][CH1-Dispenser] E9
+[T+620834281us][CH2-Pc    ] E9
+[T+620855410us][CH1-Dispenser] FE
+[T+620855281us][CH2-Pc    ] FE
+[T+620877412us][CH1-Dispenser] E0
+[T+620877281us][CH2-Pc    ] E0
+[T+620898412us][CH1-Dispenser] E1
+[T+620898281us][CH2-Pc    ] E1
+[T+620920417us][CH1-Dispenser] E0
+[T+620920281us][CH2-Pc    ] E0
+[T+620941411us][CH1-Dispenser] FB
+[T+620941281us][CH2-Pc    ] FB
+[T+620972280us][CH2-Pc    ] EE F0
+[T+621003280us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+621075306us][CH2-Pc    ] 04
+[T+621084783us][CH1-Dispenser] 04 64
+[T+621153413us][CH1-Dispenser] 05
+[T+621153281us][CH2-Pc    ] 05
+[T+621326460us][CH1-Dispenser] 06
+[T+621326322us][CH2-Pc    ] 06
+[T+621493281us][CH2-Pc    ] 01
+[T+621502280us][CH1-Dispenser] 01 61
+[T+621573280us][CH2-Pc    ] 02
+[T+621581944us][CH1-Dispenser] 02 62
+[T+621651280us][CH2-Pc    ] 03
+[T+621658907us][CH1-Dispenser] 03 73
+[T+621678304us][CH2-Pc    ] 23
+[T+621683280us][CH1-Dispenser] 23 D3
+[T+621700416us][CH1-Dispenser] FF
+[T+621700281us][CH2-Pc    ] FF
+[T+621721411us][CH1-Dispenser] E9
+[T+621721281us][CH2-Pc    ] E9
+[T+621743415us][CH1-Dispenser] FE
+[T+621743282us][CH2-Pc    ] FE
+[T+621765410us][CH1-Dispenser] E0
+[T+621765281us][CH2-Pc    ] E0
+[T+621786412us][CH1-Dispenser] E1
+[T+621786281us][CH2-Pc    ] E1
+[T+621807414us][CH1-Dispenser] E0
+[T+621807281us][CH2-Pc    ] E0
+[T+621829410us][CH1-Dispenser] FB
+[T+621829281us][CH2-Pc    ] FB
+[T+621850409us][CH1-Dispenser] EE
+[T+621850281us][CH2-Pc    ] EE
+[T+621872281us][CH2-Pc    ] F0
+[T+621903281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+621972280us][CH2-Pc    ] 04
+[T+621979281us][CH1-Dispenser] 04 64
+[T+622063412us][CH1-Dispenser] 05
+[T+622063281us][CH2-Pc    ] 05
+[T+622228414us][CH1-Dispenser] 06
+[T+622228281us][CH2-Pc    ] 06
+[T+622401280us][CH2-Pc    ] 01
+[T+622406280us][CH1-Dispenser] 01 61
+[T+622483280us][CH2-Pc    ] 02
+[T+622493285us][CH1-Dispenser] 02 62
+[T+622561305us][CH2-Pc    ] 03
+[T+622570281us][CH1-Dispenser] 03 73
+[T+622589280us][CH2-Pc    ] 23
+[T+622595288us][CH1-Dispenser] 23 D3
+[T+622610413us][CH1-Dispenser] FF
+[T+622610281us][CH2-Pc    ] FF
+[T+622632407us][CH1-Dispenser] E9
+[T+622632281us][CH2-Pc    ] E9
+[T+622658394us][CH1-Dispenser] FE
+[T+622658530us][CH2-Pc    ] FE
+[T+622681412us][CH1-Dispenser] E0
+[T+622681281us][CH2-Pc    ] E0
+[T+622702410us][CH1-Dispenser] E1
+[T+622702281us][CH2-Pc    ] E1
+[T+622723412us][CH1-Dispenser] E0
+[T+622723281us][CH2-Pc    ] E0
+[T+622746410us][CH1-Dispenser] FB
+[T+622746281us][CH2-Pc    ] FB
+[T+622768412us][CH1-Dispenser] EE
+[T+622768281us][CH2-Pc    ] EE
+[T+622795281us][CH2-Pc    ] F0
+[T+622826281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+622911280us][CH2-Pc    ] 04
+[T+622920280us][CH1-Dispenser] 04 64
+[T+622986412us][CH1-Dispenser] 05
+[T+622986281us][CH2-Pc    ] 05
+[T+623152414us][CH1-Dispenser] 06
+[T+623152282us][CH2-Pc    ] 06
+[T+623327280us][CH2-Pc    ] 01
+[T+623336280us][CH1-Dispenser] 01 61
+[T+623405280us][CH2-Pc    ] 02
+[T+623412910us][CH1-Dispenser] 02 62
+[T+623483281us][CH2-Pc    ] 03
+[T+623489912us][CH1-Dispenser] 03 73
+[T+623510281us][CH2-Pc    ] 23
+[T+623532281us][CH1-Dispenser] 23 D3 FF
+[T+623532412us][CH2-Pc    ] FF
+[T+623545425us][CH1-Dispenser] E9
+[T+623545286us][CH2-Pc    ] E9
+[T+623558289us][CH1-Dispenser] FE
+[T+623558427us][CH2-Pc    ] FE
+[T+623570428us][CH1-Dispenser] E0
+[T+623570289us][CH2-Pc    ] E0
+[T+623583423us][CH1-Dispenser] E1
+[T+623583285us][CH2-Pc    ] E1
+[T+623596280us][CH1-Dispenser] E0
+[T+623595475us][CH2-Pc    ] E0
+[T+623608427us][CH1-Dispenser] FB
+[T+623608289us][CH2-Pc    ] FB
+[T+623621428us][CH1-Dispenser] EE
+[T+623621288us][CH2-Pc    ] EE
+[T+623634280us][CH2-Pc    ] F0
+[T+623662320us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+623737281us][CH2-Pc    ] 04
+[T+623743917us][CH1-Dispenser] 04 64
+[T+623815412us][CH1-Dispenser] 05
+[T+623815281us][CH2-Pc    ] 05
+[T+623979412us][CH1-Dispenser] 06
+[T+623979281us][CH2-Pc    ] 06
+[T+624154280us][CH2-Pc    ] 01
+[T+624161842us][CH1-Dispenser] 01 61
+[T+624232280us][CH2-Pc    ] 02
+[T+624242288us][CH1-Dispenser] 02 62
+[T+624310305us][CH2-Pc    ] 03
+[T+624320871us][CH1-Dispenser] 03 73
+[T+624338280us][CH2-Pc    ] 23
+[T+624345880us][CH1-Dispenser] 23 D3
+[T+624371413us][CH1-Dispenser] FF E9
+[T+624371281us][CH2-Pc    ] FF E9
+[T+624385421us][CH1-Dispenser] FE
+[T+624385282us][CH2-Pc    ] FE
+[T+624397427us][CH1-Dispenser] E0
+[T+624397288us][CH2-Pc    ] E0
+[T+624410423us][CH1-Dispenser] E1
+[T+624410285us][CH2-Pc    ] E1
+[T+624424428us][CH1-Dispenser] E0
+[T+624424288us][CH2-Pc    ] E0
+[T+624444430us][CH1-Dispenser] FB
+[T+624444289us][CH2-Pc    ] FB
+[T+624458284us][CH1-Dispenser] EE
+[T+624458423us][CH2-Pc    ] EE
+[T+624471280us][CH2-Pc    ] F0
+[T+624496389us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+624561280us][CH2-Pc    ] 04
+[T+624570900us][CH1-Dispenser] 04 64
+[T+624639412us][CH1-Dispenser] 05
+[T+624639281us][CH2-Pc    ] 05
+[T+624815414us][CH1-Dispenser] 06
+[T+624815281us][CH2-Pc    ] 06
+[T+624978280us][CH2-Pc    ] 01
+[T+624987281us][CH1-Dispenser] 01 61
+[T+625060309us][CH1-Dispenser] 02 62
+[T+625056280us][CH2-Pc    ] 02
+[T+625124304us][CH2-Pc    ] 03
+[T+625129280us][CH1-Dispenser] 03 73
+[T+625151280us][CH2-Pc    ] 23
+[T+625159321us][CH1-Dispenser] 23 D3
+[T+625186416us][CH1-Dispenser] FF E9
+[T+625186281us][CH2-Pc    ] FF E9
+[T+625211412us][CH1-Dispenser] FE E0
+[T+625211281us][CH2-Pc    ] FE E0
+[T+625225288us][CH1-Dispenser] E1
+[T+625225428us][CH2-Pc    ] E1
+[T+625237288us][CH1-Dispenser] E0
+[T+625237427us][CH2-Pc    ] E0
+[T+625250428us][CH1-Dispenser] FB
+[T+625250288us][CH2-Pc    ] FB
+[T+625263289us][CH1-Dispenser] EE
+[T+625263427us][CH2-Pc    ] EE
+[T+625275321us][CH2-Pc    ] F0
+[T+625307304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+625378280us][CH2-Pc    ] 04
+[T+625385289us][CH1-Dispenser] 04 64
+[T+625456413us][CH1-Dispenser] 05
+[T+625456281us][CH2-Pc    ] 05
+[T+625620414us][CH1-Dispenser] 06
+[T+625620282us][CH2-Pc    ] 06
+[T+625792304us][CH2-Pc    ] 01
+[T+625796309us][CH1-Dispenser] 01 61
+[T+625859280us][CH2-Pc    ] 02
+[T+625866281us][CH1-Dispenser] 02 62
+[T+625938307us][CH2-Pc    ] 03
+[T+625945288us][CH1-Dispenser] 03 73
+[T+625965305us][CH2-Pc    ] 23
+[T+625970281us][CH1-Dispenser] 23 D3
+[T+625986415us][CH1-Dispenser] FF
+[T+625986281us][CH2-Pc    ] FF
+[T+625999424us][CH1-Dispenser] E9
+[T+625999284us][CH2-Pc    ] E9
+[T+626011419us][CH1-Dispenser] FE
+[T+626011285us][CH2-Pc    ] FE
+[T+626024425us][CH1-Dispenser] E0
+[T+626024287us][CH2-Pc    ] E0
+[T+626037479us][CH1-Dispenser] E1
+[T+626037341us][CH2-Pc    ] E1
+[T+626049284us][CH2-Pc    ] E0
+[T+626050280us][CH1-Dispenser] E0
+[T+626062412us][CH1-Dispenser] FB
+[T+626062281us][CH2-Pc    ] FB
+[T+626075412us][CH1-Dispenser] EE
+[T+626075281us][CH2-Pc    ] EE
+[T+626088657us][CH2-Pc    ] F0
+[T+626116304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+626189280us][CH2-Pc    ] 04
+[T+626194280us][CH1-Dispenser] 04 64
+[T+626268414us][CH1-Dispenser] 05
+[T+626268281us][CH2-Pc    ] 05
+[T+626432414us][CH1-Dispenser] 06
+[T+626432283us][CH2-Pc    ] 06
+[T+626610304us][CH2-Pc    ] 01
+[T+626615280us][CH1-Dispenser] 01 61
+[T+626688280us][CH2-Pc    ] 02
+[T+626697280us][CH1-Dispenser] 02 62
+[T+626766281us][CH2-Pc    ] 03
+[T+626774445us][CH1-Dispenser] 03 73
+[T+626794304us][CH2-Pc    ] 23
+[T+626799888us][CH1-Dispenser] 23 D3
+[T+626827413us][CH1-Dispenser] FF E9
+[T+626827281us][CH2-Pc    ] FF E9
+[T+626841658us][CH1-Dispenser] FE
+[T+626841501us][CH2-Pc    ] FE
+[T+626854631us][CH1-Dispenser] E0
+[T+626854490us][CH2-Pc    ] E0
+[T+626867423us][CH1-Dispenser] E1
+[T+626867285us][CH2-Pc    ] E1
+[T+626879428us][CH1-Dispenser] E0
+[T+626879288us][CH2-Pc    ] E0
+[T+626891428us][CH1-Dispenser] FB
+[T+626891288us][CH2-Pc    ] FB
+[T+626904427us][CH1-Dispenser] EE
+[T+626904289us][CH2-Pc    ] EE
+[T+626917281us][CH2-Pc    ] F0
+[T+626947280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+627016280us][CH2-Pc    ] 04
+[T+627024321us][CH1-Dispenser] 04 64
+[T+627094414us][CH1-Dispenser] 05
+[T+627094282us][CH2-Pc    ] 05
+[T+627260413us][CH1-Dispenser] 06
+[T+627260281us][CH2-Pc    ] 06
+[T+627435280us][CH2-Pc    ] 01
+[T+627444281us][CH1-Dispenser] 01 61
+[T+627513280us][CH2-Pc    ] 02
+[T+627522927us][CH1-Dispenser] 02 62
+[T+627592280us][CH2-Pc    ] 03
+[T+627601661us][CH1-Dispenser] 03 73
+[T+627619280us][CH2-Pc    ] 23
+[T+627624280us][CH1-Dispenser] 23 D3
+[T+627652416us][CH1-Dispenser] FF E9
+[T+627652283us][CH2-Pc    ] FF E9
+[T+627666417us][CH1-Dispenser] FE
+[T+627666281us][CH2-Pc    ] FE
+[T+627678470us][CH2-Pc    ] E0
+[T+627679280us][CH1-Dispenser] E0
+[T+627691412us][CH1-Dispenser] E1
+[T+627691281us][CH2-Pc    ] E1
+[T+627704429us][CH1-Dispenser] E0
+[T+627704288us][CH2-Pc    ] E0
+[T+627717288us][CH1-Dispenser] FB
+[T+627717428us][CH2-Pc    ] FB
+[T+627729288us][CH1-Dispenser] EE
+[T+627729428us][CH2-Pc    ] EE
+[T+627742281us][CH2-Pc    ] F0
+[T+627772280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+627843280us][CH2-Pc    ] 04
+[T+627850885us][CH1-Dispenser] 04 64
+[T+627922412us][CH1-Dispenser] 05
+[T+627922281us][CH2-Pc    ] 05
+[T+628096416us][CH1-Dispenser] 06
+[T+628096282us][CH2-Pc    ] 06
+[T+628261281us][CH2-Pc    ] 01
+[T+628266281us][CH1-Dispenser] 01 61
+[T+628340280us][CH2-Pc    ] 02
+[T+628349917us][CH1-Dispenser] 02 62
+[T+628418280us][CH2-Pc    ] 03
+[T+628424280us][CH1-Dispenser] 03 73
+[T+628445280us][CH2-Pc    ] 23
+[T+628449310us][CH1-Dispenser] 23 D3
+[T+628467418us][CH1-Dispenser] FF
+[T+628467282us][CH2-Pc    ] FF
+[T+628481288us][CH1-Dispenser] E9
+[T+628481428us][CH2-Pc    ] E9
+[T+628492849us][CH1-Dispenser] FE
+[T+628493075us][CH2-Pc    ] FE
+[T+628505602us][CH1-Dispenser] E0
+[T+628505297us][CH2-Pc    ] E0
+[T+628517419us][CH1-Dispenser] E1
+[T+628517285us][CH2-Pc    ] E1
+[T+628530423us][CH1-Dispenser] E0
+[T+628530285us][CH2-Pc    ] E0
+[T+628543424us][CH1-Dispenser] FB
+[T+628543284us][CH2-Pc    ] FB
+[T+628555422us][CH1-Dispenser] EE
+[T+628555284us][CH2-Pc    ] EE
+[T+628568458us][CH2-Pc    ] F0
+[T+628599281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+628670281us][CH2-Pc    ] 04
+[T+628675281us][CH1-Dispenser] 04 64
+[T+628748412us][CH1-Dispenser] 05
+[T+628748281us][CH2-Pc    ] 05
+[T+628923414us][CH1-Dispenser] 06
+[T+628923281us][CH2-Pc    ] 06
+[T+629087305us][CH2-Pc    ] 01
+[T+629091309us][CH1-Dispenser] 01 61
+[T+629165280us][CH2-Pc    ] 02
+[T+629172288us][CH1-Dispenser] 02 62
+[T+629243280us][CH2-Pc    ] 03
+[T+629250280us][CH1-Dispenser] 03 73
+[T+629270305us][CH2-Pc    ] 23
+[T+629278305us][CH1-Dispenser] 23 D3
+[T+629292413us][CH1-Dispenser] FF
+[T+629292281us][CH2-Pc    ] FF
+[T+629305288us][CH1-Dispenser] E9
+[T+629305428us][CH2-Pc    ] E9
+[T+629317899us][CH1-Dispenser] FE
+[T+629317288us][CH2-Pc    ] FE
+[T+629330415us][CH1-Dispenser] E0
+[T+629330282us][CH2-Pc    ] E0
+[T+629342412us][CH1-Dispenser] E1
+[T+629342281us][CH2-Pc    ] E1
+[T+629355416us][CH1-Dispenser] E0
+[T+629355282us][CH2-Pc    ] E0
+[T+629368412us][CH1-Dispenser] FB
+[T+629368281us][CH2-Pc    ] FB
+[T+629380419us][CH1-Dispenser] EE
+[T+629380286us][CH2-Pc    ] EE
+[T+629393281us][CH2-Pc    ] F0
+[T+629421305us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+629490281us][CH2-Pc    ] 04
+[T+629495281us][CH1-Dispenser] 04 64
+[T+629568578us][CH1-Dispenser] 05
+[T+629568442us][CH2-Pc    ] 05
+[T+629743413us][CH1-Dispenser] 06
+[T+629743281us][CH2-Pc    ] 06
+[T+629918280us][CH2-Pc    ] 01
+[T+629927918us][CH1-Dispenser] 01 61
+[T+629996280us][CH2-Pc    ] 02
+[T+630003281us][CH1-Dispenser] 02 62
+[T+630074280us][CH2-Pc    ] 03
+[T+630080281us][CH1-Dispenser] 03 73
+[T+630101280us][CH2-Pc    ] 23
+[T+630109321us][CH1-Dispenser] 23 D3
+[T+630123412us][CH1-Dispenser] FF
+[T+630123281us][CH2-Pc    ] FF
+[T+630136811us][CH1-Dispenser] E9
+[T+630136672us][CH2-Pc    ] E9
+[T+630149424us][CH1-Dispenser] FE
+[T+630149285us][CH2-Pc    ] FE
+[T+630162424us][CH1-Dispenser] E0
+[T+630162284us][CH2-Pc    ] E0
+[T+630173427us][CH1-Dispenser] E1
+[T+630173289us][CH2-Pc    ] E1
+[T+630187425us][CH1-Dispenser] E0
+[T+630187286us][CH2-Pc    ] E0
+[T+630203420us][CH1-Dispenser] FB
+[T+630203285us][CH2-Pc    ] FB
+[T+630215428us][CH1-Dispenser] EE
+[T+630215288us][CH2-Pc    ] EE
+[T+630228280us][CH2-Pc    ] F0
+[T+630257281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+630334310us][CH1-Dispenser] 04 64
+[T+630330280us][CH2-Pc    ] 04
+[T+630408412us][CH1-Dispenser] 05
+[T+630408281us][CH2-Pc    ] 05
+[T+630572416us][CH1-Dispenser] 06
+[T+630572281us][CH2-Pc    ] 06
+[T+630747282us][CH2-Pc    ] 01
+[T+630753288us][CH1-Dispenser] 01 61
+[T+630825304us][CH2-Pc    ] 02
+[T+630832280us][CH1-Dispenser] 02 62
+[T+630903280us][CH2-Pc    ] 03
+[T+630909280us][CH1-Dispenser] 03 73
+[T+630930280us][CH2-Pc    ] 23
+[T+630952283us][CH1-Dispenser] 23 D3 FF
+[T+630952418us][CH2-Pc    ] FF
+[T+630965280us][CH1-Dispenser] E9
+[T+630964288us][CH2-Pc    ] E9
+[T+630978422us][CH1-Dispenser] FE
+[T+630978284us][CH2-Pc    ] FE
+[T+630991424us][CH1-Dispenser] E0
+[T+630991284us][CH2-Pc    ] E0
+[T+631003428us][CH1-Dispenser] E1
+[T+631003288us][CH2-Pc    ] E1
+[T+631015427us][CH1-Dispenser] E0
+[T+631015289us][CH2-Pc    ] E0
+[T+631028421us][CH1-Dispenser] FB
+[T+631028283us][CH2-Pc    ] FB
+[T+631041675us][CH1-Dispenser] EE
+[T+631041537us][CH2-Pc    ] EE
+[T+631054281us][CH2-Pc    ] F0
+[T+631082304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+631156281us][CH2-Pc    ] 04
+[T+631165280us][CH1-Dispenser] 04 64
+[T+631234416us][CH1-Dispenser] 05
+[T+631234281us][CH2-Pc    ] 05
+[T+631411412us][CH1-Dispenser] 06
+[T+631411281us][CH2-Pc    ] 06
+[T+631596280us][CH2-Pc    ] 01
+[T+631601280us][CH1-Dispenser] 01 61
+[T+631675281us][CH2-Pc    ] 02
+[T+631684281us][CH1-Dispenser] 02 62
+[T+631753280us][CH2-Pc    ] 03
+[T+631760288us][CH1-Dispenser] 03 73
+[T+631780305us][CH2-Pc    ] 23
+[T+631785887us][CH1-Dispenser] 23 D3
+[T+631801413us][CH1-Dispenser] FF
+[T+631801281us][CH2-Pc    ] FF
+[T+631815415us][CH1-Dispenser] E9
+[T+631815282us][CH2-Pc    ] E9
+[T+631839412us][CH1-Dispenser] FE E0
+[T+631839281us][CH2-Pc    ] FE E0
+[T+631852428us][CH1-Dispenser] E1
+[T+631852290us][CH2-Pc    ] E1
+[T+631865426us][CH1-Dispenser] E0
+[T+631865289us][CH2-Pc    ] E0
+[T+631878607us][CH1-Dispenser] FB
+[T+631878468us][CH2-Pc    ] FB
+[T+631903280us][CH2-Pc    ] EE F0
+[T+631932280us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+632005280us][CH2-Pc    ] 04
+[T+632014427us][CH1-Dispenser] 04 64
+[T+632084415us][CH1-Dispenser] 05
+[T+632084282us][CH2-Pc    ] 05
+[T+632265280us][CH1-Dispenser] 06
+[T+632264281us][CH2-Pc    ] 06
+[T+632439280us][CH2-Pc    ] 01
+[T+632446451us][CH1-Dispenser] 01 61
+[T+632517280us][CH2-Pc    ] 02
+[T+632522280us][CH1-Dispenser] 02 62
+[T+632595280us][CH2-Pc    ] 03
+[T+632601280us][CH1-Dispenser] 03 73
+[T+632623280us][CH2-Pc    ] 23
+[T+632632280us][CH1-Dispenser] 23 D3
+[T+632644412us][CH1-Dispenser] FF
+[T+632644281us][CH2-Pc    ] FF
+[T+632658283us][CH1-Dispenser] E9
+[T+632658416us][CH2-Pc    ] E9
+[T+632671425us][CH1-Dispenser] FE
+[T+632671285us][CH2-Pc    ] FE
+[T+632684425us][CH1-Dispenser] E0
+[T+632684287us][CH2-Pc    ] E0
+[T+632696427us][CH1-Dispenser] E1
+[T+632696288us][CH2-Pc    ] E1
+[T+632709425us][CH1-Dispenser] E0
+[T+632709285us][CH2-Pc    ] E0
+[T+632722424us][CH1-Dispenser] FB
+[T+632722285us][CH2-Pc    ] FB
+[T+632735280us][CH1-Dispenser] EE
+[T+632747287us][CH2-Pc    ] EE F0
+[T+632778281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+632851280us][CH2-Pc    ] 04
+[T+632859305us][CH1-Dispenser] 04 64
+[T+632929412us][CH1-Dispenser] 05
+[T+632929281us][CH2-Pc    ] 05
+[T+633104421us][CH1-Dispenser] 06
+[T+633104284us][CH2-Pc    ] 06
+[T+633279280us][CH2-Pc    ] 01
+[T+633286281us][CH1-Dispenser] 01 61
+[T+633357280us][CH2-Pc    ] 02
+[T+633362280us][CH1-Dispenser] 02 62
+[T+633435281us][CH2-Pc    ] 03
+[T+633439309us][CH1-Dispenser] 03 73
+[T+633454280us][CH2-Pc    ] 23
+[T+633460280us][CH1-Dispenser] 23 D3
+[T+633475405us][CH1-Dispenser] FF
+[T+633475281us][CH2-Pc    ] FF
+[T+633488415us][CH1-Dispenser] E9
+[T+633488281us][CH2-Pc    ] E9
+[T+633501782us][CH1-Dispenser] FE
+[T+633501643us][CH2-Pc    ] FE
+[T+633514288us][CH1-Dispenser] E0
+[T+633514428us][CH2-Pc    ] E0
+[T+633526288us][CH1-Dispenser] E1
+[T+633526428us][CH2-Pc    ] E1
+[T+633539427us][CH1-Dispenser] E0
+[T+633539288us][CH2-Pc    ] E0
+[T+633551430us][CH1-Dispenser] FB
+[T+633551290us][CH2-Pc    ] FB
+[T+633564412us][CH1-Dispenser] EE
+[T+633564281us][CH2-Pc    ] EE
+[T+633577280us][CH2-Pc    ] F0
+[T+633608280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+633679281us][CH2-Pc    ] 04
+[T+633686288us][CH1-Dispenser] 04 64
+[T+633757344us][CH1-Dispenser] 05
+[T+633757490us][CH2-Pc    ] 05
+[T+633931288us][CH2-Pc    ] 06
+[T+633932370us][CH1-Dispenser] 06
+[T+634106305us][CH2-Pc    ] 01
+[T+634113280us][CH1-Dispenser] 01 61
+[T+634185304us][CH2-Pc    ] 02
+[T+634192921us][CH1-Dispenser] 02 62
+[T+634263281us][CH2-Pc    ] 03
+[T+634270288us][CH1-Dispenser] 03 73
+[T+634291280us][CH2-Pc    ] 23
+[T+634312281us][CH1-Dispenser] 23 D3 FF
+[T+634312412us][CH2-Pc    ] FF
+[T+634325407us][CH1-Dispenser] E9
+[T+634325281us][CH2-Pc    ] E9
+[T+634337518us][CH1-Dispenser] FE
+[T+634337374us][CH2-Pc    ] FE
+[T+634350637us][CH1-Dispenser] E0
+[T+634350496us][CH2-Pc    ] E0
+[T+634363435us][CH1-Dispenser] E1
+[T+634363288us][CH2-Pc    ] E1
+[T+634376425us][CH1-Dispenser] E0
+[T+634376287us][CH2-Pc    ] E0
+[T+634408413us][CH1-Dispenser] FB EE
+[T+634408281us][CH2-Pc    ] FB EE
+[T+634420315us][CH2-Pc    ] F0
+[T+634451281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+634523306us][CH2-Pc    ] 04
+[T+634531321us][CH1-Dispenser] 04 64
+[T+634601411us][CH1-Dispenser] 05
+[T+634601281us][CH2-Pc    ] 05
+[T+634780412us][CH1-Dispenser] 06
+[T+634780281us][CH2-Pc    ] 06
+[T+634955280us][CH2-Pc    ] 01
+[T+634962901us][CH1-Dispenser] 01 61
+[T+635033280us][CH2-Pc    ] 02
+[T+635041305us][CH1-Dispenser] 02 62
+[T+635111280us][CH2-Pc    ] 03
+[T+635122281us][CH1-Dispenser] 03 73
+[T+635138304us][CH2-Pc    ] 23
+[T+635145281us][CH1-Dispenser] 23 D3
+[T+635172416us][CH1-Dispenser] FF E9
+[T+635172281us][CH2-Pc    ] FF E9
+[T+635185424us][CH1-Dispenser] FE
+[T+635185286us][CH2-Pc    ] FE
+[T+635198412us][CH1-Dispenser] E0
+[T+635198281us][CH2-Pc    ] E0
+[T+635210303us][CH1-Dispenser] E1
+[T+635211280us][CH2-Pc    ] E1
+[T+635223427us][CH1-Dispenser] E0
+[T+635223289us][CH2-Pc    ] E0
+[T+635236427us][CH1-Dispenser] FB
+[T+635236288us][CH2-Pc    ] FB
+[T+635249431us][CH1-Dispenser] EE
+[T+635249291us][CH2-Pc    ] EE
+[T+635261321us][CH2-Pc    ] F0
+[T+635291281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+635363304us][CH2-Pc    ] 04
+[T+635371289us][CH1-Dispenser] 04 64
+[T+635441416us][CH1-Dispenser] 05
+[T+635441281us][CH2-Pc    ] 05
+[T+635626413us][CH1-Dispenser] 06
+[T+635626281us][CH2-Pc    ] 06
+[T+635791280us][CH2-Pc    ] 01
+[T+635798281us][CH1-Dispenser] 01 61
+[T+635869280us][CH2-Pc    ] 02
+[T+635877321us][CH1-Dispenser] 02 62
+[T+635947281us][CH2-Pc    ] 03
+[T+635954288us][CH1-Dispenser] 03 73
+[T+635974311us][CH2-Pc    ] 23
+[T+635981288us][CH1-Dispenser] 23 D3
+[T+635996413us][CH1-Dispenser] FF
+[T+635996281us][CH2-Pc    ] FF
+[T+636009414us][CH1-Dispenser] E9
+[T+636009282us][CH2-Pc    ] E9
+[T+636021425us][CH1-Dispenser] FE
+[T+636021284us][CH2-Pc    ] FE
+[T+636034424us][CH1-Dispenser] E0
+[T+636034285us][CH2-Pc    ] E0
+[T+636047425us][CH1-Dispenser] E1
+[T+636047285us][CH2-Pc    ] E1
+[T+636059423us][CH1-Dispenser] E0
+[T+636059284us][CH2-Pc    ] E0
+[T+636072427us][CH1-Dispenser] FB
+[T+636072288us][CH2-Pc    ] FB
+[T+636085288us][CH1-Dispenser] EE
+[T+636085428us][CH2-Pc    ] EE
+[T+636097322us][CH2-Pc    ] F0
+[T+636127280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+636198280us][CH2-Pc    ] 04
+[T+636205281us][CH1-Dispenser] 04 64
+[T+636276418us][CH1-Dispenser] 05
+[T+636276284us][CH2-Pc    ] 05
+[T+636451415us][CH1-Dispenser] 06
+[T+636451281us][CH2-Pc    ] 06
+[T+636625280us][CH2-Pc    ] 01
+[T+636632923us][CH1-Dispenser] 01 61
+[T+636704304us][CH2-Pc    ] 02
+[T+636713280us][CH1-Dispenser] 02 62
+[T+636783280us][CH2-Pc    ] 03
+[T+636791927us][CH1-Dispenser] 03 73
+[T+636811304us][CH2-Pc    ] 23
+[T+636819321us][CH1-Dispenser] 23 D3
+[T+636833412us][CH1-Dispenser] FF
+[T+636833281us][CH2-Pc    ] FF
+[T+636846284us][CH1-Dispenser] E9
+[T+636846420us][CH2-Pc    ] E9
+[T+636858413us][CH1-Dispenser] FE
+[T+636858281us][CH2-Pc    ] FE
+[T+636871425us][CH1-Dispenser] E0
+[T+636871285us][CH2-Pc    ] E0
+[T+636883426us][CH1-Dispenser] E1
+[T+636883285us][CH2-Pc    ] E1
+[T+636908412us][CH1-Dispenser] E0 FB
+[T+636908281us][CH2-Pc    ] E0 FB
+[T+636921692us][CH1-Dispenser] EE
+[T+636921536us][CH2-Pc    ] EE
+[T+636934280us][CH2-Pc    ] F0
+[T+636963280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+637036280us][CH2-Pc    ] 04
+[T+637044321us][CH1-Dispenser] 04 64
+[T+637114413us][CH1-Dispenser] 05
+[T+637114282us][CH2-Pc    ] 05
+[T+637299432us][CH1-Dispenser] 06
+[T+637299298us][CH2-Pc    ] 06
+[T+637463306us][CH2-Pc    ] 01
+[T+637472280us][CH1-Dispenser] 01 61
+[T+637541280us][CH2-Pc    ] 02
+[T+637547288us][CH1-Dispenser] 02 62
+[T+637620280us][CH2-Pc    ] 03
+[T+637626280us][CH1-Dispenser] 03 73
+[T+637648280us][CH2-Pc    ] 23
+[T+637655889us][CH1-Dispenser] 23 D3
+[T+637669414us][CH1-Dispenser] FF
+[T+637669281us][CH2-Pc    ] FF
+[T+637682422us][CH1-Dispenser] E9
+[T+637682283us][CH2-Pc    ] E9
+[T+637695418us][CH1-Dispenser] FE
+[T+637695283us][CH2-Pc    ] FE
+[T+637707428us][CH1-Dispenser] E0
+[T+637707288us][CH2-Pc    ] E0
+[T+637721432us][CH1-Dispenser] E1
+[T+637721285us][CH2-Pc    ] E1
+[T+637733281us][CH1-Dispenser] E0
+[T+637733413us][CH2-Pc    ] E0
+[T+637746413us][CH1-Dispenser] FB
+[T+637746281us][CH2-Pc    ] FB
+[T+637758620us][CH1-Dispenser] EE
+[T+637758755us][CH2-Pc    ] EE
+[T+637771283us][CH2-Pc    ] F0
+[T+637803304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+637873280us][CH2-Pc    ] 04
+[T+637881281us][CH1-Dispenser] 04 64
+[T+637951412us][CH1-Dispenser] 05
+[T+637951281us][CH2-Pc    ] 05
+[T+638126414us][CH1-Dispenser] 06
+[T+638126281us][CH2-Pc    ] 06
+[T+638306304us][CH2-Pc    ] 01
+[T+638311280us][CH1-Dispenser] 01 61
+[T+638385280us][CH2-Pc    ] 02
+[T+638392288us][CH1-Dispenser] 02 62
+[T+638463280us][CH2-Pc    ] 03
+[T+638470280us][CH1-Dispenser] 03 73
+[T+638491280us][CH2-Pc    ] 23
+[T+638512281us][CH1-Dispenser] 23 D3 FF
+[T+638512417us][CH2-Pc    ] FF
+[T+638525448us][CH1-Dispenser] E9
+[T+638525310us][CH2-Pc    ] E9
+[T+638538428us][CH1-Dispenser] FE
+[T+638538289us][CH2-Pc    ] FE
+[T+638551423us][CH1-Dispenser] E0
+[T+638551286us][CH2-Pc    ] E0
+[T+638563412us][CH1-Dispenser] E1
+[T+638563281us][CH2-Pc    ] E1
+[T+638576412us][CH1-Dispenser] E0
+[T+638576281us][CH2-Pc    ] E0
+[T+638588598us][CH1-Dispenser] FB
+[T+638588398us][CH2-Pc    ] FB
+[T+638601420us][CH1-Dispenser] EE
+[T+638601285us][CH2-Pc    ] EE
+[T+638614280us][CH2-Pc    ] F0
+[T+638643433us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+638716280us][CH2-Pc    ] 04
+[T+638727031us][CH1-Dispenser] 04 64
+[T+638795414us][CH1-Dispenser] 05
+[T+638795281us][CH2-Pc    ] 05
+[T+638969415us][CH1-Dispenser] 06
+[T+638969282us][CH2-Pc    ] 06
+[T+639134281us][CH2-Pc    ] 01
+[T+639144281us][CH1-Dispenser] 01 61
+[T+639212281us][CH2-Pc    ] 02
+[T+639218288us][CH1-Dispenser] 02 62
+[T+639289280us][CH2-Pc    ] 03
+[T+639295288us][CH1-Dispenser] 03 73
+[T+639317280us][CH2-Pc    ] 23
+[T+639325305us][CH1-Dispenser] 23 D3
+[T+639338418us][CH1-Dispenser] FF
+[T+639338282us][CH2-Pc    ] FF
+[T+639351418us][CH1-Dispenser] E9
+[T+639351283us][CH2-Pc    ] E9
+[T+639364673us][CH1-Dispenser] FE
+[T+639364531us][CH2-Pc    ] FE
+[T+639389413us][CH1-Dispenser] E0 E1
+[T+639389282us][CH2-Pc    ] E0 E1
+[T+639402418us][CH1-Dispenser] E0
+[T+639402282us][CH2-Pc    ] E0
+[T+639415281us][CH1-Dispenser] FB
+[T+639414295us][CH2-Pc    ] FB
+[T+639427427us][CH1-Dispenser] EE
+[T+639427288us][CH2-Pc    ] EE
+[T+639441454us][CH2-Pc    ] F0
+[T+639468280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+639532304us][CH2-Pc    ] 04
+[T+639540321us][CH1-Dispenser] 04 64
+[T+639610415us][CH1-Dispenser] 05
+[T+639610281us][CH2-Pc    ] 05
+[T+639774413us][CH1-Dispenser] 06
+[T+639774281us][CH2-Pc    ] 06
+[T+639949280us][CH2-Pc    ] 01
+[T+639958777us][CH1-Dispenser] 01 61
+[T+640027281us][CH2-Pc    ] 02
+[T+640034288us][CH1-Dispenser] 02 62
+[T+640105280us][CH2-Pc    ] 03
+[T+640111288us][CH1-Dispenser] 03 73
+[T+640132280us][CH2-Pc    ] 23
+[T+640140321us][CH1-Dispenser] 23 D3
+[T+640154414us][CH1-Dispenser] FF
+[T+640154281us][CH2-Pc    ] FF
+[T+640179413us][CH1-Dispenser] E9 FE
+[T+640179281us][CH2-Pc    ] E9 FE
+[T+640195281us][CH1-Dispenser] E0
+[T+640194283us][CH2-Pc    ] E0
+[T+640205547us][CH1-Dispenser] E1
+[T+640205406us][CH2-Pc    ] E1
+[T+640218725us][CH1-Dispenser] E0
+[T+640218586us][CH2-Pc    ] E0
+[T+640232424us][CH1-Dispenser] FB
+[T+640232285us][CH2-Pc    ] FB
+[T+640244427us][CH1-Dispenser] EE
+[T+640244288us][CH2-Pc    ] EE
+[T+640256321us][CH2-Pc    ] F0
+[T+640288304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+640359280us][CH2-Pc    ] 04
+[T+640365281us][CH1-Dispenser] 04 64
+[T+640437413us][CH1-Dispenser] 05
+[T+640437282us][CH2-Pc    ] 05
+[T+640612416us][CH1-Dispenser] 06
+[T+640612281us][CH2-Pc    ] 06
+[T+640776304us][CH2-Pc    ] 01
+[T+640782282us][CH1-Dispenser] 01 61
+[T+640864281us][CH2-Pc    ] 02
+[T+640872321us][CH1-Dispenser] 02 62
+[T+640942280us][CH2-Pc    ] 03
+[T+640951281us][CH1-Dispenser] 03 73
+[T+640969280us][CH2-Pc    ] 23
+[T+640974878us][CH1-Dispenser] 23 D3
+[T+640991413us][CH1-Dispenser] FF
+[T+640991282us][CH2-Pc    ] FF
+[T+641003412us][CH1-Dispenser] E9
+[T+641003281us][CH2-Pc    ] E9
+[T+641016416us][CH1-Dispenser] FE
+[T+641016282us][CH2-Pc    ] FE
+[T+641041410us][CH1-Dispenser] E0 E1
+[T+641041281us][CH2-Pc    ] E0 E1
+[T+641054418us][CH1-Dispenser] E0
+[T+641054283us][CH2-Pc    ] E0
+[T+641067425us][CH1-Dispenser] FB
+[T+641067285us][CH2-Pc    ] FB
+[T+641080423us][CH1-Dispenser] EE
+[T+641080285us][CH2-Pc    ] EE
+[T+641093320us][CH2-Pc    ] F0
+[T+641124280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+641206281us][CH2-Pc    ] 04
+[T+641216281us][CH1-Dispenser] 04 64
+[T+641285412us][CH1-Dispenser] 05
+[T+641285281us][CH2-Pc    ] 05
+[T+641470413us][CH1-Dispenser] 06
+[T+641470281us][CH2-Pc    ] 06
+[T+641634305us][CH2-Pc    ] 01
+[T+641643413us][CH1-Dispenser] 01 61
+[T+641714280us][CH2-Pc    ] 02
+[T+641722321us][CH1-Dispenser] 02 62
+[T+641792281us][CH2-Pc    ] 03
+[T+641800477us][CH1-Dispenser] 03 73
+[T+641820304us][CH2-Pc    ] 23
+[T+641825886us][CH1-Dispenser] 23 D3
+[T+641841413us][CH1-Dispenser] FF
+[T+641841281us][CH2-Pc    ] FF
+[T+641854424us][CH1-Dispenser] E9
+[T+641854285us][CH2-Pc    ] E9
+[T+641867425us][CH1-Dispenser] FE
+[T+641867287us][CH2-Pc    ] FE
+[T+641879411us][CH1-Dispenser] E0
+[T+641879281us][CH2-Pc    ] E0
+[T+641892417us][CH1-Dispenser] E1
+[T+641892281us][CH2-Pc    ] E1
+[T+641905420us][CH1-Dispenser] E0
+[T+641905282us][CH2-Pc    ] E0
+[T+641917425us][CH1-Dispenser] FB
+[T+641917288us][CH2-Pc    ] FB
+[T+641930412us][CH1-Dispenser] EE
+[T+641930281us][CH2-Pc    ] EE
+[T+641943280us][CH2-Pc    ] F0
+[T+641974280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+642044281us][CH2-Pc    ] 04
+[T+642050912us][CH1-Dispenser] 04 64
+[T+642123414us][CH1-Dispenser] 05
+[T+642123281us][CH2-Pc    ] 05
+[T+642294415us][CH1-Dispenser] 06
+[T+642294281us][CH2-Pc    ] 06
+[T+642469280us][CH2-Pc    ] 01
+[T+642477954us][CH1-Dispenser] 01 61
+[T+642547281us][CH2-Pc    ] 02
+[T+642553281us][CH1-Dispenser] 02 62
+[T+642625309us][CH2-Pc    ] 03
+[T+642630281us][CH1-Dispenser] 03 73
+[T+642653280us][CH2-Pc    ] 23
+[T+642659288us][CH1-Dispenser] 23 D3
+[T+642686413us][CH1-Dispenser] FF E9
+[T+642686281us][CH2-Pc    ] FF E9
+[T+642700288us][CH1-Dispenser] FE
+[T+642700427us][CH2-Pc    ] FE
+[T+642713420us][CH1-Dispenser] E0
+[T+642713283us][CH2-Pc    ] E0
+[T+642725611us][CH1-Dispenser] E1
+[T+642725470us][CH2-Pc    ] E1
+[T+642738427us][CH1-Dispenser] E0
+[T+642738287us][CH2-Pc    ] E0
+[T+642750427us][CH1-Dispenser] FB
+[T+642750289us][CH2-Pc    ] FB
+[T+642763424us][CH1-Dispenser] EE
+[T+642763285us][CH2-Pc    ] EE
+[T+642780304us][CH2-Pc    ] F0
+[T+642808306us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+642881280us][CH2-Pc    ] 04
+[T+642891288us][CH1-Dispenser] 04 64
+[T+642959412us][CH1-Dispenser] 05
+[T+642959281us][CH2-Pc    ] 05
+[T+643134414us][CH1-Dispenser] 06
+[T+643134282us][CH2-Pc    ] 06
+[T+643309280us][CH2-Pc    ] 01
+[T+643317305us][CH1-Dispenser] 01 61
+[T+643387280us][CH2-Pc    ] 02
+[T+643393280us][CH1-Dispenser] 02 62
+[T+643465305us][CH2-Pc    ] 03
+[T+643470280us][CH1-Dispenser] 03 73
+[T+643493281us][CH2-Pc    ] 23
+[T+643500288us][CH1-Dispenser] 23 D3
+[T+643514280us][CH2-Pc    ] FF
+[T+643527282us][CH1-Dispenser] FF E9
+[T+643527415us][CH2-Pc    ] E9
+[T+643540416us][CH1-Dispenser] FE
+[T+643540282us][CH2-Pc    ] FE
+[T+643552416us][CH1-Dispenser] E0
+[T+643552282us][CH2-Pc    ] E0
+[T+643565415us][CH1-Dispenser] E1
+[T+643565282us][CH2-Pc    ] E1
+[T+643578281us][CH1-Dispenser] E0
+[T+643577284us][CH2-Pc    ] E0
+[T+643590418us][CH1-Dispenser] FB
+[T+643590285us][CH2-Pc    ] FB
+[T+643603423us][CH1-Dispenser] EE
+[T+643603284us][CH2-Pc    ] EE
+[T+643616281us][CH2-Pc    ] F0
+[T+643643418us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+643726280us][CH2-Pc    ] 04
+[T+643731280us][CH1-Dispenser] 04 64
+[T+643804412us][CH1-Dispenser] 05
+[T+643804281us][CH2-Pc    ] 05
+[T+643979412us][CH1-Dispenser] 06
+[T+643979281us][CH2-Pc    ] 06
+[T+644154281us][CH2-Pc    ] 01
+[T+644164280us][CH1-Dispenser] 01 61
+[T+644232304us][CH2-Pc    ] 02
+[T+644238288us][CH1-Dispenser] 02 62
+[T+644310304us][CH2-Pc    ] 03
+[T+644315280us][CH1-Dispenser] 03 73
+[T+644337280us][CH2-Pc    ] 23
+[T+644345305us][CH1-Dispenser] 23 D3
+[T+644371413us][CH1-Dispenser] FF E9
+[T+644371282us][CH2-Pc    ] FF E9
+[T+644385423us][CH1-Dispenser] FE
+[T+644385286us][CH2-Pc    ] FE
+[T+644398407us][CH1-Dispenser] E0
+[T+644398281us][CH2-Pc    ] E0
+[T+644411427us][CH1-Dispenser] E1
+[T+644411288us][CH2-Pc    ] E1
+[T+644424052us][CH1-Dispenser] E0
+[T+644423914us][CH2-Pc    ] E0
+[T+644436410us][CH1-Dispenser] FB
+[T+644436281us][CH2-Pc    ] FB
+[T+644449412us][CH1-Dispenser] EE
+[T+644449281us][CH2-Pc    ] EE
+[T+644461305us][CH2-Pc    ] F0
+[T+644493304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+644563304us][CH2-Pc    ] 04
+[T+644573286us][CH1-Dispenser] 04 64
+[T+644641412us][CH1-Dispenser] 05
+[T+644641281us][CH2-Pc    ] 05
+[T+644805413us][CH1-Dispenser] 06
+[T+644805281us][CH2-Pc    ] 06
+[T+644980280us][CH2-Pc    ] 01
+[T+644987280us][CH1-Dispenser] 01 61
+[T+645058280us][CH2-Pc    ] 02
+[T+645063280us][CH1-Dispenser] 02 62
+[T+645136280us][CH2-Pc    ] 03
+[T+645146285us][CH1-Dispenser] 03 73
+[T+645161280us][CH2-Pc    ] 23
+[T+645183280us][CH1-Dispenser] 23 D3 FF
+[T+645196281us][CH1-Dispenser] E9
+[T+645195280us][CH2-Pc    ] FF E9
+[T+645209424us][CH1-Dispenser] FE
+[T+645209286us][CH2-Pc    ] FE
+[T+645221412us][CH1-Dispenser] E0
+[T+645221281us][CH2-Pc    ] E0
+[T+645234416us][CH1-Dispenser] E1
+[T+645234282us][CH2-Pc    ] E1
+[T+645247427us][CH1-Dispenser] E0
+[T+645247288us][CH2-Pc    ] E0
+[T+645259426us][CH1-Dispenser] FB
+[T+645259289us][CH2-Pc    ] FB
+[T+645272288us][CH1-Dispenser] EE
+[T+645272428us][CH2-Pc    ] EE
+[T+645284321us][CH2-Pc    ] F0
+[T+645313280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+645387281us][CH2-Pc    ] 04
+[T+645396283us][CH1-Dispenser] 04 64
+[T+645465412us][CH1-Dispenser] 05
+[T+645465281us][CH2-Pc    ] 05
+[T+645640413us][CH1-Dispenser] 06
+[T+645640281us][CH2-Pc    ] 06
+[T+645815280us][CH2-Pc    ] 01
+[T+645823305us][CH1-Dispenser] 01 61
+[T+645903314us][CH2-Pc    ] 02
+[T+645913280us][CH1-Dispenser] 02 62
+[T+645981305us][CH2-Pc    ] 03
+[T+645985309us][CH1-Dispenser] 03 73
+[T+646008280us][CH2-Pc    ] 23
+[T+646016321us][CH1-Dispenser] 23 D3
+[T+646030413us][CH1-Dispenser] FF
+[T+646030281us][CH2-Pc    ] FF
+[T+646042427us][CH1-Dispenser] E9
+[T+646042288us][CH2-Pc    ] E9
+[T+646055425us][CH1-Dispenser] FE
+[T+646055284us][CH2-Pc    ] FE
+[T+646068425us][CH1-Dispenser] E0
+[T+646068285us][CH2-Pc    ] E0
+[T+646081281us][CH1-Dispenser] E1
+[T+646080282us][CH2-Pc    ] E1
+[T+646093411us][CH1-Dispenser] E0
+[T+646093281us][CH2-Pc    ] E0
+[T+646106421us][CH1-Dispenser] FB
+[T+646106283us][CH2-Pc    ] FB
+[T+646120427us][CH1-Dispenser] EE
+[T+646120287us][CH2-Pc    ] EE
+[T+646141280us][CH2-Pc    ] F0
+[T+646167280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+646232280us][CH2-Pc    ] 04
+[T+646239290us][CH1-Dispenser] 04 64
+[T+646310418us][CH1-Dispenser] 05
+[T+646310282us][CH2-Pc    ] 05
+[T+646486412us][CH1-Dispenser] 06
+[T+646486281us][CH2-Pc    ] 06
+[T+646652280us][CH2-Pc    ] 01
+[T+646657280us][CH1-Dispenser] 01 61
+[T+646730280us][CH2-Pc    ] 02
+[T+646739933us][CH1-Dispenser] 02 62
+[T+646808280us][CH2-Pc    ] 03
+[T+646816922us][CH1-Dispenser] 03 73
+[T+646835280us][CH2-Pc    ] 23
+[T+646841280us][CH1-Dispenser] 23 D3
+[T+646869405us][CH1-Dispenser] FF E9
+[T+646869281us][CH2-Pc    ] FF E9
+[T+646882426us][CH1-Dispenser] FE
+[T+646882285us][CH2-Pc    ] FE
+[T+646895415us][CH1-Dispenser] E0
+[T+646895282us][CH2-Pc    ] E0
+[T+646908416us][CH1-Dispenser] E1
+[T+646908282us][CH2-Pc    ] E1
+[T+646925410us][CH1-Dispenser] E0
+[T+646925282us][CH2-Pc    ] E0
+[T+646938412us][CH1-Dispenser] FB
+[T+646938281us][CH2-Pc    ] FB
+[T+646950413us][CH1-Dispenser] EE
+[T+646950281us][CH2-Pc    ] EE
+[T+646963281us][CH2-Pc    ] F0
+[T+646992280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+647065320us][CH2-Pc    ] 04
+[T+647072750us][CH1-Dispenser] 04 64
+[T+647143430us][CH1-Dispenser] 05
+[T+647143289us][CH2-Pc    ] 05
+[T+647321505us][CH1-Dispenser] 06
+[T+647321371us][CH2-Pc    ] 06
+[T+647495280us][CH2-Pc    ] 01
+[T+647503288us][CH1-Dispenser] 01 61
+[T+647574280us][CH2-Pc    ] 02
+[T+647578309us][CH1-Dispenser] 02 62
+[T+647652280us][CH2-Pc    ] 03
+[T+647661631us][CH1-Dispenser] 03 73
+[T+647679280us][CH2-Pc    ] 23
+[T+647684280us][CH1-Dispenser] 23 D3
+[T+647701280us][CH1-Dispenser] FF
+[T+647700280us][CH2-Pc    ] FF
+[T+647714280us][CH1-Dispenser] E9
+[T+647713282us][CH2-Pc    ] E9
+[T+647727424us][CH1-Dispenser] FE
+[T+647727284us][CH2-Pc    ] FE
+[T+647739427us][CH1-Dispenser] E0
+[T+647739289us][CH2-Pc    ] E0
+[T+647752280us][CH1-Dispenser] E1
+[T+647753281us][CH2-Pc    ] E1
+[T+647764414us][CH1-Dispenser] E0
+[T+647764285us][CH2-Pc    ] E0
+[T+647777420us][CH1-Dispenser] FB
+[T+647777284us][CH2-Pc    ] FB
+[T+647790422us][CH1-Dispenser] EE
+[T+647790284us][CH2-Pc    ] EE
+[T+647802317us][CH2-Pc    ] F0
+[T+647834304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+647905281us][CH2-Pc    ] 04
+[T+647911928us][CH1-Dispenser] 04 64
+[T+647983412us][CH1-Dispenser] 05
+[T+647983281us][CH2-Pc    ] 05
+[T+648158417us][CH1-Dispenser] 06
+[T+648158282us][CH2-Pc    ] 06
+[T+648322307us][CH2-Pc    ] 01
+[T+648328928us][CH1-Dispenser] 01 61
+[T+648400305us][CH2-Pc    ] 02
+[T+648407962us][CH1-Dispenser] 02 62
+[T+648478280us][CH2-Pc    ] 03
+[T+648486305us][CH1-Dispenser] 03 73
+[T+648505280us][CH2-Pc    ] 23
+[T+648511280us][CH1-Dispenser] 23 D3
+[T+648539416us][CH1-Dispenser] FF E9
+[T+648539281us][CH2-Pc    ] FF E9
+[T+648552422us][CH1-Dispenser] FE
+[T+648552284us][CH2-Pc    ] FE
+[T+648565427us][CH1-Dispenser] E0
+[T+648565289us][CH2-Pc    ] E0
+[T+648579283us][CH1-Dispenser] E1
+[T+648579421us][CH2-Pc    ] E1
+[T+648591285us][CH1-Dispenser] E0
+[T+648591424us][CH2-Pc    ] E0
+[T+648603415us][CH1-Dispenser] FB
+[T+648603282us][CH2-Pc    ] FB
+[T+648615413us][CH1-Dispenser] EE
+[T+648615281us][CH2-Pc    ] EE
+[T+648637280us][CH2-Pc    ] F0
+[T+648668283us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+648736308us][CH2-Pc    ] 04
+[T+648740309us][CH1-Dispenser] 04 64
+[T+648814412us][CH1-Dispenser] 05
+[T+648814281us][CH2-Pc    ] 05
+[T+648978416us][CH1-Dispenser] 06
+[T+648978281us][CH2-Pc    ] 06
+[T+649153280us][CH2-Pc    ] 01
+[T+649158280us][CH1-Dispenser] 01 61
+[T+649231281us][CH2-Pc    ] 02
+[T+649241280us][CH1-Dispenser] 02 62
+[T+649309305us][CH2-Pc    ] 03
+[T+649315288us][CH1-Dispenser] 03 73
+[T+649336280us][CH2-Pc    ] 23
+[T+649342288us][CH1-Dispenser] 23 D3
+[T+649358416us][CH1-Dispenser] FF
+[T+649358281us][CH2-Pc    ] FF
+[T+649371415us][CH1-Dispenser] E9
+[T+649371282us][CH2-Pc    ] E9
+[T+649383427us][CH1-Dispenser] FE
+[T+649383289us][CH2-Pc    ] FE
+[T+649396428us][CH1-Dispenser] E0
+[T+649396288us][CH2-Pc    ] E0
+[T+649409428us][CH1-Dispenser] E1
+[T+649409288us][CH2-Pc    ] E1
+[T+649421428us][CH1-Dispenser] E0
+[T+649421288us][CH2-Pc    ] E0
+[T+649436421us][CH1-Dispenser] FB
+[T+649436283us][CH2-Pc    ] FB
+[T+649448411us][CH1-Dispenser] EE
+[T+649448281us][CH2-Pc    ] EE
+[T+649461280us][CH2-Pc    ] F0
+[T+649492280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+649563280us][CH2-Pc    ] 04
+[T+649573289us][CH1-Dispenser] 04 64
+[T+649641412us][CH1-Dispenser] 05
+[T+649641281us][CH2-Pc    ] 05
+[T+649805413us][CH1-Dispenser] 06
+[T+649805281us][CH2-Pc    ] 06
+[T+649980280us][CH2-Pc    ] 01
+[T+649987280us][CH1-Dispenser] 01 61
+[T+650058280us][CH2-Pc    ] 02
+[T+650063280us][CH1-Dispenser] 02 62
+[T+650136280us][CH2-Pc    ] 03
+[T+650153280us][CH2-Pc    ] 23
+[T+650174280us][CH1-Dispenser] 03 73 23 D3 FF
+[T+650187420us][CH1-Dispenser] E9
+[T+650187283us][CH2-Pc    ] FF E9
+[T+650199412us][CH1-Dispenser] FE
+[T+650199281us][CH2-Pc    ] FE
+[T+650212427us][CH1-Dispenser] E0
+[T+650212285us][CH2-Pc    ] E0
+[T+650225425us][CH1-Dispenser] E1
+[T+650225288us][CH2-Pc    ] E1
+[T+650237428us][CH1-Dispenser] E0
+[T+650237288us][CH2-Pc    ] E0
+[T+650251285us][CH1-Dispenser] FB
+[T+650251426us][CH2-Pc    ] FB
+[T+650264421us][CH1-Dispenser] EE
+[T+650264283us][CH2-Pc    ] EE
+[T+650276304us][CH2-Pc    ] F0
+[T+650304525us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+650377281us][CH2-Pc    ] 04
+[T+650385905us][CH1-Dispenser] 04 64
+[T+650455412us][CH1-Dispenser] 05
+[T+650455281us][CH2-Pc    ] 05
+[T+650620415us][CH1-Dispenser] 06
+[T+650620281us][CH2-Pc    ] 06
+[T+650794280us][CH2-Pc    ] 01
+[T+650804281us][CH1-Dispenser] 01 61
+[T+650874280us][CH2-Pc    ] 02
+[T+650879280us][CH1-Dispenser] 02 62
+[T+650952281us][CH2-Pc    ] 03
+[T+650960549us][CH1-Dispenser] 03 73
+[T+650979281us][CH2-Pc    ] 23
+[T+650985881us][CH1-Dispenser] 23 D3
+[T+651000410us][CH1-Dispenser] FF
+[T+651000281us][CH2-Pc    ] FF
+[T+651013419us][CH1-Dispenser] E9
+[T+651013284us][CH2-Pc    ] E9
+[T+651026426us][CH1-Dispenser] FE
+[T+651026288us][CH2-Pc    ] FE
+[T+651038417us][CH1-Dispenser] E0
+[T+651038284us][CH2-Pc    ] E0
+[T+651051425us][CH1-Dispenser] E1
+[T+651051285us][CH2-Pc    ] E1
+[T+651064427us][CH1-Dispenser] E0
+[T+651064285us][CH2-Pc    ] E0
+[T+651076285us][CH1-Dispenser] FB
+[T+651076419us][CH2-Pc    ] FB
+[T+651089425us][CH1-Dispenser] EE
+[T+651089284us][CH2-Pc    ] EE
+[T+651103281us][CH2-Pc    ] F0
+[T+651133280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+651203280us][CH2-Pc    ] 04
+[T+651212281us][CH1-Dispenser] 04 64
+[T+651282415us][CH1-Dispenser] 05
+[T+651282281us][CH2-Pc    ] 05
+[T+651446411us][CH1-Dispenser] 06
+[T+651446281us][CH2-Pc    ] 06
+[T+651620280us][CH2-Pc    ] 01
+[T+651629280us][CH1-Dispenser] 01 61
+[T+651698281us][CH2-Pc    ] 02
+[T+651703281us][CH1-Dispenser] 02 62
+[T+651766280us][CH2-Pc    ] 03
+[T+651771920us][CH1-Dispenser] 03 73
+[T+651793280us][CH2-Pc    ] 23
+[T+651800478us][CH1-Dispenser] 23 D3
+[T+651827414us][CH1-Dispenser] FF E9
+[T+651827281us][CH2-Pc    ] FF E9
+[T+651841535us][CH1-Dispenser] FE
+[T+651841286us][CH2-Pc    ] FE
+[T+651853288us][CH1-Dispenser] E0
+[T+651853427us][CH2-Pc    ] E0
+[T+651867284us][CH1-Dispenser] E1
+[T+651867423us][CH2-Pc    ] E1
+[T+651890411us][CH1-Dispenser] E0 FB
+[T+651890281us][CH2-Pc    ] E0 FB
+[T+651903409us][CH1-Dispenser] EE
+[T+651903281us][CH2-Pc    ] EE
+[T+651916280us][CH2-Pc    ] F0
+[T+651944304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+652008304us][CH2-Pc    ] 04
+[T+652016305us][CH1-Dispenser] 04 64
+[T+652086413us][CH1-Dispenser] 05
+[T+652086281us][CH2-Pc    ] 05
+[T+652261416us][CH1-Dispenser] 06
+[T+652261282us][CH2-Pc    ] 06
+[T+652436280us][CH2-Pc    ] 01
+[T+652443281us][CH1-Dispenser] 01 61
+[T+652514280us][CH2-Pc    ] 02
+[T+652524285us][CH1-Dispenser] 02 62
+[T+652592305us][CH2-Pc    ] 03
+[T+652600517us][CH1-Dispenser] 03 73
+[T+652632408us][CH1-Dispenser] 23 D3 FF
+[T+652632281us][CH2-Pc    ] 23 FF
+[T+652653412us][CH1-Dispenser] E9
+[T+652653281us][CH2-Pc    ] E9
+[T+652680413us][CH1-Dispenser] FE E0
+[T+652680281us][CH2-Pc    ] FE E0
+[T+652693416us][CH1-Dispenser] E1
+[T+652693282us][CH2-Pc    ] E1
+[T+652706416us][CH1-Dispenser] E0
+[T+652706282us][CH2-Pc    ] E0
+[T+652719416us][CH1-Dispenser] FB
+[T+652719282us][CH2-Pc    ] FB
+[T+652748304us][CH2-Pc    ] EE F0
+[T+652778281us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+652851280us][CH2-Pc    ] 04
+[T+652856280us][CH1-Dispenser] 04 64
+[T+652929413us][CH1-Dispenser] 05
+[T+652929281us][CH2-Pc    ] 05
+[T+653104413us][CH1-Dispenser] 06
+[T+653104281us][CH2-Pc    ] 06
+[T+653274280us][CH2-Pc    ] 01
+[T+653281545us][CH1-Dispenser] 01 61
+[T+653352280us][CH2-Pc    ] 02
+[T+653360305us][CH1-Dispenser] 02 62
+[T+653430280us][CH2-Pc    ] 03
+[T+653436280us][CH1-Dispenser] 03 73
+[T+653457280us][CH2-Pc    ] 23
+[T+653479285us][CH1-Dispenser] 23 D3 FF
+[T+653479421us][CH2-Pc    ] FF
+[T+653491427us][CH1-Dispenser] E9
+[T+653491287us][CH2-Pc    ] E9
+[T+653504425us][CH1-Dispenser] FE
+[T+653504284us][CH2-Pc    ] FE
+[T+653517424us][CH1-Dispenser] E0
+[T+653517285us][CH2-Pc    ] E0
+[T+653530424us][CH1-Dispenser] E1
+[T+653530285us][CH2-Pc    ] E1
+[T+653542427us][CH1-Dispenser] E0
+[T+653542286us][CH2-Pc    ] E0
+[T+653555426us][CH1-Dispenser] FB
+[T+653555287us][CH2-Pc    ] FB
+[T+653569284us][CH1-Dispenser] EE
+[T+653569422us][CH2-Pc    ] EE
+[T+653580288us][CH2-Pc    ] F0
+[T+653609280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+653682280us][CH2-Pc    ] 04
+[T+653692285us][CH1-Dispenser] 04 64
+[T+653760413us][CH1-Dispenser] 05
+[T+653760281us][CH2-Pc    ] 05
+[T+653935414us][CH1-Dispenser] 06
+[T+653935281us][CH2-Pc    ] 06
+[T+654110281us][CH2-Pc    ] 01
+[T+654119281us][CH1-Dispenser] 01 61
+[T+654188280us][CH2-Pc    ] 02
+[T+654193880us][CH1-Dispenser] 02 62
+[T+654266280us][CH2-Pc    ] 03
+[T+654272280us][CH1-Dispenser] 03 73
+[T+654293280us][CH2-Pc    ] 23
+[T+654301312us][CH1-Dispenser] 23 D3
+[T+654315416us][CH1-Dispenser] FF
+[T+654315282us][CH2-Pc    ] FF
+[T+654327578us][CH1-Dispenser] E9
+[T+654327439us][CH2-Pc    ] E9
+[T+654340428us][CH1-Dispenser] FE
+[T+654340288us][CH2-Pc    ] FE
+[T+654353427us][CH1-Dispenser] E0
+[T+654353288us][CH2-Pc    ] E0
+[T+654365484us][CH1-Dispenser] E1
+[T+654365290us][CH2-Pc    ] E1
+[T+654390418us][CH1-Dispenser] E0 FB
+[T+654390281us][CH2-Pc    ] E0 FB
+[T+654403420us][CH1-Dispenser] EE
+[T+654403283us][CH2-Pc    ] EE
+[T+654416280us][CH2-Pc    ] F0
+[T+654445281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+654518280us][CH2-Pc    ] 04
+[T+654526305us][CH1-Dispenser] 04 64
+[T+654596413us][CH1-Dispenser] 05
+[T+654596281us][CH2-Pc    ] 05
+[T+654760415us][CH1-Dispenser] 06
+[T+654760281us][CH2-Pc    ] 06
+[T+654935280us][CH2-Pc    ] 01
+[T+654944911us][CH1-Dispenser] 01 61
+[T+655013280us][CH2-Pc    ] 02
+[T+655018280us][CH1-Dispenser] 02 62
+[T+655091280us][CH2-Pc    ] 03
+[T+655095309us][CH1-Dispenser] 03 73
+[T+655119308us][CH2-Pc    ] 23
+[T+655126288us][CH1-Dispenser] 23 D3
+[T+655140413us][CH1-Dispenser] FF
+[T+655140281us][CH2-Pc    ] FF
+[T+655173412us][CH1-Dispenser] E9 FE
+[T+655173281us][CH2-Pc    ] E9 FE
+[T+655187421us][CH1-Dispenser] E0
+[T+655187283us][CH2-Pc    ] E0
+[T+655199554us][CH1-Dispenser] E1
+[T+655199359us][CH2-Pc    ] E1
+[T+655212410us][CH1-Dispenser] E0
+[T+655212281us][CH2-Pc    ] E0
+[T+655225829us][CH1-Dispenser] FB
+[T+655225985us][CH2-Pc    ] FB
+[T+655238288us][CH1-Dispenser] EE
+[T+655238428us][CH2-Pc    ] EE
+[T+655250321us][CH2-Pc    ] F0
+[T+655279280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+655352280us][CH2-Pc    ] 04
+[T+655357280us][CH1-Dispenser] 04 64
+[T+655430416us][CH1-Dispenser] 05
+[T+655430281us][CH2-Pc    ] 05
+[T+655605414us][CH1-Dispenser] 06
+[T+655605283us][CH2-Pc    ] 06
+[T+655780281us][CH2-Pc    ] 01
+[T+655787295us][CH1-Dispenser] 01 61
+[T+655858280us][CH2-Pc    ] 02
+[T+655863921us][CH1-Dispenser] 02 62
+[T+655940312us][CH1-Dispenser] 03 73
+[T+655936374us][CH2-Pc    ] 03
+[T+655963280us][CH2-Pc    ] 23
+[T+655971305us][CH1-Dispenser] 23 D3
+[T+655984281us][CH2-Pc    ] FF
+[T+655985280us][CH1-Dispenser] FF
+[T+655997413us][CH1-Dispenser] E9
+[T+655997281us][CH2-Pc    ] E9
+[T+656010428us][CH1-Dispenser] FE
+[T+656010288us][CH2-Pc    ] FE
+[T+656023428us][CH1-Dispenser] E0
+[T+656023288us][CH2-Pc    ] E0
+[T+656047412us][CH1-Dispenser] E1 E0
+[T+656047281us][CH2-Pc    ] E1 E0
+[T+656061412us][CH1-Dispenser] FB
+[T+656061281us][CH2-Pc    ] FB
+[T+656074288us][CH1-Dispenser] EE
+[T+656074428us][CH2-Pc    ] EE
+[T+656086321us][CH2-Pc    ] F0
+[T+656113281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+656186281us][CH1-Dispenser] 04 64
+[T+656182299us][CH2-Pc    ] 04
+[T+656249415us][CH1-Dispenser] 05
+[T+656249281us][CH2-Pc    ] 05
+[T+656424414us][CH1-Dispenser] 06
+[T+656424281us][CH2-Pc    ] 06
+[T+656588305us][CH2-Pc    ] 01
+[T+656593281us][CH1-Dispenser] 01 61
+[T+656670281us][CH2-Pc    ] 02
+[T+656678902us][CH1-Dispenser] 02 62
+[T+656748280us][CH2-Pc    ] 03
+[T+656757280us][CH1-Dispenser] 03 73
+[T+656781304us][CH2-Pc    ] 23
+[T+656787280us][CH1-Dispenser] 23 D3
+[T+656814412us][CH1-Dispenser] FF E9
+[T+656814281us][CH2-Pc    ] FF E9
+[T+656827423us][CH1-Dispenser] FE
+[T+656827283us][CH2-Pc    ] FE
+[T+656840947us][CH1-Dispenser] E0
+[T+656840810us][CH2-Pc    ] E0
+[T+656853413us][CH1-Dispenser] E1
+[T+656853281us][CH2-Pc    ] E1
+[T+656865416us][CH1-Dispenser] E0
+[T+656865285us][CH2-Pc    ] E0
+[T+656878425us][CH1-Dispenser] FB
+[T+656878286us][CH2-Pc    ] FB
+[T+656891426us][CH1-Dispenser] EE
+[T+656891288us][CH2-Pc    ] EE
+[T+656905280us][CH2-Pc    ] F0
+[T+656933304us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+656997305us][CH2-Pc    ] 04
+[T+657005321us][CH1-Dispenser] 04 64
+[T+657075417us][CH1-Dispenser] 05
+[T+657075283us][CH2-Pc    ] 05
+[T+657250413us][CH1-Dispenser] 06
+[T+657250281us][CH2-Pc    ] 06
+[T+657414305us][CH2-Pc    ] 01
+[T+657420280us][CH1-Dispenser] 01 61
+[T+657492304us][CH2-Pc    ] 02
+[T+657501280us][CH1-Dispenser] 02 62
+[T+657570280us][CH2-Pc    ] 03
+[T+657577998us][CH1-Dispenser] 03 73
+[T+657598305us][CH2-Pc    ] 23
+[T+657605288us][CH1-Dispenser] 23 D3
+[T+657619412us][CH1-Dispenser] FF
+[T+657619281us][CH2-Pc    ] FF
+[T+657641410us][CH1-Dispenser] E9
+[T+657641281us][CH2-Pc    ] E9
+[T+657669409us][CH1-Dispenser] FE E0
+[T+657669281us][CH2-Pc    ] FE E0
+[T+657683426us][CH1-Dispenser] E1
+[T+657683285us][CH2-Pc    ] E1
+[T+657695425us][CH1-Dispenser] E0
+[T+657695287us][CH2-Pc    ] E0
+[T+657708425us][CH1-Dispenser] FB
+[T+657708284us][CH2-Pc    ] FB
+[T+657721425us][CH1-Dispenser] EE
+[T+657721285us][CH2-Pc    ] EE
+[T+657734280us][CH2-Pc    ] F0
+[T+657764280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+657835280us][CH2-Pc    ] 04
+[T+657843960us][CH1-Dispenser] 04 64
+[T+657913412us][CH1-Dispenser] 05
+[T+657913281us][CH2-Pc    ] 05
+[T+658088418us][CH1-Dispenser] 06
+[T+658088282us][CH2-Pc    ] 06
+[T+658264305us][CH2-Pc    ] 01
+[T+658269281us][CH1-Dispenser] 01 61
+[T+658342280us][CH2-Pc    ] 02
+[T+658348288us][CH1-Dispenser] 02 62
+[T+658420305us][CH2-Pc    ] 03
+[T+658429920us][CH1-Dispenser] 03 73
+[T+658447280us][CH2-Pc    ] 23
+[T+658456881us][CH1-Dispenser] 23 D3
+[T+658469412us][CH1-Dispenser] FF
+[T+658469281us][CH2-Pc    ] FF
+[T+658493412us][CH1-Dispenser] E9 FE
+[T+658493281us][CH2-Pc    ] E9 FE
+[T+658507422us][CH1-Dispenser] E0
+[T+658507284us][CH2-Pc    ] E0
+[T+658520414us][CH1-Dispenser] E1
+[T+658520282us][CH2-Pc    ] E1
+[T+658532425us][CH1-Dispenser] E0
+[T+658532286us][CH2-Pc    ] E0
+[T+658545423us][CH1-Dispenser] FB
+[T+658545285us][CH2-Pc    ] FB
+[T+658570280us][CH2-Pc    ] EE F0
+[T+658598304us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+658662305us][CH2-Pc    ] 04
+[T+658670321us][CH1-Dispenser] 04 64
+[T+658740413us][CH1-Dispenser] 05
+[T+658740281us][CH2-Pc    ] 05
+[T+658915414us][CH1-Dispenser] 06
+[T+658915281us][CH2-Pc    ] 06
+[T+659090280us][CH2-Pc    ] 01
+[T+659097289us][CH1-Dispenser] 01 61
+[T+659168280us][CH2-Pc    ] 02
+[T+659173280us][CH1-Dispenser] 02 62
+[T+659250309us][CH1-Dispenser] 03 73
+[T+659246280us][CH2-Pc    ] 03
+[T+659273280us][CH2-Pc    ] 23
+[T+659295280us][CH1-Dispenser] 23 D3 FF
+[T+659308280us][CH1-Dispenser] E9
+[T+659307287us][CH2-Pc    ] FF E9
+[T+659320435us][CH1-Dispenser] FE
+[T+659320288us][CH2-Pc    ] FE
+[T+659348410us][CH1-Dispenser] E0 E1
+[T+659348281us][CH2-Pc    ] E0 E1
+[T+659361423us][CH1-Dispenser] E0
+[T+659361284us][CH2-Pc    ] E0
+[T+659373427us][CH1-Dispenser] FB
+[T+659373288us][CH2-Pc    ] FB
+[T+659386424us][CH1-Dispenser] EE
+[T+659386285us][CH2-Pc    ] EE
+[T+659398334us][CH2-Pc    ] F0
+[T+659429280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+659500280us][CH2-Pc    ] 04
+[T+659506281us][CH1-Dispenser] 04 64
+[T+659578416us][CH1-Dispenser] 05
+[T+659578281us][CH2-Pc    ] 05
+[T+659742415us][CH1-Dispenser] 06
+[T+659742282us][CH2-Pc    ] 06
+[T+659917281us][CH2-Pc    ] 01
+[T+659925916us][CH1-Dispenser] 01 61
+[T+659995280us][CH2-Pc    ] 02
+[T+660004281us][CH1-Dispenser] 02 62
+[T+660073280us][CH2-Pc    ] 03
+[T+660081305us][CH1-Dispenser] 03 73
+[T+660101304us][CH2-Pc    ] 23
+[T+660108281us][CH1-Dispenser] 23 D3
+[T+660122413us][CH1-Dispenser] FF
+[T+660122281us][CH2-Pc    ] FF
+[T+660144413us][CH1-Dispenser] E9
+[T+660144281us][CH2-Pc    ] E9
+[T+660169410us][CH1-Dispenser] FE E0
+[T+660169281us][CH2-Pc    ] FE E0
+[T+660183428us][CH1-Dispenser] E1
+[T+660183288us][CH2-Pc    ] E1
+[T+660195422us][CH1-Dispenser] E0
+[T+660195288us][CH2-Pc    ] E0
+[T+660209424us][CH1-Dispenser] FB
+[T+660209285us][CH2-Pc    ] FB
+[T+660222285us][CH1-Dispenser] EE
+[T+660222423us][CH2-Pc    ] EE
+[T+660233342us][CH2-Pc    ] F0
+[T+660263280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+660335306us][CH2-Pc    ] 04
+[T+660341282us][CH1-Dispenser] 04 64
+[T+660413416us][CH1-Dispenser] 05
+[T+660413281us][CH2-Pc    ] 05
+[T+660588413us][CH1-Dispenser] 06
+[T+660588281us][CH2-Pc    ] 06
+[T+660763281us][CH2-Pc    ] 01
+[T+660768281us][CH1-Dispenser] 01 61
+[T+660841280us][CH2-Pc    ] 02
+[T+660849321us][CH1-Dispenser] 02 62
+[T+660925304us][CH2-Pc    ] 03
+[T+660932281us][CH1-Dispenser] 03 73
+[T+660952304us][CH2-Pc    ] 23
+[T+660960970us][CH1-Dispenser] 23 D3
+[T+660974412us][CH1-Dispenser] FF
+[T+660974281us][CH2-Pc    ] FF
+[T+660987427us][CH1-Dispenser] E9
+[T+660987288us][CH2-Pc    ] E9
+[T+660999489us][CH1-Dispenser] FE
+[T+660999350us][CH2-Pc    ] FE
+[T+661012445us][CH1-Dispenser] E0
+[T+661012306us][CH2-Pc    ] E0
+[T+661025429us][CH1-Dispenser] E1
+[T+661025290us][CH2-Pc    ] E1
+[T+661037428us][CH1-Dispenser] E0
+[T+661037289us][CH2-Pc    ] E0
+[T+661051425us][CH1-Dispenser] FB
+[T+661051287us][CH2-Pc    ] FB
+[T+661063428us][CH1-Dispenser] EE
+[T+661063288us][CH2-Pc    ] EE
+[T+661076288us][CH2-Pc    ] F0
+[T+661104305us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+661178280us][CH2-Pc    ] 04
+[T+661186970us][CH1-Dispenser] 04 64
+[T+661256413us][CH1-Dispenser] 05
+[T+661256281us][CH2-Pc    ] 05
+[T+661440416us][CH1-Dispenser] 06
+[T+661440283us][CH2-Pc    ] 06
+[T+661603280us][CH2-Pc    ] 01
+[T+661609288us][CH1-Dispenser] 01 61
+[T+661682280us][CH2-Pc    ] 02
+[T+661689281us][CH1-Dispenser] 02 62
+[T+661761128us][CH2-Pc    ] 03
+[T+661770763us][CH1-Dispenser] 03 73
+[T+661799551us][CH1-Dispenser] 23 D3 FF
+[T+661799289us][CH2-Pc    ] 23 FF
+[T+661812288us][CH1-Dispenser] E9
+[T+661812839us][CH2-Pc    ] E9
+[T+661825682us][CH1-Dispenser] FE
+[T+661825541us][CH2-Pc    ] FE
+[T+661837690us][CH1-Dispenser] E0
+[T+661837544us][CH2-Pc    ] E0
+[T+661849566us][CH1-Dispenser] E1
+[T+661849428us][CH2-Pc    ] E1
+[T+661861407us][CH1-Dispenser] E0
+[T+661861281us][CH2-Pc    ] E0
+[T+661874417us][CH1-Dispenser] FB
+[T+661874285us][CH2-Pc    ] FB
+[T+661887428us][CH1-Dispenser] EE
+[T+661887288us][CH2-Pc    ] EE
+[T+661900280us][CH2-Pc    ] F0
+[T+661930280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+662005280us][CH1-Dispenser] 04 64
+[T+662002280us][CH2-Pc    ] 04
+[T+662069412us][CH1-Dispenser] 05
+[T+662069281us][CH2-Pc    ] 05
+[T+662244414us][CH1-Dispenser] 06
+[T+662244281us][CH2-Pc    ] 06
+[T+662419280us][CH2-Pc    ] 01
+[T+662424915us][CH1-Dispenser] 01 61
+[T+662497280us][CH2-Pc    ] 02
+[T+662503280us][CH1-Dispenser] 02 62
+[T+662575305us][CH2-Pc    ] 03
+[T+662582281us][CH1-Dispenser] 03 73
+[T+662603280us][CH2-Pc    ] 23
+[T+662611321us][CH1-Dispenser] 23 D3
+[T+662624412us][CH1-Dispenser] FF
+[T+662624281us][CH2-Pc    ] FF
+[T+662638280us][CH1-Dispenser] E9
+[T+662637291us][CH2-Pc    ] E9
+[T+662649493us][CH1-Dispenser] FE
+[T+662649288us][CH2-Pc    ] FE
+[T+662675412us][CH1-Dispenser] E0 E1
+[T+662675281us][CH2-Pc    ] E0 E1
+[T+662688288us][CH1-Dispenser] E0
+[T+662688427us][CH2-Pc    ] E0
+[T+662700288us][CH1-Dispenser] FB
+[T+662700428us][CH2-Pc    ] FB
+[T+662713427us][CH1-Dispenser] EE
+[T+662713288us][CH2-Pc    ] EE
+[T+662726280us][CH2-Pc    ] F0
+[T+662753280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+662817305us][CH2-Pc    ] 04
+[T+662827281us][CH1-Dispenser] 04 64
+[T+662895417us][CH1-Dispenser] 05
+[T+662895281us][CH2-Pc    ] 05
+[T+663070415us][CH1-Dispenser] 06
+[T+663070281us][CH2-Pc    ] 06
+[T+663245280us][CH2-Pc    ] 01
+[T+663254919us][CH1-Dispenser] 01 61
+[T+663323280us][CH2-Pc    ] 02
+[T+663328280us][CH1-Dispenser] 02 62
+[T+663402281us][CH2-Pc    ] 03
+[T+663407281us][CH1-Dispenser] 03 73
+[T+663429281us][CH2-Pc    ] 23
+[T+663436288us][CH1-Dispenser] 23 D3
+[T+663450416us][CH1-Dispenser] FF
+[T+663450281us][CH2-Pc    ] FF
+[T+663463422us][CH1-Dispenser] E9
+[T+663463284us][CH2-Pc    ] E9
+[T+663476422us][CH1-Dispenser] FE
+[T+663476284us][CH2-Pc    ] FE
+[T+663488414us][CH1-Dispenser] E0
+[T+663488282us][CH2-Pc    ] E0
+[T+663501425us][CH1-Dispenser] E1
+[T+663501288us][CH2-Pc    ] E1
+[T+663514427us][CH1-Dispenser] E0
+[T+663514288us][CH2-Pc    ] E0
+[T+663539410us][CH1-Dispenser] FB EE
+[T+663539281us][CH2-Pc    ] FB EE
+[T+663552281us][CH2-Pc    ] F0
+[T+663578281us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+663643433us][CH2-Pc    ] 04
+[T+663654286us][CH1-Dispenser] 04 64
+[T+663722418us][CH1-Dispenser] 05
+[T+663722283us][CH2-Pc    ] 05
+[T+663907417us][CH1-Dispenser] 06
+[T+663907282us][CH2-Pc    ] 06
+[T+664071467us][CH2-Pc    ] 01
+[T+664080281us][CH1-Dispenser] 01 61
+[T+664149280us][CH2-Pc    ] 02
+[T+664154922us][CH1-Dispenser] 02 62
+[T+664217280us][CH2-Pc    ] 03
+[T+664222280us][CH1-Dispenser] 03 73
+[T+664244280us][CH2-Pc    ] 23
+[T+664250306us][CH1-Dispenser] 23 D3
+[T+664266412us][CH1-Dispenser] FF
+[T+664266281us][CH2-Pc    ] FF
+[T+664278414us][CH1-Dispenser] E9
+[T+664278282us][CH2-Pc    ] E9
+[T+664291415us][CH1-Dispenser] FE
+[T+664291282us][CH2-Pc    ] FE
+[T+664304412us][CH1-Dispenser] E0
+[T+664304281us][CH2-Pc    ] E0
+[T+664316413us][CH1-Dispenser] E1
+[T+664316281us][CH2-Pc    ] E1
+[T+664330406us][CH1-Dispenser] E0
+[T+664329281us][CH2-Pc    ] E0
+[T+664342492us][CH1-Dispenser] FB
+[T+664342352us][CH2-Pc    ] FB
+[T+664354412us][CH1-Dispenser] EE
+[T+664354281us][CH2-Pc    ] EE
+[T+664367281us][CH2-Pc    ] F0
+[T+664396280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+664471280us][CH2-Pc    ] 04
+[T+664476280us][CH1-Dispenser] 04 64
+[T+664549413us][CH1-Dispenser] 05
+[T+664549281us][CH2-Pc    ] 05
+[T+664713416us][CH1-Dispenser] 06
+[T+664713281us][CH2-Pc    ] 06
+[T+664888280us][CH2-Pc    ] 01
+[T+664894288us][CH1-Dispenser] 01 61
+[T+664966304us][CH2-Pc    ] 02
+[T+664975924us][CH1-Dispenser] 02 62
+[T+665044280us][CH2-Pc    ] 03
+[T+665051284us][CH1-Dispenser] 03 73
+[T+665071419us][CH2-Pc    ] 23
+[T+665077280us][CH1-Dispenser] 23 D3
+[T+665105414us][CH1-Dispenser] FF E9
+[T+665105282us][CH2-Pc    ] FF E9
+[T+665118282us][CH2-Pc    ] FE
+[T+665118420us][CH1-Dispenser] FE
+[T+665131657us][CH1-Dispenser] E0
+[T+665131516us][CH2-Pc    ] E0
+[T+665143416us][CH1-Dispenser] E1
+[T+665143282us][CH2-Pc    ] E1
+[T+665156416us][CH1-Dispenser] E0
+[T+665156281us][CH2-Pc    ] E0
+[T+665181412us][CH1-Dispenser] FB EE
+[T+665181281us][CH2-Pc    ] FB EE
+[T+665194304us][CH2-Pc    ] F0
+[T+665223280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+665296280us][CH2-Pc    ] 04
+[T+665301907us][CH1-Dispenser] 04 64
+[T+665374414us][CH1-Dispenser] 05
+[T+665374281us][CH2-Pc    ] 05
+[T+665539413us][CH1-Dispenser] 06
+[T+665539281us][CH2-Pc    ] 06
+[T+665714280us][CH2-Pc    ] 01
+[T+665719280us][CH1-Dispenser] 01 61
+[T+665792280us][CH2-Pc    ] 02
+[T+665799911us][CH1-Dispenser] 02 62
+[T+665870281us][CH2-Pc    ] 03
+[T+665878321us][CH1-Dispenser] 03 73
+[T+665908412us][CH1-Dispenser] 23 D3 FF
+[T+665908281us][CH2-Pc    ] 23 FF
+[T+665921412us][CH1-Dispenser] E9
+[T+665921281us][CH2-Pc    ] E9
+[T+665938413us][CH1-Dispenser] FE
+[T+665938281us][CH2-Pc    ] FE
+[T+665951428us][CH1-Dispenser] E0
+[T+665951289us][CH2-Pc    ] E0
+[T+665965288us][CH1-Dispenser] E1
+[T+665965428us][CH2-Pc    ] E1
+[T+665977448us][CH1-Dispenser] E0
+[T+665976897us][CH2-Pc    ] E0
+[T+665990418us][CH1-Dispenser] FB
+[T+665990282us][CH2-Pc    ] FB
+[T+666002421us][CH1-Dispenser] EE
+[T+666002284us][CH2-Pc    ] EE
+[T+666015281us][CH2-Pc    ] F0
+[T+666045280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+666116280us][CH2-Pc    ] 04
+[T+666121280us][CH1-Dispenser] 04 64
+[T+666194413us][CH1-Dispenser] 05
+[T+666194281us][CH2-Pc    ] 05
+[T+666369413us][CH1-Dispenser] 06
+[T+666369281us][CH2-Pc    ] 06
+[T+666544281us][CH2-Pc    ] 01
+[T+666548310us][CH1-Dispenser] 01 61
+[T+666611281us][CH2-Pc    ] 02
+[T+666618288us][CH1-Dispenser] 02 62
+[T+666689280us][CH2-Pc    ] 03
+[T+666698281us][CH1-Dispenser] 03 73
+[T+666717280us][CH2-Pc    ] 23
+[T+666722280us][CH1-Dispenser] 23 D3
+[T+666738413us][CH1-Dispenser] FF
+[T+666738281us][CH2-Pc    ] FF
+[T+666751415us][CH1-Dispenser] E9
+[T+666751282us][CH2-Pc    ] E9
+[T+666764427us][CH1-Dispenser] FE
+[T+666764287us][CH2-Pc    ] FE
+[T+666779415us][CH1-Dispenser] E0
+[T+666779281us][CH2-Pc    ] E0
+[T+666794425us][CH1-Dispenser] E1
+[T+666794286us][CH2-Pc    ] E1
+[T+666807415us][CH1-Dispenser] E0
+[T+666807282us][CH2-Pc    ] E0
+[T+666819418us][CH1-Dispenser] FB
+[T+666819282us][CH2-Pc    ] FB
+[T+666832415us][CH1-Dispenser] EE
+[T+666832282us][CH2-Pc    ] EE
+[T+666845281us][CH2-Pc    ] F0
+[T+666874280us][CH1-Dispenser] F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+666947281us][CH2-Pc    ] 04
+[T+666953923us][CH1-Dispenser] 04 64
+[T+667025413us][CH1-Dispenser] 05
+[T+667025281us][CH2-Pc    ] 05
+[T+667207417us][CH1-Dispenser] 06
+[T+667207281us][CH2-Pc    ] 06
+[T+667392280us][CH2-Pc    ] 01
+[T+667400321us][CH1-Dispenser] 01 61
+[T+667471280us][CH2-Pc    ] 02
+[T+667482280us][CH1-Dispenser] 02 62
+[T+667549280us][CH2-Pc    ] 03
+[T+667557305us][CH1-Dispenser] 03 73
+[T+667576280us][CH2-Pc    ] 23
+[T+667584305us][CH1-Dispenser] 23 D3
+[T+667610420us][CH1-Dispenser] FF E9
+[T+667610282us][CH2-Pc    ] FF E9
+[T+667623425us][CH1-Dispenser] FE
+[T+667623287us][CH2-Pc    ] FE
+[T+667636416us][CH1-Dispenser] E0
+[T+667636282us][CH2-Pc    ] E0
+[T+667648284us][CH1-Dispenser] E1
+[T+667648417us][CH2-Pc    ] E1
+[T+667661425us][CH1-Dispenser] E0
+[T+667661285us][CH2-Pc    ] E0
+[T+667674423us][CH1-Dispenser] FB
+[T+667674284us][CH2-Pc    ] FB
+[T+667699280us][CH2-Pc    ] EE F0
+[T+667730280us][CH1-Dispenser] EE F0 BA B0 B3 B3 B0 B1 B0 B0 B0 B0 B1 B1 B1 B1 B1 B9 C1 8D 8A
+[T+667801280us][CH2-Pc    ] 04
+[T+667806280us][CH1-Dispenser] 04 64
+[T+667879413us][CH1-Dispenser] 05
+[T+667879281us][CH2-Pc    ] 05
+[T+668064413us][CH1-Dispenser] 06
+[T+668064281us][CH2-Pc    ] 06
+[T+668228308us][CH2-Pc    ] 01
+[T+668235293us][CH1-Dispenser] 01 61
+[T+668306280us][CH2-Pc    ] 02
+[T+668314321us][CH1-Dispenser] 02 62

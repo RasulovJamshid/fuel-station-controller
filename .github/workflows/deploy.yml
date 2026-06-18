@@ -116,7 +116,7 @@ jobs:
 
             echo "==> Verifying API health"
             curl -sf --retry 5 --retry-delay 3 \
-              https://fuelstation.ung.uz/api/health \
+              https://fuelstation.ung.uz/api/health/ready \
               | python3 -m json.tool
 
             echo "==> Deploy complete"

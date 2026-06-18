@@ -145,7 +145,12 @@ fn parse_fill_data_block(inner: &[u8]) -> Option<FillDataFields> {
         volume_x2: inner[off + 3],
         volume_l: inner[off + 4],
         volume_h: inner[off + 5],
-        amount: [inner[off + 6], inner[off + 7], inner[off + 8], inner[off + 9]],
+        amount: [
+            inner[off + 6],
+            inner[off + 7],
+            inner[off + 8],
+            inner[off + 9],
+        ],
         sale_complete,
         hose_product,
         hose_code,
@@ -938,7 +943,10 @@ mod tests {
                     decode_volume(volume_x1, volume_x2, volume_l, volume_h),
                     0.15
                 );
-                assert_eq!(decode_amount(amount[0], amount[1], amount[2], amount[3]), 1575);
+                assert_eq!(
+                    decode_amount(amount[0], amount[1], amount[2], amount[3]),
+                    1575
+                );
             }
             f => panic!("expected Data, got {:?}", f),
         }

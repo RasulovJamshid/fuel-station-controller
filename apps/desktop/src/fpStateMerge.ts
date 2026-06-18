@@ -136,6 +136,10 @@ export function mergeIncomingFpState(
     product_id: holdDone ? (prev.product_id ?? incoming.product_id) : (incoming.product_id ?? prev.product_id),
     product_color: holdDone ? (prev.product_color ?? incoming.product_color) : (incoming.product_color ?? prev.product_color),
     nozzle_index: holdDone ? (prev.nozzle_index ?? incoming.nozzle_index) : (incoming.nozzle_index ?? prev.nozzle_index),
+    pump_total_nozzle_index: incoming.pump_total_nozzle_index ?? prev.pump_total_nozzle_index ?? null,
+    pump_total_volume: incoming.pump_total_volume ?? prev.pump_total_volume ?? null,
+    pump_total_amount: incoming.pump_total_amount ?? prev.pump_total_amount ?? null,
+    pump_total_price: incoming.pump_total_price ?? prev.pump_total_price ?? null,
     pre_auth_preset: preAuthPreset,
     stopped_tx_id:
       incoming.stopped_tx_id ?? (incomingTag === "STOPPED" ? prev.stopped_tx_id : null) ?? null,

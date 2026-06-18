@@ -6,19 +6,27 @@ import { PaginationDto, PaginatedResponse } from '../common/dto/pagination.dto';
 export class PricesService {
     constructor(private prisma: PrismaService) {}
 
-    async getCurrentPrices(companyId: string, stationId?: string) {
+    async getCurrentPrices(companyId: string, stationId?: string, allowedStationIds?: string[]) {
+        if (allowedStationIds && allowedStationIds.length === 0) return [];
         return this.prisma.priceSetting.findMany({
             where: {
-                station: { companyId, ...(stationId ? { id: stationId } : {}), deletedAt: null },
+                station: {
+                    companyId,
+                    ...(allowedStationIds ? { id: { in: allowedStationIds } } :
+                        stationId ? { id: stationId } : {}),
+                    deletedAt: null,
+                },
             },
             orderBy: [{ stationId: 'asc' }, { fpId: 'asc' }, { nozzleIndex: 'asc' }],
         });
     }
 
-    async getPriceHistory(companyId: string, stationId: string | undefined, pagination: PaginationDto) {
+    async getPriceHistory(companyId: string, stationId: string | undefined, pagination: PaginationDto, allowedStationIds?: string[]) {
+        if (allowedStationIds && allowedStationIds.length === 0) return { data: [], total: 0, page: 1, pages: 1 };
         const where = {
             companyId,
-            ...(stationId ? { stationId } : {}),
+            ...(allowedStationIds ? { stationId: { in: allowedStationIds } } :
+                stationId ? { stationId } : {}),
         };
         const [data, total] = await this.prisma.$transaction([
             this.prisma.priceChangeLog.findMany({

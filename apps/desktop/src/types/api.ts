@@ -35,6 +35,10 @@ export interface FpState {
   base_amount?: number | null;
   segment_volume?: number | null;
   segment_amount?: number | null;
+  pump_total_nozzle_index?: number | null;
+  pump_total_volume?: number | null;
+  pump_total_amount?: number | null;
+  pump_total_price?: number | null;
   pre_auth_preset?: string | null;
   stop_source?: StopSource | null;
 }

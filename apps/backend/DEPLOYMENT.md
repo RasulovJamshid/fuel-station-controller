@@ -178,6 +178,11 @@ CORS_ORIGINS=https://fuelstation.ung.uz
 # ── Seed admin (first start only) ────────────────────────────────────────────
 SEED_ADMIN_EMAIL=admin@fuelstation.ung.uz
 SEED_ADMIN_PASSWORD=<strong-password>
+
+# ── Optional Timescale hypertable setup ──────────────────────────────────────
+# Keep disabled unless prisma/timescale.sql has been validated against the
+# current Prisma primary keys and indexes.
+ENABLE_TIMESCALE_SETUP=false
 ```
 
 ```bash
@@ -320,11 +325,17 @@ docker compose logs -f
 |---|------------|-----------------------------------------------------------|----------|
 | 1 | `postgres`  | TimescaleDB init, health check passes                    | ~10 s    |
 | 2 | `redis`     | Starts with password                                     | ~2 s     |
-| 3 | `backend`   | Waits for postgres, runs `prisma db push`, seeds admin   | ~30 s    |
+| 3 | `backend`   | Waits for postgres, runs Prisma migrations, seeds admin if configured | ~30 s |
 | 4 | `frontend`  | Next.js standalone server starts                         | ~20 s    |
 | 5 | `nginx`     | Starts after backend and frontend are healthy            | ~2 s     |
 
 The first build pulls base images and compiles TypeScript + Next.js — allow **3–6 minutes**.
+
+After the first successful login, rotate or remove `SEED_ADMIN_PASSWORD` from `.env`; the seed is idempotent, but the password should not stay in production configuration longer than needed.
+
+### Optional Timescale setup
+
+The production database image is TimescaleDB, but `ENABLE_TIMESCALE_SETUP` defaults to `false`. The current Prisma schema uses simple primary keys such as `"Transaction"."id"`, while Timescale hypertables require unique indexes to include the partitioning time column. Enable `prisma/timescale.sql` only after validating it against the target schema or adjusting the Prisma indexes for hypertables.
 
 ---
 
@@ -345,15 +356,19 @@ azs_postgres        running (healthy)
 azs_redis           running (healthy)
 ```
 
-### API health check
+### API health checks
 
 ```bash
-curl -s https://fuelstation.ung.uz/api/health | python3 -m json.tool
+curl -s https://fuelstation.ung.uz/api/health/live | python3 -m json.tool
+curl -s https://fuelstation.ung.uz/api/health/ready | python3 -m json.tool
+curl -s https://fuelstation.ung.uz/api/health/metrics | python3 -m json.tool
 ```
 
 ```json
 { "status": "ok", "info": { "database": { "status": "up" } } }
 ```
+
+`/health/live` confirms the process is running. `/health/ready` checks PostgreSQL, Redis, and heap memory and is used by Docker/nginx/deploy verification. `/health/metrics` exposes lightweight process and memory data for external monitoring.
 
 ### Frontend
 
@@ -390,7 +405,9 @@ push to main
     └─ neither changed          → skip deploy
 ```
 
-After rebuilding, the workflow waits for all containers to report `healthy`, then hits `/api/health`. If anything fails it posts a Telegram message and marks the run red.
+After rebuilding, the workflow waits for all containers to report `healthy`, then hits `/api/health/ready`. If anything fails it posts a Telegram message and marks the run red.
+
+Backend pull requests and backend changes on `main` also run `.github/workflows/backend-ci.yml`, which installs dependencies, validates Prisma, builds NestJS, and runs Jest.
 
 You can also trigger a deploy manually from the GitHub UI (Actions → Deploy to Production → Run workflow) and optionally specify which services to rebuild.
 
@@ -581,9 +598,67 @@ gunzip -c backups/azs_20240601_020000.sql.gz \
 docker compose start backend frontend
 ```
 
+### Verify backup restore
+
+Production backups are only useful if restore has been tested. Create an empty restore database first, then run:
+
+```bash
+cd /opt/azs/apps/backend
+
+docker compose exec postgres createdb -U azs azs_restore || true
+
+docker compose exec \
+  -e DATABASE_URL="postgresql://azs:$POSTGRES_PASSWORD@postgres:5432/azs_manager" \
+  -e RESTORE_DATABASE_URL="postgresql://azs:$POSTGRES_PASSWORD@postgres:5432/azs_restore" \
+  backend npm run backup:verify
+```
+
+The script creates a compressed dump, restores it into `azs_restore`, and checks core tables. Run this after first deployment and after any backup process change.
+
 ---
 
 ## 13. Troubleshooting
+
+### Station sync compatibility smoke test
+
+After creating a station and copying its API key, send one small transaction batch:
+
+```bash
+curl -s -X POST https://fuelstation.ung.uz/api/v1/sync/STATION_ID \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: STATION_API_KEY" \
+  -d '{
+    "records": [{
+      "id": "2b27a2c3-ef90-4ee6-8f7d-8a98d2f8d1a1",
+      "entity_type": "transaction",
+      "entity_id": "smoke-tx-1",
+      "created_at": 1781780000000,
+      "payload": {
+        "id": "smoke-tx-1",
+        "fp_id": "FP1",
+        "label": "1",
+        "address_byte": 80,
+        "started_at": "2026-06-18T10:00:00.000Z",
+        "completed_at": "2026-06-18T10:01:00.000Z",
+        "volume": 1,
+        "amount": 14300,
+        "price": 14300,
+        "nozzle_index": 1,
+        "product_id": 95,
+        "product_name": "AI-95",
+        "status": "COMPLETED"
+      }
+    }]
+  }' | python3 -m json.tool
+```
+
+Expected result:
+
+```json
+{ "accepted": ["2b27a2c3-ef90-4ee6-8f7d-8a98d2f8d1a1"], "rejected": [] }
+```
+
+Then confirm the transaction appears in dashboard/reports. Re-sending the same record should still return `accepted` and must not duplicate the transaction.
 
 ### Backend won't start
 

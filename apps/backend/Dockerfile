@@ -25,6 +25,7 @@ RUN npm install --omit=dev
 
 # Copy schema first so prisma generate can run without a DB connection
 COPY prisma ./prisma
+COPY scripts ./scripts
 RUN npx prisma generate
 
 # Copy compiled app from builder

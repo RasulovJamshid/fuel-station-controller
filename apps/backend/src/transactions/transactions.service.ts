@@ -15,16 +15,22 @@ export class TransactionsService {
         return rows.map(r => r.id);
     }
 
-    async findAll(companyId: string, q: QueryTransactionsDto) {
+    async findAll(companyId: string, q: QueryTransactionsDto, allowedStationIds?: string[]) {
+        if (allowedStationIds && allowedStationIds.length === 0) return { data: [], total: 0, page: 1, pages: 1 };
         const oilBaseIds = q.oilBaseId
             ? await this.stationIdsForOilBase(companyId, q.oilBaseId)
             : null;
         if (oilBaseIds !== null && oilBaseIds.length === 0) return { data: [], total: 0, page: 1, pages: 1 };
 
+        const stationIds = allowedStationIds
+            ? (oilBaseIds ?? allowedStationIds).filter(id => allowedStationIds.includes(id))
+            : oilBaseIds;
+        if (stationIds && stationIds.length === 0) return { data: [], total: 0, page: 1, pages: 1 };
+
         const where: any = {
             companyId,
             deletedAt: null,
-            ...(oilBaseIds       ? { stationId: { in: oilBaseIds } } :
+            ...(stationIds       ? { stationId: { in: stationIds } } :
                 q.stationId     ? { stationId: q.stationId }        : {}),
             ...(q.fpId          ? { fpId: q.fpId }               : {}),
             ...(q.shiftId       ? { shiftId: q.shiftId }         : {}),
@@ -51,24 +57,38 @@ export class TransactionsService {
         return PaginatedResponse.of(data, total, q);
     }
 
-    async findOne(id: string, companyId: string) {
+    async findOne(id: string, companyId: string, allowedStationIds?: string[]) {
+        if (allowedStationIds && allowedStationIds.length === 0) {
+            throw new NotFoundException('Transaction not found');
+        }
         const tx = await this.prisma.transaction.findFirst({
-            where: { id, companyId, deletedAt: null },
+            where: {
+                id,
+                companyId,
+                deletedAt: null,
+                ...(allowedStationIds ? { stationId: { in: allowedStationIds } } : {}),
+            },
         });
         if (!tx) throw new NotFoundException('Transaction not found');
         return tx;
     }
 
-    async summarize(companyId: string, q: QueryTransactionsDto) {
+    async summarize(companyId: string, q: QueryTransactionsDto, allowedStationIds?: string[]) {
+        if (allowedStationIds && allowedStationIds.length === 0) return { count: 0, totalVolume: 0 };
         const oilBaseIds = q.oilBaseId
             ? await this.stationIdsForOilBase(companyId, q.oilBaseId)
             : null;
         if (oilBaseIds !== null && oilBaseIds.length === 0) return { count: 0, totalVolume: 0 };
 
+        const stationIds = allowedStationIds
+            ? (oilBaseIds ?? allowedStationIds).filter(id => allowedStationIds.includes(id))
+            : oilBaseIds;
+        if (stationIds && stationIds.length === 0) return { count: 0, totalVolume: 0 };
+
         const where: any = {
             companyId,
             deletedAt: null,
-            ...(oilBaseIds       ? { stationId: { in: oilBaseIds } } :
+            ...(stationIds       ? { stationId: { in: stationIds } } :
                 q.stationId     ? { stationId: q.stationId }        : {}),
             ...(q.fpId          ? { fpId: q.fpId }              : {}),
             ...(q.shiftId       ? { shiftId: q.shiftId }        : {}),

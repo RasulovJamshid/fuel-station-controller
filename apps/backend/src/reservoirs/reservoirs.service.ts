@@ -25,11 +25,16 @@ export class ReservoirsService {
         });
     }
 
-    findAll(companyId: string, stationId?: string) {
+    findAll(companyId: string, stationId?: string, allowedStationIds?: string[]) {
+        if (allowedStationIds && allowedStationIds.length === 0) return [];
         return this.prisma.reservoir.findMany({
             where: {
                 deletedAt: null,
-                station: { companyId, ...(stationId ? { id: stationId } : {}) },
+                station: {
+                    companyId,
+                    ...(allowedStationIds ? { id: { in: allowedStationIds } } :
+                        stationId ? { id: stationId } : {}),
+                },
             },
             include: {
                 readings: {
@@ -40,8 +45,11 @@ export class ReservoirsService {
         });
     }
 
-    async latestReadings(companyId: string, stationId?: string) {
-        const stationFilter = stationId
+    async latestReadings(companyId: string, stationId?: string, allowedStationIds?: string[]) {
+        if (allowedStationIds && allowedStationIds.length === 0) return [];
+        const stationFilter = allowedStationIds
+            ? Prisma.sql`AND r."stationId" = ANY(${allowedStationIds})`
+            : stationId
             ? Prisma.sql`AND r."stationId" = ${stationId}`
             : Prisma.empty;
 

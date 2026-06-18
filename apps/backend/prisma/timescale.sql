@@ -1,5 +1,12 @@
--- Run this ONCE after prisma migrate deploy
--- Requires TimescaleDB extension
+-- Optional TimescaleDB setup.
+--
+-- IMPORTANT: validate this file before enabling ENABLE_TIMESCALE_SETUP=true.
+-- Timescale hypertables require all unique indexes, including primary keys, to
+-- include the partitioning time column. The current Prisma schema uses simple
+-- primary keys such as "Transaction"."id", so create_hypertable may fail unless
+-- the schema/index strategy is adjusted first.
+
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 -- Hypertables
 SELECT create_hypertable('"Transaction"', 'startedAt',

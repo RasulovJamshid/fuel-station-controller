@@ -40,6 +40,7 @@ import { MaintenanceModule } from './maintenance/maintenance.module';
                 JWT_EXPIRES_IN:         Joi.string().default('15m'),
                 JWT_REFRESH_SECRET:     Joi.string().min(32).required(),
                 JWT_REFRESH_EXPIRES_IN: Joi.string().default('30d'),
+                LOG_LEVEL:              Joi.string().valid('fatal', 'error', 'warn', 'info', 'debug', 'trace').default('info'),
                 BCRYPT_ROUNDS:          Joi.number().default(12),
                 MAX_LOGIN_ATTEMPTS:     Joi.number().default(5),
                 LOGIN_LOCKOUT_MINUTES:  Joi.number().default(15),
@@ -59,7 +60,7 @@ import { MaintenanceModule } from './maintenance/maintenance.module';
                 transport: process.env.NODE_ENV !== 'production'
                     ? { target: 'pino-pretty' }
                     : undefined,
-                level: process.env.NODE_ENV !== 'production' ? 'debug' : 'info',
+                level: process.env.NODE_ENV !== 'production' ? 'debug' : process.env.LOG_LEVEL ?? 'info',
                 autoLogging: { ignore: (req) => req.url === '/api/health' },
                 redact: ['req.headers.authorization', 'req.headers["x-api-key"]'],
             },

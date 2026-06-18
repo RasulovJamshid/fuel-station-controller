@@ -14,7 +14,7 @@
   "connection": {
     "protocol": "gilbarco",
     "port": "/dev/ttyUSB0",
-    "baud_rate": 5787,
+    "baud_rate": 9600,
     "parity": "even",
     "data_bits": 8,
     "stop_bits": 1,
@@ -26,9 +26,24 @@
     "reconnect_settle_rounds": 3
   },
   "products": [
-    { "id": 1, "name": "AI-92",  "color": "#2196F3", "unit": "litre" },
-    { "id": 2, "name": "AI-95",  "color": "#FF9800", "unit": "litre" },
-    { "id": 3, "name": "Diesel", "color": "#795548", "unit": "litre" }
+    {
+      "id": 1,
+      "name": "AI-92",
+      "color": "#2196F3",
+      "unit": "litre"
+    },
+    {
+      "id": 2,
+      "name": "AI-92RUS",
+      "color": "#4CAF50",
+      "unit": "litre"
+    },
+    {
+      "id": 3,
+      "name": "AI-95",
+      "color": "#FF9800",
+      "unit": "litre"
+    }
   ],
   "fueling_positions": [
     {
@@ -38,57 +53,54 @@
       "active": true,
       "nozzles": [
         { "index": 1, "product_id": 1, "price": 12500, "active": true },
-        { "index": 2, "product_id": 2, "price": 15500, "active": true },
-        { "index": 3, "product_id": 3, "price": 10800, "active": true },
+        { "index": 2, "product_id": 1, "price": 12500, "active": true },
+        { "index": 3, "product_id": 1, "price": 12500, "active": true },
         { "index": 4, "product_id": 1, "price": 12500, "active": false }
       ]
     },
     {
       "id": "FP2",
-      "label": "Dispenser 1 Side B",
+      "label": "Dispenser 2 Side A",
       "address_byte": 2,
       "active": true,
       "nozzles": [
-        { "index": 1, "product_id": 1, "price": 12500, "active": true },
-        { "index": 2, "product_id": 2, "price": 15500, "active": true },
-        { "index": 3, "product_id": 3, "price": 10800, "active": true },
-        { "index": 4, "product_id": 1, "price": 12500, "active": false }
+        { "index": 1, "product_id": 2, "price": 11300, "active": true },
+        { "index": 2, "product_id": 2, "price": 11300, "active": true },
+        { "index": 3, "product_id": 2, "price": 11300, "active": true },
+        { "index": 4, "product_id": 2, "price": 11300, "active": false }
       ]
     },
     {
       "id": "FP3",
-      "label": "Dispenser 2 Side A",
+      "label": "Dispenser 3 Side A",
       "address_byte": 3,
       "active": true,
       "nozzles": [
-        { "index": 1, "product_id": 1, "price": 12500, "active": true },
-        { "index": 2, "product_id": 2, "price": 15500, "active": true },
-        { "index": 3, "product_id": 3, "price": 10800, "active": true },
-        { "index": 4, "product_id": 1, "price": 12500, "active": false }
+        { "index": 1, "product_id": 3, "price": 14300, "active": true },
+        { "index": 2, "product_id": 3, "price": 14300, "active": true },
+        { "index": 3, "product_id": 3, "price": 14300, "active": true },
+        { "index": 4, "product_id": 3, "price": 14300, "active": false }
       ]
     },
     {
       "id": "FP4",
-      "label": "Dispenser 2 Side B",
+      "label": "Dispenser 1 Side B",
       "address_byte": 4,
       "active": true,
       "nozzles": [
         { "index": 1, "product_id": 1, "price": 12500, "active": true },
-        { "index": 2, "product_id": 2, "price": 15500, "active": true },
-        { "index": 3, "product_id": 3, "price": 10800, "active": true },
+        { "index": 2, "product_id": 1, "price": 12500, "active": true },
+        { "index": 3, "product_id": 1, "price": 12500, "active": true },
         { "index": 4, "product_id": 1, "price": 12500, "active": false }
       ]
     },
     {
       "id": "FP5",
-      "label": "Dispenser 3 Side A",
+      "label": "Dispenser 2 Side B",
       "address_byte": 5,
       "active": false,
       "nozzles": [
-        { "index": 1, "product_id": 1, "price": 12500, "active": true },
-        { "index": 2, "product_id": 2, "price": 15500, "active": true },
-        { "index": 3, "product_id": 3, "price": 10800, "active": true },
-        { "index": 4, "product_id": 1, "price": 12500, "active": false }
+        { "index": 1, "product_id": 1, "price": 12500, "active": true }
       ]
     },
     {
@@ -97,10 +109,7 @@
       "address_byte": 6,
       "active": false,
       "nozzles": [
-        { "index": 1, "product_id": 1, "price": 12500, "active": true },
-        { "index": 2, "product_id": 2, "price": 15500, "active": true },
-        { "index": 3, "product_id": 3, "price": 10800, "active": true },
-        { "index": 4, "product_id": 1, "price": 12500, "active": false }
+        { "index": 1, "product_id": 1, "price": 12500, "active": true }
       ]
     }
   ],
@@ -123,8 +132,23 @@
     "use_cancel_mode": true
   },
   "tanks": [
-    { "product_id": 1, "label": "AI-92",  "capacity_l": 20000.0, "current_l": 10000.0 },
-    { "product_id": 2, "label": "AI-95",  "capacity_l": 20000.0, "current_l": 8000.0  },
-    { "product_id": 3, "label": "Diesel", "capacity_l": 20000.0, "current_l": 6000.0  }
+    {
+      "product_id": 1,
+      "label": "AI-92",
+      "capacity_l": 20000.0,
+      "current_l": 10000.0
+    },
+    {
+      "product_id": 2,
+      "label": "AI-92RUS",
+      "capacity_l": 20000.0,
+      "current_l": 10000.0
+    },
+    {
+      "product_id": 3,
+      "label": "AI-95",
+      "capacity_l": 20000.0,
+      "current_l": 8000.0
+    }
   ]
 }

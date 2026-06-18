@@ -99,8 +99,8 @@ export class ReportsService {
         `;
     }
 
-    async requestExport(userId: string, companyId: string, params: any) {
-        const job = await this.queue.add('export', { userId, companyId, params });
+    async requestExport(userId: string, companyId: string, params: any, allowedStationIds?: string[]) {
+        const job = await this.queue.add('export', { userId, companyId, params, allowedStationIds });
         return { jobId: job.id, message: 'Export started — you will be notified when ready' };
     }
 }

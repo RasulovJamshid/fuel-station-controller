@@ -90,6 +90,15 @@ pub struct FpState {
     pub segment_volume: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub segment_amount: Option<u64>,
+    /// Latest pump totalizer for the currently selected/last sold nozzle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pump_total_nozzle_index: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pump_total_volume: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pump_total_amount: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pump_total_price: Option<u32>,
     /// Human-readable preset while `status` is `PRE_AUTHORIZED`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pre_auth_preset: Option<String>,

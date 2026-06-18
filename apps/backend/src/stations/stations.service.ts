@@ -31,9 +31,14 @@ export class StationsService {
         });
     }
 
-    findAll(companyId: string) {
+    findAll(companyId: string, stationIds?: string[]) {
+        if (stationIds && stationIds.length === 0) return [];
         return this.prisma.station.findMany({
-            where: { companyId, deletedAt: null },
+            where: {
+                companyId,
+                deletedAt: null,
+                ...(stationIds ? { id: { in: stationIds } } : {}),
+            },
             orderBy: { name: 'asc' },
         });
     }

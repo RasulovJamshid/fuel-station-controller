@@ -2,88 +2,76 @@ use crate::lrc::gilbarco_lrc;
 
 // ── Single-byte commands ──────────────────────────────────────────────────────
 
-/// Status request: `[addr]`.
+/// Poll pump status: send `[addr]`, pump responds with its current state byte.
 pub fn status(addr: u8) -> [u8; 1] {
     [addr]
 }
 
-/// Authorize fueling position: `[addr + 16]`.
-pub fn authorize(addr: u8) -> [u8; 1] {
-    [addr.wrapping_add(16)]
-}
-
-/// Enter listen mode: `[addr + 32]`.
-/// Required before SetPrice, GetNozzle, or PresetAmount.
-pub fn listen_mode(addr: u8) -> [u8; 1] {
-    [addr.wrapping_add(32)]
-}
-
-/// Halt pump: `[addr + 48]`.
-pub fn halt(addr: u8) -> [u8; 1] {
-    [addr.wrapping_add(48)]
-}
-
-/// Request final transaction data: `[addr + 64]`.
-pub fn get_transaction(addr: u8) -> [u8; 1] {
-    [addr.wrapping_add(64)]
-}
-
-/// Request accumulated pump totals: `[addr + 80]`.
-pub fn get_totals(addr: u8) -> [u8; 1] {
-    [addr.wrapping_add(80)]
-}
-
-/// Request live display data during delivery: `[addr + 96]`.
+/// Request live display data during delivery: `0x60 | addr`.
+///
+/// Pump responds with 6 E-prefixed bytes: `E{d0}..E{d5}`.
+/// Decode with `parse_display_response` as an amount counter in units of 10 soum.
 pub fn get_display(addr: u8) -> [u8; 1] {
-    [addr.wrapping_add(96)]
+    [0x60 | (addr & 0x0F)]
 }
 
-// ── Multi-byte commands ───────────────────────────────────────────────────────
+/// Request final transaction record (first frame): `0x40 | addr`.
+///
+/// Pump responds with a 33-byte frame starting `FF`.
+/// Decoded by `parse_transaction_response`.
+pub fn get_transaction(addr: u8) -> [u8; 1] {
+    [0x40 | (addr & 0x0F)]
+}
+
+/// Request totals/secondary frame: `0x50 | addr`.
+///
+/// ASFuelControl names this command `GetTotals`; decode with `parse_totals_response`.
+pub fn get_transaction2(addr: u8) -> [u8; 1] {
+    [0x50 | (addr & 0x0F)]
+}
+
+/// Request accumulated per-nozzle totals: `0x50 | addr`.
+pub fn get_totals(addr: u8) -> [u8; 1] {
+    get_transaction2(addr)
+}
 
 /// Query which nozzle is currently lifted.
-/// Pump must already be in listen mode (response 0xD1..0xDF) before sending.
-pub fn get_nozzle() -> [u8; 9] {
-    [0xFF, 0xE9, 0xFE, 0xE0, 0xE1, 0xE0, 0xFB, 0xEE, 0xF0]
+///
+/// Send `[0x20 | addr, 0xFF]` as a two-byte command.
+/// Pump responds: `0xD0|addr` (ack) + `FF` (frame start) + 7 bytes (nozzle data + LRC).
+/// Full raw response is `[0x20|addr, 0xD0|addr, 0xFF, <6-bytes>, <LRC>]` = 10 bytes
+/// before echo stripping; see `parse_nozzle_response`.
+pub fn get_nozzle(addr: u8) -> [u8; 2] {
+    [0x20 | (addr & 0x0F), 0xFF]
 }
 
-/// Build a SetPrice frame for the given 1-based nozzle index and price integer.
+/// Request all-pump status: `F0`.
 ///
-/// `price_int` is the raw integer as used by the pump's internal price register
-/// (typically 4 digits max, e.g. 1050 → 10.50 per litre with 2 dp on the pump).
-/// The value must match the price scale the pump is configured for.
-///
-/// Frame layout: `FF E5 F4 F6 [NozzleID=223+idx] F7 [p_lsb..p_msb] FB [LRC] F0`
-pub fn set_price(nozzle_index: u8, price_int: u32) -> Vec<u8> {
-    let nozzle_id = 223u8.wrapping_add(nozzle_index);
-    let digits = encode_4digit(price_int);
-    // digits[0] = LSB (units), digits[3] = MSB (thousands)
-    let cmd: Vec<u8> = vec![
-        0xFF, 0xE5, 0xF4, 0xF6, nozzle_id, 0xF7, digits[0], digits[1], digits[2],
-        digits[3], // units first (LSB-first per protocol)
-        0xFB,
-    ];
-    let lrc = gilbarco_lrc(&cmd);
-    let mut buf = cmd;
-    buf.push(lrc);
-    buf.push(0xF0);
-    buf
+/// Pump responds with a 19-byte frame encoding the status of all pump addresses.
+/// Used for initialization and periodic bus health checks.
+pub fn get_all() -> [u8; 1] {
+    [0xF0]
 }
 
-/// Build a PresetAmount frame (money preset).
+/// Authorize pump to start fueling: `0x10 | addr`.
 ///
-/// `amount_int`: raw 5-digit amount integer in the pump's currency scale.
-pub fn preset_amount(amount_int: u32) -> Vec<u8> {
-    let digits = encode_5digit(amount_int);
-    let cmd: Vec<u8> = vec![
-        0xFF, 0xE6, 0xF2, 0xF8, digits[0], digits[1], digits[2], digits[3],
-        digits[4], // units first (LSB-first)
-        0xFB,
-    ];
-    let lrc = gilbarco_lrc(&cmd);
-    let mut buf = cmd;
-    buf.push(lrc);
-    buf.push(0xF0);
-    buf
+/// Confirmed from all 9600 fill logs: PC sends this automatically ~20ms after
+/// detecting NozzleLifted (`0x70|addr`). Pump transitions to Delivering (`0x90|addr`)
+/// on the very next poll.
+///
+/// Amount/volume presets are sent separately with `preset_amount` before this byte.
+pub fn authorize(addr: u8) -> [u8; 1] {
+    [0x10 | (addr & 0x0F)]
+}
+
+/// Halt pump mid-delivery: `0x30 | addr`.
+///
+/// Confirmed from log `maybe9600_fill_midfillstop_from_app.log`: PC transmits `0x32`
+/// (addr=2) during a Delivering (`0x92`) → Stopped (`0xC2`) transition triggered by
+/// the app. Next status poll returns `0xC0|addr` (Stopped). No pump ack byte is sent;
+/// effect is confirmed by the subsequent poll.
+pub fn halt(addr: u8) -> [u8; 1] {
+    [0x30 | (addr & 0x0F)]
 }
 
 // ── Encoding helpers ──────────────────────────────────────────────────────────
@@ -109,45 +97,139 @@ pub fn encode_5digit(val: u32) -> [u8; 5] {
     ]
 }
 
+/// Encode a 6-digit integer as 6 Gilbarco data bytes (0xE0|digit), index 0 = LSB.
+pub fn encode_6digit(val: u32) -> [u8; 6] {
+    [
+        0xE0 | ((val) % 10) as u8,
+        0xE0 | ((val / 10) % 10) as u8,
+        0xE0 | ((val / 100) % 10) as u8,
+        0xE0 | ((val / 1000) % 10) as u8,
+        0xE0 | ((val / 10000) % 10) as u8,
+        0xE0 | ((val / 100000) % 10) as u8,
+    ]
+}
+
+/// Build a set-price frame for a 1-based nozzle.
+///
+/// Confirmed from `30L_AI92RUS_2NDPUMP_100000SUM_AI92RUS_3RDPUMP.log`:
+/// `FF E5 F4 F6 E0 F7 E0 E3 E1 E1 FB EB F0` sets nozzle 1 price raw 1130
+/// (11300 sum/L on this site).
+pub fn set_price(nozzle_index: u8, price_raw: u32) -> Vec<u8> {
+    let nozzle_id = 0xDFu8.wrapping_add(nozzle_index);
+    let digits = encode_4digit(price_raw);
+    let mut frame = vec![
+        0xFF, 0xE5, 0xF4, 0xF6, nozzle_id, 0xF7, digits[0], digits[1], digits[2], digits[3], 0xFB,
+    ];
+    frame.push(gilbarco_lrc(&frame));
+    frame.push(0xF0);
+    frame
+}
+
+/// Build a money preset frame.
+///
+/// `amount_raw` is real amount / 10, matching live display and final transaction
+/// amount scale. Confirmed frames:
+/// - 339000 sum -> raw 33900 -> `FF E5 F2 F8 E0 E0 E9 E3 E3 E0 FB E8 F0`
+/// - 100000 sum -> raw 10000 -> `FF E5 F2 F8 E0 E0 E0 E0 E1 E0 FB E6 F0`
+pub fn preset_amount(amount_raw: u32) -> Vec<u8> {
+    let digits = encode_6digit(amount_raw);
+    let mut frame = vec![
+        0xFF, 0xE5, 0xF2, 0xF8, digits[0], digits[1], digits[2], digits[3], digits[4], digits[5],
+        0xFB,
+    ];
+    frame.push(gilbarco_lrc(&frame));
+    frame.push(0xF0);
+    frame
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn single_byte_commands() {
-        assert_eq!(status(0), [0x00]);
-        assert_eq!(authorize(0), [0x10]);
-        assert_eq!(listen_mode(0), [0x20]);
-        assert_eq!(halt(0), [0x30]);
-        assert_eq!(get_transaction(0), [0x40]);
-        assert_eq!(get_totals(0), [0x50]);
-        assert_eq!(get_display(0), [0x60]);
+    fn status_byte() {
+        assert_eq!(status(0x01), [0x01]);
+        assert_eq!(status(0x03), [0x03]);
+    }
 
-        assert_eq!(status(2), [0x02]);
-        assert_eq!(authorize(2), [0x12]);
-        assert_eq!(halt(2), [0x32]);
+    #[test]
+    fn get_display_bytes() {
+        // addr 02 → 0x60|0x02 = 0x62
+        assert_eq!(get_display(0x02), [0x62]);
+        // addr 03 → 0x60|0x03 = 0x63
+        assert_eq!(get_display(0x03), [0x63]);
+    }
+
+    #[test]
+    fn get_transaction_bytes() {
+        // addr 02 → 0x40|0x02 = 0x42
+        assert_eq!(get_transaction(0x02), [0x42]);
+        // addr 03 → 0x40|0x03 = 0x43
+        assert_eq!(get_transaction(0x03), [0x43]);
+    }
+
+    #[test]
+    fn get_transaction2_bytes() {
+        assert_eq!(get_transaction2(0x02), [0x52]);
+        assert_eq!(get_transaction2(0x03), [0x53]);
+        assert_eq!(get_totals(0x02), [0x52]);
+    }
+
+    #[test]
+    fn get_nozzle_bytes() {
+        // addr 02 → [0x22, 0xFF]
+        assert_eq!(get_nozzle(0x02), [0x22, 0xFF]);
+        // addr 03 → [0x23, 0xFF]
+        assert_eq!(get_nozzle(0x03), [0x23, 0xFF]);
+    }
+
+    #[test]
+    fn get_all_byte() {
+        assert_eq!(get_all(), [0xF0]);
+    }
+
+    #[test]
+    fn authorize_bytes() {
+        // Confirmed from all 9600 fill logs: every NozzleLifted is followed by 0x1N
+        assert_eq!(authorize(0x02), [0x12]);
+        assert_eq!(authorize(0x03), [0x13]);
+    }
+
+    #[test]
+    fn halt_bytes() {
+        // Confirmed from log: addr 2 → 0x32, addr 1 → 0x31
+        assert_eq!(halt(0x02), [0x32]);
+        assert_eq!(halt(0x01), [0x31]);
     }
 
     #[test]
     fn encode_4digit_values() {
         let d = encode_4digit(1234);
-        // index 0 = units digit = 4, index 3 = thousands digit = 1
         assert_eq!(d, [0xE4, 0xE3, 0xE2, 0xE1]);
-        let d0 = encode_4digit(0);
-        assert_eq!(d0, [0xE0, 0xE0, 0xE0, 0xE0]);
+        assert_eq!(encode_4digit(0), [0xE0, 0xE0, 0xE0, 0xE0]);
     }
 
     #[test]
-    fn set_price_frame_structure() {
-        let frame = set_price(1, 1050);
-        // NozzleID = 223 + 1 = 224 = 0xE0
-        assert_eq!(frame[0], 0xFF);
-        assert_eq!(frame[4], 0xE0); // nozzle id
-        assert_eq!(frame[5], 0xF7); // price header
-                                    // Last byte is always 0xF0
-        assert_eq!(*frame.last().unwrap(), 0xF0);
-        // Second-to-last is LRC (0xE0..0xEF)
-        let lrc = frame[frame.len() - 2];
-        assert!((0xE0..=0xEF).contains(&lrc));
+    fn set_price_frame_from_preset_log() {
+        assert_eq!(
+            set_price(1, 1130),
+            vec![0xFF, 0xE5, 0xF4, 0xF6, 0xE0, 0xF7, 0xE0, 0xE3, 0xE1, 0xE1, 0xFB, 0xEB, 0xF0]
+        );
+    }
+
+    #[test]
+    fn preset_amount_frames_from_preset_log() {
+        assert_eq!(
+            preset_amount(33900),
+            vec![0xFF, 0xE5, 0xF2, 0xF8, 0xE0, 0xE0, 0xE9, 0xE3, 0xE3, 0xE0, 0xFB, 0xE8, 0xF0]
+        );
+        assert_eq!(
+            preset_amount(10000),
+            vec![0xFF, 0xE5, 0xF2, 0xF8, 0xE0, 0xE0, 0xE0, 0xE0, 0xE1, 0xE0, 0xFB, 0xE6, 0xF0]
+        );
+        assert_eq!(
+            preset_amount(0),
+            vec![0xFF, 0xE5, 0xF2, 0xF8, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xFB, 0xE7, 0xF0]
+        );
     }
 }

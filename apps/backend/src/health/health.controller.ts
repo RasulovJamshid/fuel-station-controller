@@ -1,26 +1,81 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { HealthCheck, HealthCheckService, HttpHealthIndicator } from '@nestjs/terminus';
+import { ConfigService } from '@nestjs/config';
+import { HealthCheck, HealthCheckService, MemoryHealthIndicator } from '@nestjs/terminus';
+import Redis from 'ioredis';
 import { Public } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
+    private readonly startedAt = Date.now();
+
     constructor(
         private health: HealthCheckService,
         private prisma: PrismaService,
+        private config: ConfigService,
+        private memory: MemoryHealthIndicator,
     ) {}
 
     @Get()
     @Public()
+    check() {
+        return this.ready();
+    }
+
+    @Get('live')
+    @Public()
+    live() {
+        return {
+            status: 'ok',
+            uptimeSeconds: Math.floor(process.uptime()),
+            startedAt: new Date(this.startedAt).toISOString(),
+        };
+    }
+
+    @Get('ready')
+    @Public()
     @HealthCheck()
-    async check() {
+    async ready() {
         return this.health.check([
             async () => {
                 await this.prisma.$queryRaw`SELECT 1`;
                 return { database: { status: 'up' } };
             },
+            async () => {
+                const redis = new Redis(this.config.get<string>('REDIS_URL')!, {
+                    maxRetriesPerRequest: 1,
+                    lazyConnect: true,
+                });
+                try {
+                    await redis.connect();
+                    await redis.ping();
+                    return { redis: { status: 'up' } };
+                } finally {
+                    redis.disconnect();
+                }
+            },
+            () => this.memory.checkHeap('memory_heap', 512 * 1024 * 1024),
         ]);
+    }
+
+    @Get('metrics')
+    @Public()
+    metrics() {
+        const memory = process.memoryUsage();
+        return {
+            process: {
+                uptimeSeconds: Math.floor(process.uptime()),
+                pid: process.pid,
+                node: process.version,
+            },
+            memory: {
+                rss: memory.rss,
+                heapTotal: memory.heapTotal,
+                heapUsed: memory.heapUsed,
+                external: memory.external,
+            },
+        };
     }
 }

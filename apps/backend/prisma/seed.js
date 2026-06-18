@@ -9,8 +9,8 @@ async function main() {
     const password = process.env.SEED_ADMIN_PASSWORD;
 
     if (!password) {
-        console.error('SEED_ADMIN_PASSWORD is not set in .env');
-        process.exit(1);
+        console.log('SEED_ADMIN_PASSWORD is not set; skipping seed');
+        return;
     }
 
     const slug = 'ung';

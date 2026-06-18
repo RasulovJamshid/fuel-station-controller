@@ -1,0 +1,3027 @@
+connected
+[T+629519172us][CH2-Pc    ] E1
+[T+629526172us][CH1-Dispenser] E1 E9
+[T+629601172us][CH1-Dispenser] F0 F8
+[T+629598172us][CH2-Pc    ] F0
+[T+629676305us][CH1-Dispenser] E0
+[T+629676173us][CH2-Pc    ] E0
+[T+629850304us][CH1-Dispenser] E1
+[T+629850173us][CH2-Pc    ] E1
+[T+630014172us][CH2-Pc    ] F0
+[T+630022179us][CH1-Dispenser] F0 F8
+[T+630093172us][CH2-Pc    ] F1
+[T+630103785us][CH1-Dispenser] F1 F9
+[T+630171172us][CH2-Pc    ] E1
+[T+630176172us][CH1-Dispenser] E1 E9
+[T+630249172us][CH2-Pc    ] F0
+[T+630263172us][CH1-Dispenser] F0 F8
+[T+630327306us][CH1-Dispenser] E0
+[T+630327173us][CH2-Pc    ] E0
+[T+630502307us][CH1-Dispenser] E1
+[T+630502173us][CH2-Pc    ] E1
+[T+630681172us][CH1-Dispenser] F0 F8
+[T+630677174us][CH2-Pc    ] F0
+[T+630755172us][CH2-Pc    ] F1
+[T+630761200us][CH1-Dispenser] F1 F9
+[T+630833172us][CH2-Pc    ] E1
+[T+630838172us][CH1-Dispenser] E1 E9
+[T+630911172us][CH2-Pc    ] F0
+[T+630918172us][CH1-Dispenser] F0 F8
+[T+630989307us][CH1-Dispenser] E0
+[T+630989174us][CH2-Pc    ] E0
+[T+631164303us][CH1-Dispenser] E1
+[T+631164173us][CH2-Pc    ] E1
+[T+631328172us][CH2-Pc    ] F0
+[T+631335172us][CH1-Dispenser] F0 F8
+[T+631406172us][CH2-Pc    ] F1
+[T+631411172us][CH1-Dispenser] F1 F9
+[T+631484172us][CH2-Pc    ] E1
+[T+631493172us][CH1-Dispenser] E1 E9
+[T+631562172us][CH2-Pc    ] F0
+[T+631567172us][CH1-Dispenser] F0 F8
+[T+631640303us][CH1-Dispenser] E0
+[T+631640173us][CH2-Pc    ] E0
+[T+631815307us][CH1-Dispenser] E1
+[T+631815173us][CH2-Pc    ] E1
+[T+631990172us][CH2-Pc    ] F0
+[T+631997172us][CH1-Dispenser] F0 F8
+[T+632068172us][CH2-Pc    ] F1
+[T+632076730us][CH1-Dispenser] F1 E9
+[T+632146172us][CH2-Pc    ] E1
+[T+632155179us][CH1-Dispenser] E1 E9
+[T+632224172us][CH2-Pc    ] F0
+[T+632232172us][CH1-Dispenser] F0 F8
+[T+632303304us][CH1-Dispenser] E0
+[T+632303173us][CH2-Pc    ] E0
+[T+632467307us][CH1-Dispenser] E1
+[T+632467173us][CH2-Pc    ] E1
+[T+632641197us][CH2-Pc    ] F0
+[T+632647207us][CH1-Dispenser] F0 F8
+[T+632720172us][CH2-Pc    ] F1
+[T+632727172us][CH1-Dispenser] F1 F9
+[T+632805197us][CH2-Pc    ] E1
+[T+632812172us][CH1-Dispenser] E1 E9
+[T+632884197us][CH2-Pc    ] F0
+[T+632892748us][CH1-Dispenser] F0 F8
+[T+632962303us][CH1-Dispenser] E0
+[T+632962173us][CH2-Pc    ] E0
+[T+633147307us][CH1-Dispenser] E1
+[T+633147174us][CH2-Pc    ] E1
+[T+633311172us][CH2-Pc    ] F0
+[T+633316173us][CH1-Dispenser] F0 F8
+[T+633389172us][CH2-Pc    ] F1
+[T+633397179us][CH1-Dispenser] F1 F9
+[T+633468172us][CH2-Pc    ] E1
+[T+633472172us][CH1-Dispenser] E1 E9
+[T+633546172us][CH2-Pc    ] F0
+[T+633551172us][CH1-Dispenser] F0 F8
+[T+633624304us][CH1-Dispenser] E0
+[T+633624173us][CH2-Pc    ] E0
+[T+633799308us][CH1-Dispenser] E1
+[T+633799173us][CH2-Pc    ] E1
+[T+633973196us][CH2-Pc    ] F0
+[T+633980172us][CH1-Dispenser] F0 F8
+[T+634052172us][CH2-Pc    ] F1
+[T+634056172us][CH1-Dispenser] F1 F9
+[T+634130173us][CH2-Pc    ] E1
+[T+634137777us][CH1-Dispenser] E1 E9
+[T+634210172us][CH2-Pc    ] F0
+[T+634216202us][CH1-Dispenser] F0 F8
+[T+634288303us][CH1-Dispenser] E0
+[T+634288173us][CH2-Pc    ] E0
+[T+634452304us][CH1-Dispenser] E1
+[T+634452173us][CH2-Pc    ] E1
+[T+634627172us][CH2-Pc    ] F0
+[T+634631172us][CH1-Dispenser] F0 F8
+[T+634705172us][CH2-Pc    ] F1
+[T+634712172us][CH1-Dispenser] F1 F9
+[T+634783172us][CH2-Pc    ] E1
+[T+634787172us][CH1-Dispenser] E1 E9
+[T+634861198us][CH2-Pc    ] F0
+[T+634867173us][CH1-Dispenser] F0 E8
+[T+634939304us][CH1-Dispenser] E0
+[T+634939173us][CH2-Pc    ] E0
+[T+635114304us][CH1-Dispenser] E1
+[T+635114173us][CH2-Pc    ] E1
+[T+635289172us][CH2-Pc    ] F0
+[T+635296771us][CH1-Dispenser] F0 F8
+[T+635371172us][CH1-Dispenser] F1 F9
+[T+635367172us][CH2-Pc    ] F1
+[T+635445172us][CH2-Pc    ] E1
+[T+635452172us][CH1-Dispenser] E1 E9
+[T+635521172us][CH2-Pc    ] F0
+[T+635526172us][CH1-Dispenser] F0 E8
+[T+635599307us][CH1-Dispenser] E0
+[T+635599173us][CH2-Pc    ] E0
+[T+635764305us][CH1-Dispenser] E1
+[T+635764173us][CH2-Pc    ] E1
+[T+635939172us][CH2-Pc    ] F0
+[T+635946775us][CH1-Dispenser] F0 F8
+[T+636016172us][CH2-Pc    ] F1
+[T+636022201us][CH1-Dispenser] F1 F9
+[T+636094197us][CH2-Pc    ] E1
+[T+636103172us][CH1-Dispenser] E1 E9
+[T+636173172us][CH2-Pc    ] F0
+[T+636176174us][CH1-Dispenser] F0 F8
+[T+636251301us][CH1-Dispenser] E0
+[T+636251173us][CH2-Pc    ] E0
+[T+636426304us][CH1-Dispenser] E1
+[T+636426173us][CH2-Pc    ] E1
+[T+636600197us][CH2-Pc    ] F0
+[T+636606200us][CH1-Dispenser] F0 F8
+[T+636678196us][CH2-Pc    ] F1
+[T+636687181us][CH1-Dispenser] F1 F9
+[T+636757172us][CH2-Pc    ] E1
+[T+636762172us][CH1-Dispenser] E1 E9
+[T+636835172us][CH2-Pc    ] F0
+[T+636841200us][CH1-Dispenser] F0 F8
+[T+636915304us][CH1-Dispenser] E0
+[T+636915173us][CH2-Pc    ] E0
+[T+637100310us][CH1-Dispenser] E1
+[T+637100174us][CH2-Pc    ] E1
+[T+637264172us][CH2-Pc    ] F0
+[T+637271172us][CH1-Dispenser] F0 F8
+[T+637342172us][CH2-Pc    ] F1
+[T+637346172us][CH1-Dispenser] F1 F9
+[T+637421172us][CH2-Pc    ] E1
+[T+637427200us][CH1-Dispenser] E1 E9
+[T+637499197us][CH2-Pc    ] F0
+[T+637506172us][CH1-Dispenser] F0 F8
+[T+637577303us][CH1-Dispenser] E0
+[T+637577173us][CH2-Pc    ] E0
+[T+637752304us][CH1-Dispenser] E1
+[T+637752173us][CH2-Pc    ] E1
+[T+637927172us][CH2-Pc    ] F0
+[T+637932172us][CH1-Dispenser] F0 F8
+[T+638005172us][CH2-Pc    ] F1
+[T+638015179us][CH1-Dispenser] F1 F9
+[T+638086172us][CH1-Dispenser] E1 E9
+[T+638083172us][CH2-Pc    ] E1
+[T+638161172us][CH2-Pc    ] F0
+[T+638169172us][CH1-Dispenser] F0 F8
+[T+638239306us][CH1-Dispenser] E0
+[T+638239173us][CH2-Pc    ] E0
+[T+638406303us][CH1-Dispenser] E1
+[T+638406173us][CH2-Pc    ] E1
+[T+638580197us][CH2-Pc    ] F0
+[T+638588179us][CH1-Dispenser] F0 F8
+[T+638662173us][CH1-Dispenser] F1 F9
+[T+638658172us][CH2-Pc    ] F1
+[T+638736175us][CH2-Pc    ] E1
+[T+638744172us][CH1-Dispenser] E1 E9
+[T+638814172us][CH2-Pc    ] F0
+[T+638825179us][CH1-Dispenser] F0 F8
+[T+638892307us][CH1-Dispenser] E0
+[T+638892173us][CH2-Pc    ] E0
+[T+639067309us][CH1-Dispenser] E1
+[T+639067174us][CH2-Pc    ] E1
+[T+639239172us][CH2-Pc    ] F0
+[T+639246172us][CH1-Dispenser] F0 F8
+[T+639317172us][CH2-Pc    ] F1
+[T+639323201us][CH1-Dispenser] F1 F9
+[T+639409172us][CH2-Pc    ] E1
+[T+639418182us][CH1-Dispenser] E1 E9
+[T+639487172us][CH2-Pc    ] F0
+[T+639493202us][CH1-Dispenser] F0 F8
+[T+639565304us][CH1-Dispenser] E0
+[T+639565173us][CH2-Pc    ] E0
+[T+639740306us][CH1-Dispenser] E1
+[T+639740173us][CH2-Pc    ] E1
+[T+639904172us][CH2-Pc    ] F0
+[T+639912172us][CH1-Dispenser] F0 F8
+[T+639982172us][CH2-Pc    ] F1
+[T+639990172us][CH1-Dispenser] F1 F9
+[T+640060172us][CH2-Pc    ] E1
+[T+640067173us][CH1-Dispenser] E1 E9
+[T+640138172us][CH2-Pc    ] F0
+[T+640144202us][CH1-Dispenser] F0 F8
+[T+640216308us][CH1-Dispenser] E0
+[T+640216175us][CH2-Pc    ] E0
+[T+640391306us][CH1-Dispenser] E1
+[T+640391173us][CH2-Pc    ] E1
+[T+640567172us][CH2-Pc    ] F0
+[T+640572172us][CH1-Dispenser] F0 F8
+[T+640644197us][CH2-Pc    ] F1
+[T+640653172us][CH1-Dispenser] F1 F9
+[T+640722172us][CH2-Pc    ] E1
+[T+640730172us][CH1-Dispenser] E1 E9
+[T+640800172us][CH2-Pc    ] F0
+[T+640807172us][CH1-Dispenser] F0 F8
+[T+640879304us][CH1-Dispenser] E0
+[T+640879173us][CH2-Pc    ] E0
+[T+641055305us][CH1-Dispenser] E1
+[T+641055173us][CH2-Pc    ] E1
+[T+641241197us][CH2-Pc    ] F0
+[T+641247200us][CH1-Dispenser] F0 F8
+[T+641319197us][CH2-Pc    ] F1
+[T+641327179us][CH1-Dispenser] F1 F9
+[T+641397172us][CH2-Pc    ] E1
+[T+641402174us][CH1-Dispenser] E1 E9
+[T+641475172us][CH2-Pc    ] F0
+[T+641483172us][CH1-Dispenser] F0 F8
+[T+641554305us][CH1-Dispenser] E0
+[T+641554174us][CH2-Pc    ] E0
+[T+641718311us][CH1-Dispenser] E1
+[T+641718173us][CH2-Pc    ] E1
+[T+641892196us][CH2-Pc    ] F0
+[T+641898200us][CH1-Dispenser] F0 F8
+[T+641970196us][CH2-Pc    ] F1
+[T+641979179us][CH1-Dispenser] F1 F9
+[T+642052172us][CH1-Dispenser] E1 E9
+[T+642049172us][CH2-Pc    ] E1
+[T+642131172us][CH1-Dispenser] F0 F8
+[T+642127172us][CH2-Pc    ] F0
+[T+642205303us][CH1-Dispenser] E0
+[T+642205173us][CH2-Pc    ] E0
+[T+642380304us][CH1-Dispenser] E1
+[T+642380173us][CH2-Pc    ] E1
+[T+642554197us][CH2-Pc    ] F0
+[T+642563723us][CH1-Dispenser] F0 F8
+[T+642632172us][CH2-Pc    ] F1
+[T+642637172us][CH1-Dispenser] F1 F9
+[T+642711172us][CH2-Pc    ] E1
+[T+642717200us][CH1-Dispenser] E1 E9
+[T+642789172us][CH2-Pc    ] F0
+[T+642793172us][CH1-Dispenser] F0 F8
+[T+642867304us][CH1-Dispenser] E0
+[T+642867174us][CH2-Pc    ] E0
+[T+643031307us][CH1-Dispenser] E1
+[T+643031173us][CH2-Pc    ] E1
+[T+643206172us][CH2-Pc    ] F0
+[T+643211172us][CH1-Dispenser] F0 F8
+[T+643284172us][CH2-Pc    ] F1
+[T+643292172us][CH1-Dispenser] F1 F9
+[T+643362172us][CH2-Pc    ] E1
+[T+643368200us][CH1-Dispenser] E1 E9
+[T+643440196us][CH2-Pc    ] F0
+[T+643447172us][CH1-Dispenser] F0 F8
+[T+643518304us][CH1-Dispenser] E0
+[T+643518173us][CH2-Pc    ] E0
+[T+643693307us][CH1-Dispenser] E1
+[T+643693174us][CH2-Pc    ] E1
+[T+643881172us][CH2-Pc    ] F0
+[T+643887200us][CH1-Dispenser] F0 F8
+[T+643960172us][CH2-Pc    ] F1
+[T+643966206us][CH1-Dispenser] F1 F9
+[T+644038172us][CH2-Pc    ] E1
+[T+644043172us][CH1-Dispenser] E1 E9
+[T+644116172us][CH2-Pc    ] F0
+[T+644124172us][CH1-Dispenser] F0 F8
+[T+644194306us][CH1-Dispenser] E0
+[T+644194173us][CH2-Pc    ] E0
+[T+644358303us][CH1-Dispenser] E1
+[T+644358173us][CH2-Pc    ] E1
+[T+644533172us][CH2-Pc    ] F0
+[T+644538172us][CH1-Dispenser] F0 F8
+[T+644611172us][CH2-Pc    ] F1
+[T+644617200us][CH1-Dispenser] F1 F9
+[T+644689197us][CH2-Pc    ] E1
+[T+644699179us][CH1-Dispenser] E1 E9
+[T+644767172us][CH2-Pc    ] F0
+[T+644773200us][CH1-Dispenser] F0 F8
+[T+644845307us][CH1-Dispenser] E0
+[T+644845173us][CH2-Pc    ] E0
+[T+645020305us][CH1-Dispenser] E1
+[T+645020173us][CH2-Pc    ] E1
+[T+645185172us][CH2-Pc    ] F0
+[T+645192172us][CH1-Dispenser] F0 F8
+[T+645263172us][CH2-Pc    ] F1
+[T+645267172us][CH1-Dispenser] F1 F9
+[T+645341172us][CH2-Pc    ] E1
+[T+645348771us][CH1-Dispenser] E1 E9
+[T+645419172us][CH2-Pc    ] F0
+[T+645427172us][CH1-Dispenser] F0 F8
+[T+645498311us][CH1-Dispenser] E0
+[T+645498174us][CH2-Pc    ] E0
+[T+645673306us][CH1-Dispenser] E1
+[T+645673173us][CH2-Pc    ] E1
+[T+645847196us][CH2-Pc    ] F0
+[T+645853200us][CH1-Dispenser] F0 F8
+[T+645925196us][CH2-Pc    ] F1
+[T+645932172us][CH1-Dispenser] F1 F9
+[T+646004244us][CH2-Pc    ] E1
+[T+646009173us][CH1-Dispenser] E1 E9
+[T+646082172us][CH2-Pc    ] F0
+[T+646090172us][CH1-Dispenser] F0 F8
+[T+646160305us][CH1-Dispenser] E0
+[T+646160173us][CH2-Pc    ] E0
+[T+646329309us][CH1-Dispenser] E1
+[T+646329173us][CH2-Pc    ] E1
+[T+646503172us][CH2-Pc    ] F0
+[T+646507172us][CH1-Dispenser] F0 F8
+[T+646581172us][CH2-Pc    ] F1
+[T+646586172us][CH1-Dispenser] F1 F9
+[T+646651172us][CH2-Pc    ] E1
+[T+646658172us][CH1-Dispenser] E1 E9
+[T+646729172us][CH2-Pc    ] F0
+[T+646739820us][CH1-Dispenser] F0 F8
+[T+646807307us][CH1-Dispenser] E0
+[T+646807173us][CH2-Pc    ] E0
+[T+646982307us][CH1-Dispenser] E1
+[T+646982173us][CH2-Pc    ] E1
+[T+647157173us][CH2-Pc    ] F0
+[T+647161172us][CH1-Dispenser] F0 F8
+[T+647235175us][CH2-Pc    ] F1
+[T+647242803us][CH1-Dispenser] F1 F9
+[T+647317172us][CH1-Dispenser] E1 E9
+[T+647313172us][CH2-Pc    ] E1
+[T+647391172us][CH2-Pc    ] F0
+[T+647398172us][CH1-Dispenser] F0 F8
+[T+647469307us][CH1-Dispenser] E0
+[T+647469173us][CH2-Pc    ] E0
+[T+647644309us][CH1-Dispenser] E1
+[T+647644173us][CH2-Pc    ] E1
+[T+647819172us][CH2-Pc    ] F0
+[T+647828813us][CH1-Dispenser] F0 F8
+[T+647897172us][CH2-Pc    ] F1
+[T+647902172us][CH1-Dispenser] F1 F9
+[T+647975172us][CH2-Pc    ] E1
+[T+647986180us][CH1-Dispenser] E1 E9
+[T+648053174us][CH2-Pc    ] F0
+[T+648058174us][CH1-Dispenser] F0 F8
+[T+648131303us][CH1-Dispenser] E0
+[T+648131173us][CH2-Pc    ] E0
+[T+648296173us][CH1-Dispenser] E1
+[T+648295173us][CH2-Pc    ] E1
+[T+648478173us][CH1-Dispenser] F0 F8
+[T+648474172us][CH2-Pc    ] F0
+[T+648552193us][CH2-Pc    ] F1
+[T+648558173us][CH1-Dispenser] F1 F9
+[T+648630197us][CH2-Pc    ] E1
+[T+648640179us][CH1-Dispenser] E1 E9
+[T+648709172us][CH2-Pc    ] F0
+[T+648712172us][CH1-Dispenser] F0 F8
+[T+648776306us][CH1-Dispenser] E0
+[T+648776174us][CH2-Pc    ] E0
+[T+648951306us][CH1-Dispenser] E1
+[T+648951173us][CH2-Pc    ] E1
+[T+649126172us][CH2-Pc    ] F0
+[T+649132201us][CH1-Dispenser] F0 F8
+[T+649206172us][CH1-Dispenser] F1 F9
+[T+649204172us][CH2-Pc    ] F1
+[T+649271172us][CH2-Pc    ] E1
+[T+649278172us][CH1-Dispenser] E1 E9
+[T+649349172us][CH2-Pc    ] F0
+[T+649353172us][CH1-Dispenser] F0 F8
+[T+649428304us][CH1-Dispenser] E0
+[T+649428173us][CH2-Pc    ] E0
+[T+649595310us][CH1-Dispenser] E1
+[T+649595173us][CH2-Pc    ] E1
+[T+649770172us][CH2-Pc    ] F0
+[T+649777172us][CH1-Dispenser] F0 F8
+[T+649848172us][CH2-Pc    ] F1
+[T+649851172us][CH1-Dispenser] F1 F9
+[T+649916172us][CH2-Pc    ] E1
+[T+649923172us][CH1-Dispenser] E1 E9
+[T+649994172us][CH2-Pc    ] F0
+[T+649998182us][CH1-Dispenser] F0 E8
+[T+650072304us][CH1-Dispenser] E0
+[T+650072173us][CH2-Pc    ] E0
+[T+650257306us][CH1-Dispenser] E1
+[T+650257173us][CH2-Pc    ] E1
+[T+650422172us][CH2-Pc    ] F0
+[T+650428202us][CH1-Dispenser] F0 F8
+[T+650500197us][CH2-Pc    ] F1
+[T+650507172us][CH1-Dispenser] F1 F9
+[T+650579172us][CH2-Pc    ] E1
+[T+650582172us][CH1-Dispenser] E1 E9
+[T+650646173us][CH2-Pc    ] F0
+[T+650652201us][CH1-Dispenser] F0 F8
+[T+650724306us][CH1-Dispenser] E0
+[T+650724175us][CH2-Pc    ] E0
+[T+650888304us][CH1-Dispenser] E1
+[T+650888173us][CH2-Pc    ] E1
+[T+651063172us][CH2-Pc    ] F0
+[T+651068172us][CH1-Dispenser] F0 FE
+[T+651141172us][CH2-Pc    ] F1
+[T+651147200us][CH1-Dispenser] F1 F9
+[T+651222172us][CH1-Dispenser] E1 E9
+[T+651219173us][CH2-Pc    ] E1
+[T+651286172us][CH2-Pc    ] F0
+[T+651292200us][CH1-Dispenser] F0 F8
+[T+651365304us][CH1-Dispenser] E0
+[T+651365173us][CH2-Pc    ] E0
+[T+651529306us][CH1-Dispenser] E1
+[T+651529174us][CH2-Pc    ] E1
+[T+651703173us][CH2-Pc    ] F0
+[T+651707174us][CH1-Dispenser] F0 FE
+[T+651782172us][CH2-Pc    ] F1
+[T+651786172us][CH1-Dispenser] F1 F9
+[T+651860172us][CH2-Pc    ] E1
+[T+651869179us][CH1-Dispenser] E1 E9
+[T+651938172us][CH2-Pc    ] F0
+[T+651943172us][CH1-Dispenser] F0 E8
+[T+652016305us][CH1-Dispenser] E0
+[T+652016173us][CH2-Pc    ] E0
+[T+652191306us][CH1-Dispenser] E1
+[T+652191174us][CH2-Pc    ] E1
+[T+652367172us][CH2-Pc    ] F0
+[T+652372173us][CH1-Dispenser] F0 F8
+[T+652445172us][CH2-Pc    ] F1
+[T+652451202us][CH1-Dispenser] F1 F9
+[T+652523172us][CH2-Pc    ] E1
+[T+652528172us][CH1-Dispenser] E1 E9
+[T+652601172us][CH2-Pc    ] F0
+[T+652607201us][CH1-Dispenser] F0 F8
+[T+652679304us][CH1-Dispenser] E0
+[T+652679173us][CH2-Pc    ] E0
+[T+652843307us][CH1-Dispenser] E1
+[T+652843173us][CH2-Pc    ] E1
+[T+653018172us][CH2-Pc    ] F0
+[T+653023172us][CH1-Dispenser] F0 F8
+[T+653096172us][CH2-Pc    ] F1
+[T+653102200us][CH1-Dispenser] F1 F9
+[T+653174173us][CH2-Pc    ] E1
+[T+653179172us][CH1-Dispenser] E1 E9
+[T+653253172us][CH2-Pc    ] F0
+[T+653260781us][CH1-Dispenser] F0 F8
+[T+653330305us][CH1-Dispenser] E0
+[T+653330173us][CH2-Pc    ] E0
+[T+653502305us][CH1-Dispenser] E1
+[T+653502173us][CH2-Pc    ] E1
+[T+653677172us][CH2-Pc    ] F0
+[T+653704176us][CH2-Pc    ] E0
+[T+653827172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+653855172us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 F5 82 24 F1 F1 12 E8 22 1E 22
+[T+653937172us][CH2-Pc    ] F1
+[T+653943200us][CH1-Dispenser] F1 F9
+[T+654015197us][CH2-Pc    ] E1
+[T+654022172us][CH1-Dispenser] E1 E9
+[T+654095172us][CH2-Pc    ] F0
+[T+654103172us][CH1-Dispenser] F0 F8
+[T+654172305us][CH1-Dispenser] E0
+[T+654172173us][CH2-Pc    ] E0
+[T+654347303us][CH1-Dispenser] E1
+[T+654347173us][CH2-Pc    ] E1
+[T+654522172us][CH2-Pc    ] F0
+[T+654527173us][CH1-Dispenser] F0 EC
+[T+654559306us][CH1-Dispenser] E0 EC EF
+[T+654559173us][CH2-Pc    ] E0 EF
+[T+654651307us][CH1-Dispenser] FA FF F8 E8 F8 FF
+[T+654651173us][CH2-Pc    ] FA FF F8 E8 F8 FF
+[T+654690172us][CH2-Pc    ] EB EC
+[T+654720196us][CH1-Dispenser] EB EC 37 AB 82 24 A3 A3 12 E8 A2 F2 22
+[T+654792172us][CH2-Pc    ] F1
+[T+654797172us][CH1-Dispenser] F1 F9
+[T+654871172us][CH2-Pc    ] E1
+[T+654878172us][CH1-Dispenser] E1 E9
+[T+654949172us][CH2-Pc    ] F0
+[T+654953172us][CH1-Dispenser] F0 F8
+[T+655027304us][CH1-Dispenser] E0
+[T+655027173us][CH2-Pc    ] E0
+[T+655202303us][CH1-Dispenser] E1
+[T+655202173us][CH2-Pc    ] E1
+[T+655376196us][CH2-Pc    ] F0
+[T+655404172us][CH2-Pc    ] E0
+[T+655526197us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+655554172us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 12 24 F1 F1 A2 13 22 2E 22
+[T+655628172us][CH2-Pc    ] F1
+[T+655633174us][CH1-Dispenser] F1 F9
+[T+655706172us][CH2-Pc    ] E1
+[T+655714298us][CH1-Dispenser] E1 E9
+[T+655784172us][CH2-Pc    ] F0
+[T+655788172us][CH1-Dispenser] F0 E8
+[T+655852303us][CH1-Dispenser] E0
+[T+655852173us][CH2-Pc    ] E0
+[T+656037307us][CH1-Dispenser] E1
+[T+656037173us][CH2-Pc    ] E1
+[T+656202172us][CH2-Pc    ] F0
+[T+656340172us][CH2-Pc    ] E0 EF FA FF F8 E8 F8 FF EB EC
+[T+656370197us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 F5 82 24 A3 A3 12 68 F4 1E A2
+[T+656447172us][CH2-Pc    ] F1
+[T+656453209us][CH1-Dispenser] F1 F9
+[T+656525172us][CH2-Pc    ] E1
+[T+656528172us][CH1-Dispenser] E1 E9
+[T+656603172us][CH2-Pc    ] F0
+[T+656608172us][CH1-Dispenser] F0 F8
+[T+656681304us][CH1-Dispenser] E0
+[T+656681173us][CH2-Pc    ] E0
+[T+656866311us][CH1-Dispenser] E1
+[T+656866173us][CH2-Pc    ] E1
+[T+657031172us][CH2-Pc    ] F0
+[T+657058197us][CH2-Pc    ] E0
+[T+657180172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+657210197us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 12 24 A3 F1 A2 13 22 2E A2
+[T+657282197us][CH2-Pc    ] F1
+[T+657288200us][CH1-Dispenser] F1 F9
+[T+657361172us][CH2-Pc    ] E1
+[T+657368772us][CH1-Dispenser] E1 E9
+[T+657448172us][CH2-Pc    ] F0
+[T+657453172us][CH1-Dispenser] F0 F8
+[T+657526304us][CH1-Dispenser] E0
+[T+657526173us][CH2-Pc    ] E0
+[T+657701308us][CH1-Dispenser] E1
+[T+657701174us][CH2-Pc    ] E1
+[T+657875197us][CH2-Pc    ] F0
+[T+657903178us][CH2-Pc    ] E0
+[T+658025197us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+658055196us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 32 F5 A3 A3 12 68 F4 1E 22
+[T+658128172us][CH2-Pc    ] F1
+[T+658133173us][CH1-Dispenser] F1 F9
+[T+658205196us][CH2-Pc    ] E1
+[T+658213179us][CH1-Dispenser] E1 E9
+[T+658283172us][CH2-Pc    ] F0
+[T+658289202us][CH1-Dispenser] F0 F8
+[T+658362306us][CH1-Dispenser] E0
+[T+658362173us][CH2-Pc    ] E0
+[T+658536304us][CH1-Dispenser] E1
+[T+658536173us][CH2-Pc    ] E1
+[T+658700172us][CH2-Pc    ] F0
+[T+658728196us][CH2-Pc    ] E0
+[T+658850172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+658880197us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 12 24 A3 A3 12 68 F4 1E A2
+[T+658952196us][CH2-Pc    ] F1
+[T+658960797us][CH1-Dispenser] F1 F9
+[T+659030172us][CH2-Pc    ] E1
+[T+659038179us][CH1-Dispenser] E1 E9
+[T+659109172us][CH2-Pc    ] F0
+[T+659114172us][CH1-Dispenser] F0 F8
+[T+659187306us][CH1-Dispenser] E0
+[T+659187173us][CH2-Pc    ] E0
+[T+659362304us][CH1-Dispenser] E1
+[T+659362173us][CH2-Pc    ] E1
+[T+659536196us][CH2-Pc    ] F0
+[T+659544172us][CH1-Dispenser] F0 F8
+[T+659615172us][CH2-Pc    ] F1
+[T+659623179us][CH1-Dispenser] F1 F9
+[T+659693172us][CH2-Pc    ] E1
+[T+659700172us][CH1-Dispenser] E1 E9
+[T+659771172us][CH2-Pc    ] F0
+[T+659781803us][CH1-Dispenser] F0 F8
+[T+659849303us][CH1-Dispenser] E0
+[T+659849173us][CH2-Pc    ] E0
+[T+660013308us][CH1-Dispenser] E1
+[T+660013173us][CH2-Pc    ] E1
+[T+660188173us][CH2-Pc    ] F0
+[T+660192172us][CH1-Dispenser] F0 F8
+[T+660266172us][CH2-Pc    ] F1
+[T+660273172us][CH1-Dispenser] F1 F9
+[T+660344173us][CH2-Pc    ] E1
+[T+660348172us][CH1-Dispenser] E1 E9
+[T+660422172us][CH2-Pc    ] F0
+[T+660429172us][CH1-Dispenser] F0 F8
+[T+660500306us][CH1-Dispenser] E0
+[T+660500173us][CH2-Pc    ] E0
+[T+660675304us][CH1-Dispenser] E1
+[T+660675173us][CH2-Pc    ] E1
+[T+660850172us][CH2-Pc    ] F0
+[T+660859809us][CH1-Dispenser] F0 FE
+[T+660928172us][CH2-Pc    ] F1
+[T+660935172us][CH1-Dispenser] F1 F9
+[T+661006172us][CH2-Pc    ] E1
+[T+661013769us][CH1-Dispenser] E1 E9
+[T+661084172us][CH2-Pc    ] F0
+[T+661089172us][CH1-Dispenser] F0 F8
+[T+661162307us][CH1-Dispenser] E0
+[T+661162173us][CH2-Pc    ] E0
+[T+661326307us][CH1-Dispenser] E1
+[T+661326174us][CH2-Pc    ] E1
+[T+661506197us][CH2-Pc    ] F0
+[T+661515172us][CH1-Dispenser] F0 F8
+[T+661583172us][CH2-Pc    ] F1
+[T+661589200us][CH1-Dispenser] F1 F9
+[T+661661197us][CH2-Pc    ] E1
+[T+661669172us][CH1-Dispenser] E1 E9
+[T+661739172us][CH2-Pc    ] F0
+[T+661743172us][CH1-Dispenser] F0 F8
+[T+661807305us][CH1-Dispenser] E0
+[T+661807173us][CH2-Pc    ] E0
+[T+661982315us][CH1-Dispenser] E1
+[T+661982175us][CH2-Pc    ] E1
+[T+662156196us][CH2-Pc    ] F0
+[T+662165179us][CH1-Dispenser] F0 F8
+[T+662237173us][CH1-Dispenser] F1 F9
+[T+662235172us][CH2-Pc    ] F1
+[T+662308172us][CH2-Pc    ] E1
+[T+662314200us][CH1-Dispenser] E1 E9
+[T+662386196us][CH2-Pc    ] F0
+[T+662395179us][CH1-Dispenser] F0 F8
+[T+662464303us][CH1-Dispenser] E0
+[T+662464173us][CH2-Pc    ] E0
+[T+662639307us][CH1-Dispenser] E1
+[T+662639173us][CH2-Pc    ] E1
+[T+662817173us][CH1-Dispenser] F0 F8
+[T+662814172us][CH2-Pc    ] F0
+[T+662892172us][CH2-Pc    ] F1
+[T+662899172us][CH1-Dispenser] F1 F9
+[T+662970172us][CH2-Pc    ] E1
+[T+662974172us][CH1-Dispenser] E1 E9
+[T+663048172us][CH2-Pc    ] F0
+[T+663056779us][CH1-Dispenser] F0 F8
+[T+663126304us][CH1-Dispenser] E0
+[T+663126173us][CH2-Pc    ] E0
+[T+663301306us][CH1-Dispenser] E1
+[T+663301174us][CH2-Pc    ] E1
+[T+663476172us][CH2-Pc    ] F0
+[T+663484172us][CH1-Dispenser] F0 F8
+[T+663558180us][CH1-Dispenser] F1 F9
+[T+663555610us][CH2-Pc    ] F1
+[T+663632180us][CH2-Pc    ] E1
+[T+663640803us][CH1-Dispenser] E1 E9
+[T+663710172us][CH2-Pc    ] F0
+[T+663719280us][CH1-Dispenser] F0 F8
+[T+663789582us][CH1-Dispenser] E0
+[T+663789441us][CH2-Pc    ] E0
+[T+663952305us][CH1-Dispenser] E1
+[T+663952173us][CH2-Pc    ] E1
+[T+664127196us][CH2-Pc    ] F0
+[T+664133206us][CH1-Dispenser] F0 EC
+[T+664154172us][CH2-Pc    ] E0
+[T+664282172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+664311172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 12 24 A3 A3 12 68 F0 DE 22
+[T+664379172us][CH2-Pc    ] F1
+[T+664385200us][CH1-Dispenser] F1 F9
+[T+664457197us][CH2-Pc    ] E1
+[T+664464810us][CH1-Dispenser] E1 E9
+[T+664562172us][CH2-Pc    ] F0
+[T+664568200us][CH1-Dispenser] F0 F8
+[T+664640304us][CH1-Dispenser] E0
+[T+664640173us][CH2-Pc    ] E0
+[T+664815303us][CH1-Dispenser] E1
+[T+664815173us][CH2-Pc    ] E1
+[T+664989196us][CH2-Pc    ] F0
+[T+664996172us][CH1-Dispenser] F0 EC
+[T+665017172us][CH2-Pc    ] E0
+[T+665139172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+665165172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 12 24 F1 F3 12 68 60 DE 22
+[T+665232172us][CH2-Pc    ] F1
+[T+665237172us][CH1-Dispenser] F1 F9
+[T+665310172us][CH2-Pc    ] E1
+[T+665314172us][CH1-Dispenser] E1 E9
+[T+665388172us][CH2-Pc    ] F0
+[T+665393172us][CH1-Dispenser] F0 F8
+[T+665467312us][CH1-Dispenser] E0
+[T+665467175us][CH2-Pc    ] E0
+[T+665642306us][CH1-Dispenser] E1
+[T+665642173us][CH2-Pc    ] E1
+[T+665816196us][CH2-Pc    ] F0
+[T+665844172us][CH2-Pc    ] E0
+[T+665966199us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+666000173us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 82 24 A3 A3 A2 13 2A AE A2
+[T+666070172us][CH2-Pc    ] F1
+[T+666075175us][CH1-Dispenser] F1 F9
+[T+666148301us][CH2-Pc    ] E1
+[T+666154217us][CH1-Dispenser] E1 E9
+[T+666226199us][CH2-Pc    ] F0
+[T+666233172us][CH1-Dispenser] F0 F8
+[T+666304303us][CH1-Dispenser] E0
+[T+666304173us][CH2-Pc    ] E0
+[T+666468310us][CH1-Dispenser] E1
+[T+666468174us][CH2-Pc    ] E1
+[T+666643330us][CH2-Pc    ] F0
+[T+666648172us][CH1-Dispenser] F0 EC
+[T+666782172us][CH2-Pc    ] E0 EF FA FF F8 E8 F8 FF EB EC
+[T+666810172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 82 24 A3 A3 12 13 F0 DE 22
+[T+666875172us][CH2-Pc    ] F1
+[T+666886179us][CH1-Dispenser] F1 F9
+[T+666953172us][CH2-Pc    ] E1
+[T+666959201us][CH1-Dispenser] E1 E9
+[T+667032172us][CH2-Pc    ] F0
+[T+667040172us][CH1-Dispenser] F0 F8
+[T+667109314us][CH1-Dispenser] E0
+[T+667109175us][CH2-Pc    ] E0
+[T+667284308us][CH1-Dispenser] E1
+[T+667284173us][CH2-Pc    ] E1
+[T+667459172us][CH2-Pc    ] F0
+[T+667465301us][CH1-Dispenser] F0 EC
+[T+667486172us][CH2-Pc    ] E0
+[T+667609173us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+667636172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 F5 82 24 34 A3 12 68 F0 AE A2
+[T+667701172us][CH2-Pc    ] F1
+[T+667708770us][CH1-Dispenser] F1 F9
+[T+667780172us][CH2-Pc    ] E1
+[T+667785172us][CH1-Dispenser] E1 E9
+[T+667861172us][CH2-Pc    ] F0
+[T+667869172us][CH1-Dispenser] F0 F8
+[T+667939306us][CH1-Dispenser] E0
+[T+667939173us][CH2-Pc    ] E0
+[T+668113306us][CH1-Dispenser] E1
+[T+668113173us][CH2-Pc    ] E1
+[T+668288172us][CH2-Pc    ] F0
+[T+668293174us][CH1-Dispenser] F0 F8
+[T+668368172us][CH2-Pc    ] F1
+[T+668373172us][CH1-Dispenser] F1 F9
+[T+668446172us][CH2-Pc    ] E1
+[T+668455629us][CH1-Dispenser] E1 E9
+[T+668524172us][CH2-Pc    ] F0
+[T+668529172us][CH1-Dispenser] F0 F8
+[T+668603304us][CH1-Dispenser] E0
+[T+668603173us][CH2-Pc    ] E0
+[T+668788306us][CH1-Dispenser] E1
+[T+668788173us][CH2-Pc    ] E1
+[T+668952172us][CH2-Pc    ] F0
+[T+668958200us][CH1-Dispenser] F0 F8
+[T+669030196us][CH2-Pc    ] F1
+[T+669041768us][CH1-Dispenser] F1 F9
+[T+669108172us][CH2-Pc    ] E1
+[T+669114200us][CH1-Dispenser] E1 E9
+[T+669187172us][CH2-Pc    ] F0
+[T+669193201us][CH1-Dispenser] F0 F8
+[T+669267306us][CH1-Dispenser] E0
+[T+669267174us][CH2-Pc    ] E0
+[T+669441305us][CH1-Dispenser] E1
+[T+669441173us][CH2-Pc    ] E1
+[T+669616172us][CH2-Pc    ] F0
+[T+669627179us][CH1-Dispenser] F0 F8
+[T+669694172us][CH2-Pc    ] F1
+[T+669699172us][CH1-Dispenser] F1 F9
+[T+669772172us][CH2-Pc    ] E1
+[T+669779803us][CH1-Dispenser] E1 E9
+[T+669851196us][CH2-Pc    ] F0
+[T+669860172us][CH1-Dispenser] F0 F8
+[T+669930304us][CH1-Dispenser] E0
+[T+669930173us][CH2-Pc    ] E0
+[T+670111306us][CH1-Dispenser] E1
+[T+670111173us][CH2-Pc    ] E1
+[T+670286172us][CH2-Pc    ] F0
+[T+670295172us][CH1-Dispenser] F0 F8
+[T+670373198us][CH2-Pc    ] F1
+[T+670380172us][CH1-Dispenser] F1 F9
+[T+670451172us][CH2-Pc    ] E1
+[T+670459172us][CH1-Dispenser] E1 E9
+[T+670530172us][CH2-Pc    ] F0
+[T+670534172us][CH1-Dispenser] F0 F8
+[T+670607303us][CH1-Dispenser] E0
+[T+670607173us][CH2-Pc    ] E0
+[T+670783173us][CH1-Dispenser] E1
+[T+670782172us][CH2-Pc    ] E1
+[T+670957196us][CH2-Pc    ] F0
+[T+670966180us][CH1-Dispenser] F0 F8
+[T+671035172us][CH2-Pc    ] F1
+[T+671043172us][CH1-Dispenser] F1 F9
+[T+671113172us][CH2-Pc    ] E1
+[T+671120172us][CH1-Dispenser] E1 E9
+[T+671191172us][CH2-Pc    ] F0
+[T+671199172us][CH1-Dispenser] F0 F8
+[T+671270302us][CH1-Dispenser] E0
+[T+671270173us][CH2-Pc    ] E0
+[T+671444305us][CH1-Dispenser] E1
+[T+671444173us][CH2-Pc    ] E1
+[T+671607172us][CH2-Pc    ] F0
+[T+671614172us][CH1-Dispenser] F0 F8
+[T+671685172us][CH2-Pc    ] F1
+[T+671693771us][CH1-Dispenser] F1 F9
+[T+671764172us][CH2-Pc    ] E1
+[T+671769172us][CH1-Dispenser] E1 E9
+[T+671842172us][CH2-Pc    ] F0
+[T+671849172us][CH1-Dispenser] F0 F8
+[T+671920307us][CH1-Dispenser] E0
+[T+671920174us][CH2-Pc    ] E0
+[T+672095306us][CH1-Dispenser] E1
+[T+672095173us][CH2-Pc    ] E1
+[T+672269173us][CH2-Pc    ] F0
+[T+672274173us][CH1-Dispenser] F0 EC
+[T+672297172us][CH2-Pc    ] E0
+[T+672355308us][CH1-Dispenser] E0 EC EF FA FF F8
+[T+672355174us][CH2-Pc    ] EF FA FF F8
+[T+672428172us][CH2-Pc    ] E8 F8 FF EB EC
+[T+672456172us][CH1-Dispenser] E8 F8 FF EB EC 37 AB 12 E4 F1 F1 F4 A2 57 26 E2
+[T+672521172us][CH2-Pc    ] F1
+[T+672530816us][CH1-Dispenser] F1 F9
+[T+672599172us][CH2-Pc    ] E1
+[T+672605202us][CH1-Dispenser] E1 E9
+[T+672677196us][CH2-Pc    ] F0
+[T+672684809us][CH1-Dispenser] F0 F8
+[T+672755307us][CH1-Dispenser] E0
+[T+672755173us][CH2-Pc    ] E0
+[T+672919307us][CH1-Dispenser] E1
+[T+672919173us][CH2-Pc    ] E1
+[T+673094172us][CH2-Pc    ] F0
+[T+673099172us][CH1-Dispenser] F0 EC
+[T+673121172us][CH2-Pc    ] E0
+[T+673243204us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+673272172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 82 24 A3 A3 72 F4 F4 CE A2
+[T+673369172us][CH1-Dispenser] F1 F9
+[T+673365172us][CH2-Pc    ] F1
+[T+673443172us][CH2-Pc    ] E1
+[T+673450172us][CH1-Dispenser] E1 E9
+[T+673522197us][CH2-Pc    ] F0
+[T+673529172us][CH1-Dispenser] F0 F8
+[T+673600303us][CH1-Dispenser] E0
+[T+673600173us][CH2-Pc    ] E0
+[T+673764310us][CH1-Dispenser] E1
+[T+673764174us][CH2-Pc    ] E1
+[T+673938197us][CH2-Pc    ] F0
+[T+673966173us][CH2-Pc    ] E0
+[T+674049307us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8
+[T+674049173us][CH2-Pc    ] EF FA FF F8 E8 F8
+[T+674072311us][CH1-Dispenser] FF
+[T+674072175us][CH2-Pc    ] FF
+[T+674106172us][CH2-Pc    ] EB EC
+[T+674137172us][CH1-Dispenser] EB EC 37 AB 12 24 F1 34 F4 12 6A 26 E2
+[T+674209172us][CH2-Pc    ] F1
+[T+674214172us][CH1-Dispenser] F1 F9
+[T+674287172us][CH2-Pc    ] E1
+[T+674295172us][CH1-Dispenser] E1 E9
+[T+674365172us][CH2-Pc    ] F0
+[T+674370172us][CH1-Dispenser] F0 F8
+[T+674445307us][CH1-Dispenser] E0
+[T+674445173us][CH2-Pc    ] E0
+[T+674631306us][CH1-Dispenser] E1
+[T+674631173us][CH2-Pc    ] E1
+[T+674811196us][CH2-Pc    ] F0 E0
+[T+674934172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+674962172us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 82 24 F1 F1 22 93 F4 CE E2 FE
+[T+675036172us][CH2-Pc    ] F1
+[T+675045179us][CH1-Dispenser] F1 F9
+[T+675114172us][CH2-Pc    ] E1
+[T+675120201us][CH1-Dispenser] E1 E9
+[T+675192200us][CH2-Pc    ] F0
+[T+675199172us][CH1-Dispenser] F0 F8
+[T+675270306us][CH1-Dispenser] E0
+[T+675270174us][CH2-Pc    ] E0
+[T+675435304us][CH1-Dispenser] E1
+[T+675435173us][CH2-Pc    ] E1
+[T+675610172us][CH2-Pc    ] F0
+[T+675615172us][CH1-Dispenser] F0 EC
+[T+675638172us][CH2-Pc    ] E0
+[T+675760172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+675788172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 12 24 F1 F1 F4 12 F5 CE 22
+[T+675852172us][CH2-Pc    ] F1
+[T+675859811us][CH1-Dispenser] F1 F9
+[T+675931172us][CH2-Pc    ] E1
+[T+675936172us][CH1-Dispenser] E1 E9
+[T+676009172us][CH2-Pc    ] F0
+[T+676017172us][CH1-Dispenser] F0 F8
+[T+676087303us][CH1-Dispenser] E0
+[T+676087173us][CH2-Pc    ] E0
+[T+676272304us][CH1-Dispenser] E1
+[T+676272173us][CH2-Pc    ] E1
+[T+676436172us][CH2-Pc    ] F0
+[T+676445812us][CH1-Dispenser] F0 F8
+[T+676515172us][CH2-Pc    ] F1
+[T+676519199us][CH1-Dispenser] F1 F9
+[T+676593172us][CH2-Pc    ] E1
+[T+676601172us][CH1-Dispenser] E1 E9
+[T+676671172us][CH2-Pc    ] F0
+[T+676675174us][CH1-Dispenser] F0 F8
+[T+676749307us][CH1-Dispenser] E0
+[T+676749174us][CH2-Pc    ] E0
+[T+676924306us][CH1-Dispenser] E1
+[T+676924173us][CH2-Pc    ] E1
+[T+677098198us][CH2-Pc    ] F0
+[T+677104200us][CH1-Dispenser] F0 F8
+[T+677177172us][CH2-Pc    ] F1
+[T+677184172us][CH1-Dispenser] F1 F9
+[T+677255172us][CH2-Pc    ] E1
+[T+677262807us][CH1-Dispenser] E1 E9
+[T+677333172us][CH2-Pc    ] F0
+[T+677340172us][CH1-Dispenser] F0 F8
+[T+677411307us][CH1-Dispenser] E0
+[T+677411173us][CH2-Pc    ] E0
+[T+677575306us][CH1-Dispenser] E1
+[T+677575174us][CH2-Pc    ] E1
+[T+677757172us][CH2-Pc    ] F0
+[T+677764172us][CH1-Dispenser] F0 F8
+[T+677835172us][CH2-Pc    ] F1
+[T+677840172us][CH1-Dispenser] F1 F9
+[T+677913172us][CH2-Pc    ] E1
+[T+677920172us][CH1-Dispenser] E1 E9
+[T+677991172us][CH2-Pc    ] F0
+[T+677996173us][CH1-Dispenser] F0 F8
+[T+678069303us][CH1-Dispenser] E0
+[T+678069173us][CH2-Pc    ] E0
+[T+678233306us][CH1-Dispenser] E1
+[T+678233173us][CH2-Pc    ] E1
+[T+678408172us][CH2-Pc    ] F0
+[T+678414200us][CH1-Dispenser] F0 F8
+[T+678486197us][CH2-Pc    ] F1
+[T+678496179us][CH1-Dispenser] F1 F9
+[T+678564172us][CH2-Pc    ] E1
+[T+678571172us][CH1-Dispenser] E1 E9
+[T+678642172us][CH2-Pc    ] F0
+[T+678650181us][CH1-Dispenser] F0 E8
+[T+678721308us][CH1-Dispenser] E0
+[T+678721174us][CH2-Pc    ] E0
+[T+678895308us][CH1-Dispenser] E1
+[T+678895173us][CH2-Pc    ] E1
+[T+679063172us][CH1-Dispenser] F0 F8
+[T+679059172us][CH2-Pc    ] F0
+[T+679127172us][CH2-Pc    ] F1
+[T+679135172us][CH1-Dispenser] F1 F9
+[T+679205172us][CH2-Pc    ] E1
+[T+679210172us][CH1-Dispenser] E1 E9
+[T+679283172us][CH2-Pc    ] F0
+[T+679290172us][CH1-Dispenser] F0 E8
+[T+679367304us][CH1-Dispenser] E0
+[T+679367173us][CH2-Pc    ] E0
+[T+679553306us][CH1-Dispenser] E1
+[T+679553173us][CH2-Pc    ] E1
+[T+679717172us][CH2-Pc    ] F0
+[T+679726172us][CH1-Dispenser] F0 F8
+[T+679795172us][CH2-Pc    ] F1
+[T+679800175us][CH1-Dispenser] F1 F9
+[T+679873172us][CH2-Pc    ] E1
+[T+679880172us][CH1-Dispenser] E1 E9
+[T+679951172us][CH2-Pc    ] F0
+[T+679954172us][CH1-Dispenser] F0 F8
+[T+680018303us][CH1-Dispenser] E0
+[T+680018173us][CH2-Pc    ] E0
+[T+680193304us][CH1-Dispenser] E1
+[T+680193173us][CH2-Pc    ] E1
+[T+680357172us][CH2-Pc    ] F0
+[T+680364813us][CH1-Dispenser] F0 F8
+[T+680435172us][CH2-Pc    ] F1
+[T+680440172us][CH1-Dispenser] F1 F9
+[T+680514175us][CH2-Pc    ] E1
+[T+680520203us][CH1-Dispenser] E1 E9
+[T+680592196us][CH2-Pc    ] F0
+[T+680599172us][CH1-Dispenser] F0 F8
+[T+680674306us][CH1-Dispenser] E0
+[T+680674174us][CH2-Pc    ] E0
+[T+680848307us][CH1-Dispenser] E1
+[T+680848173us][CH2-Pc    ] E1
+[T+681013172us][CH2-Pc    ] F0
+[T+681020172us][CH1-Dispenser] F0 F8
+[T+681091172us][CH2-Pc    ] F1
+[T+681096172us][CH1-Dispenser] F1 F9
+[T+681169172us][CH2-Pc    ] E1
+[T+681174172us][CH1-Dispenser] E1 E9
+[T+681247172us][CH2-Pc    ] F0
+[T+681255172us][CH1-Dispenser] F0 F8
+[T+681325307us][CH1-Dispenser] E0
+[T+681325173us][CH2-Pc    ] E0
+[T+681500308us][CH1-Dispenser] E1
+[T+681500174us][CH2-Pc    ] E1
+[T+681675172us][CH2-Pc    ] F0
+[T+681679172us][CH1-Dispenser] F0 F8
+[T+681753172us][CH2-Pc    ] F1
+[T+681759200us][CH1-Dispenser] F1 F9
+[T+681831172us][CH2-Pc    ] E1
+[T+681836172us][CH1-Dispenser] E1 E9
+[T+681909172us][CH2-Pc    ] F0
+[T+681915201us][CH1-Dispenser] F0 F8
+[T+681987307us][CH1-Dispenser] E0
+[T+681987174us][CH2-Pc    ] E0
+[T+682162305us][CH1-Dispenser] E1
+[T+682162173us][CH2-Pc    ] E1
+[T+682330173us][CH1-Dispenser] F0 F8
+[T+682326172us][CH2-Pc    ] F0
+[T+682416172us][CH2-Pc    ] F1
+[T+682420172us][CH1-Dispenser] F1 F9
+[T+682494172us][CH2-Pc    ] E1
+[T+682500201us][CH1-Dispenser] E1 E9
+[T+682572197us][CH2-Pc    ] F0
+[T+682581172us][CH1-Dispenser] F0 F8
+[T+682650307us][CH1-Dispenser] E0
+[T+682650174us][CH2-Pc    ] E0
+[T+682825307us][CH1-Dispenser] E1
+[T+682825174us][CH2-Pc    ] E1
+[T+683000172us][CH2-Pc    ] F0
+[T+683004173us][CH1-Dispenser] F0 F8
+[T+683078172us][CH2-Pc    ] F1
+[T+683085172us][CH1-Dispenser] F1 F9
+[T+683157197us][CH2-Pc    ] E1
+[T+683165172us][CH1-Dispenser] E1 E9
+[T+683235172us][CH2-Pc    ] F0
+[T+683243172us][CH1-Dispenser] F0 E8
+[T+683314303us][CH1-Dispenser] E0
+[T+683314173us][CH2-Pc    ] E0
+[T+683489310us][CH1-Dispenser] E1
+[T+683489173us][CH2-Pc    ] E1
+[T+683653172us][CH2-Pc    ] F0
+[T+683660172us][CH1-Dispenser] F0 F8
+[T+683731172us][CH2-Pc    ] F1
+[T+683734173us][CH1-Dispenser] F1 F9
+[T+683799172us][CH2-Pc    ] E1
+[T+683805200us][CH1-Dispenser] E1 E9
+[T+683877199us][CH2-Pc    ] F0
+[T+683884172us][CH1-Dispenser] F0 F8
+[T+683955303us][CH1-Dispenser] E0
+[T+683955173us][CH2-Pc    ] E0
+[T+684130307us][CH1-Dispenser] E1
+[T+684130174us][CH2-Pc    ] E1
+[T+684294172us][CH2-Pc    ] F0
+[T+684301172us][CH1-Dispenser] F0 F8
+[T+684374172us][CH2-Pc    ] F1
+[T+684381172us][CH1-Dispenser] F1 E9
+[T+684452172us][CH2-Pc    ] E1
+[T+684461172us][CH1-Dispenser] E1 E9
+[T+684530172us][CH2-Pc    ] F0
+[T+684535172us][CH1-Dispenser] F0 F8
+[T+684608307us][CH1-Dispenser] E0
+[T+684608173us][CH2-Pc    ] E0
+[T+684783303us][CH1-Dispenser] E1
+[T+684783173us][CH2-Pc    ] E1
+[T+684958197us][CH2-Pc    ] F0
+[T+684964201us][CH1-Dispenser] F0 F8
+[T+685040172us][CH1-Dispenser] F1 F9
+[T+685036174us][CH2-Pc    ] F1
+[T+685114172us][CH2-Pc    ] E1
+[T+685120200us][CH1-Dispenser] E1 E9
+[T+685192197us][CH2-Pc    ] F0
+[T+685199172us][CH1-Dispenser] F0 F8
+[T+685270304us][CH1-Dispenser] E0
+[T+685270174us][CH2-Pc    ] E0
+[T+685439306us][CH1-Dispenser] E1
+[T+685439174us][CH2-Pc    ] E1
+[T+685615172us][CH2-Pc    ] F0
+[T+685622813us][CH1-Dispenser] F0 F8
+[T+685693172us][CH2-Pc    ] F1
+[T+685720172us][CH2-Pc    ] E1
+[T+685843172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+685872172us][CH1-Dispenser] F1 ED E1 ED EF FA FF F8 E8 F8 FF EB EC 37 AB 8D 24 F1 F1 A2 93 F4 2C 22
+[T+685946173us][CH2-Pc    ] E1
+[T+685949172us][CH1-Dispenser] E1 E9
+[T+686013172us][CH2-Pc    ] F0
+[T+686019202us][CH1-Dispenser] F0 F8
+[T+686091304us][CH1-Dispenser] E0
+[T+686091173us][CH2-Pc    ] E0
+[T+686266309us][CH1-Dispenser] E1
+[T+686266174us][CH2-Pc    ] E1
+[T+686441172us][CH2-Pc    ] F0
+[T+686445172us][CH1-Dispenser] F0 F8
+[T+686519172us][CH2-Pc    ] F1
+[T+686525200us][CH1-Dispenser] F1 ED
+[T+686547172us][CH2-Pc    ] E1
+[T+686669197us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+686698172us][CH1-Dispenser] E1 ED EF FA FF F8 E8 F8 FF EB EC 37 AB 8D 24 F1 F1 12 68 F4 2C 22
+[T+686773172us][CH2-Pc    ] E1
+[T+686780172us][CH1-Dispenser] E1 E9
+[T+686850172us][CH2-Pc    ] F0
+[T+686856202us][CH1-Dispenser] F0 F8
+[T+686928304us][CH1-Dispenser] E0
+[T+686928173us][CH2-Pc    ] E0
+[T+687093308us][CH1-Dispenser] E1
+[T+687093174us][CH2-Pc    ] E1
+[T+687268172us][CH2-Pc    ] F0
+[T+687274208us][CH1-Dispenser] F0 F8
+[T+687345172us][CH2-Pc    ] F1
+[T+687350172us][CH1-Dispenser] F1 ED
+[T+687373172us][CH2-Pc    ] E1
+[T+687495172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+687523172us][CH1-Dispenser] E1 ED EF FA FF F8 E8 F8 FF EB EC 37 AB 1D 24 A3 F1 12 68 F4 2C 22
+[T+687597172us][CH2-Pc    ] E1
+[T+687607179us][CH1-Dispenser] E1 E9
+[T+687676172us][CH2-Pc    ] F0
+[T+687681274us][CH1-Dispenser] F0 F8
+[T+687754306us][CH1-Dispenser] E0
+[T+687754174us][CH2-Pc    ] E0
+[T+687928305us][CH1-Dispenser] E1
+[T+687928173us][CH2-Pc    ] E1
+[T+688092172us][CH2-Pc    ] F0
+[T+688099172us][CH1-Dispenser] F0 F8
+[T+688171172us][CH2-Pc    ] F1
+[T+688175172us][CH1-Dispenser] F1 ED
+[T+688198173us][CH2-Pc    ] E1
+[T+688320172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+688348172us][CH1-Dispenser] E1 ED EF FA FF F8 E8 F8 FF EB EC 37 AB 1D 64 F1 F1 12 68 F4 2C 22
+[T+688423172us][CH2-Pc    ] E1
+[T+688430172us][CH1-Dispenser] E1 E9
+[T+688502173us][CH2-Pc    ] F0
+[T+688506172us][CH1-Dispenser] F0 E8
+[T+688580307us][CH1-Dispenser] E0
+[T+688580173us][CH2-Pc    ] E0
+[T+688755304us][CH1-Dispenser] E1
+[T+688755173us][CH2-Pc    ] E1
+[T+688919172us][CH2-Pc    ] F0
+[T+688925200us][CH1-Dispenser] F0 F8
+[T+688997196us][CH2-Pc    ] F1
+[T+689024172us][CH2-Pc    ] E1
+[T+689146172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+689177172us][CH1-Dispenser] F1 ED E1 ED EF FA FF F8 E8 F8 FF EB EC 37 F5 8D 24 F1 F1 82 74 22 0E A2
+[T+689250172us][CH2-Pc    ] E1
+[T+689256200us][CH1-Dispenser] E1 E9
+[T+689328196us][CH2-Pc    ] F0
+[T+689336179us][CH1-Dispenser] F0 F8
+[T+689406307us][CH1-Dispenser] E0
+[T+689406173us][CH2-Pc    ] E0
+[T+689582306us][CH1-Dispenser] E1
+[T+689582174us][CH2-Pc    ] E1
+[T+689757172us][CH2-Pc    ] F0
+[T+689764172us][CH1-Dispenser] F0 F8
+[T+689836173us][CH2-Pc    ] F1
+[T+689840172us][CH1-Dispenser] F1 F9
+[T+689914172us][CH2-Pc    ] E1
+[T+689922172us][CH1-Dispenser] E1 E9
+[T+689992172us][CH2-Pc    ] F0
+[T+689996172us][CH1-Dispenser] F0 F8
+[T+690070305us][CH1-Dispenser] E0
+[T+690070174us][CH2-Pc    ] E0
+[T+690255305us][CH1-Dispenser] E1
+[T+690255173us][CH2-Pc    ] E1
+[T+690419172us][CH2-Pc    ] F0
+[T+690426172us][CH1-Dispenser] F0 F8
+[T+690498196us][CH2-Pc    ] F1
+[T+690505804us][CH1-Dispenser] F1 F9
+[T+690580172us][CH1-Dispenser] E1 E9
+[T+690576172us][CH2-Pc    ] E1
+[T+690655172us][CH2-Pc    ] F0
+[T+690661202us][CH1-Dispenser] F0 F8
+[T+690733302us][CH1-Dispenser] E0
+[T+690733173us][CH2-Pc    ] E0
+[T+690908304us][CH1-Dispenser] E1
+[T+690908173us][CH2-Pc    ] E1
+[T+691081172us][CH2-Pc    ] F0
+[T+691085173us][CH1-Dispenser] F0 F8
+[T+691159172us][CH2-Pc    ] F1
+[T+691166172us][CH1-Dispenser] F1 F9
+[T+691237172us][CH2-Pc    ] E1
+[T+691241172us][CH1-Dispenser] E1 E9
+[T+691315172us][CH2-Pc    ] F0
+[T+691320172us][CH1-Dispenser] F0 F8
+[T+691393303us][CH1-Dispenser] E0
+[T+691393173us][CH2-Pc    ] E0
+[T+691568307us][CH1-Dispenser] E1
+[T+691568174us][CH2-Pc    ] E1
+[T+691732172us][CH2-Pc    ] F0
+[T+691739172us][CH1-Dispenser] F0 F8
+[T+691810172us][CH2-Pc    ] F1
+[T+691817172us][CH1-Dispenser] F1 F9
+[T+691888172us][CH2-Pc    ] E1
+[T+691895172us][CH1-Dispenser] E1 E9
+[T+691966173us][CH2-Pc    ] F0
+[T+691971172us][CH1-Dispenser] F0 F8
+[T+692044304us][CH1-Dispenser] E0
+[T+692044173us][CH2-Pc    ] E0
+[T+692221306us][CH1-Dispenser] E1
+[T+692221174us][CH2-Pc    ] E1
+[T+692396173us][CH2-Pc    ] F0
+[T+692401172us][CH1-Dispenser] F0 F8
+[T+692474172us][CH2-Pc    ] F1
+[T+692480201us][CH1-Dispenser] F1 E9
+[T+692552197us][CH2-Pc    ] E1
+[T+692560172us][CH1-Dispenser] E1 E9
+[T+692631172us][CH2-Pc    ] F0
+[T+692638172us][CH1-Dispenser] F0 E8
+[T+692710305us][CH1-Dispenser] E0
+[T+692710173us][CH2-Pc    ] E0
+[T+692874306us][CH1-Dispenser] E1
+[T+692874173us][CH2-Pc    ] E1
+[T+693048196us][CH2-Pc    ] F0
+[T+693055172us][CH1-Dispenser] F0 F8
+[T+693127197us][CH2-Pc    ] F1
+[T+693138179us][CH1-Dispenser] F1 E9
+[T+693205172us][CH2-Pc    ] E1
+[T+693211203us][CH1-Dispenser] E1 E9
+[T+693283197us][CH2-Pc    ] F0
+[T+693290172us][CH1-Dispenser] F0 F8
+[T+693361303us][CH1-Dispenser] E0
+[T+693361173us][CH2-Pc    ] E0
+[T+693536305us][CH1-Dispenser] E1
+[T+693536173us][CH2-Pc    ] E1
+[T+693700172us][CH2-Pc    ] F0
+[T+693705172us][CH1-Dispenser] F0 F8
+[T+693778172us][CH2-Pc    ] F1
+[T+693805172us][CH2-Pc    ] E1
+[T+693927360us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+693959172us][CH1-Dispenser] F1 ED E1 ED EF FA FF F8 E8 F8 FF EB EC 37 AB 8D 24 F1 F1 A2 13 2A 9C 22
+[T+694039172us][CH2-Pc    ] E1
+[T+694045200us][CH1-Dispenser] E1 E9
+[T+694120172us][CH1-Dispenser] F0 F8
+[T+694117172us][CH2-Pc    ] F0
+[T+694211305us][CH1-Dispenser] E0
+[T+694211173us][CH2-Pc    ] E0
+[T+694397305us][CH1-Dispenser] E1
+[T+694397173us][CH2-Pc    ] E1
+[T+694561172us][CH2-Pc    ] F0
+[T+694565172us][CH1-Dispenser] F0 F8
+[T+694639172us][CH2-Pc    ] F1
+[T+694666172us][CH2-Pc    ] E1
+[T+694789172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+694819196us][CH1-Dispenser] F1 ED E1 ED EF FA FF F8 E8 F8 FF EB EC 37 F5 8D 24 A3 A3 64 F4 F0 F6 CD
+[T+694891172us][CH2-Pc    ] E1
+[T+694895172us][CH1-Dispenser] E1 E9
+[T+694969172us][CH2-Pc    ] F0
+[T+694975201us][CH1-Dispenser] F0 F8
+[T+695047303us][CH1-Dispenser] E0
+[T+695047173us][CH2-Pc    ] E0
+[T+695222307us][CH1-Dispenser] E1
+[T+695222173us][CH2-Pc    ] E1
+[T+695401172us][CH1-Dispenser] F0 F8
+[T+695397172us][CH2-Pc    ] F0
+[T+695476172us][CH2-Pc    ] F1
+[T+695480172us][CH1-Dispenser] F1 ED
+[T+695502172us][CH2-Pc    ] E1
+[T+695625172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+695653172us][CH1-Dispenser] E1 ED EF FA FF F8 E8 F8 FF EB EC 37 AB 8D 24 F1 F1 A2 68 60 78 CD FC
+[T+695727172us][CH2-Pc    ] E1
+[T+695731173us][CH1-Dispenser] E1 E9
+[T+695809197us][CH2-Pc    ] F0
+[T+695816172us][CH1-Dispenser] F0 F8
+[T+695887306us][CH1-Dispenser] E0
+[T+695887173us][CH2-Pc    ] E0
+[T+696062303us][CH1-Dispenser] E1
+[T+696062173us][CH2-Pc    ] E1
+[T+696240172us][CH1-Dispenser] F0 F8
+[T+696237172us][CH2-Pc    ] F0
+[T+696315172us][CH2-Pc    ] F1
+[T+696342196us][CH2-Pc    ] E1
+[T+696467172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+696498172us][CH1-Dispenser] F1 ED E1 ED EF FA FF F8 E8 F8 FF EB EC 37 F5 8D 24 A3 A3 12 13 2A 9C A2
+[T+696570197us][CH2-Pc    ] E1
+[T+696577172us][CH1-Dispenser] E1 E9
+[T+696648172us][CH2-Pc    ] F0
+[T+696656778us][CH1-Dispenser] F0 F8
+[T+696726306us][CH1-Dispenser] E0
+[T+696726173us][CH2-Pc    ] E0
+[T+696912720us][CH1-Dispenser] E1
+[T+696912576us][CH2-Pc    ] E1
+[T+697076172us][CH2-Pc    ] F0
+[T+697082200us][CH1-Dispenser] F0 F8
+[T+697154197us][CH2-Pc    ] F1
+[T+697292196us][CH2-Pc    ] E1 EF FA FF F8 E8 F8 FF EB EC
+[T+697323172us][CH1-Dispenser] F1 ED E1 ED EF FA FF F8 E8 F8 FF EB EC 37 E5 8D 24 47 34 F5 F4 52 70 CD FC
+[T+697395196us][CH2-Pc    ] E1
+[T+697402774us][CH1-Dispenser] E1 E9
+[T+697473172us][CH2-Pc    ] F0
+[T+697481172us][CH1-Dispenser] F0 F8
+[T+697551303us][CH1-Dispenser] E0
+[T+697551173us][CH2-Pc    ] E0
+[T+697715309us][CH1-Dispenser] E1
+[T+697715173us][CH2-Pc    ] E1
+[T+697890172us][CH2-Pc    ] F0
+[T+697896200us][CH1-Dispenser] F0 F8
+[T+697968196us][CH2-Pc    ] F1
+[T+697996172us][CH2-Pc    ] E1
+[T+698118198us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+698148196us][CH1-Dispenser] F1 ED E1 ED EF FA FF F8 E8 F8 FF EB EC 37 F5 8D 24 A3 A3 A2 13 2A 9C A2
+[T+698220199us][CH2-Pc    ] E1
+[T+698227172us][CH1-Dispenser] E1 E9
+[T+698298172us][CH2-Pc    ] F0
+[T+698306172us][CH1-Dispenser] F0 E8
+[T+698376304us][CH1-Dispenser] E0
+[T+698376173us][CH2-Pc    ] E0
+[T+698551307us][CH1-Dispenser] E1
+[T+698551173us][CH2-Pc    ] E1
+[T+698715172us][CH2-Pc    ] F0
+[T+698721202us][CH1-Dispenser] F0 F8
+[T+698793199us][CH2-Pc    ] F1
+[T+698821172us][CH2-Pc    ] E1
+[T+698950172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+698979172us][CH1-Dispenser] F1 ED E1 ED EF FA FF F8 E8 F8 FF EB EC 37 F5 8D 24 A3 A3 A2 13 2A 9C A2
+[T+699052173us][CH2-Pc    ] E1
+[T+699056172us][CH1-Dispenser] E1 E9
+[T+699130173us][CH2-Pc    ] F0
+[T+699137776us][CH1-Dispenser] F0 F8
+[T+699208304us][CH1-Dispenser] E0
+[T+699208173us][CH2-Pc    ] E0
+[T+699372304us][CH1-Dispenser] E1
+[T+699372173us][CH2-Pc    ] E1
+[T+699547172us][CH2-Pc    ] F0
+[T+699556172us][CH1-Dispenser] F0 F8
+[T+699625172us][CH2-Pc    ] F1
+[T+699631202us][CH1-Dispenser] F1 F9
+[T+699704172us][CH2-Pc    ] E1
+[T+699710202us][CH1-Dispenser] E1 E9
+[T+699783172us][CH2-Pc    ] F0
+[T+699791172us][CH1-Dispenser] F0 F8
+[T+699861307us][CH1-Dispenser] E0
+[T+699861173us][CH2-Pc    ] E0
+[T+700036173us][CH1-Dispenser] E1
+[T+700035172us][CH2-Pc    ] E1
+[T+700200172us][CH2-Pc    ] F0
+[T+700208172us][CH1-Dispenser] F0 F8
+[T+700278175us][CH2-Pc    ] F1
+[T+700287797us][CH1-Dispenser] F1 F9
+[T+700356172us][CH2-Pc    ] E1
+[T+700360172us][CH1-Dispenser] E1 E9
+[T+700434172us][CH2-Pc    ] F0
+[T+700441763us][CH1-Dispenser] F0 F8
+[T+700512306us][CH1-Dispenser] E0
+[T+700512173us][CH2-Pc    ] E0
+[T+700689312us][CH1-Dispenser] E1
+[T+700689176us][CH2-Pc    ] E1
+[T+700864172us][CH2-Pc    ] F0
+[T+700871172us][CH1-Dispenser] F0 F8
+[T+700942172us][CH2-Pc    ] F1
+[T+700945172us][CH1-Dispenser] F1 F9
+[T+701009172us][CH2-Pc    ] E1
+[T+701016798us][CH1-Dispenser] E1 E9
+[T+701090172us][CH1-Dispenser] F0 F8
+[T+701087172us][CH2-Pc    ] F0
+[T+701155305us][CH1-Dispenser] E0
+[T+701155173us][CH2-Pc    ] E0
+[T+701329305us][CH1-Dispenser] E1
+[T+701329173us][CH2-Pc    ] E1
+[T+701504172us][CH2-Pc    ] F0
+[T+701513172us][CH1-Dispenser] F0 F8
+[T+701582172us][CH2-Pc    ] F1
+[T+701592172us][CH1-Dispenser] F1 F9
+[T+701660172us][CH2-Pc    ] E1
+[T+701667172us][CH1-Dispenser] E1 E9
+[T+701739197us][CH2-Pc    ] F0
+[T+701746172us][CH1-Dispenser] F0 F8
+[T+701817309us][CH1-Dispenser] E0
+[T+701817175us][CH2-Pc    ] E0
+[T+701981306us][CH1-Dispenser] E1
+[T+701981173us][CH2-Pc    ] E1
+[T+702156172us][CH2-Pc    ] F0
+[T+702161172us][CH1-Dispenser] F0 F8
+[T+702234172us][CH2-Pc    ] F1
+[T+702240200us][CH1-Dispenser] F1 F9
+[T+702312172us][CH2-Pc    ] E1
+[T+702317172us][CH1-Dispenser] E1 E9
+[T+702390172us][CH2-Pc    ] F0
+[T+702396202us][CH1-Dispenser] F0 F8
+[T+702470305us][CH1-Dispenser] E0
+[T+702470173us][CH2-Pc    ] E0
+[T+702645307us][CH1-Dispenser] E1
+[T+702645173us][CH2-Pc    ] E1
+[T+702809172us][CH2-Pc    ] F0
+[T+702819172us][CH1-Dispenser] F0 F8
+[T+702887172us][CH2-Pc    ] F1
+[T+702891172us][CH1-Dispenser] F1 ED
+[T+702914172us][CH2-Pc    ] E1
+[T+703036172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+703064172us][CH1-Dispenser] E1 ED EF FA FF F8 E8 F8 FF EB EC 37 AB 8D 24 F1 34 F5 F4 F4 26 E2
+[T+703129172us][CH2-Pc    ] E1
+[T+703137733us][CH1-Dispenser] E1 E9
+[T+703207172us][CH2-Pc    ] F0
+[T+703211172us][CH1-Dispenser] F0 F8
+[T+703275306us][CH1-Dispenser] E0
+[T+703275174us][CH2-Pc    ] E0
+[T+703449305us][CH1-Dispenser] E1
+[T+703449173us][CH2-Pc    ] E1
+[T+703624199us][CH2-Pc    ] F0
+[T+703632179us][CH1-Dispenser] F0 F8
+[T+703718172us][CH2-Pc    ] F1 E1
+[T+703752306us][CH1-Dispenser] F1 ED E1 ED EF FA
+[T+703752173us][CH2-Pc    ] EF FA
+[T+703857303us][CH1-Dispenser] FF F8
+[T+703857173us][CH2-Pc    ] FF F8
+[T+703928172us][CH2-Pc    ] E8 F8 FF EB EC
+[T+703959172us][CH1-Dispenser] E8 F8 FF EB EC 37 F5 8D 24 A3 F1 22 A3 A2 38 DC FC
+[T+704031172us][CH2-Pc    ] E1
+[T+704036172us][CH1-Dispenser] E1 E9
+[T+704110172us][CH2-Pc    ] F0
+[T+704115172us][CH1-Dispenser] F0 F8
+[T+704188305us][CH1-Dispenser] E0
+[T+704188173us][CH2-Pc    ] E0
+[T+704363307us][CH1-Dispenser] E1
+[T+704363173us][CH2-Pc    ] E1
+[T+704531172us][CH2-Pc    ] F0
+[T+704536172us][CH1-Dispenser] F0 F8
+[T+704610172us][CH2-Pc    ] F1
+[T+704616200us][CH1-Dispenser] F1 ED
+[T+704637172us][CH2-Pc    ] E1
+[T+704746306us][CH1-Dispenser] E1 ED EF FA FF F8 E8 F8 FF EB
+[T+704746173us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB
+[T+704768172us][CH2-Pc    ] EC
+[T+704799172us][CH1-Dispenser] EC 37 AB 1D 24 F1 F1 22 68 F4 8C 0B FE
+[T+704871172us][CH2-Pc    ] E1
+[T+704876172us][CH1-Dispenser] E1 E9
+[T+704949172us][CH2-Pc    ] F0
+[T+704959172us][CH1-Dispenser] F0 F8
+[T+705028304us][CH1-Dispenser] E0
+[T+705028173us][CH2-Pc    ] E0
+[T+705203172us][CH1-Dispenser] E1
+[T+705202173us][CH2-Pc    ] E1
+[T+705377173us][CH2-Pc    ] F0
+[T+705381172us][CH1-Dispenser] F0 F8
+[T+705455172us][CH2-Pc    ] F1
+[T+705461201us][CH1-Dispenser] F1 ED
+[T+705556304us][CH1-Dispenser] E1 ED EF FA FF F8 E8 F8
+[T+705556173us][CH2-Pc    ] E1 EF FA FF F8 E8 F8
+[T+705603274us][CH2-Pc    ] FF EB EC
+[T+705633196us][CH1-Dispenser] FF EB EC 37 F5 8D 24 A3 A3 A2 93 AA 8C 64 FE
+[T+705705293us][CH2-Pc    ] E1
+[T+705712769us][CH1-Dispenser] E1 E9
+[T+705784197us][CH2-Pc    ] F0
+[T+705791172us][CH1-Dispenser] F0 F8
+[T+705862305us][CH1-Dispenser] E0
+[T+705862173us][CH2-Pc    ] E0
+[T+706037311us][CH1-Dispenser] E1
+[T+706037174us][CH2-Pc    ] E1
+[T+706200172us][CH2-Pc    ] F0
+[T+706208172us][CH1-Dispenser] F0 F8
+[T+706279172us][CH2-Pc    ] F1
+[T+706306172us][CH2-Pc    ] E1
+[T+706351304us][CH1-Dispenser] F1 ED E1 ED EF FA FF
+[T+706351173us][CH2-Pc    ] EF FA FF
+[T+706446172us][CH2-Pc    ] F8 E8 F8 FF EB EC
+[T+706474172us][CH1-Dispenser] F8 E8 F8 FF EB EC 37 AB 8D 24 F1 F1 12 68 F4 8C 8B F3
+[T+706539172us][CH2-Pc    ] E1
+[T+706546172us][CH1-Dispenser] E1 E9
+[T+706617172us][CH2-Pc    ] F0
+[T+706622172us][CH1-Dispenser] F0 F8
+[T+706695305us][CH1-Dispenser] E0
+[T+706695173us][CH2-Pc    ] E0
+[T+706880307us][CH1-Dispenser] E1
+[T+706880174us][CH2-Pc    ] E1
+[T+707046172us][CH2-Pc    ] F0
+[T+707051173us][CH1-Dispenser] F0 F8
+[T+707123196us][CH2-Pc    ] F1
+[T+707151172us][CH2-Pc    ] E1
+[T+707247322us][CH1-Dispenser] F1 ED E1 ED EF FA FF F8 E8 F8 FF
+[T+707247181us][CH2-Pc    ] EF FA FF F8 E8 F8 FF
+[T+707272303us][CH1-Dispenser] EB
+[T+707272173us][CH2-Pc    ] EB
+[T+707294209us][CH2-Pc    ] EC
+[T+707324196us][CH1-Dispenser] EC 37 AB 8D 24 A3 A3 12 68 F4 9C 64 FE
+[T+707395172us][CH2-Pc    ] E1
+[T+707402172us][CH1-Dispenser] E1 E9
+[T+707473172us][CH2-Pc    ] F0
+[T+707476173us][CH1-Dispenser] F0 F8
+[T+707540303us][CH1-Dispenser] E0
+[T+707540173us][CH2-Pc    ] E0
+[T+707715304us][CH1-Dispenser] E1
+[T+707715173us][CH2-Pc    ] E1
+[T+707890197us][CH2-Pc    ] F0
+[T+707898172us][CH1-Dispenser] F0 F8
+[T+707968172us][CH2-Pc    ] F1
+[T+707995172us][CH2-Pc    ] E1
+[T+708117172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+708149172us][CH1-Dispenser] F1 ED E1 ED EF FA FF F8 E8 F8 FF EB EC 37 AB 1D 24 A3 A3 12 68 AA 8C 0B FE
+[T+708221202us][CH2-Pc    ] E1
+[T+708227200us][CH1-Dispenser] E1 FA
+[T+708299196us][CH2-Pc    ] F0
+[T+708307772us][CH1-Dispenser] F0 F8
+[T+708377304us][CH1-Dispenser] E0
+[T+708377173us][CH2-Pc    ] E0
+[T+708552307us][CH1-Dispenser] E1
+[T+708552174us][CH2-Pc    ] E1
+[T+708716304us][CH2-Pc    ] F0
+[T+708722200us][CH1-Dispenser] F0 F8
+[T+708794196us][CH2-Pc    ] F1
+[T+708801172us][CH1-Dispenser] F1 F9
+[T+708872172us][CH2-Pc    ] E1
+[T+708876172us][CH1-Dispenser] E1 E9
+[T+708940172us][CH2-Pc    ] F0
+[T+708948172us][CH1-Dispenser] F0 F8
+[T+709018306us][CH1-Dispenser] E0
+[T+709018173us][CH2-Pc    ] E0
+[T+709193309us][CH1-Dispenser] E1
+[T+709193174us][CH2-Pc    ] E1
+[T+709357172us][CH2-Pc    ] F0
+[T+709361172us][CH1-Dispenser] F0 F8
+[T+709435172us][CH2-Pc    ] F1
+[T+709441202us][CH1-Dispenser] F1 F9
+[T+709513173us][CH2-Pc    ] E1
+[T+709517172us][CH1-Dispenser] E1 E9
+[T+709591172us][CH2-Pc    ] F0
+[T+709597206us][CH1-Dispenser] F0 F8
+[T+709669307us][CH1-Dispenser] E0
+[T+709669173us][CH2-Pc    ] E0
+[T+709844304us][CH1-Dispenser] E1
+[T+709844173us][CH2-Pc    ] E1
+[T+710019172us][CH2-Pc    ] F0
+[T+710026172us][CH1-Dispenser] F0 F8
+[T+710097172us][CH2-Pc    ] F1
+[T+710102172us][CH1-Dispenser] F1 F9
+[T+710175172us][CH2-Pc    ] E1
+[T+710182172us][CH1-Dispenser] E1 E9
+[T+710253172us][CH2-Pc    ] F0
+[T+710258172us][CH1-Dispenser] F0 F8
+[T+710331304us][CH1-Dispenser] E0
+[T+710331173us][CH2-Pc    ] E0
+[T+710506307us][CH1-Dispenser] E1
+[T+710506173us][CH2-Pc    ] E1
+[T+710670172us][CH2-Pc    ] F0
+[T+710677172us][CH1-Dispenser] F0 F8
+[T+710748172us][CH2-Pc    ] F1
+[T+710758179us][CH1-Dispenser] F1 F9
+[T+710826172us][CH2-Pc    ] E1
+[T+710833775us][CH1-Dispenser] E1 E9
+[T+710905196us][CH2-Pc    ] F0
+[T+710914172us][CH1-Dispenser] F0 F8
+[T+710983307us][CH1-Dispenser] E0
+[T+710983173us][CH2-Pc    ] E0
+[T+711158304us][CH1-Dispenser] E1
+[T+711158173us][CH2-Pc    ] E1
+[T+711332172us][CH2-Pc    ] F0
+[T+711336173us][CH1-Dispenser] F0 F8
+[T+711410172us][CH2-Pc    ] F1
+[T+711417172us][CH1-Dispenser] F1 F9
+[T+711488172us][CH2-Pc    ] E1
+[T+711498254us][CH1-Dispenser] E1 E9
+[T+711567172us][CH2-Pc    ] F0
+[T+711573202us][CH1-Dispenser] F0 F8
+[T+711645316us][CH1-Dispenser] E0
+[T+711645175us][CH2-Pc    ] E0
+[T+711809306us][CH1-Dispenser] E1
+[T+711809173us][CH2-Pc    ] E1
+[T+711984172us][CH2-Pc    ] F0
+[T+711994179us][CH1-Dispenser] F0 F8
+[T+712062172us][CH2-Pc    ] F1
+[T+712066172us][CH1-Dispenser] F1 F9
+[T+712140172us][CH2-Pc    ] E1
+[T+712146202us][CH1-Dispenser] E1 E9
+[T+712222172us][CH1-Dispenser] F0 F8
+[T+712218172us][CH2-Pc    ] F0
+[T+712296305us][CH1-Dispenser] E0
+[T+712296174us][CH2-Pc    ] E0
+[T+712471310us][CH1-Dispenser] E1
+[T+712471174us][CH2-Pc    ] E1
+[T+712646172us][CH2-Pc    ] F0
+[T+712652202us][CH1-Dispenser] F0 F8
+[T+712724197us][CH2-Pc    ] F1
+[T+712731172us][CH1-Dispenser] F1 F9
+[T+712802172us][CH2-Pc    ] E1
+[T+712808200us][CH1-Dispenser] E1 E9
+[T+712880196us][CH2-Pc    ] F0
+[T+712889349us][CH1-Dispenser] F0 F8
+[T+712958307us][CH1-Dispenser] E0
+[T+712958173us][CH2-Pc    ] E0
+[T+713122304us][CH1-Dispenser] E1
+[T+713122173us][CH2-Pc    ] E1
+[T+713294172us][CH2-Pc    ] F0
+[T+713302172us][CH1-Dispenser] F0 F8
+[T+713372172us][CH2-Pc    ] F1
+[T+713378200us][CH1-Dispenser] F1 E9
+[T+713452172us][CH2-Pc    ] E1
+[T+713456172us][CH1-Dispenser] E1 E9
+[T+713530172us][CH2-Pc    ] F0
+[T+713537172us][CH1-Dispenser] F0 F8
+[T+713608305us][CH1-Dispenser] E0
+[T+713608173us][CH2-Pc    ] E0
+[T+713783305us][CH1-Dispenser] E1
+[T+713783173us][CH2-Pc    ] E1
+[T+713958173us][CH2-Pc    ] F0
+[T+713962172us][CH1-Dispenser] F0 F8
+[T+714036172us][CH2-Pc    ] F1
+[T+714044179us][CH1-Dispenser] F1 F9
+[T+714114172us][CH2-Pc    ] E1
+[T+714121172us][CH1-Dispenser] E1 E9
+[T+714192172us][CH2-Pc    ] F0
+[T+714197172us][CH1-Dispenser] F0 F8
+[T+714271303us][CH1-Dispenser] E0
+[T+714271173us][CH2-Pc    ] E0
+[T+714435305us][CH1-Dispenser] E1
+[T+714435173us][CH2-Pc    ] E1
+[T+714611172us][CH2-Pc    ] F0
+[T+714618780us][CH1-Dispenser] F0 F8
+[T+714691172us][CH2-Pc    ] F1
+[T+714699172us][CH1-Dispenser] F1 F9
+[T+714770172us][CH2-Pc    ] E1
+[T+714777744us][CH1-Dispenser] E1 E9
+[T+714848172us][CH2-Pc    ] F0
+[T+714853172us][CH1-Dispenser] F0 F8
+[T+714926310us][CH1-Dispenser] E0
+[T+714926173us][CH2-Pc    ] E0
+[T+715090306us][CH1-Dispenser] E1
+[T+715090173us][CH2-Pc    ] E1
+[T+715265172us][CH2-Pc    ] F0
+[T+715272772us][CH1-Dispenser] F0 F8
+[T+715347172us][CH1-Dispenser] F1 F9
+[T+715343172us][CH2-Pc    ] F1
+[T+715421172us][CH2-Pc    ] E1
+[T+715428172us][CH1-Dispenser] E1 E9
+[T+715499172us][CH2-Pc    ] F0
+[T+715508172us][CH1-Dispenser] F0 F8
+[T+715577305us][CH1-Dispenser] E0
+[T+715577173us][CH2-Pc    ] E0
+[T+715752306us][CH1-Dispenser] E1
+[T+715752173us][CH2-Pc    ] E1
+[T+715927172us][CH2-Pc    ] F0
+[T+715935172us][CH1-Dispenser] F0 F8
+[T+716005172us][CH2-Pc    ] F1
+[T+716012172us][CH1-Dispenser] F1 F9
+[T+716083172us][CH2-Pc    ] E1
+[T+716087172us][CH1-Dispenser] E1 E9
+[T+716161172us][CH2-Pc    ] F0
+[T+716168770us][CH1-Dispenser] F0 F8
+[T+716239304us][CH1-Dispenser] E0
+[T+716239174us][CH2-Pc    ] E0
+[T+716403306us][CH1-Dispenser] E1
+[T+716403173us][CH2-Pc    ] E1
+[T+716582172us][CH1-Dispenser] F0 F8
+[T+716578172us][CH2-Pc    ] F0
+[T+716646172us][CH2-Pc    ] F1
+[T+716654172us][CH1-Dispenser] F1 F9
+[T+716724172us][CH2-Pc    ] E1
+[T+716732172us][CH1-Dispenser] E1 E9
+[T+716802172us][CH2-Pc    ] F0
+[T+716806172us][CH1-Dispenser] F0 F8
+[T+716880307us][CH1-Dispenser] E0
+[T+716880173us][CH2-Pc    ] E0
+[T+717044308us][CH1-Dispenser] E1
+[T+717044173us][CH2-Pc    ] E1
+[T+717219172us][CH2-Pc    ] F0
+[T+717228764us][CH1-Dispenser] F0 F8
+[T+717297172us][CH2-Pc    ] F1
+[T+717302172us][CH1-Dispenser] F1 F9
+[T+717375172us][CH2-Pc    ] E1
+[T+717402172us][CH2-Pc    ] F1
+[T+717524198us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+717555172us][CH1-Dispenser] E1 FD F1 FD EF FA FF F8 E8 F8 FF EB EC 37 AB 8D 24 A3 A3 12 68 F4 2B 22
+[T+717628172us][CH2-Pc    ] F0
+[T+717631173us][CH1-Dispenser] F0 F8
+[T+717695305us][CH1-Dispenser] E0
+[T+717695173us][CH2-Pc    ] E0
+[T+717881306us][CH1-Dispenser] E1
+[T+717881173us][CH2-Pc    ] E1
+[T+718065172us][CH2-Pc    ] F0
+[T+718072172us][CH1-Dispenser] F0 F8
+[T+718143172us][CH2-Pc    ] F1
+[T+718147172us][CH1-Dispenser] F1 F9
+[T+718221172us][CH2-Pc    ] E1
+[T+718248172us][CH2-Pc    ] F1
+[T+718359304us][CH1-Dispenser] E1 FD F1 FD EF FA FF F8 E8 F8 FF EB
+[T+718359173us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB
+[T+718382177us][CH2-Pc    ] EC
+[T+718409172us][CH1-Dispenser] EC 37 AB 8D 24 A3 A3 12 68 F4 2B 22
+[T+718477172us][CH2-Pc    ] F0
+[T+718481172us][CH1-Dispenser] F0 F8
+[T+718555304us][CH1-Dispenser] E0
+[T+718555173us][CH2-Pc    ] E0
+[T+718740305us][CH1-Dispenser] E1
+[T+718740173us][CH2-Pc    ] E1
+[T+718904172us][CH2-Pc    ] F0
+[T+718911172us][CH1-Dispenser] F0 F8
+[T+718982172us][CH2-Pc    ] F1
+[T+718987172us][CH1-Dispenser] F1 F9
+[T+719060172us][CH2-Pc    ] E1
+[T+719088172us][CH2-Pc    ] F1
+[T+719146304us][CH1-Dispenser] E1 ED F1 FD EF FA FF F8
+[T+719146173us][CH2-Pc    ] EF FA FF F8
+[T+719219172us][CH2-Pc    ] E8 F8 FF EB EC
+[T+719251172us][CH1-Dispenser] E8 F8 FF EB EC 37 F5 8D 24 F1 F1 A2 13 22 1B 22
+[T+719322325us][CH2-Pc    ] F0
+[T+719327174us][CH1-Dispenser] F0 F8
+[T+719400304us][CH1-Dispenser] E0
+[T+719400173us][CH2-Pc    ] E0
+[T+719575305us][CH1-Dispenser] E1
+[T+719575173us][CH2-Pc    ] E1
+[T+719751172us][CH2-Pc    ] F0
+[T+719756172us][CH1-Dispenser] F0 F8
+[T+719829172us][CH2-Pc    ] F1
+[T+719838789us][CH1-Dispenser] F1 F9
+[T+719908172us][CH2-Pc    ] E1
+[T+719912173us][CH1-Dispenser] E1 ED
+[T+719935172us][CH2-Pc    ] F1
+[T+720058172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+720091172us][CH1-Dispenser] F1 FD EF FA FF F8 E8 F8 FF EB EC 37 F5 8D 24 A3 C7 22 68 22 2B 62 FE
+[T+720160172us][CH2-Pc    ] F0
+[T+720168172us][CH1-Dispenser] F0 F8
+[T+720242304us][CH1-Dispenser] E0
+[T+720242173us][CH2-Pc    ] E0
+[T+720436304us][CH1-Dispenser] E1
+[T+720436173us][CH2-Pc    ] E1
+[T+720611172us][CH2-Pc    ] F0
+[T+720616174us][CH1-Dispenser] F0 F8
+[T+720689172us][CH2-Pc    ] F1
+[T+720697172us][CH1-Dispenser] F1 F9
+[T+720768172us][CH2-Pc    ] E1
+[T+720774202us][CH1-Dispenser] E1 ED
+[T+720795172us][CH2-Pc    ] F1
+[T+720917172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+720946172us][CH1-Dispenser] F1 FD EF FA FF F8 E8 F8 FF EB EC 37 CF 8D 24 F1 A3 12 E8 22 1B A2
+[T+721020172us][CH2-Pc    ] F0
+[T+721028172us][CH1-Dispenser] F0 F8
+[T+721099304us][CH1-Dispenser] E0
+[T+721099173us][CH2-Pc    ] E0
+[T+721263303us][CH1-Dispenser] E1
+[T+721263173us][CH2-Pc    ] E1
+[T+721437196us][CH2-Pc    ] F0
+[T+721443201us][CH1-Dispenser] F0 F8
+[T+721516172us][CH2-Pc    ] F1
+[T+721522200us][CH1-Dispenser] F1 F9
+[T+721609172us][CH2-Pc    ] E1 F1
+[T+721643444us][CH1-Dispenser] E1 FD F1 FD EF FA
+[T+721643312us][CH2-Pc    ] EF FA
+[T+721740172us][CH2-Pc    ] FF F8 E8 F8 FF EB EC
+[T+721770196us][CH1-Dispenser] FF F8 E8 F8 FF EB EC 37 AB 8D 24 A3 A3 12 34 F4 3C 22
+[T+721843172us][CH2-Pc    ] F0
+[T+721848172us][CH1-Dispenser] F0 F8
+[T+721921304us][CH1-Dispenser] E0
+[T+721921173us][CH2-Pc    ] E0
+[T+722096307us][CH1-Dispenser] E1
+[T+722096174us][CH2-Pc    ] E1
+[T+722270197us][CH2-Pc    ] F0
+[T+722279179us][CH1-Dispenser] F0 F8
+[T+722349172us][CH2-Pc    ] F1
+[T+722353172us][CH1-Dispenser] F1 E9
+[T+722427172us][CH2-Pc    ] E1
+[T+722433202us][CH1-Dispenser] E1 E9
+[T+722505197us][CH2-Pc    ] F0
+[T+722514774us][CH1-Dispenser] F0 F8
+[T+722583303us][CH1-Dispenser] E0
+[T+722583173us][CH2-Pc    ] E0
+[T+722747303us][CH1-Dispenser] E1
+[T+722747173us][CH2-Pc    ] E1
+[T+722922172us][CH2-Pc    ] F0
+[T+722928202us][CH1-Dispenser] F0 F8
+[T+723000196us][CH2-Pc    ] F1
+[T+723009179us][CH1-Dispenser] F1 F9
+[T+723078172us][CH2-Pc    ] E1
+[T+723082172us][CH1-Dispenser] E1 E9
+[T+723156172us][CH2-Pc    ] F0
+[T+723163172us][CH1-Dispenser] F0 F8
+[T+723234306us][CH1-Dispenser] E0
+[T+723234173us][CH2-Pc    ] E0
+[T+723409306us][CH1-Dispenser] E1
+[T+723409173us][CH2-Pc    ] E1
+[T+723580172us][CH2-Pc    ] F0
+[T+723587172us][CH1-Dispenser] F0 F8
+[T+723658172us][CH2-Pc    ] F1
+[T+723667618us][CH1-Dispenser] F1 F9
+[T+723736997us][CH2-Pc    ] E1
+[T+723745592us][CH1-Dispenser] E1 E9
+[T+723816172us][CH2-Pc    ] F0
+[T+723824172us][CH1-Dispenser] F0 F8
+[T+723892305us][CH1-Dispenser] E0
+[T+723892173us][CH2-Pc    ] E0
+[T+724067305us][CH1-Dispenser] E1
+[T+724067173us][CH2-Pc    ] E1
+[T+724231172us][CH2-Pc    ] F0
+[T+724238993us][CH1-Dispenser] F0 F8
+[T+724310196us][CH2-Pc    ] F1
+[T+724319172us][CH1-Dispenser] F1 F9
+[T+724388172us][CH2-Pc    ] E1
+[T+724392172us][CH1-Dispenser] E1 FD
+[T+724415172us][CH2-Pc    ] F1
+[T+724539172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+724574172us][CH1-Dispenser] F1 FD EF FA FF F8 E8 F8 FF EB EC 37 AB 8D 24 F1 F1 22 13 2A 9B A2
+[T+724642172us][CH2-Pc    ] F0
+[T+724647174us][CH1-Dispenser] F0 F8
+[T+724721306us][CH1-Dispenser] E0
+[T+724721173us][CH2-Pc    ] E0
+[T+724895305us][CH1-Dispenser] E1
+[T+724895173us][CH2-Pc    ] E1
+[T+725059172us][CH2-Pc    ] F0
+[T+725067172us][CH1-Dispenser] F0 F8
+[T+725138172us][CH2-Pc    ] F1
+[T+725142172us][CH1-Dispenser] F1 F9
+[T+725216172us][CH2-Pc    ] E1
+[T+725243172us][CH2-Pc    ] F1
+[T+725365172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+725395196us][CH1-Dispenser] E1 FD F1 FD EF FA FF F8 E8 F8 FF EB EC 37 B5 F1 82 34 A3 12 68 F0 9B A2
+[T+725471172us][CH2-Pc    ] F0
+[T+725478172us][CH1-Dispenser] F0 F8
+[T+725549304us][CH1-Dispenser] E0
+[T+725549173us][CH2-Pc    ] E0
+[T+725739306us][CH1-Dispenser] E1
+[T+725739173us][CH2-Pc    ] E1
+[T+725903172us][CH2-Pc    ] F0
+[T+725908172us][CH1-Dispenser] F0 FE
+[T+725981174us][CH2-Pc    ] F1
+[T+725987200us][CH1-Dispenser] F1 F9
+[T+726059196us][CH2-Pc    ] E1
+[T+726087172us][CH2-Pc    ] F1
+[T+726210172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+726240196us][CH1-Dispenser] E1 FD F1 FD EF FA FF F8 E8 F8 FF EB EC 77 F5 8D 24 F1 F1 22 13 2A 9B A2
+[T+726312196us][CH2-Pc    ] F0
+[T+726320812us][CH1-Dispenser] F0 F8
+[T+726390311us][CH1-Dispenser] E0
+[T+726390176us][CH2-Pc    ] E0
+[T+726560306us][CH1-Dispenser] E1
+[T+726560174us][CH2-Pc    ] E1
+[T+726734196us][CH2-Pc    ] F0
+[T+726746213us][CH1-Dispenser] F0 F8
+[T+726812197us][CH2-Pc    ] F1
+[T+726818200us][CH1-Dispenser] F1 F9
+[T+726891172us][CH2-Pc    ] E1
+[T+726919172us][CH2-Pc    ] F1
+[T+727041172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+727073172us][CH1-Dispenser] E1 FD F1 FD EF FA FF F8 E8 F8 FF EB EC 37 AB 8D 24 E1 F1 A2 E8 2A 9B 22
+[T+727147172us][CH1-Dispenser] F0 F8
+[T+727143172us][CH2-Pc    ] F0
+[T+727211310us][CH1-Dispenser] E0
+[T+727211174us][CH2-Pc    ] E0
+[T+727396306us][CH1-Dispenser] E1
+[T+727396173us][CH2-Pc    ] E1
+[T+727560172us][CH2-Pc    ] F0
+[T+727568172us][CH1-Dispenser] F0 F8
+[T+727638172us][CH2-Pc    ] F1
+[T+727643336us][CH1-Dispenser] F1 F9
+[T+727717295us][CH2-Pc    ] E1
+[T+727856172us][CH2-Pc    ] F1 EF FA FF F8 E8 F8 FF EB EC
+[T+727887172us][CH1-Dispenser] E1 FD F1 FD EF FA FF F8 E8 F8 FF EB EC 37 AB 8D 24 F1 A3 12 68 F0 AB 22
+[T+727960172us][CH2-Pc    ] F0
+[T+727968804us][CH1-Dispenser] F0 F8
+[T+728038303us][CH1-Dispenser] E0
+[T+728038173us][CH2-Pc    ] E0
+[T+728223307us][CH1-Dispenser] E1
+[T+728223174us][CH2-Pc    ] E1
+[T+728389172us][CH2-Pc    ] F0
+[T+728393172us][CH1-Dispenser] F0 F8
+[T+728467265us][CH2-Pc    ] F1
+[T+728472173us][CH1-Dispenser] F1 F9
+[T+728545172us][CH2-Pc    ] E1
+[T+728572172us][CH2-Pc    ] F1
+[T+728694197us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+728725172us][CH1-Dispenser] E1 FD F1 FD EF FA FF F8 E8 F8 FF EB EC 37 F5 8D 24 A3 A3 12 68 F0 9B A2
+[T+728797197us][CH2-Pc    ] F0
+[T+728804172us][CH1-Dispenser] F0 F8
+[T+728875303us][CH1-Dispenser] E0
+[T+728875173us][CH2-Pc    ] E0
+[T+729050391us][CH1-Dispenser] E1
+[T+729050258us][CH2-Pc    ] E1
+[T+729224196us][CH2-Pc    ] F0
+[T+729232172us][CH1-Dispenser] F0 F8
+[T+729302172us][CH2-Pc    ] F1
+[T+729308200us][CH1-Dispenser] F1 F9
+[T+729384172us][CH2-Pc    ] E1
+[T+729394668us][CH1-Dispenser] E1 E9
+[T+729463172us][CH2-Pc    ] F0
+[T+729468176us][CH1-Dispenser] F0 F8
+[T+729541303us][CH1-Dispenser] E0
+[T+729541173us][CH2-Pc    ] E0
+[T+729716306us][CH1-Dispenser] E1
+[T+729716174us][CH2-Pc    ] E1
+[T+729890196us][CH2-Pc    ] F0
+[T+729897172us][CH1-Dispenser] F0 F8
+[T+729969172us][CH2-Pc    ] F1
+[T+729973173us][CH1-Dispenser] F1 F9
+[T+730047172us][CH2-Pc    ] E1
+[T+730053202us][CH1-Dispenser] E1 E9
+[T+730127172us][CH2-Pc    ] F0
+[T+730134172us][CH1-Dispenser] F0 F8
+[T+730205305us][CH1-Dispenser] E0
+[T+730205173us][CH2-Pc    ] E0
+[T+730380305us][CH1-Dispenser] E1
+[T+730380173us][CH2-Pc    ] E1
+[T+730544172us][CH2-Pc    ] F0
+[T+730548172us][CH1-Dispenser] F0 F8
+[T+730622172us][CH2-Pc    ] F1
+[T+730627172us][CH1-Dispenser] F1 F9
+[T+730700172us][CH2-Pc    ] E1
+[T+730707172us][CH1-Dispenser] E1 E9
+[T+730778172us][CH2-Pc    ] F0
+[T+730783172us][CH1-Dispenser] F0 F8
+[T+730856307us][CH1-Dispenser] E0
+[T+730856173us][CH2-Pc    ] E0
+[T+731031307us][CH1-Dispenser] E1
+[T+731031173us][CH2-Pc    ] E1
+[T+731202172us][CH1-Dispenser] F0 F8
+[T+731199172us][CH2-Pc    ] F0
+[T+731267172us][CH2-Pc    ] F1
+[T+731272172us][CH1-Dispenser] F1 F9
+[T+731344172us][CH2-Pc    ] E1
+[T+731347172us][CH1-Dispenser] E1 E9
+[T+731412172us][CH2-Pc    ] F0
+[T+731419172us][CH1-Dispenser] F0 F8
+[T+731490303us][CH1-Dispenser] E0
+[T+731490173us][CH2-Pc    ] E0
+[T+731654307us][CH1-Dispenser] E1
+[T+731654173us][CH2-Pc    ] E1
+[T+731829172us][CH2-Pc    ] F0
+[T+731833173us][CH1-Dispenser] F0 F8
+[T+731907172us][CH2-Pc    ] F1
+[T+731912172us][CH1-Dispenser] F1 F9
+[T+731985172us][CH2-Pc    ] E1
+[T+732012172us][CH2-Pc    ] F1
+[T+732138172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+732165172us][CH1-Dispenser] E1 FD F1 FD EF FA FF F8 E8 F8 FF EB EC 37 B5 F1 82 34 A3 12 13 AA 9B 64 FE
+[T+732231202us][CH2-Pc    ] F0
+[T+732239172us][CH1-Dispenser] F0 F8
+[T+732309304us][CH1-Dispenser] E0
+[T+732309173us][CH2-Pc    ] E0
+[T+732484305us][CH1-Dispenser] E1
+[T+732484173us][CH2-Pc    ] E1
+[T+732659173us][CH2-Pc    ] F0
+[T+732663172us][CH1-Dispenser] F0 F8
+[T+732737221us][CH2-Pc    ] F1
+[T+732744172us][CH1-Dispenser] F1 F9
+[T+732815172us][CH2-Pc    ] E1
+[T+732842173us][CH2-Pc    ] F1
+[T+732965172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+732997172us][CH1-Dispenser] E1 FD F1 FD EF FA FF F8 E8 F8 FF EB EC 37 F5 8D 24 F1 F1 A2 93 A2 36 CC FC
+[T+733070172us][CH2-Pc    ] F0
+[T+733078172us][CH1-Dispenser] F0 F8
+[T+733148303us][CH1-Dispenser] E0
+[T+733148173us][CH2-Pc    ] E0
+[T+733334307us][CH1-Dispenser] E1
+[T+733334173us][CH2-Pc    ] E1
+[T+733498172us][CH2-Pc    ] F0
+[T+733503172us][CH1-Dispenser] F0 F8
+[T+733576172us][CH2-Pc    ] F1
+[T+733584172us][CH1-Dispenser] F1 F9
+[T+733654172us][CH2-Pc    ] E1
+[T+733659172us][CH1-Dispenser] E1 FD
+[T+733681172us][CH2-Pc    ] F1
+[T+733803198us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+733833196us][CH1-Dispenser] F1 FD EF FA FF F8 E8 F8 FF EB EC 37 F5 8D 24 A3 F1 A2 13 AA 9B 64 FE
+[T+733906172us][CH2-Pc    ] F0
+[T+733913172us][CH1-Dispenser] F0 F8
+[T+733984307us][CH1-Dispenser] E0
+[T+733984174us][CH2-Pc    ] E0
+[T+734159303us][CH1-Dispenser] E1
+[T+734159173us][CH2-Pc    ] E1
+[T+734334172us][CH2-Pc    ] F0
+[T+734337173us][CH1-Dispenser] F0 F8
+[T+734401172us][CH2-Pc    ] F1
+[T+734407200us][CH1-Dispenser] F1 F9
+[T+734479172us][CH2-Pc    ] E1
+[T+734484174us][CH1-Dispenser] E1 FD
+[T+734507172us][CH2-Pc    ] F1
+[T+734629172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+734655172us][CH1-Dispenser] F1 FD EF FA FF F8 E8 F8 FF EB EC 37 AB 8D 24 A3 A3 12 68 F4 8B 8B FC
+[T+734721199us][CH2-Pc    ] F0
+[T+734729172us][CH1-Dispenser] F0 F8
+[T+734799304us][CH1-Dispenser] E0
+[T+734799173us][CH2-Pc    ] E0
+[T+734973306us][CH1-Dispenser] E1
+[T+734973173us][CH2-Pc    ] E1
+[T+735137172us][CH2-Pc    ] F0
+[T+735143200us][CH1-Dispenser] F0 F8
+[T+735216172us][CH2-Pc    ] F1
+[T+735224792us][CH1-Dispenser] F1 F9
+[T+735294172us][CH2-Pc    ] E1
+[T+735298175us][CH1-Dispenser] E1 FD
+[T+735321172us][CH2-Pc    ] F1
+[T+735443172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+735471172us][CH1-Dispenser] F1 FD EF FA FF F8 E8 F8 FF EB EC 37 F5 8D 24 F1 F1 22 13 AA 9B 64 FE
+[T+735547174us][CH2-Pc    ] F0
+[T+735552179us][CH1-Dispenser] F0 F8
+[T+735625304us][CH1-Dispenser] E0
+[T+735625173us][CH2-Pc    ] E0
+[T+735799305us][CH1-Dispenser] E1
+[T+735799173us][CH2-Pc    ] E1
+[T+735975172us][CH2-Pc    ] F0
+[T+735982172us][CH1-Dispenser] F0 F8
+[T+736053172us][CH2-Pc    ] F1
+[T+736058172us][CH1-Dispenser] F1 F9
+[T+736131172us][CH2-Pc    ] E1
+[T+736159172us][CH2-Pc    ] F1
+[T+736217424us][CH1-Dispenser] E1 FD F1 FD EF FA FF F8
+[T+736217295us][CH2-Pc    ] EF FA FF F8
+[T+736297172us][CH2-Pc    ] E8 F8 FF EB EC
+[T+736325172us][CH1-Dispenser] E8 F8 FF EB EC 37 F5 8D 24 A3 A3 A2 13 AA 9B 64 FE
+[T+736403172us][CH1-Dispenser] F0 F8
+[T+736399172us][CH2-Pc    ] F0
+[T+736477305us][CH1-Dispenser] E0
+[T+736477173us][CH2-Pc    ] E0
+[T+736652304us][CH1-Dispenser] E1
+[T+736652173us][CH2-Pc    ] E1
+[T+736827172us][CH2-Pc    ] F0
+[T+736833200us][CH1-Dispenser] F0 F8
+[T+736905196us][CH2-Pc    ] F1
+[T+736914179us][CH1-Dispenser] F1 F9
+[T+736983172us][CH2-Pc    ] E1
+[T+736988173us][CH1-Dispenser] E1 FD
+[T+737010172us][CH2-Pc    ] F1
+[T+737132198us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+737161172us][CH1-Dispenser] F1 FD EF FA FF F8 E8 F8 FF EB EC 37 E5 8D 24 A3 A3 32 F1 AA 9C 22
+[T+737236172us][CH2-Pc    ] F0
+[T+737242200us][CH1-Dispenser] F0 F8
+[T+737314303us][CH1-Dispenser] E0
+[T+737314173us][CH2-Pc    ] E0
+[T+737489306us][CH1-Dispenser] E1
+[T+737489173us][CH2-Pc    ] E1
+[T+737653172us][CH2-Pc    ] F0
+[T+737660172us][CH1-Dispenser] F0 F8
+[T+737731172us][CH2-Pc    ] F1
+[T+737739179us][CH1-Dispenser] F1 F9
+[T+737809172us][CH2-Pc    ] E1
+[T+737816172us][CH1-Dispenser] E1 E9
+[T+737887172us][CH2-Pc    ] F0
+[T+737895172us][CH1-Dispenser] F0 F8
+[T+737965308us][CH1-Dispenser] E0
+[T+737965174us][CH2-Pc    ] E0
+[T+738140305us][CH1-Dispenser] E1
+[T+738140174us][CH2-Pc    ] E1
+[T+738315172us][CH2-Pc    ] F0
+[T+738323793us][CH1-Dispenser] F0 F8
+[T+738393172us][CH2-Pc    ] F1
+[T+738399201us][CH1-Dispenser] F1 F9
+[T+738471197us][CH2-Pc    ] E1
+[T+738479172us][CH1-Dispenser] E1 E9
+[T+738552172us][CH1-Dispenser] F0 F8
+[T+738549172us][CH2-Pc    ] F0
+[T+738617303us][CH1-Dispenser] E0
+[T+738617173us][CH2-Pc    ] E0
+[T+738802307us][CH1-Dispenser] E1
+[T+738802174us][CH2-Pc    ] E1
+[T+738966172us][CH2-Pc    ] F0
+[T+738973172us][CH1-Dispenser] F0 F8
+[T+739044172us][CH2-Pc    ] F1
+[T+739049172us][CH1-Dispenser] F1 F9
+[T+739123172us][CH2-Pc    ] E1
+[T+739131173us][CH1-Dispenser] E1 E9
+[T+739201172us][CH2-Pc    ] F0
+[T+739208172us][CH1-Dispenser] F0 F8
+[T+739279307us][CH1-Dispenser] E0
+[T+739279173us][CH2-Pc    ] E0
+[T+739454303us][CH1-Dispenser] E1
+[T+739454173us][CH2-Pc    ] E1
+[T+739629172us][CH2-Pc    ] F0
+[T+739633172us][CH1-Dispenser] F0 F8
+[T+739707172us][CH2-Pc    ] F1
+[T+739712172us][CH1-Dispenser] F1 F9
+[T+739785172us][CH2-Pc    ] E1
+[T+739789172us][CH1-Dispenser] E1 E9
+[T+739863172us][CH2-Pc    ] F0
+[T+739868172us][CH1-Dispenser] F0 F8
+[T+739941304us][CH1-Dispenser] E0
+[T+739941173us][CH2-Pc    ] E0
+[T+740105303us][CH1-Dispenser] E1
+[T+740105173us][CH2-Pc    ] E1
+[T+740280172us][CH2-Pc    ] F0
+[T+740285174us][CH1-Dispenser] F0 F8
+[T+740358172us][CH2-Pc    ] F1
+[T+740364200us][CH1-Dispenser] F1 F9
+[T+740436197us][CH2-Pc    ] E1
+[T+740445801us][CH1-Dispenser] E1 E9
+[T+740514172us][CH2-Pc    ] F0
+[T+740518172us][CH1-Dispenser] F0 F8
+[T+740594190us][CH1-Dispenser] E0
+[T+740592181us][CH2-Pc    ] E0
+[T+740767309us][CH1-Dispenser] E1
+[T+740767173us][CH2-Pc    ] E1
+[T+740942172us][CH2-Pc    ] F0
+[T+740950172us][CH1-Dispenser] F0 F8
+[T+741020172us][CH2-Pc    ] F1
+[T+741029172us][CH1-Dispenser] F1 F9
+[T+741098172us][CH2-Pc    ] E1
+[T+741104200us][CH1-Dispenser] E1 E9
+[T+741176197us][CH2-Pc    ] F0
+[T+741183172us][CH1-Dispenser] F0 F8
+[T+741255305us][CH1-Dispenser] E0
+[T+741255174us][CH2-Pc    ] E0
+[T+741419304us][CH1-Dispenser] E1
+[T+741419173us][CH2-Pc    ] E1
+[T+741596172us][CH2-Pc    ] F0
+[T+741606181us][CH1-Dispenser] F0 F8
+[T+741674172us][CH2-Pc    ] F1
+[T+741678172us][CH1-Dispenser] F1 F9
+[T+741753172us][CH2-Pc    ] E1
+[T+741758172us][CH1-Dispenser] E1 E9
+[T+741831172us][CH2-Pc    ] F0
+[T+741839172us][CH1-Dispenser] F0 F8
+[T+741909305us][CH1-Dispenser] E0
+[T+741909173us][CH2-Pc    ] E0
+[T+742083308us][CH1-Dispenser] E1
+[T+742083174us][CH2-Pc    ] E1
+[T+742248172us][CH2-Pc    ] F0
+[T+742256172us][CH1-Dispenser] F0 F8
+[T+742326172us][CH2-Pc    ] F1
+[T+742334172us][CH1-Dispenser] F1 F9
+[T+742404172us][CH2-Pc    ] E1
+[T+742409172us][CH1-Dispenser] E1 E9
+[T+742482172us][CH2-Pc    ] F0
+[T+742488200us][CH1-Dispenser] F0 F8
+[T+742551304us][CH1-Dispenser] E0
+[T+742551173us][CH2-Pc    ] E0
+[T+742716305us][CH1-Dispenser] E1
+[T+742716173us][CH2-Pc    ] E1
+[T+742892172us][CH2-Pc    ] F0
+[T+742898200us][CH1-Dispenser] F0 F8
+[T+742970196us][CH2-Pc    ] F1
+[T+742981179us][CH1-Dispenser] F1 F9
+[T+743048172us][CH2-Pc    ] E1
+[T+743054201us][CH1-Dispenser] E1 E9
+[T+743123172us][CH2-Pc    ] F0
+[T+743129201us][CH1-Dispenser] F0 F8
+[T+743202303us][CH1-Dispenser] E0
+[T+743202173us][CH2-Pc    ] E0
+[T+743372304us][CH1-Dispenser] E1
+[T+743372173us][CH2-Pc    ] E1
+[T+743546199us][CH2-Pc    ] F0
+[T+743555285us][CH1-Dispenser] F0 F8
+[T+743625172us][CH2-Pc    ] F1
+[T+743629172us][CH1-Dispenser] F1 F9
+[T+743703172us][CH2-Pc    ] E1
+[T+743710172us][CH1-Dispenser] E1 E9
+[T+743781172us][CH2-Pc    ] F0
+[T+743789771us][CH1-Dispenser] F0 F8
+[T+743860304us][CH1-Dispenser] E0
+[T+743860173us][CH2-Pc    ] E0
+[T+744035309us][CH1-Dispenser] E1
+[T+744035173us][CH2-Pc    ] E1
+[T+744199172us][CH2-Pc    ] F0
+[T+744204172us][CH1-Dispenser] F0 F8
+[T+744277172us][CH2-Pc    ] F1
+[T+744284172us][CH1-Dispenser] F1 F9
+[T+744355172us][CH2-Pc    ] E1
+[T+744358172us][CH1-Dispenser] E1 E9
+[T+744422172us][CH2-Pc    ] F0
+[T+744428200us][CH1-Dispenser] F0 F8
+[T+744500303us][CH1-Dispenser] E0
+[T+744500173us][CH2-Pc    ] E0
+[T+744675306us][CH1-Dispenser] E1
+[T+744675173us][CH2-Pc    ] E1
+[T+744839172us][CH2-Pc    ] F0
+[T+744844172us][CH1-Dispenser] F0 F8
+[T+744917172us][CH2-Pc    ] F1
+[T+744925215us][CH1-Dispenser] F1 F9
+[T+744995172us][CH2-Pc    ] E1
+[T+745000172us][CH1-Dispenser] E1 E9
+[T+745074172us][CH2-Pc    ] F0
+[T+745079172us][CH1-Dispenser] F0 F8
+[T+745152305us][CH1-Dispenser] E0
+[T+745152173us][CH2-Pc    ] E0
+[T+745327307us][CH1-Dispenser] E1
+[T+745327173us][CH2-Pc    ] E1
+[T+745501196us][CH2-Pc    ] F0
+[T+745509794us][CH1-Dispenser] F0 F8
+[T+745584172us][CH1-Dispenser] F1 F9
+[T+745580172us][CH2-Pc    ] F1
+[T+745658172us][CH2-Pc    ] E1
+[T+745665172us][CH1-Dispenser] E1 E9
+[T+745736172us][CH2-Pc    ] F0
+[T+745763172us][CH2-Pc    ] E0
+[T+745885172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+745917172us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 F5 8B 24 34 A3 12 68 22 C2 D1
+[T+745989306us][CH1-Dispenser] E0
+[T+745989173us][CH2-Pc    ] E0
+[T+746153309us][CH1-Dispenser] E1
+[T+746153173us][CH2-Pc    ] E1
+[T+746357201us][CH2-Pc    ] F0
+[T+746363204us][CH1-Dispenser] F0 F8
+[T+746438172us][CH1-Dispenser] F1 F9
+[T+746435173us][CH2-Pc    ] F1
+[T+746513172us][CH2-Pc    ] E1
+[T+746519200us][CH1-Dispenser] E1 E9
+[T+746591196us][CH2-Pc    ] F0
+[T+746619172us][CH2-Pc    ] E0
+[T+746741197us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+746773172us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 F5 43 24 C7 F1 A2 13 22 C2 D1
+[T+746843305us][CH1-Dispenser] E0
+[T+746843173us][CH2-Pc    ] E0
+[T+747018305us][CH1-Dispenser] E1
+[T+747018173us][CH2-Pc    ] E1
+[T+747193172us][CH2-Pc    ] F0
+[T+747199200us][CH1-Dispenser] F0 F8
+[T+747271196us][CH2-Pc    ] F1
+[T+747280181us][CH1-Dispenser] F1 F9
+[T+747349172us][CH2-Pc    ] E1
+[T+747355201us][CH1-Dispenser] E1 E9
+[T+747427198us][CH2-Pc    ] F0
+[T+747455172us][CH2-Pc    ] E0
+[T+747551304us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF
+[T+747551173us][CH2-Pc    ] EF FA FF F8 E8 F8 FF
+[T+747600172us][CH2-Pc    ] EB EC
+[T+747632172us][CH1-Dispenser] EB EC 37 F5 43 24 F1 F1 F4 22 92 70 14
+[T+747702303us][CH1-Dispenser] E0
+[T+747702173us][CH2-Pc    ] E0
+[T+747877305us][CH1-Dispenser] E1
+[T+747877173us][CH2-Pc    ] E1
+[T+748053172us][CH2-Pc    ] F0
+[T+748058174us][CH1-Dispenser] F0 FE
+[T+748131173us][CH2-Pc    ] F1
+[T+748141172us][CH1-Dispenser] F1 F9
+[T+748209172us][CH2-Pc    ] E1
+[T+748214172us][CH1-Dispenser] E1 E9
+[T+748287172us][CH2-Pc    ] F0
+[T+748293202us][CH1-Dispenser] F0 EC
+[T+748315172us][CH2-Pc    ] E0
+[T+748348307us][CH1-Dispenser] E0 EC EF FA
+[T+748348173us][CH2-Pc    ] EF FA
+[T+748454172us][CH2-Pc    ] FF F8 E8 F8 FF EB EC
+[T+748483172us][CH1-Dispenser] FF F8 E8 F8 FF EB EC 37 E5 8B 24 A3 A3 A2 13 22 C2 D1
+[T+748547304us][CH1-Dispenser] E0
+[T+748547174us][CH2-Pc    ] E0
+[T+748722308us][CH1-Dispenser] E1
+[T+748722173us][CH2-Pc    ] E1
+[T+748894172us][CH2-Pc    ] F0
+[T+748898172us][CH1-Dispenser] F0 F8
+[T+748972172us][CH2-Pc    ] F1
+[T+748979778us][CH1-Dispenser] F1 F9
+[T+749054172us][CH1-Dispenser] E1 E9
+[T+749050172us][CH2-Pc    ] E1
+[T+749136172us][CH2-Pc    ] F0 E0
+[T+749259172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+749290172us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 E5 8B 24 A3 F1 A2 13 22 C2 D1
+[T+749362304us][CH1-Dispenser] E0
+[T+749362173us][CH2-Pc    ] E0
+[T+749536309us][CH1-Dispenser] E1
+[T+749536173us][CH2-Pc    ] E1
+[T+749700172us][CH2-Pc    ] F0
+[T+749705172us][CH1-Dispenser] F0 F8
+[T+749779172us][CH2-Pc    ] F1
+[T+749785202us][CH1-Dispenser] F1 F9
+[T+749857197us][CH2-Pc    ] E1
+[T+749865181us][CH1-Dispenser] E1 E9
+[T+749939172us][CH1-Dispenser] F0 EC
+[T+749935172us][CH2-Pc    ] F0
+[T+749962172us][CH2-Pc    ] E0
+[T+750084172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+750111172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 8B 24 F1 F1 22 12 68 C4 01
+[T+750177304us][CH1-Dispenser] E0
+[T+750177173us][CH2-Pc    ] E0
+[T+750341306us][CH1-Dispenser] E1
+[T+750341173us][CH2-Pc    ] E1
+[T+750516172us][CH2-Pc    ] F0
+[T+750523808us][CH1-Dispenser] F0 F8
+[T+750594172us][CH2-Pc    ] F1
+[T+750599172us][CH1-Dispenser] F1 F9
+[T+750672172us][CH2-Pc    ] E1
+[T+750679172us][CH1-Dispenser] E1 E9
+[T+750750172us][CH2-Pc    ] F0
+[T+750755172us][CH1-Dispenser] F0 F8
+[T+750829303us][CH1-Dispenser] E0
+[T+750829173us][CH2-Pc    ] E0
+[T+751003306us][CH1-Dispenser] E1
+[T+751003173us][CH2-Pc    ] E1
+[T+751168172us][CH2-Pc    ] F0
+[T+751174207us][CH1-Dispenser] F0 F8
+[T+751246197us][CH2-Pc    ] F1
+[T+751255172us][CH1-Dispenser] F1 F9
+[T+751325172us][CH2-Pc    ] E1
+[T+751330173us][CH1-Dispenser] E1 E9
+[T+751404172us][CH2-Pc    ] F0
+[T+751409172us][CH1-Dispenser] F0 F8
+[T+751482309us][CH1-Dispenser] E0
+[T+751482174us][CH2-Pc    ] E0
+[T+751657173us][CH1-Dispenser] E1
+[T+751656172us][CH2-Pc    ] E1
+[T+751845172us][CH2-Pc    ] F0
+[T+751849172us][CH1-Dispenser] F0 F8
+[T+751923172us][CH2-Pc    ] F1
+[T+751929200us][CH1-Dispenser] F1 F9
+[T+752001197us][CH2-Pc    ] E1
+[T+752009172us][CH1-Dispenser] E1 E9
+[T+752080172us][CH2-Pc    ] F0
+[T+752084172us][CH1-Dispenser] F0 F8
+[T+752158305us][CH1-Dispenser] E0
+[T+752158173us][CH2-Pc    ] E0
+[T+752332304us][CH1-Dispenser] E1
+[T+752332173us][CH2-Pc    ] E1
+[T+752496172us][CH2-Pc    ] F0
+[T+752504813us][CH1-Dispenser] F0 F8
+[T+752579172us][CH1-Dispenser] F1 E9
+[T+752575172us][CH2-Pc    ] F1
+[T+752653172us][CH2-Pc    ] E1
+[T+752659200us][CH1-Dispenser] E1 E9
+[T+752733173us][CH1-Dispenser] F0 F8
+[T+752731172us][CH2-Pc    ] F0
+[T+752798304us][CH1-Dispenser] E0
+[T+752798173us][CH2-Pc    ] E0
+[T+752973304us][CH1-Dispenser] E1
+[T+752973174us][CH2-Pc    ] E1
+[T+753137172us][CH2-Pc    ] F0
+[T+753143200us][CH1-Dispenser] F0 F8
+[T+753215173us][CH2-Pc    ] F1
+[T+753219178us][CH1-Dispenser] F1 F9
+[T+753293172us][CH2-Pc    ] E1
+[T+753299202us][CH1-Dispenser] E1 E9
+[T+753371196us][CH2-Pc    ] F0
+[T+753378771us][CH1-Dispenser] F0 F8
+[T+753449307us][CH1-Dispenser] E0
+[T+753449173us][CH2-Pc    ] E0
+[T+753624304us][CH1-Dispenser] E1
+[T+753624173us][CH2-Pc    ] E1
+[T+753799172us][CH2-Pc    ] F0
+[T+753806172us][CH1-Dispenser] F0 F8
+[T+753877172us][CH2-Pc    ] F1
+[T+753886735us][CH1-Dispenser] F1 F9
+[T+753955172us][CH2-Pc    ] E1
+[T+753958172us][CH1-Dispenser] E1 E9
+[T+754023172us][CH2-Pc    ] F0
+[T+754050172us][CH2-Pc    ] E0
+[T+754174197us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+754203176us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 F5 43 24 A3 A3 A2 13 2A B2 D1
+[T+754278307us][CH1-Dispenser] E0
+[T+754278174us][CH2-Pc    ] E0
+[T+754452309us][CH1-Dispenser] E1
+[T+754452173us][CH2-Pc    ] E1
+[T+754627172us][CH2-Pc    ] F0
+[T+754633201us][CH1-Dispenser] F0 F8
+[T+754709172us][CH1-Dispenser] F1 E9
+[T+754705174us][CH2-Pc    ] F1
+[T+754783172us][CH2-Pc    ] E1
+[T+754791172us][CH1-Dispenser] E1 E9
+[T+754862172us][CH2-Pc    ] F0
+[T+754890172us][CH2-Pc    ] E0
+[T+755017172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+755047197us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 F5 43 24 A3 A3 A2 13 2A B2 D1
+[T+755158306us][CH1-Dispenser] E0
+[T+755158174us][CH2-Pc    ] E0
+[T+755333306us][CH1-Dispenser] E1
+[T+755333174us][CH2-Pc    ] E1
+[T+755497172us][CH2-Pc    ] F0
+[T+755504766us][CH1-Dispenser] F0 F8
+[T+755579172us][CH1-Dispenser] F1 F9
+[T+755575172us][CH2-Pc    ] F1
+[T+755653172us][CH2-Pc    ] E1
+[T+755660172us][CH1-Dispenser] E1 E9
+[T+755732197us][CH2-Pc    ] F0
+[T+755759172us][CH2-Pc    ] E0
+[T+755855305us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF
+[T+755855173us][CH2-Pc    ] EF FA FF F8 E8 F8 FF
+[T+755878303us][CH1-Dispenser] EB
+[T+755878173us][CH2-Pc    ] EB
+[T+755901175us][CH2-Pc    ] EC
+[T+755931196us][CH1-Dispenser] EC 37 F5 43 24 A3 34 F5 F4 2A B2 D1
+[T+756003306us][CH1-Dispenser] E0
+[T+756003173us][CH2-Pc    ] E0
+[T+756167304us][CH1-Dispenser] E1
+[T+756167173us][CH2-Pc    ] E1
+[T+756342172us][CH2-Pc    ] F0
+[T+756349771us][CH1-Dispenser] F0 F8
+[T+756423172us][CH2-Pc    ] F1
+[T+756430172us][CH1-Dispenser] F1 F9
+[T+756501172us][CH2-Pc    ] E1
+[T+756510179us][CH1-Dispenser] E1 E9
+[T+756579172us][CH2-Pc    ] F0
+[T+756584172us][CH1-Dispenser] F0 EC
+[T+756607172us][CH2-Pc    ] E0
+[T+756729172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+756757172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 F5 8B 24 F1 F1 A2 13 2A B2 D1
+[T+756822305us][CH1-Dispenser] E0
+[T+756822173us][CH2-Pc    ] E0
+[T+756996305us][CH1-Dispenser] E1
+[T+756996173us][CH2-Pc    ] E1
+[T+757171172us][CH2-Pc    ] F0
+[T+757174172us][CH1-Dispenser] F0 F8
+[T+757239172us][CH2-Pc    ] F1
+[T+757244173us][CH1-Dispenser] F1 F9
+[T+757317172us][CH2-Pc    ] E1
+[T+757324771us][CH1-Dispenser] E1 E9
+[T+757395172us][CH2-Pc    ] F0
+[T+757400172us][CH1-Dispenser] F0 EC
+[T+757422172us][CH2-Pc    ] E0
+[T+757544197us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+757571172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 8B 24 F1 F1 A2 F5 F0 F4 01
+[T+757637305us][CH1-Dispenser] E0
+[T+757637173us][CH2-Pc    ] E0
+[T+757823307us][CH1-Dispenser] E1
+[T+757823173us][CH2-Pc    ] E1
+[T+757998172us][CH2-Pc    ] F0
+[T+758005172us][CH1-Dispenser] F0 F8
+[T+758076172us][CH2-Pc    ] F1
+[T+758084734us][CH1-Dispenser] F1 F9
+[T+758154172us][CH2-Pc    ] E1
+[T+758161772us][CH1-Dispenser] E1 E9
+[T+758233173us][CH2-Pc    ] F0
+[T+758240172us][CH1-Dispenser] F0 EC
+[T+758345309us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8
+[T+758345174us][CH2-Pc    ] E0 EF FA FF F8 E8 F8
+[T+758367311us][CH1-Dispenser] FF
+[T+758367175us][CH2-Pc    ] FF
+[T+758401177us][CH2-Pc    ] EB EC
+[T+758432172us][CH1-Dispenser] EB EC 37 AB 8B 64 F1 F1 CE 22 6A F4 01
+[T+758504304us][CH1-Dispenser] E0
+[T+758504173us][CH2-Pc    ] E0
+[T+758668307us][CH1-Dispenser] E1
+[T+758668173us][CH2-Pc    ] E1
+[T+758843172us][CH2-Pc    ] F0
+[T+758851038us][CH1-Dispenser] F0 F8
+[T+758925172us][CH1-Dispenser] F1 F9
+[T+758921172us][CH2-Pc    ] F1
+[T+758999172us][CH2-Pc    ] E1
+[T+759007172us][CH1-Dispenser] E1 E9
+[T+759077172us][CH2-Pc    ] F0
+[T+759086772us][CH1-Dispenser] F0 F8
+[T+759160312us][CH1-Dispenser] E0
+[T+759160174us][CH2-Pc    ] E0
+[T+759324308us][CH1-Dispenser] E1
+[T+759324174us][CH2-Pc    ] E1
+[T+759501172us][CH2-Pc    ] F0
+[T+759506174us][CH1-Dispenser] F0 F8
+[T+759579172us][CH2-Pc    ] F1
+[T+759585200us][CH1-Dispenser] F1 F9
+[T+759659172us][CH2-Pc    ] E1
+[T+759665202us][CH1-Dispenser] E1 E9
+[T+759738172us][CH2-Pc    ] F0
+[T+759744200us][CH1-Dispenser] F0 F8
+[T+759816305us][CH1-Dispenser] E0
+[T+759816174us][CH2-Pc    ] E0
+[T+759980310us][CH1-Dispenser] E1
+[T+759980174us][CH2-Pc    ] E1
+[T+760155172us][CH2-Pc    ] F0
+[T+760160172us][CH1-Dispenser] F0 F8
+[T+760232196us][CH2-Pc    ] F1
+[T+760239172us][CH1-Dispenser] F1 F9
+[T+760311172us][CH2-Pc    ] E1
+[T+760315172us][CH1-Dispenser] E1 E9
+[T+760389172us][CH2-Pc    ] F0
+[T+760395201us][CH1-Dispenser] F0 F8
+[T+760467374us][CH1-Dispenser] E0
+[T+760467243us][CH2-Pc    ] E0
+[T+760636307us][CH1-Dispenser] E1
+[T+760636173us][CH2-Pc    ] E1
+[T+760809172us][CH2-Pc    ] F0
+[T+760816172us][CH1-Dispenser] F0 F8
+[T+760887172us][CH2-Pc    ] F1
+[T+760898180us][CH1-Dispenser] F1 F9
+[T+760965172us][CH2-Pc    ] E1
+[T+760970172us][CH1-Dispenser] E1 E9
+[T+761043172us][CH2-Pc    ] F0
+[T+761049200us][CH1-Dispenser] F0 F8
+[T+761121305us][CH1-Dispenser] E0
+[T+761121173us][CH2-Pc    ] E0
+[T+761296308us][CH1-Dispenser] E1
+[T+761296173us][CH2-Pc    ] E1
+[T+761471200us][CH2-Pc    ] F0
+[T+761477200us][CH1-Dispenser] F0 F8
+[T+761549196us][CH2-Pc    ] F1
+[T+761558179us][CH1-Dispenser] F1 F9
+[T+761627172us][CH2-Pc    ] E1
+[T+761634172us][CH1-Dispenser] E1 E9
+[T+761705172us][CH2-Pc    ] F0
+[T+761710172us][CH1-Dispenser] F0 F8
+[T+761783303us][CH1-Dispenser] E0
+[T+761783173us][CH2-Pc    ] E0
+[T+761958308us][CH1-Dispenser] E1
+[T+761958174us][CH2-Pc    ] E1
+[T+762122172us][CH2-Pc    ] F0
+[T+762129172us][CH1-Dispenser] F0 F8
+[T+762200172us][CH2-Pc    ] F1
+[T+762205172us][CH1-Dispenser] F1 F9
+[T+762278172us][CH2-Pc    ] E1
+[T+762285746us][CH1-Dispenser] E1 E9
+[T+762357197us][CH2-Pc    ] F0
+[T+762384172us][CH2-Pc    ] E0
+[T+762507197us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+762539172us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 8B 24 A3 F1 A2 93 F4 F0 01
+[T+762612303us][CH1-Dispenser] E0
+[T+762612173us][CH2-Pc    ] E0
+[T+762786307us][CH1-Dispenser] E1
+[T+762786173us][CH2-Pc    ] E1
+[T+762954172us][CH1-Dispenser] F0 F8
+[T+762950172us][CH2-Pc    ] F0
+[T+763028172us][CH2-Pc    ] F1
+[T+763035172us][CH1-Dispenser] F1 F9
+[T+763106172us][CH2-Pc    ] E1
+[T+763116179us][CH1-Dispenser] E1 E9
+[T+763185172us][CH2-Pc    ] F0
+[T+763189172us][CH1-Dispenser] F0 EC
+[T+763212172us][CH2-Pc    ] E0
+[T+763334172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+763362172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC F7 E5 43 24 F1 F1 12 E8 AA 32 D1
+[T+763427304us][CH1-Dispenser] E0
+[T+763427173us][CH2-Pc    ] E0
+[T+763591306us][CH1-Dispenser] E1
+[T+763591173us][CH2-Pc    ] E1
+[T+763768173us][CH2-Pc    ] F0
+[T+763776758us][CH1-Dispenser] F0 E8
+[T+763846172us][CH2-Pc    ] F1
+[T+763850172us][CH1-Dispenser] F1 F9
+[T+763924172us][CH2-Pc    ] E1
+[T+763930200us][CH1-Dispenser] E1 E9
+[T+764002197us][CH2-Pc    ] F0
+[T+764029172us][CH2-Pc    ] E0
+[T+764153172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+764184172us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 F5 43 24 A3 A3 12 68 AA F0 01
+[T+764257306us][CH1-Dispenser] E0
+[T+764257173us][CH2-Pc    ] E0
+[T+764442307us][CH1-Dispenser] E1
+[T+764442173us][CH2-Pc    ] E1
+[T+764607172us][CH2-Pc    ] F0
+[T+764616179us][CH1-Dispenser] F0 F8
+[T+764685172us][CH2-Pc    ] F1
+[T+764691210us][CH1-Dispenser] F1 F9
+[T+764763197us][CH2-Pc    ] E1
+[T+764770172us][CH1-Dispenser] E1 E9
+[T+764841172us][CH2-Pc    ] F0
+[T+764845172us][CH1-Dispenser] F0 EC
+[T+764868172us][CH2-Pc    ] E0
+[T+764996172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+765027172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 43 24 A3 A3 12 68 F4 F0 01
+[T+765099312us][CH1-Dispenser] E0
+[T+765099175us][CH2-Pc    ] E0
+[T+765263305us][CH1-Dispenser] E1
+[T+765263173us][CH2-Pc    ] E1
+[T+765439172us][CH2-Pc    ] F0
+[T+765444172us][CH1-Dispenser] F0 F8
+[T+765517172us][CH2-Pc    ] F1
+[T+765526172us][CH1-Dispenser] F1 F9
+[T+765595172us][CH2-Pc    ] E1
+[T+765600172us][CH1-Dispenser] E1 E9
+[T+765673172us][CH2-Pc    ] F0
+[T+765700172us][CH2-Pc    ] E0
+[T+765822197us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+765852196us][CH1-Dispenser] F0 EC E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 8B 24 A3 A3 64 F4 F4 F0 01
+[T+765926306us][CH1-Dispenser] E0
+[T+765926174us][CH2-Pc    ] E0
+[T+766090309us][CH1-Dispenser] E1
+[T+766090174us][CH2-Pc    ] E1
+[T+766265172us][CH2-Pc    ] F0
+[T+766272172us][CH1-Dispenser] F0 F8
+[T+766343172us][CH2-Pc    ] F1
+[T+766351172us][CH1-Dispenser] F1 F9
+[T+766421172us][CH2-Pc    ] E1
+[T+766426172us][CH1-Dispenser] E1 E9
+[T+766499172us][CH2-Pc    ] F0
+[T+766505202us][CH1-Dispenser] F0 EC
+[T+766526172us][CH2-Pc    ] E0
+[T+766648172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+766678196us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 43 24 A3 A3 12 68 F4 F0 D1
+[T+766745305us][CH1-Dispenser] E0
+[T+766745174us][CH2-Pc    ] E0
+[T+766920306us][CH1-Dispenser] E1
+[T+766920173us][CH2-Pc    ] E1
+[T+767095185us][CH2-Pc    ] F0
+[T+767100173us][CH1-Dispenser] F0 F8
+[T+767173172us][CH2-Pc    ] F1
+[T+767182172us][CH1-Dispenser] F1 F9
+[T+767251172us][CH2-Pc    ] E1
+[T+767256172us][CH1-Dispenser] E1 E9
+[T+767329172us][CH2-Pc    ] F0
+[T+767336172us][CH1-Dispenser] F0 EC
+[T+767356172us][CH2-Pc    ] E0
+[T+767479172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+767508172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 8B 24 A3 A3 12 68 AA F0 01
+[T+767582307us][CH1-Dispenser] E0
+[T+767582174us][CH2-Pc    ] E0
+[T+767746303us][CH1-Dispenser] E1
+[T+767746173us][CH2-Pc    ] E1
+[T+767921172us][CH2-Pc    ] F0
+[T+767926172us][CH1-Dispenser] F0 F8
+[T+767999172us][CH2-Pc    ] F1
+[T+768005202us][CH1-Dispenser] F1 F9
+[T+768077197us][CH2-Pc    ] E1
+[T+768085172us][CH1-Dispenser] E1 E9
+[T+768155172us][CH2-Pc    ] F0
+[T+768161200us][CH1-Dispenser] F0 EC
+[T+768183176us][CH2-Pc    ] E0
+[T+768305197us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+768334172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 43 24 A3 A3 12 E8 F4 F0 D1
+[T+768408304us][CH1-Dispenser] E0
+[T+768408173us][CH2-Pc    ] E0
+[T+768583309us][CH1-Dispenser] E1
+[T+768583174us][CH2-Pc    ] E1
+[T+768747172us][CH2-Pc    ] F0
+[T+768756179us][CH1-Dispenser] F0 FE
+[T+768825172us][CH2-Pc    ] F1
+[T+768830172us][CH1-Dispenser] F1 F9
+[T+768903172us][CH2-Pc    ] E1
+[T+768910172us][CH1-Dispenser] E1 E9
+[T+768981172us][CH2-Pc    ] F0
+[T+768986448us][CH1-Dispenser] F0 EC
+[T+769009172us][CH2-Pc    ] E0
+[T+769131172us][CH2-Pc    ] EF FA FF F8 E8 F8 FF EB EC
+[T+769159172us][CH1-Dispenser] E0 EC EF FA FF F8 E8 F8 FF EB EC 37 AB 43 24 A3 A3 12 68 F4 32 D1
+[T+769224307us][CH1-Dispenser] E0
+[T+769224173us][CH2-Pc    ] E0
+[T+769388304us][CH1-Dispenser] E1
+[T+769388173us][CH2-Pc    ] E1
+[T+769562196us][CH2-Pc    ] F0
+[T+769571772us][CH1-Dispenser] F0 F8
+[T+769640172us][CH2-Pc    ] F1
+[T+769646203us][CH1-Dispenser] F1 F9
+[T+769721172us][CH2-Pc    ] E1
+[T+769727200us][CH1-Dispenser] E1 E9
+[T+769805196us][CH2-Pc    ] F0
+[T+769811210us][CH1-Dispenser] F0 F8
+[T+769883304us][CH1-Dispenser] E0
+[T+769883173us][CH2-Pc    ] E0
+[T+770058305us][CH1-Dispenser] E1
+[T+770058173us][CH2-Pc    ] E1
+[T+770232197us][CH2-Pc    ] F0
+[T+770243762us][CH1-Dispenser] F0 F8
+[T+770311172us][CH2-Pc    ] F1
+[T+770315172us][CH1-Dispenser] F1 F9
+[T+770389172us][CH2-Pc    ] E1
+[T+770397774us][CH1-Dispenser] E1 E9
+[T+770467261us][CH2-Pc    ] F0
+[T+770470173us][CH1-Dispenser] F0 F8
+[T+770545305us][CH1-Dispenser] E0
+[T+770545173us][CH2-Pc    ] E0
+[T+770720304us][CH1-Dispenser] E1
+[T+770720173us][CH2-Pc    ] E1
+[T+770895172us][CH2-Pc    ] F0
+[T+770901202us][CH1-Dispenser] F0 F8
+[T+770973173us][CH2-Pc    ] F1
+[T+770980172us][CH1-Dispenser] F1 F9
+[T+771051172us][CH2-Pc    ] E1
+[T+771056172us][CH1-Dispenser] E1 E9
+[T+771129172us][CH2-Pc    ] F0
+[T+771135201us][CH1-Dispenser] F0 F8
+[T+771207304us][CH1-Dispenser] E0
+[T+771207173us][CH2-Pc    ] E0
+[T+771395304us][CH1-Dispenser] E1
+[T+771395173us][CH2-Pc    ] E1
+[T+771560172us][CH2-Pc    ] F0
+[T+771565173us][CH1-Dispenser] F0 F8
+[T+771638172us][CH2-Pc    ] F1
+[T+771645172us][CH1-Dispenser] F1 F9
+[T+771719173us][CH1-Dispenser] E1 E9
+[T+771716172us][CH2-Pc    ] E1
+[T+771794172us][CH2-Pc    ] F0
+[T+771802172us][CH1-Dispenser] F0 F8
+[T+771872304us][CH1-Dispenser] E0
+[T+771872173us][CH2-Pc    ] E0
+[T+772047310us][CH1-Dispenser] E1
+[T+772047173us][CH2-Pc    ] E1
+[T+772222173us][CH2-Pc    ] F0
+[T+772225173us][CH1-Dispenser] F0 F8
+[T+772289172us][CH2-Pc    ] F1
+[T+772295200us][CH1-Dispenser] F1 F9
+[T+772369173us][CH2-Pc    ] E1
+[T+772375202us][CH1-Dispenser] E1 E9
+[T+772447196us][CH2-Pc    ] F0
+[T+772454172us][CH1-Dispenser] F0 F8
+[T+772526306us][CH1-Dispenser] E0
+[T+772526174us][CH2-Pc    ] E0
+[T+772705306us][CH1-Dispenser] E1
+[T+772705173us][CH2-Pc    ] E1
+[T+772880173us][CH2-Pc    ] F0
+[T+772884172us][CH1-Dispenser] F0 F8
+[T+772958172us][CH2-Pc    ] F1
+[T+772966179us][CH1-Dispenser] F1 F9
+[T+773040172us][CH1-Dispenser] E1 E9
+[T+773036172us][CH2-Pc    ] E1
+[T+773114172us][CH2-Pc    ] F0
+[T+773119172us][CH1-Dispenser] F0 F8
+[T+773193306us][CH1-Dispenser] E0
+[T+773193173us][CH2-Pc    ] E0
+[T+773356305us][CH1-Dispenser] E1
+[T+773356173us][CH2-Pc    ] E1
+[T+773531172us][CH2-Pc    ] F0
+[T+773537200us][CH1-Dispenser] F0 F8
+[T+773609196us][CH2-Pc    ] F1
+[T+773616172us][CH1-Dispenser] F1 F9
+[T+773688173us][CH2-Pc    ] E1
+[T+773696181us][CH1-Dispenser] E1 E9
+[T+773770172us][CH1-Dispenser] F0 F8
+[T+773766172us][CH2-Pc    ] F0
+[T+773844303us][CH1-Dispenser] E0
+[T+773844173us][CH2-Pc    ] E0
+[T+774018308us][CH1-Dispenser] E1
+[T+774018174us][CH2-Pc    ] E1
+[T+774182172us][CH2-Pc    ] F0
+[T+774191172us][CH1-Dispenser] F0 F8
+[T+774261172us][CH2-Pc    ] F1
+[T+774265173us][CH1-Dispenser] F1 F9
+[T+774339172us][CH2-Pc    ] E1
+[T+774347770us][CH1-Dispenser] E1 E9
+[T+774417174us][CH2-Pc    ] F0
+[T+774420172us][CH1-Dispenser] F0 F8
+[T+774484303us][CH1-Dispenser] E0
+[T+774484173us][CH2-Pc    ] E0
+[T+774660309us][CH1-Dispenser] E1
+[T+774660174us][CH2-Pc    ] E1
+[T+774824172us][CH2-Pc    ] F0
+[T+774830205us][CH1-Dispenser] F0 F8
+[T+774906172us][CH1-Dispenser] F1 F9
+[T+774902172us][CH2-Pc    ] F1
+[T+774980172us][CH2-Pc    ] E1
+[T+774986200us][CH1-Dispenser] E1 E9
+[T+775058196us][CH2-Pc    ] F0
+[T+775065172us][CH1-Dispenser] F0 F8
+[T+775153304us][CH1-Dispenser] E0
+[T+775153173us][CH2-Pc    ] E0
+[T+775327306us][CH1-Dispenser] E1
+[T+775327173us][CH2-Pc    ] E1
+[T+775502172us][CH2-Pc    ] F0
+[T+775506172us][CH1-Dispenser] F0 E8
+[T+775580172us][CH2-Pc    ] F1
+[T+775587768us][CH1-Dispenser] F1 F9
+[T+775658172us][CH2-Pc    ] E1
+[T+775665172us][CH1-Dispenser] E1 E9
+[T+775736172us][CH2-Pc    ] F0
+[T+775741172us][CH1-Dispenser] F0 F8
+[T+775814304us][CH1-Dispenser] E0
+[T+775814173us][CH2-Pc    ] E0
+[T+775989307us][CH1-Dispenser] E1
+[T+775989173us][CH2-Pc    ] E1
+[T+776153172us][CH2-Pc    ] F0
+[T+776160172us][CH1-Dispenser] F0 F8
+[T+776231172us][CH2-Pc    ] F1
+[T+776236172us][CH1-Dispenser] F1 F9
+[T+776309172us][CH2-Pc    ] E1
+[T+776316172us][CH1-Dispenser] E1 E9
+[T+776395172us][CH2-Pc    ] F0
+[T+776401202us][CH1-Dispenser] F0 E8
+[T+776473306us][CH1-Dispenser] E0
+[T+776473173us][CH2-Pc    ] E0
+[T+776637306us][CH1-Dispenser] E1
+[T+776637173us][CH2-Pc    ] E1
+[T+776812172us][CH2-Pc    ] F0
+[T+776822172us][CH1-Dispenser] F0 F8
+[T+776890172us][CH2-Pc    ] F1
+[T+776895172us][CH1-Dispenser] F1 F9
+[T+776968172us][CH2-Pc    ] E1
+[T+776977788us][CH1-Dispenser] E1 E9
+[T+777047172us][CH2-Pc    ] F0
+[T+777051172us][CH1-Dispenser] F0 F8
+[T+777125305us][CH1-Dispenser] E0
+[T+777125173us][CH2-Pc    ] E0
+[T+777300306us][CH1-Dispenser] E1
+[T+777300173us][CH2-Pc    ] E1
+[T+777464172us][CH2-Pc    ] F0
+[T+777470205us][CH1-Dispenser] F0 F8
+[T+777546172us][CH1-Dispenser] F1 F9
+[T+777542172us][CH2-Pc    ] F1
+[T+777620172us][CH2-Pc    ] E1
+[T+777626201us][CH1-Dispenser] E1 E9
+[T+777698196us][CH2-Pc    ] F0
+[T+777707172us][CH1-Dispenser] F0 F8
+[T+777776307us][CH1-Dispenser] E0
+[T+777776173us][CH2-Pc    ] E0
+[T+777951308us][CH1-Dispenser] E1
+[T+777951174us][CH2-Pc    ] E1
+[T+778126172us][CH2-Pc    ] F0
+[T+778131172us][CH1-Dispenser] F0 F8
+[T+778204172us][CH2-Pc    ] F1
+[T+778211172us][CH1-Dispenser] F1 F9
+[T+778282172us][CH2-Pc    ] E1
+[T+778285172us][CH1-Dispenser] E1 E9
+[T+778349172us][CH2-Pc    ] F0
+[T+778355202us][CH1-Dispenser] F0 F8
+[T+778430304us][CH1-Dispenser] E0
+[T+778430173us][CH2-Pc    ] E0
+[T+778605308us][CH1-Dispenser] E1
+[T+778605175us][CH2-Pc    ] E1
+[T+778785197us][CH2-Pc    ] F0
+[T+778791200us][CH1-Dispenser] F0 F8
+[T+778863196us][CH2-Pc    ] F1
+[T+778870172us][CH1-Dispenser] F1 F9
+[T+778941172us][CH2-Pc    ] E1
+[T+778945172us][CH1-Dispenser] E1 E9
+[T+779019172us][CH2-Pc    ] F0
+[T+779028172us][CH1-Dispenser] F0 E8
+[T+779097307us][CH1-Dispenser] E0
+[T+779097173us][CH2-Pc    ] E0
+[T+779261303us][CH1-Dispenser] E1
+[T+779261173us][CH2-Pc    ] E1
+[T+779436172us][CH2-Pc    ] F0
+[T+779441172us][CH1-Dispenser] F0 F8
+[T+779515172us][CH2-Pc    ] F1
+[T+779521202us][CH1-Dispenser] F1 F9
+[T+779594172us][CH2-Pc    ] E1
+[T+779603468us][CH1-Dispenser] E1 E9
+[T+779672172us][CH2-Pc    ] F0
+[T+779678202us][CH1-Dispenser] F0 F8
+[T+779750307us][CH1-Dispenser] E0
+[T+779750173us][CH2-Pc    ] E0
+[T+779924309us][CH1-Dispenser] E1
+[T+779924174us][CH2-Pc    ] E1
+[T+780089172us][CH2-Pc    ] F0
+[T+780095200us][CH1-Dispenser] F0 F8
+[T+780167172us][CH2-Pc    ] F1
+[T+780171172us][CH1-Dispenser] F1 F9
+[T+780245172us][CH2-Pc    ] E1
+[T+780251207us][CH1-Dispenser] E1 E9
+[T+780327172us][CH2-Pc    ] F0
+[T+780334172us][CH1-Dispenser] F0 F8
+[T+780405307us][CH1-Dispenser] E0
+[T+780405173us][CH2-Pc    ] E0
+[T+780580308us][CH1-Dispenser] E1
+[T+780580173us][CH2-Pc    ] E1
+[T+780755178us][CH2-Pc    ] F0
+[T+780760181us][CH1-Dispenser] F0 F8
+[T+780833172us][CH2-Pc    ] F1
+[T+780841172us][CH1-Dispenser] F1 F9
+[T+780911172us][CH2-Pc    ] E1
+[T+780916172us][CH1-Dispenser] E1 E9
+[T+780989172us][CH2-Pc    ] F0
+[T+780995200us][CH1-Dispenser] F0 F8
+[T+781067304us][CH1-Dispenser] E0
+[T+781067173us][CH2-Pc    ] E0
+[T+781231306us][CH1-Dispenser] E1
+[T+781231173us][CH2-Pc    ] E1
+[T+781406172us][CH2-Pc    ] F0
+[T+781411172us][CH1-Dispenser] F0 F8
+[T+781484172us][CH2-Pc    ] F1
+[T+781490202us][CH1-Dispenser] F1 F9
+[T+781562172us][CH2-Pc    ] E1
+[T+781567172us][CH1-Dispenser] E1 E9
+[T+781640172us][CH2-Pc    ] F0
+[T+781646206us][CH1-Dispenser] F0 F8
+[T+781723305us][CH1-Dispenser] E0
+[T+781723173us][CH2-Pc    ] E0
+[T+781888304us][CH1-Dispenser] E1
+[T+781888173us][CH2-Pc    ] E1
+[T+782065172us][CH2-Pc    ] F0
+[T+782070172us][CH1-Dispenser] F0 F8
+[T+782143172us][CH2-Pc    ] F1
+[T+782151172us][CH1-Dispenser] F1 F9
+[T+782222172us][CH2-Pc    ] E1
+[T+782226173us][CH1-Dispenser] E1 E9
+[T+782300172us][CH2-Pc    ] F0
+[T+782307172us][CH1-Dispenser] F0 F8
+[T+782380303us][CH1-Dispenser] E0
+[T+782380173us][CH2-Pc    ] E0
+[T+782544306us][CH1-Dispenser] E1
+[T+782544173us][CH2-Pc    ] E1
+[T+782719172us][CH2-Pc    ] F0
+[T+782726172us][CH1-Dispenser] F0 F8
+[T+782796172us][CH2-Pc    ] F1
+[T+782802202us][CH1-Dispenser] F1 F9
+[T+782875172us][CH2-Pc    ] E1
+[T+782882172us][CH1-Dispenser] E1 E9
+[T+782953172us][CH2-Pc    ] F0
+[T+782961172us][CH1-Dispenser] F0 F8
+[T+783031304us][CH1-Dispenser] E0
+[T+783031173us][CH2-Pc    ] E0
+[T+783208172us][CH1-Dispenser] E1
+[T+783207173us][CH2-Pc    ] E1
+[T+783372172us][CH2-Pc    ] F0
+[T+783377172us][CH1-Dispenser] F0 F8
+[T+783450172us][CH2-Pc    ] F1
+[T+783456201us][CH1-Dispenser] F1 F9
+[T+783528197us][CH2-Pc    ] E1
+[T+783536172us][CH1-Dispenser] E1 E9
+[T+783606186us][CH2-Pc    ] F0
+[T+783612217us][CH1-Dispenser] F0 F8
+[T+783685322us][CH1-Dispenser] E0
+[T+783685181us][CH2-Pc    ] E0
+[T+783859320us][CH1-Dispenser] E1
+[T+783859181us][CH2-Pc    ] E1
+[T+784034213us][CH2-Pc    ] F0
+[T+784042316us][CH1-Dispenser] F0 E8
+[T+784112172us][CH2-Pc    ] F1
+[T+784115172us][CH1-Dispenser] F1 F9
+[T+784190172us][CH2-Pc    ] E1
+[T+784195172us][CH1-Dispenser] E1 E9
+[T+784268172us][CH2-Pc    ] F0
+[T+784276172us][CH1-Dispenser] F0 F8
+[T+784346303us][CH1-Dispenser] E0
+[T+784346173us][CH2-Pc    ] E0
+[T+784535304us][CH1-Dispenser] E1
+[T+784535173us][CH2-Pc    ] E1
+[T+784699172us][CH2-Pc    ] F0
+[T+784706172us][CH1-Dispenser] F0 F8
+[T+784777172us][CH2-Pc    ] F1
+[T+784782172us][CH1-Dispenser] F1 F9
+[T+784855172us][CH2-Pc    ] E1
+[T+784862172us][CH1-Dispenser] E1 E9
+[T+784933172us][CH2-Pc    ] F0
+[T+784941739us][CH1-Dispenser] F0 F8
+[T+785011306us][CH1-Dispenser] E0
+[T+785011173us][CH2-Pc    ] E0
+[T+785186303us][CH1-Dispenser] E1
+[T+785186173us][CH2-Pc    ] E1
+[T+785361172us][CH2-Pc    ] F0
+[T+785366173us][CH1-Dispenser] F0 F8
+[T+785439172us][CH2-Pc    ] F1
+[T+785449172us][CH1-Dispenser] F1 F9
+[T+785518172us][CH2-Pc    ] E1
+[T+785527770us][CH1-Dispenser] E1 E9
+[T+785596172us][CH2-Pc    ] F0
+[T+785603172us][CH1-Dispenser] F0 F8
+[T+785677303us][CH1-Dispenser] E0
+[T+785677173us][CH2-Pc    ] E0
+[T+785840304us][CH1-Dispenser] E1
+[T+785840174us][CH2-Pc    ] E1
+[T+786015172us][CH2-Pc    ] F0
+[T+786022172us][CH1-Dispenser] F0 FE
+[T+786093173us][CH2-Pc    ] F1
+[T+786103179us][CH1-Dispenser] F1 F9
+[T+786171172us][CH2-Pc    ] E1
+[T+786178172us][CH1-Dispenser] E1 E9
+[T+786250173us][CH2-Pc    ] F0
+[T+786257172us][CH1-Dispenser] F0 F8
+[T+786328304us][CH1-Dispenser] E0
+[T+786328173us][CH2-Pc    ] E0
+[T+786503309us][CH1-Dispenser] E1
+[T+786503173us][CH2-Pc    ] E1
+[T+786670172us][CH1-Dispenser] F0 F8
+[T+786667174us][CH2-Pc    ] F0
+[T+786745172us][CH2-Pc    ] F1
+[T+786752172us][CH1-Dispenser] F1 F9
+[T+786826172us][CH1-Dispenser] E1 E9
+[T+786823172us][CH2-Pc    ] E1
+[T+786890172us][CH2-Pc    ] F0
+[T+786898172us][CH1-Dispenser] F0 E8
+[T+786964304us][CH1-Dispenser] E0
+[T+786964173us][CH2-Pc    ] E0
+[T+787138306us][CH1-Dispenser] E1
+[T+787138174us][CH2-Pc    ] E1
+[T+787313172us][CH2-Pc    ] F0
+[T+787316173us][CH1-Dispenser] F0 F8
+[T+787380172us][CH2-Pc    ] F1
+[T+787386202us][CH1-Dispenser] F1 F9
+[T+787459172us][CH2-Pc    ] E1
+[T+787466172us][CH1-Dispenser] E1 E9
+[T+787537172us][CH2-Pc    ] F0
+[T+787541172us][CH1-Dispenser] F0 F8
+[T+787615304us][CH1-Dispenser] E0
+[T+787615173us][CH2-Pc    ] E0
+[T+787798305us][CH1-Dispenser] E1
+[T+787798174us][CH2-Pc    ] E1
+[T+787970172us][CH2-Pc    ] F0
+[T+787977172us][CH1-Dispenser] F0 F8
+[T+788048172us][CH2-Pc    ] F1
+[T+788058179us][CH1-Dispenser] F1 F9
+[T+788126172us][CH2-Pc    ] E1
+[T+788131172us][CH1-Dispenser] E1 E9
+[T+788201172us][CH2-Pc    ] F0
+[T+788206172us][CH1-Dispenser] F0 F8
+[T+788279303us][CH1-Dispenser] E0
+[T+788279173us][CH2-Pc    ] E0
+[T+788456305us][CH1-Dispenser] E1
+[T+788456173us][CH2-Pc    ] E1
+[T+788620192us][CH2-Pc    ] F0
+[T+788626173us][CH1-Dispenser] F0 F8
+[T+788698172us][CH2-Pc    ] F1
+[T+788701172us][CH1-Dispenser] F1 F9
+[T+788776172us][CH2-Pc    ] E1
+[T+788781172us][CH1-Dispenser] E1 E9
+[T+788854172us][CH2-Pc    ] F0
+[T+788862814us][CH1-Dispenser] F0 F8
+[T+788932307us][CH1-Dispenser] E0
+[T+788932173us][CH2-Pc    ] E0
+[T+789107306us][CH1-Dispenser] E1
+[T+789107173us][CH2-Pc    ] E1
+[T+789282172us][CH2-Pc    ] F0
+[T+789287174us][CH1-Dispenser] F0 F8
+[T+789360172us][CH2-Pc    ] F1
+[T+789366200us][CH1-Dispenser] F1 F9
+[T+789438196us][CH2-Pc    ] E1
+[T+789446172us][CH1-Dispenser] E1 E9
+[T+789516172us][CH2-Pc    ] F0
+[T+789522200us][CH1-Dispenser] F0 F8
+[T+789595304us][CH1-Dispenser] E0
+[T+789595173us][CH2-Pc    ] E0
+[T+789769304us][CH1-Dispenser] E1
+[T+789769173us][CH2-Pc    ] E1
+[T+789933172us][CH2-Pc    ] F0
+[T+789937172us][CH1-Dispenser] F0 E8
+[T+790011172us][CH2-Pc    ] F1
+[T+790017201us][CH1-Dispenser] F1 F9
+[T+790089197us][CH2-Pc    ] E1
+[T+790096172us][CH1-Dispenser] E1 E9
+[T+790167172us][CH2-Pc    ] F0
+[T+790172172us][CH1-Dispenser] F0 F8
+[T+790246304us][CH1-Dispenser] E0
+[T+790246174us][CH2-Pc    ] E0
+[T+790421172us][CH1-Dispenser] E1
+[T+790420172us][CH2-Pc    ] E1
+[T+790595201us][CH2-Pc    ] F0
+[T+790602172us][CH1-Dispenser] F0 F8
+[T+790673172us][CH2-Pc    ] F1
+[T+790683179us][CH1-Dispenser] F1 F9
+[T+790752172us][CH2-Pc    ] E1
+[T+790756174us][CH1-Dispenser] E1 E9
+[T+790841172us][CH2-Pc    ] F0
+[T+790846172us][CH1-Dispenser] F0 F8
+[T+790919304us][CH1-Dispenser] E0
+[T+790919173us][CH2-Pc    ] E0
+[T+791094309us][CH1-Dispenser] E1
+[T+791094174us][CH2-Pc    ] E1
+[T+791269172us][CH2-Pc    ] F0
+[T+791278172us][CH1-Dispenser] F0 F8
+[T+791347172us][CH2-Pc    ] F1
+[T+791352172us][CH1-Dispenser] F1 F9
+[T+791425172us][CH2-Pc    ] E1
+[T+791432172us][CH1-Dispenser] E1 E9
+[T+791503172us][CH2-Pc    ] F0
+[T+791511787us][CH1-Dispenser] F0 F8
+[T+791582308us][CH1-Dispenser] E0
+[T+791582173us][CH2-Pc    ] E0
+[T+791746306us][CH1-Dispenser] E1
+[T+791746173us][CH2-Pc    ] E1
+[T+791920196us][CH2-Pc    ] F0
+[T+791927825us][CH1-Dispenser] F0 F8
+[T+791998172us][CH2-Pc    ] F1
+[T+792008172us][CH1-Dispenser] F1 F9
+[T+792077172us][CH2-Pc    ] E1
+[T+792082172us][CH1-Dispenser] E1 E9
+[T+792155172us][CH2-Pc    ] F0
+[T+792161200us][CH1-Dispenser] F0 F8
+[T+792233381us][CH1-Dispenser] E0
+[T+792233242us][CH2-Pc    ] E0
+[T+792408307us][CH1-Dispenser] E1
+[T+792408173us][CH2-Pc    ] E1
+[T+792586173us][CH1-Dispenser] F0 F8
+[T+792583172us][CH2-Pc    ] F0
+[T+792661172us][CH2-Pc    ] F1
+[T+792669172us][CH1-Dispenser] F1 F9
+[T+792739172us][CH2-Pc    ] E1
+[T+792747172us][CH1-Dispenser] E1 E9
+[T+792817172us][CH2-Pc    ] F0
+[T+792821172us][CH1-Dispenser] F0 F8
+[T+792895303us][CH1-Dispenser] E0
+[T+792895173us][CH2-Pc    ] E0
+[T+793059310us][CH1-Dispenser] E1
+[T+793059174us][CH2-Pc    ] E1
+[T+793234172us][CH2-Pc    ] F0
+[T+793242179us][CH1-Dispenser] F0 F8
+[T+793312172us][CH2-Pc    ] F1
+[T+793318201us][CH1-Dispenser] F1 F9
+[T+793390197us][CH2-Pc    ] E1
+[T+793397172us][CH1-Dispenser] E1 E9
+[T+793471173us][CH1-Dispenser] F0 F8
+[T+793468262us][CH2-Pc    ] F0
+[T+793536304us][CH1-Dispenser] E0
+[T+793536173us][CH2-Pc    ] E0
+[T+793700306us][CH1-Dispenser] E1
+[T+793700173us][CH2-Pc    ] E1
+[T+793874201us][CH2-Pc    ] F0
+[T+793882172us][CH1-Dispenser] F0 F8
+[T+793952172us][CH2-Pc    ] F1
+[T+793957172us][CH1-Dispenser] F1 F9
+[T+794031172us][CH2-Pc    ] E1
+[T+794039179us][CH1-Dispenser] E1 E9
+[T+794109172us][CH2-Pc    ] F0
+[T+794118172us][CH1-Dispenser] F0 F8
+[T+794187305us][CH1-Dispenser] E0
+[T+794187173us][CH2-Pc    ] E0
+[T+794365307us][CH1-Dispenser] E1
+[T+794365174us][CH2-Pc    ] E1
+[T+794550172us][CH2-Pc    ] F0
+[T+794557172us][CH1-Dispenser] F0 F8
+[T+794629172us][CH2-Pc    ] F1
+[T+794633172us][CH1-Dispenser] F1 F9
+[T+794706172us][CH2-Pc    ] E1
+[T+794711172us][CH1-Dispenser] E1 E9
+[T+794785172us][CH2-Pc    ] F0
+[T+794792800us][CH1-Dispenser] F0 F8
+[T+794863305us][CH1-Dispenser] E0
+[T+794863173us][CH2-Pc    ] E0
+[T+795027307us][CH1-Dispenser] E1
+[T+795027174us][CH2-Pc    ] E1
+[T+795201208us][CH2-Pc    ] F0
+[T+795208904us][CH1-Dispenser] F0 F8
+[T+795280196us][CH2-Pc    ] F1
+[T+795287172us][CH1-Dispenser] F1 F9
+[T+795360172us][CH2-Pc    ] E1
+[T+795367779us][CH1-Dispenser] E1 E9
+[T+795442172us][CH1-Dispenser] F0 F8
+[T+795438172us][CH2-Pc    ] F0
+[T+795516308us][CH1-Dispenser] E0
+[T+795516175us][CH2-Pc    ] E0
+[T+795691309us][CH1-Dispenser] E1
+[T+795691174us][CH2-Pc    ] E1
+[T+795859196us][CH2-Pc    ] F0
+[T+795867179us][CH1-Dispenser] F0 F8
+[T+795941172us][CH1-Dispenser] F1 F9
+[T+795937172us][CH2-Pc    ] F1
+[T+796016172us][CH2-Pc    ] E1
+[T+796021172us][CH1-Dispenser] E1 E9
+[T+796094172us][CH2-Pc    ] F0
+[T+796102172us][CH1-Dispenser] F0 F8
+[T+796172305us][CH1-Dispenser] E0
+[T+796172173us][CH2-Pc    ] E0
+[T+796347308us][CH1-Dispenser] E1
+[T+796347173us][CH2-Pc    ] E1
+[T+796511172us][CH2-Pc    ] F0
+[T+796518172us][CH1-Dispenser] F0 F8
+[T+796589172us][CH2-Pc    ] F1
+[T+796597774us][CH1-Dispenser] F1 F9

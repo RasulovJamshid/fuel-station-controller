@@ -14,18 +14,23 @@ export class ShiftsService {
         return rows.map(r => r.id);
     }
 
-    async findAll(companyId: string, stationId: string | undefined, pagination: PaginationDto, oilBaseId?: string) {
+    async findAll(companyId: string, stationId: string | undefined, pagination: PaginationDto, oilBaseId?: string, allowedStationIds?: string[]) {
+        if (allowedStationIds && allowedStationIds.length === 0) return { data: [], total: 0, page: 1, pages: 1 };
         const oilBaseStationIds = oilBaseId
             ? await this.stationIdsForOilBase(companyId, oilBaseId)
             : null;
         if (oilBaseStationIds !== null && oilBaseStationIds.length === 0) {
             return { data: [], total: 0, page: 1, pages: 1 };
         }
+        const stationIds = allowedStationIds
+            ? (oilBaseStationIds ?? allowedStationIds).filter(id => allowedStationIds.includes(id))
+            : oilBaseStationIds;
+        if (stationIds && stationIds.length === 0) return { data: [], total: 0, page: 1, pages: 1 };
 
         const where: any = {
             companyId,
             deletedAt: null,
-            ...(oilBaseStationIds ? { stationId: { in: oilBaseStationIds } } :
+            ...(stationIds ? { stationId: { in: stationIds } } :
                 stationId         ? { stationId }                            : {}),
         };
         const [data, total] = await this.prisma.$transaction([
@@ -41,26 +46,37 @@ export class ShiftsService {
         return PaginatedResponse.of(data, total, pagination);
     }
 
-    async findOne(id: string, companyId: string) {
+    async findOne(id: string, companyId: string, allowedStationIds?: string[]) {
+        if (allowedStationIds && allowedStationIds.length === 0) throw new NotFoundException('Shift not found');
         const shift = await this.prisma.shift.findFirst({
-            where: { id, companyId, deletedAt: null },
+            where: {
+                id,
+                companyId,
+                deletedAt: null,
+                ...(allowedStationIds ? { stationId: { in: allowedStationIds } } : {}),
+            },
             include: { positionTotals: true },
         });
         if (!shift) throw new NotFoundException('Shift not found');
         return shift;
     }
 
-    async getActive(companyId: string, stationId?: string, oilBaseId?: string) {
+    async getActive(companyId: string, stationId?: string, oilBaseId?: string, allowedStationIds?: string[]) {
+        if (allowedStationIds && allowedStationIds.length === 0) return [];
         const oilBaseStationIds = oilBaseId
             ? await this.stationIdsForOilBase(companyId, oilBaseId)
             : null;
+        const stationIds = allowedStationIds
+            ? (oilBaseStationIds ?? allowedStationIds).filter(id => allowedStationIds.includes(id))
+            : oilBaseStationIds;
+        if (stationIds && stationIds.length === 0) return [];
 
         return this.prisma.shift.findMany({
             where: {
                 companyId,
                 status: 'ACTIVE',
                 deletedAt: null,
-                ...(oilBaseStationIds ? { stationId: { in: oilBaseStationIds } } :
+                ...(stationIds ? { stationId: { in: stationIds } } :
                     stationId         ? { stationId }                            : {}),
             },
             include: { positionTotals: true },

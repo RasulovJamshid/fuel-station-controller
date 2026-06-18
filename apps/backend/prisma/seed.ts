@@ -7,8 +7,8 @@ async function main() {
     const email    = process.env.SEED_ADMIN_EMAIL ?? 'admin@ung.uz';
     const password = process.env.SEED_ADMIN_PASSWORD;
     if (!password) {
-        console.error('SEED_ADMIN_PASSWORD is not set');
-        process.exit(1);
+        console.log('SEED_ADMIN_PASSWORD is not set; skipping seed');
+        return;
     }
 
     const slug = 'ung';

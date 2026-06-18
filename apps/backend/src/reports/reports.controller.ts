@@ -7,6 +7,7 @@ import { ReportsService } from './reports.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { resolveStationIds } from '../common/helpers/station-access.helper';
 
 class ReportQueryDto {
     @ApiPropertyOptional()  @IsOptional() @IsDateString() from?: string;
@@ -27,22 +28,22 @@ export class ReportsController {
         private prisma: PrismaService,
     ) {}
 
-    private async resolveIds(companyId: string, q: ReportQueryDto): Promise<string[]> {
+    private async resolveIds(user: any, q: ReportQueryDto): Promise<string[]> {
         if (q.oilBaseId) {
             const rows = await this.prisma.station.findMany({
-                where: { companyId, oilBaseId: q.oilBaseId, deletedAt: null },
+                where: { companyId: user.companyId, oilBaseId: q.oilBaseId, deletedAt: null },
                 select: { id: true },
             });
-            return rows.map(r => r.id);
+            return resolveStationIds(this.prisma, user, rows.map(r => r.id));
         }
-        return q.stationIds ?? (q.stationId ? [q.stationId] : []);
+        return resolveStationIds(this.prisma, user, q.stationIds ?? (q.stationId ? [q.stationId] : []));
     }
 
     @Get('revenue')
     async revenue(@CurrentUser() user: any, @Query() q: ReportQueryDto) {
         const from = q.from ? new Date(q.from) : new Date(Date.now() - 30 * 86_400_000);
         const to   = q.to   ? new Date(q.to)   : new Date();
-        const ids  = await this.resolveIds(user.companyId, q);
+        const ids  = await this.resolveIds(user, q);
         return this.reports.getRevenueSummary(user.companyId, ids, from, to, q.groupBy ?? 'day');
     }
 
@@ -50,7 +51,7 @@ export class ReportsController {
     async operators(@CurrentUser() user: any, @Query() q: ReportQueryDto) {
         const from = q.from ? new Date(q.from) : new Date(Date.now() - 30 * 86_400_000);
         const to   = q.to   ? new Date(q.to)   : new Date();
-        const ids  = await this.resolveIds(user.companyId, q);
+        const ids  = await this.resolveIds(user, q);
         return this.reports.getOperatorReport(user.companyId, from, to, ids);
     }
 
@@ -58,12 +59,14 @@ export class ReportsController {
     async products(@CurrentUser() user: any, @Query() q: ReportQueryDto) {
         const from = q.from ? new Date(q.from) : new Date(Date.now() - 30 * 86_400_000);
         const to   = q.to   ? new Date(q.to)   : new Date();
-        const ids  = await this.resolveIds(user.companyId, q);
+        const ids  = await this.resolveIds(user, q);
         return this.reports.getProductReport(user.companyId, from, to, ids);
     }
 
     @Post('export')
-    requestExport(@CurrentUser() user: any, @Body() params: any) {
-        return this.reports.requestExport(user.id, user.companyId, params);
+    async requestExport(@CurrentUser() user: any, @Body() params: any) {
+        const requested = params.stationIds ?? (params.stationId ? [params.stationId] : []);
+        const allowed = await resolveStationIds(this.prisma, user, requested);
+        return this.reports.requestExport(user.id, user.companyId, params, allowed);
     }
 }

@@ -16,11 +16,11 @@ export class ReportsProcessor extends WorkerHost {
     }
 
     async process(job: Job) {
-        const { userId, companyId, params } = job.data;
+        const { userId, companyId, params, allowedStationIds } = job.data;
         this.logger.log(`Processing export job ${job.id}: ${params.format}`);
 
         try {
-            const result = await this.exportService.generate(companyId, params);
+            const result = await this.exportService.generate(companyId, params, allowedStationIds);
             this.gateway.notifyUser(userId, 'export.ready', result);
         } catch (e: any) {
             this.logger.error(`Export job ${job.id} failed: ${e.message}`);

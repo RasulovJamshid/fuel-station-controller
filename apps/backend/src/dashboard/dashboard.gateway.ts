@@ -46,6 +46,7 @@ export class DashboardGateway implements OnGatewayConnection, OnGatewayDisconnec
 
             client.data.user = payload;
             client.join(`company:${payload.companyId}`);
+            client.join(`user:${payload.sub}`);
             this.logger.log(`WS client ${client.id} connected (company ${payload.companyId})`);
         } catch {
             client.disconnect();

@@ -450,6 +450,9 @@ export function DispenserCard({
   const displayVolume = isPaused ? (paused?.stopped_volume ?? 0) : state.volume;
   const progressTarget = parseVolumeTargetLiters(state.pre_auth_preset);
   const amountTarget = parseAmountTargetSum(state.pre_auth_preset);
+  const hasPumpTotalizer =
+    state.pump_total_volume != null || state.pump_total_amount != null;
+  const showPumpTotalizer = hasPumpTotalizer && (isIdle || isDone || isPaused);
 
   return (
     <>
@@ -679,6 +682,30 @@ export function DispenserCard({
               targetAmount={amountTarget}
               compact={compact}
             />
+          )}
+
+          {showPumpTotalizer && !showPumpForm && (
+            <div className={`flex items-center justify-between rounded-lg border border-border-primary/50 bg-bg-input/30 ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`}>
+              <div className="min-w-0">
+                <p className="truncate text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                  {t("dispenser.totalizer")}
+                  {state.pump_total_nozzle_index != null ? ` · ${t("dispenser.nozzle")} ${state.pump_total_nozzle_index}` : ""}
+                </p>
+                {state.pump_total_price != null && state.pump_total_price > 0 ? (
+                  <p className="truncate text-xs text-text-tertiary">
+                    {fmtSum.format(state.pump_total_price)} SUM/L
+                  </p>
+                ) : null}
+              </div>
+              <div className="shrink-0 text-right">
+                <p className={`font-mono font-semibold tabular-nums text-text-secondary ${compact ? "text-xs" : "text-sm"}`}>
+                  {state.pump_total_volume != null ? `${state.pump_total_volume.toFixed(2)} L` : "—"}
+                </p>
+                <p className={`font-mono tabular-nums text-text-muted ${compact ? "text-xs" : "text-sm"}`}>
+                  {state.pump_total_amount != null ? fmtSum.format(state.pump_total_amount) : "—"}
+                </p>
+              </div>
+            </div>
           )}
         </div>
 

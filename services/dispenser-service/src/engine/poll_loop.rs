@@ -1817,7 +1817,13 @@ async fn run_gilbarco_poll_loop(
                             .unwrap_or(false)
                     };
 
-                    let nozzle = gbr_query_nozzle_from_all(byte, &backend).unwrap_or(1);
+                    let Some(nozzle) = gbr_query_nozzle_from_all(byte, &backend) else {
+                        warn!(
+                            addr = format_args!("0x{byte:02X}"),
+                            "Gilbarco: nozzle lifted but GetAll did not identify nozzle"
+                        );
+                        continue;
+                    };
                     let (product_id, product_name) = gbr_nozzle_product(fp_cfg, &cfg, nozzle);
                     let price = {
                         let map = runtimes.read().await;
@@ -1832,13 +1838,42 @@ async fn run_gilbarco_poll_loop(
                     };
 
                     if has_pending_auth {
+                        let expected_nozzle = {
+                            let map = runtimes.read().await;
+                            map.get(&byte)
+                                .and_then(|rt| rt.pre_auth.as_ref().map(|p| p.nozzle_index))
+                                .unwrap_or(nozzle)
+                        };
+                        if expected_nozzle != 0 && expected_nozzle != nozzle {
+                            let expected_name = gbr_nozzle_product(fp_cfg, &cfg, expected_nozzle).1;
+                            let mut map = runtimes.write().await;
+                            if let Some(rt) = map.get_mut(&byte) {
+                                rt.cancel_pre_auth();
+                                rt.state.status = FpStatus::NozzleUp;
+                                rt.state.nozzle_index = Some(nozzle);
+                                rt.state.product_id = Some(product_id);
+                                rt.state.product_name = Some(product_name.clone());
+                                rt.state.price = price;
+                            }
+                            let _ = events.send(WsEvent::PreAuthNozzleMismatch {
+                                fp_id: fp_cfg.id.clone(),
+                                expected_nozzle_index: expected_nozzle,
+                                expected_product_name: expected_name,
+                                lifted_nozzle_index: nozzle,
+                                lifted_product_name: product_name.clone(),
+                            });
+                            broadcast_status(byte, &runtimes, &events).await;
+                            continue;
+                        }
                         let preset = {
                             let map = runtimes.read().await;
                             map.get(&byte)
                                 .map(|rt| rt.last_preset.clone())
                                 .unwrap_or_else(|| Preset::Str("full".into()))
                         };
-                        gbr_send_price_and_preset(byte, nozzle, price, &preset, &backend);
+                        if !gbr_send_price_and_preset(byte, nozzle, price, &preset, &backend) {
+                            continue;
+                        }
                         let _ = exchange_serial(&backend, &gilbarco::authorize(byte));
                         let tx = CurrentTx {
                             id: uuid::Uuid::new_v4().to_string(),
@@ -1869,24 +1904,31 @@ async fn run_gilbarco_poll_loop(
                             .product(product_id)
                             .map(|p| p.color.clone())
                             .unwrap_or_default();
-                        {
+                        let should_emit_nozzle_up = {
                             let mut map = runtimes.write().await;
                             if let Some(rt) = map.get_mut(&byte) {
+                                let changed = rt.state.status != FpStatus::NozzleUp
+                                    || rt.state.nozzle_index != Some(nozzle);
                                 rt.state.nozzle_index = Some(nozzle);
                                 rt.state.product_id = Some(product_id);
                                 rt.state.product_name = Some(product_name.clone());
                                 rt.state.price = price;
                                 rt.state.status = FpStatus::NozzleUp;
+                                changed
+                            } else {
+                                false
                             }
+                        };
+                        if should_emit_nozzle_up {
+                            let _ = events.send(WsEvent::NozzleUp {
+                                fp_id: fp_cfg.id.clone(),
+                                nozzle_index: nozzle,
+                                product_id,
+                                product_name,
+                                product_color,
+                                price,
+                            });
                         }
-                        let _ = events.send(WsEvent::NozzleUp {
-                            fp_id: fp_cfg.id.clone(),
-                            nozzle_index: nozzle,
-                            product_id,
-                            product_name,
-                            product_color,
-                            price,
-                        });
                     }
                 }
 
@@ -1988,7 +2030,7 @@ fn gbr_nozzle_product(
 fn gbr_preset_amount_raw(preset: &Preset, price: u32) -> Option<u32> {
     match preset {
         Preset::Str(s) if s.eq_ignore_ascii_case("full") => Some(0),
-        Preset::Amount(amount) => Some((amount / 10).min(999_999) as u32),
+        Preset::Amount(amount) if *amount > 0 => Some((amount / 10).min(999_999) as u32),
         Preset::Volume(litres) if *litres > 0.0 && price > 0 => Some(
             ((*litres * price as f64) / 10.0)
                 .round()
@@ -2004,15 +2046,32 @@ fn gbr_send_price_and_preset(
     price: u32,
     preset: &Preset,
     backend: &SerialBackend,
-) {
+) -> bool {
+    if price == 0 {
+        warn!(byte, nozzle, "Gilbarco: refusing authorize with zero price");
+        return false;
+    }
     let Some(amount_raw) = gbr_preset_amount_raw(preset, price) else {
-        return;
+        warn!(
+            byte,
+            nozzle, "Gilbarco: refusing authorize with invalid preset"
+        );
+        return false;
     };
 
-    let _ = exchange_serial(backend, &gilbarco::get_nozzle(byte));
-    let _ = exchange_serial(backend, &gilbarco::set_price(nozzle, price / 10));
-    let _ = exchange_serial(backend, &gilbarco::get_nozzle(byte));
-    let _ = exchange_serial(backend, &gilbarco::preset_amount(amount_raw));
+    if exchange_serial(backend, &gilbarco::get_nozzle(byte)).is_err() {
+        return false;
+    }
+    if exchange_serial(backend, &gilbarco::set_price(nozzle, price / 10)).is_err() {
+        return false;
+    }
+    if exchange_serial(backend, &gilbarco::get_nozzle(byte)).is_err() {
+        return false;
+    }
+    if exchange_serial(backend, &gilbarco::preset_amount(amount_raw)).is_err() {
+        return false;
+    }
+    true
 }
 
 /// Send SetPrice for all active nozzles via listen-mode.  Returns `true` if all sent.
@@ -2043,10 +2102,7 @@ async fn gbr_close_transaction(
             .map(|rt| {
                 matches!(
                     rt.state.status,
-                    FpStatus::Delivering
-                        | FpStatus::Authorizing
-                        | FpStatus::NozzleUp
-                        | FpStatus::Stopped { .. }
+                    FpStatus::Delivering | FpStatus::Authorizing | FpStatus::Stopped { .. }
                 )
             })
             .unwrap_or(false)
@@ -2057,13 +2113,17 @@ async fn gbr_close_transaction(
 
     // Step 1: GetTransaction (0x40|addr) → final sale frame.
     // Step 2: GetTotals (0x50|addr) → accumulated per-nozzle totals.
-    let tx_raw1 = exchange_serial(backend, &gilbarco::get_transaction(byte)).ok();
-    let tx_data = tx_raw1
-        .as_deref()
-        .and_then(gilbarco::parse_transaction_response);
+    let tx_data = exchange_serial(backend, &gilbarco::get_transaction(byte))
+        .ok()
+        .and_then(|r| gilbarco::parse_transaction_response(&r))
+        .or_else(|| {
+            exchange_serial(backend, &gilbarco::get_transaction(byte))
+                .ok()
+                .and_then(|r| gilbarco::parse_transaction_response(&r))
+        });
     let totals_raw = exchange_serial(backend, &gilbarco::get_totals(byte)).ok();
 
-    let (ctx, price, nozzle_index) = {
+    let (ctx, state_price, nozzle_index) = {
         let map = runtimes.read().await;
         let Some(rt) = map.get(&byte) else {
             return;
@@ -2078,6 +2138,13 @@ async fn gbr_close_transaction(
     let ctx = match ctx {
         Some(c) => c,
         None => {
+            if tx_data.is_none() {
+                warn!(
+                    addr = format_args!("0x{byte:02X}"),
+                    "Gilbarco: transaction complete without active transaction or final frame"
+                );
+                return;
+            }
             // No active tx recorded — create a minimal one for the record.
             let (product_id, product_name) = gbr_nozzle_product(fp_cfg, cfg, nozzle_index);
             CurrentTx {
@@ -2089,6 +2156,11 @@ async fn gbr_close_transaction(
             }
         }
     };
+
+    let price = tx_data
+        .map(|td| (td.unit_price_raw * 10).min(u32::MAX as u64) as u32)
+        .filter(|p| *p > 0)
+        .unwrap_or(state_price);
 
     if let Some(totals) = totals_raw
         .as_deref()
@@ -2119,10 +2191,11 @@ async fn gbr_close_transaction(
     let (volume, amount) = match tx_data {
         Some(td) => (td.volume_raw as f64 / 1000.0, td.amount_raw * 10),
         None => {
-            let map = runtimes.read().await;
-            map.get(&byte)
-                .map(|rt| (rt.state.volume, rt.state.amount))
-                .unwrap_or((0.0, 0))
+            warn!(
+                addr = format_args!("0x{byte:02X}"),
+                "Gilbarco: refusing to save transaction without final frame"
+            );
+            return;
         }
     };
 
@@ -2195,7 +2268,10 @@ async fn gbr_apply_command(
                     .and_then(|rt| rt.state.nozzle_index)
             };
             if let Some(nozzle) = nozzle_up {
-                gbr_send_price_and_preset(byte, nozzle, price, &preset, backend);
+                if !gbr_send_price_and_preset(byte, nozzle, price, &preset, backend) {
+                    broadcast_status(byte, runtimes, events).await;
+                    return;
+                }
                 let _ = exchange_serial(backend, &gilbarco::authorize(byte));
                 let (product_id, product_name) = gbr_nozzle_product(&fp_cfg, cfg, nozzle);
                 let tx = CurrentTx {
@@ -2224,6 +2300,7 @@ async fn gbr_apply_command(
                     });
                     rt.state.price = price;
                     rt.set_last_preset(preset);
+                    rt.pre_auth_started_at = Some(Utc::now().timestamp_millis());
                 }
             }
             broadcast_status(byte, runtimes, events).await;
@@ -2244,16 +2321,22 @@ async fn gbr_apply_command(
             {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
+                    let nozzle_already_up = rt.state.status == FpStatus::NozzleUp;
                     rt.pre_auth = Some(PreAuthContext {
                         nozzle_index,
                         product_id,
                     });
                     rt.state.price = price;
-                    rt.state.nozzle_index = Some(nozzle_index);
-                    rt.state.product_id = Some(product_id);
-                    rt.state.status = FpStatus::PreAuthorized;
+                    if !nozzle_already_up {
+                        rt.state.nozzle_index = Some(nozzle_index);
+                        rt.state.product_id = Some(product_id);
+                    }
+                    if rt.state.status != FpStatus::NozzleUp {
+                        rt.state.status = FpStatus::PreAuthorized;
+                    }
                     rt.state.pre_auth_preset = Some(preset_label_str.clone());
                     rt.set_last_preset(preset);
+                    rt.pre_auth_started_at = Some(Utc::now().timestamp_millis());
                 }
             }
             let _ = events.send(WsEvent::PreAuthorized {
@@ -2384,11 +2467,7 @@ async fn gbr_apply_command(
             {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
-                    rt.pre_auth = None;
-                    rt.state.pre_auth_preset = None;
-                    if rt.state.status == FpStatus::PreAuthorized {
-                        rt.state.status = FpStatus::Idle;
-                    }
+                    rt.cancel_pre_auth();
                 }
             }
             let _ = events.send(WsEvent::PreAuthCancelled {

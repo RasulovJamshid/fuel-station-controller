@@ -195,7 +195,7 @@ pub fn parse_transaction_response(buf: &[u8]) -> Option<TransactionData> {
     if buf.len() < 33 || buf[0] != 0xFF {
         return None;
     }
-    if buf[16] != 0xF9 || buf[23] != 0xFA {
+    if buf[16] != 0xF9 || buf[23] != 0xFA || buf[30] != 0xFB || buf[32] != 0xF0 {
         return None;
     }
     Some(TransactionData {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { pausedInfo, statusTag } from "../types/api";
@@ -156,10 +156,65 @@ export function ClassicDispenserConsole({
   const consoleRef = useRef<HTMLDivElement>(null);
   const pumpButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const bottomPanelRef = useRef<HTMLDivElement>(null);
+
+  // Dynamically adapt to available vertical space with mathematical scaling
+  const [scale, setScale] = useState(1);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const container = consoleRef.current;
+    const content = contentRef.current;
+    if (!container || !content) return;
+
+    let rafId: number;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const containerH = container.clientHeight;
+        const naturalH = content.offsetHeight;
+        if (containerH > 0 && naturalH > 0) {
+          // If content is taller than available space, scale it down proportionally
+          const newScale = containerH / naturalH;
+          setScale(newScale < 1 ? newScale : 1);
+        }
+      });
+    });
+
+    observer.observe(container);
+    observer.observe(content);
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
+  }, [states.length]);
+
+  // Use the premium, highly readable style tokens. The scaling engine handles small screens!
+  const ui = {
+    topGridGap: "gap-2",
+    topCardPad: "p-3",
+    topCardText: "text-lg",
+    topCardLabel: "text-xs",
+    
+    thPad: "px-4 py-3",
+    tdPad: "px-3 py-2",
+    thText: "text-xs",
+    
+    inputHeight: "h-11",
+    inputText: "text-xl",
+    inputPad: "px-4",
+    
+    modeBtnPad: "px-3 py-2",
+    modeBtnText: "text-sm",
+    
+    btnHeight: "h-10",
+    btnPad: "px-4",
+    btnText: "text-sm",
+  };
+
   const focusControlClass =
-    "transition-all duration-200 focus-visible:border-accent-blue focus-visible:bg-bg-card focus-visible:ring-[3px] focus-visible:ring-accent-blue/20 focus-visible:ring-offset-0 focus-visible:outline-none";
+    "transition-all duration-200 focus:border-accent-blue focus:bg-bg-primary focus:ring-[4px] focus:ring-accent-blue/30 focus:ring-offset-0 focus:outline-none shadow-sm focus:shadow-md";
   const bottomControlWrapClass =
-    "group flex flex-col justify-end rounded-xl border border-border-primary/50 bg-bg-secondary/20 p-3 transition-all duration-300 hover:bg-bg-secondary/40 hover:shadow-md focus-within:-translate-y-0.5 focus-within:border-accent-blue/50 focus-within:bg-accent-blue/5 focus-within:shadow-[0_8px_24px_-8px_rgba(var(--color-accent-blue),0.2)]";
+    "group flex flex-col gap-1 rounded-xl border border-border-primary/50 bg-bg-secondary/20 p-3 transition-all duration-300 hover:bg-bg-secondary/40 hover:shadow-md focus-within:-translate-y-1 focus-within:border-accent-blue focus-within:bg-accent-blue/5 focus-within:shadow-[0_8px_24px_-8px_rgba(var(--color-accent-blue),0.4)]";
   const bottomLabelClass =
     "mb-1.5 block text-[10px] font-extrabold uppercase tracking-wider text-text-muted transition-colors duration-200 group-focus-within:text-accent-blue group-hover:text-text-secondary";
 
@@ -395,24 +450,26 @@ export function ClassicDispenserConsole({
     }
     if (e.key === "ArrowRight") {
       e.preventDefault();
-      selectPumpByOffset(state.fp_id, 1, currentControl, tableRowName);
+      if (!tableRowName) focusBottomControlByOffset(currentControl, 1);
+      else selectPumpByOffset(state.fp_id, 1, currentControl, tableRowName);
       return;
     }
     if (e.key === "ArrowLeft") {
       e.preventDefault();
-      selectPumpByOffset(state.fp_id, -1, currentControl, tableRowName);
+      if (!tableRowName) focusBottomControlByOffset(currentControl, -1);
+      else selectPumpByOffset(state.fp_id, -1, currentControl, tableRowName);
       return;
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       if (tableRowName) focusTableControlByOffset(tableRowName, state.fp_id, 1);
-      else focusBottomControlByOffset(currentControl, 1);
+      else selectPumpByOffset(state.fp_id, 1, currentControl);
       return;
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
       if (tableRowName) focusTableControlByOffset(tableRowName, state.fp_id, -1);
-      else focusBottomControlByOffset(currentControl, -1);
+      else selectPumpByOffset(state.fp_id, -1, currentControl);
     }
   }, [focusBottomControlByOffset, focusPump, focusTableControlByOffset, selectPumpByOffset, startPump]);
 
@@ -426,22 +483,22 @@ export function ClassicDispenserConsole({
     }
     if (e.key === "ArrowRight") {
       e.preventDefault();
-      selectPumpByOffset(state.fp_id, 1, currentControl);
+      focusBottomControlByOffset(currentControl, 1);
       return;
     }
     if (e.key === "ArrowLeft") {
       e.preventDefault();
-      selectPumpByOffset(state.fp_id, -1, currentControl);
+      focusBottomControlByOffset(currentControl, -1);
       return;
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      focusBottomControlByOffset(currentControl, 1);
+      selectPumpByOffset(state.fp_id, 1, currentControl);
       return;
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
-      focusBottomControlByOffset(currentControl, -1);
+      selectPumpByOffset(state.fp_id, -1, currentControl);
     }
   }, [focusBottomControlByOffset, focusPump, selectPumpByOffset]);
 
@@ -506,9 +563,7 @@ export function ClassicDispenserConsole({
     const positionActive = positionActiveByFp.get(state.fp_id) ?? true;
     const meta = getMeta(state, defaultAuthMode, positionActive);
     const paused = meta.paused;
-    const baseClass = compact
-      ? "h-8 px-3 text-[11px] rounded-lg"
-      : "h-10 px-4 text-sm rounded-xl";
+    const baseClass = `${ui.btnHeight} ${ui.btnPad} ${ui.btnText} rounded-md`;
     const cls = `${baseClass} w-full flex-1 font-black uppercase tracking-wider outline-none transition-colors duration-200 active:brightness-95 focus-visible:ring-[3px] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none`;
 
     if (meta.canAuthorize) {
@@ -622,9 +677,7 @@ export function ClassicDispenserConsole({
             data-classic-control={keyboardControls ? `mode-${mode}` : undefined}
             onClick={() => setDraft(state.fp_id, { mode })}
             onKeyDown={keyboardControls ? (e) => handleControlNavKeyDown(state, e) : undefined}
-              className={`flex-1 rounded-md px-2 py-2 font-black uppercase outline-none transition-all duration-200 ${focusControlClass} ${
-              compact ? "text-[11px]" : "text-sm"
-            } ${
+              className={`flex-1 rounded transition-all duration-200 outline-none ${ui.modeBtnPad} ${ui.modeBtnText} font-black uppercase ${focusControlClass} ${
               draft?.mode === mode
                 ? "bg-accent-blue text-text-inverse shadow-[0_2px_8px_rgba(var(--color-accent-blue),0.3)] scale-100"
                 : "text-text-muted hover:bg-bg-secondary hover:text-text-primary scale-95 hover:scale-100"
@@ -688,26 +741,26 @@ export function ClassicDispenserConsole({
           onKeyDown={(e) => handlePumpKeyDown(state, e)}
           className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-inset"
         >
-          <div className={`flex items-center justify-between gap-2 border-b border-border-primary/25 px-3 py-2 ${statusClass(meta)}`}>
-            <span className="text-lg font-black">{pumpNumber(state)}</span>
-            <span className="truncate text-[10px] font-black uppercase tracking-wider">{classicStatusLabel(meta, t)}</span>
+          <div className={`flex items-center justify-between border-b border-border-primary/25 ${ui.topCardPad} ${statusClass(meta)}`}>
+            <span className={`${ui.topCardText} font-black`}>{pumpNumber(state)}</span>
+            <span className={`truncate ${ui.topCardLabel} font-black uppercase tracking-wider`}>{classicStatusLabel(meta, t)}</span>
           </div>
-          <div className="grid grid-cols-2 gap-2 bg-bg-primary/20 p-3 font-mono tabular-nums">
+          <div className={`grid grid-cols-2 bg-bg-primary/20 ${ui.topGridGap} ${ui.topCardPad} font-mono tabular-nums`}>
             <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-wider text-text-muted">{t("classic.currentLiters")}</p>
-              <p className="truncate text-xl font-black text-text-primary">{(meta.paused?.stopped_volume ?? state.volume).toFixed(2)}</p>
+              <p className={`${ui.topCardLabel} font-extrabold uppercase tracking-wider text-text-muted`}>{t("classic.currentLiters")}</p>
+              <p className={`truncate ${ui.topCardText} font-black text-text-primary`}>{(meta.paused?.stopped_volume ?? state.volume).toFixed(2)}</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-extrabold uppercase tracking-wider text-text-muted">{t("classic.currentAmount")}</p>
-              <p className="truncate text-xl font-black text-accent-blue">{fmtSum.format(meta.paused?.stopped_amount ?? state.amount)}</p>
+              <p className={`${ui.topCardLabel} font-extrabold uppercase tracking-wider text-text-muted`}>{t("classic.currentAmount")}</p>
+              <p className={`truncate ${ui.topCardText} font-black text-accent-blue`}>{fmtSum.format(meta.paused?.stopped_amount ?? state.amount)}</p>
             </div>
           </div>
         </button>
-        <div className="flex items-center justify-between gap-2 border-t border-border-primary/20 bg-bg-secondary/20 px-3 py-1.5 text-xs">
+        <div className={`flex items-center justify-between border-t border-border-primary/20 bg-bg-secondary/20 ${ui.topGridGap} ${ui.topCardPad} ${ui.topCardLabel}`}>
           <span className="min-w-0 truncate font-bold text-text-secondary">{nozzle?.product_name ?? state.product_name ?? "--"}</span>
           <span className="shrink-0 font-mono font-bold text-text-primary">{fmtSum.format(nozzle?.price ?? state.price ?? 0)}</span>
         </div>
-        <div className="border-t border-border-primary/20 bg-bg-secondary/10 px-3 py-2">
+        <div className={`border-t border-border-primary/20 bg-bg-secondary/10 ${ui.topCardPad}`}>
           {renderAction(state, true)}
         </div>
       </div>
@@ -718,29 +771,38 @@ export function ClassicDispenserConsole({
     <div
       ref={consoleRef}
       onKeyDownCapture={handleConsoleKeyDownCapture}
-      className="classic-console flex h-full min-h-0 flex-col gap-3 rounded-2xl bg-bg-primary text-text-primary"
+      className="classic-console relative h-full min-h-0 w-full overflow-hidden rounded-2xl bg-bg-primary text-text-primary"
     >
       <div
-        className="grid shrink-0 gap-2"
-        style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(states.length, 1), 8)}, minmax(11rem, 1fr))` }}
+        ref={contentRef}
+        className="flex flex-col gap-3 origin-top-left absolute top-0 left-0"
+        style={{
+          transform: `scale(${scale})`,
+          width: scale < 1 ? `${100 / scale}%` : "100%",
+          height: "max-content",
+        }}
+      >
+      <div
+        className={`grid shrink-0 ${ui.topGridGap}`}
+        style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(states.length, 1), 8)}, minmax(0, 1fr))` }}
       >
         {states.map(renderPumpTile)}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border-primary/50 bg-bg-card/40 backdrop-blur-md shadow-inner">
-        <table className="w-full min-w-[1100px] border-collapse text-center text-xs">
+      <div className="rounded-xl border border-border-primary/50 bg-bg-card/40 backdrop-blur-md shadow-inner">
+        <table className="w-full table-fixed border-collapse text-center text-xs">
           <thead>
-            <tr className="bg-bg-secondary/60 text-[11px] font-black uppercase tracking-wider text-text-secondary backdrop-blur-sm">
-              <th className="sticky left-0 z-20 w-40 border-b border-r border-border-primary/40 bg-bg-secondary/90 px-4 py-4 text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] align-bottom">
-                <div className="pb-2 text-text-muted font-bold tracking-wider uppercase">{t("classic.field")}</div>
+            <tr className={`bg-bg-secondary/60 ${ui.thText} font-black uppercase tracking-wider text-text-secondary backdrop-blur-sm`}>
+              <th className={`sticky left-0 z-20 w-32 border-b border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] align-bottom`}>
+                <div className="pb-1 text-text-muted font-bold tracking-wider uppercase">{t("classic.field")}</div>
               </th>
               {states.map((state) => (
-                  <th key={state.fp_id} className={`border-b border-border-primary/40 px-3 py-3 align-bottom min-w-[13rem] ${centerHeaderClass(state.fp_id)}`}>
+                  <th key={state.fp_id} className={`border-b border-border-primary/40 ${ui.thPad} align-bottom ${centerHeaderClass(state.fp_id)}`}>
                     <button
                       type="button"
                       onClick={() => onSelectFp(state.fp_id)}
                       onKeyDown={(e) => handlePumpKeyDown(state, e)}
-                      className={`w-full rounded-lg px-3 py-2 font-black tracking-wider transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-accent-blue ${
+                      className={`w-full rounded ${ui.thPad} ${ui.thText} font-black tracking-wider transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-accent-blue truncate ${
                         state.fp_id === selected.fp_id ? "bg-accent-blue text-text-inverse shadow-[0_4px_12px_rgba(var(--color-accent-blue),0.3)] scale-105" : "bg-bg-card/50 text-text-primary hover:bg-bg-tertiary hover:scale-105"
                       }`}
                     >
@@ -752,12 +814,12 @@ export function ClassicDispenserConsole({
           </thead>
           <tbody className="divide-y divide-border-primary/30">
             <tr className="hover:bg-bg-primary/20 transition-colors">
-              <th className="sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 px-4 py-4 text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] text-sm">{t("classic.status")}</th>
+              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.status")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 return (
-                  <td key={state.fp_id} className={`px-2 py-3 ${centerCellClass(state.fp_id)}`}>
-                    <span className={`inline-flex min-w-[120px] justify-center rounded-lg border px-3 py-1.5 font-black uppercase tracking-wider ${statusClass(meta)}`}>
+                  <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`}>
+                    <span className={`inline-flex w-full min-w-0 justify-center rounded border ${ui.modeBtnPad} font-black uppercase tracking-wider ${ui.thText} truncate ${statusClass(meta)}`}>
                       {classicStatusLabel(meta, t)}
                     </span>
                   </td>
@@ -765,12 +827,12 @@ export function ClassicDispenserConsole({
               })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors">
-              <th className="sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 px-4 py-4 text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] text-sm">{t("classic.fuel")}</th>
+              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.fuel")}</th>
               {states.map((state) => {
                 const nozzles = (nozzlesByFp.get(state.fp_id) ?? []).filter((n) => n.active);
                 const draft = drafts[state.fp_id];
                 return (
-                  <td key={state.fp_id} className={`px-2 py-3 ${centerCellClass(state.fp_id)}`} data-table-row="fuel" data-fp-id={state.fp_id}>
+                  <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="fuel" data-fp-id={state.fp_id}>
                     <select
                       value={draft?.nozzleIndex ?? ""}
                       disabled={nozzles.length <= 1}
@@ -787,7 +849,7 @@ export function ClassicDispenserConsole({
                             : drafts[state.fp_id]?.amount,
                         });
                       }}
-                      className="h-11 w-full rounded-lg border border-border-primary/40 bg-bg-input px-3 text-sm font-bold text-text-primary transition-all duration-200 outline-none focus:border-accent-blue focus:ring-[3px] focus:ring-accent-blue/30 focus:ring-offset-0 disabled:opacity-60"
+                      className={`${ui.inputHeight} w-full rounded border border-border-primary/40 bg-bg-input ${ui.inputPad} ${ui.inputText} font-bold text-text-primary transition-all duration-200 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/30 focus:ring-offset-0 disabled:opacity-60`}
                     >
                       {nozzles.length > 1 ? <option value="">--</option> : null}
                       {nozzles.map((n) => (
@@ -799,17 +861,17 @@ export function ClassicDispenserConsole({
               })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors">
-              <th className="sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 px-4 py-4 text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] text-sm">{t("classic.price")}</th>
+              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.price")}</th>
               {states.map((state) => (
-                <td key={state.fp_id} className={`px-2 py-3 font-mono font-bold text-base ${centerCellClass(state.fp_id)}`}>
+                <td key={state.fp_id} className={`${ui.tdPad} font-mono font-bold ${ui.inputText} ${centerCellClass(state.fp_id)}`}>
                   <span className="text-accent-blue">{fmtSum.format(selectedNozzle(state)?.price ?? state.price ?? 0)}</span>
                 </td>
               ))}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors">
-              <th className="sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 px-4 py-4 text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] text-sm">{t("classic.orderLiters")}</th>
+              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.orderLiters")}</th>
               {states.map((state) => (
-                <td key={state.fp_id} className={`px-2 py-3 ${centerCellClass(state.fp_id)}`} data-table-row="volume" data-fp-id={state.fp_id}>
+                <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="volume" data-fp-id={state.fp_id}>
                   <input
                     type="text"
                     inputMode="decimal"
@@ -817,7 +879,7 @@ export function ClassicDispenserConsole({
                     onFocus={(e) => { onSelectFp(state.fp_id); e.currentTarget.select(); }}
                     onChange={(e) => updateVolume(state, e.target.value)}
                     onKeyDown={(e) => handleEditKeyDown(state, e)}
-                    className={`h-11 w-full rounded-lg border px-4 text-center text-lg font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-[3px] focus:ring-offset-0 ${
+                    className={`${ui.inputHeight} w-full rounded border ${ui.inputPad} text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-0 ${
                       drafts[state.fp_id]?.mode === "volume"
                         ? "border-accent-emerald/50 bg-accent-emerald/10 text-text-primary focus:ring-accent-emerald/30 focus:border-accent-emerald shadow-inner"
                         : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
@@ -827,9 +889,9 @@ export function ClassicDispenserConsole({
               ))}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors">
-              <th className="sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 px-4 py-4 text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] text-sm">{t("classic.orderAmount")}</th>
+              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.orderAmount")}</th>
               {states.map((state) => (
-                <td key={state.fp_id} className={`px-2 py-3 ${centerCellClass(state.fp_id)}`} data-table-row="amount" data-fp-id={state.fp_id}>
+                <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="amount" data-fp-id={state.fp_id}>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -837,7 +899,7 @@ export function ClassicDispenserConsole({
                     onFocus={(e) => { onSelectFp(state.fp_id); e.currentTarget.select(); }}
                     onChange={(e) => updateAmount(state, e.target.value)}
                     onKeyDown={(e) => handleEditKeyDown(state, e)}
-                    className={`h-11 w-full rounded-lg border px-4 text-center text-lg font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-[3px] focus:ring-offset-0 ${
+                    className={`${ui.inputHeight} w-full rounded border ${ui.inputPad} text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-0 ${
                       drafts[state.fp_id]?.mode === "amount"
                         ? "border-accent-emerald/50 bg-accent-emerald/10 text-text-primary focus:ring-accent-emerald/30 focus:border-accent-emerald shadow-inner"
                         : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
@@ -847,28 +909,28 @@ export function ClassicDispenserConsole({
               ))}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors">
-              <th className="sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 px-4 py-4 text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] text-sm">{t("classic.mode")}</th>
+              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.mode")}</th>
               {states.map((state) => (
-                <td key={state.fp_id} className={`px-2 py-3 ${centerCellClass(state.fp_id)}`} data-table-row="mode" data-fp-id={state.fp_id}>{renderModeButtons(state, true)}</td>
+                <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="mode" data-fp-id={state.fp_id}>{renderModeButtons(state, true)}</td>
               ))}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors">
-              <th className="sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 px-4 py-4 text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] text-sm">{t("classic.currentLiters")}</th>
+              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.currentLiters")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 return (
-                  <td key={state.fp_id} className={`px-2 py-3 font-mono font-black tabular-nums text-lg ${centerCellClass(state.fp_id)}`}>
+                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} ${centerCellClass(state.fp_id)}`}>
                     {(meta.paused?.stopped_volume ?? state.volume).toFixed(2)}
                   </td>
                 );
               })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors">
-              <th className="sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 px-4 py-4 text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] text-sm">{t("classic.currentAmount")}</th>
+              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.currentAmount")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 return (
-                  <td key={state.fp_id} className={`px-2 py-3 font-mono font-black tabular-nums text-lg text-accent-blue ${centerCellClass(state.fp_id)}`}>
+                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} text-accent-blue ${centerCellClass(state.fp_id)}`}>
                     {fmtSum.format(meta.paused?.stopped_amount ?? state.amount)}
                   </td>
                 );
@@ -882,9 +944,9 @@ export function ClassicDispenserConsole({
         ref={bottomPanelRef}
         className="shrink-0 overflow-hidden rounded-2xl border border-border-primary/50 bg-bg-card/80 backdrop-blur-xl shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] transition-all duration-300"
       >
-        <div className={`flex flex-wrap items-center justify-between gap-4 border-b border-border-primary/30 px-5 py-3 ${statusClass(selectedMeta)} bg-opacity-40`}>
+        <div className={`flex flex-wrap items-center justify-between border-b border-border-primary/30 ${ui.topCardPad} ${statusClass(selectedMeta)} bg-opacity-40`}>
           <div className="min-w-0">
-            <p className="truncate text-lg font-black uppercase tracking-wider text-text-primary">
+            <p className={`truncate ${ui.inputText} font-black uppercase tracking-wider text-text-primary`}>
               {t("classic.selectedPump")}: <span className="text-accent-blue">{pumpTitle(selected)}</span>
             </p>
             <p className="text-sm font-extrabold uppercase tracking-wide opacity-90">
@@ -893,36 +955,69 @@ export function ClassicDispenserConsole({
           </div>
           <div className="flex gap-8 text-right font-mono tabular-nums">
             <div>
-              <p className="text-[11px] font-extrabold uppercase tracking-wider opacity-70">{t("classic.currentLiters")}</p>
-              <p className="text-2xl font-black">{(selectedMeta.paused?.stopped_volume ?? selected.volume).toFixed(2)}</p>
+              <p className={`${ui.thText} font-extrabold uppercase tracking-wider opacity-70`}>{t("classic.currentLiters")}</p>
+              <p className={`${ui.inputText} font-black`}>{(selectedMeta.paused?.stopped_volume ?? selected.volume).toFixed(2)}</p>
             </div>
             <div>
-              <p className="text-[11px] font-extrabold uppercase tracking-wider opacity-70">{t("classic.currentAmount")}</p>
-              <p className="text-2xl font-black text-accent-blue">{fmtSum.format(selectedMeta.paused?.stopped_amount ?? selected.amount)}</p>
+              <p className={`${ui.thText} font-extrabold uppercase tracking-wider opacity-70`}>{t("classic.currentAmount")}</p>
+              <p className={`${ui.inputText} font-black text-accent-blue`}>{fmtSum.format(selectedMeta.paused?.stopped_amount ?? selected.amount)}</p>
             </div>
           </div>
         </div>
-        <div className="grid gap-3 p-4 lg:grid-cols-[1.1fr_1fr_1fr_auto]">
+        <div className={`grid ${ui.topGridGap} ${ui.topCardPad} lg:grid-cols-[1.1fr_1fr_1fr_auto]`}>
           <div className={`min-w-0 ${bottomControlWrapClass}`}>
             <label className={bottomLabelClass}>{t("classic.fuel")}</label>
-            <select
+            <div
               data-classic-control="fuel"
-              value={selectedDraft?.nozzleIndex ?? ""}
-              disabled={selectedNozzles.length <= 1}
-              onChange={(e) => setDraft(selected.fp_id, { nozzleIndex: e.target.value ? Number(e.target.value) : null })}
-              onKeyDown={(e) => handleEditKeyDown(selected, e)}
-              className={`h-11 w-full rounded-lg border border-border-primary/40 bg-bg-input/60 px-3 text-sm font-bold text-text-primary outline-none backdrop-blur-sm ${focusControlClass} disabled:opacity-60`}
+              tabIndex={selectedNozzles.length > 0 ? 0 : -1}
+              onKeyDown={(e) => {
+                if (e.key === " " || e.key === "Enter") {
+                  e.preventDefault();
+                  if (selectedNozzles.length > 1) {
+                    const currentIndex = selectedNozzles.findIndex((n) => n.index === selectedDraft?.nozzleIndex);
+                    const next = selectedNozzles[(currentIndex + 1) % selectedNozzles.length];
+                    if (next) setDraft(selected.fp_id, { nozzleIndex: next.index });
+                  }
+                } else {
+                  handleEditKeyDown(selected, e);
+                }
+              }}
+              className={`flex-1 min-h-0 w-full flex gap-1 rounded border border-border-primary/40 bg-bg-input/60 p-1 outline-none backdrop-blur-sm transition-all duration-200 ${focusControlClass} ${selectedNozzles.length <= 1 ? "opacity-80" : "cursor-pointer"}`}
             >
-              {selectedNozzles.length > 1 ? <option value="">--</option> : null}
-              {selectedNozzles.map((n) => (
-                <option key={n.index} value={n.index}>{n.product_name}</option>
-              ))}
-            </select>
-            <p className="mt-2 truncate text-xs font-bold tracking-wide text-text-muted">
-              {selectedProduct
-                ? `${t("pumpForm.nozzleLabel", { n: selectedProduct.index })} · ${fmtSum.format(selectedProduct.price)}`
-                : t("classic.noActiveProducts")}
-            </p>
+              {selectedNozzles.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-xs font-bold tracking-wide text-text-muted">
+                  {t("classic.noActiveProducts")}
+                </div>
+              ) : (
+                selectedNozzles.map((n) => {
+                  const isActive = selectedDraft?.nozzleIndex === n.index;
+                  return (
+                    <button
+                      key={n.index}
+                      type="button"
+                      tabIndex={-1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDraft(selected.fp_id, { nozzleIndex: n.index });
+                        e.currentTarget.parentElement?.focus();
+                      }}
+                      className={`flex-1 flex flex-col justify-center items-center min-h-0 min-w-0 rounded transition-all duration-300 outline-none ${
+                        isActive
+                          ? "bg-accent-blue border border-accent-blue/50 text-text-inverse shadow-[0_4px_12px_rgba(var(--color-accent-blue),0.4)]"
+                          : "bg-transparent text-text-primary hover:bg-bg-secondary"
+                      }`}
+                    >
+                      <span className={`font-black uppercase tracking-wider truncate px-1 w-full text-center ${ui.inputText}`}>
+                        {n.product_name}
+                      </span>
+                      <span className="text-[10px] font-mono opacity-80 truncate px-1 w-full text-center">
+                        {fmtSum.format(n.price)}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
           <div className={bottomControlWrapClass}>
             <label className={bottomLabelClass}>{t("classic.orderLiters")}</label>
@@ -934,7 +1029,7 @@ export function ClassicDispenserConsole({
               onChange={(e) => updateVolume(selected, e.target.value)}
               onFocus={(e) => e.currentTarget.select()}
               onKeyDown={(e) => handleEditKeyDown(selected, e)}
-              className={`h-11 w-full rounded-lg border border-border-primary/40 bg-bg-input/60 px-4 text-center font-mono text-xl font-black text-text-primary outline-none backdrop-blur-sm ${focusControlClass}`}
+              className={`flex-1 min-h-0 w-full rounded border border-border-primary/40 bg-bg-input/60 ${ui.inputPad} text-center font-mono ${ui.inputText} font-black text-text-primary outline-none backdrop-blur-sm ${focusControlClass}`}
             />
           </div>
           <div className={bottomControlWrapClass}>
@@ -947,17 +1042,18 @@ export function ClassicDispenserConsole({
               onChange={(e) => updateAmount(selected, e.target.value)}
               onFocus={(e) => e.currentTarget.select()}
               onKeyDown={(e) => handleEditKeyDown(selected, e)}
-              className={`h-11 w-full rounded-lg border border-border-primary/40 bg-bg-input/60 px-4 text-center font-mono text-xl font-black text-text-primary outline-none backdrop-blur-sm ${focusControlClass}`}
+              className={`flex-1 min-h-0 w-full rounded border border-border-primary/40 bg-bg-input/60 ${ui.inputPad} text-center font-mono ${ui.inputText} font-black text-text-primary outline-none backdrop-blur-sm ${focusControlClass}`}
             />
           </div>
           <div className={`${bottomControlWrapClass} flex min-w-64 flex-col justify-end gap-3`}>
             <span className={bottomLabelClass}>{t("classic.mode")}</span>
-            {renderModeButtons(selected, false, true)}
+            {renderModeButtons(selected, false, false)}
             <div className="mt-1 flex" data-classic-control="action" onKeyDown={(e) => handleControlNavKeyDown(selected, e)}>
               {renderAction(selected)}
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

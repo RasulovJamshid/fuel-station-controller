@@ -1,6 +1,6 @@
 # AZS Manager — Production Deployment Guide
 
-Domain: **fuelstation.ung.uz**
+Domain: **fillingstation.ung.uz**
 Stack: Next.js frontend · NestJS backend · PostgreSQL (TimescaleDB) · Redis · nginx
 
 ---
@@ -173,10 +173,10 @@ JWT_SECRET=<64-char-hex>
 JWT_REFRESH_SECRET=<64-char-hex-different>
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-CORS_ORIGINS=https://fuelstation.ung.uz
+CORS_ORIGINS=https://fillingstation.ung.uz
 
 # ── Seed admin (first start only) ────────────────────────────────────────────
-SEED_ADMIN_EMAIL=admin@fuelstation.ung.uz
+SEED_ADMIN_EMAIL=admin@fillingstation.ung.uz
 SEED_ADMIN_PASSWORD=<strong-password>
 
 # ── Optional Timescale hypertable setup ──────────────────────────────────────
@@ -289,7 +289,7 @@ openssl rsa  -noout -modulus -in ssl/privkey.pem   | md5sum
 openssl x509 -noout -subject -issuer -dates -in ssl/fullchain.pem
 
 # Expected output includes:
-#   subject= ... fuelstation.ung.uz
+#   subject= ... fillingstation.ung.uz
 #   notAfter= <future date>
 ```
 
@@ -359,9 +359,9 @@ azs_redis           running (healthy)
 ### API health checks
 
 ```bash
-curl -s https://fuelstation.ung.uz/api/health/live | python3 -m json.tool
-curl -s https://fuelstation.ung.uz/api/health/ready | python3 -m json.tool
-curl -s https://fuelstation.ung.uz/api/health/metrics | python3 -m json.tool
+curl -s https://fillingstation.ung.uz/api/health/live | python3 -m json.tool
+curl -s https://fillingstation.ung.uz/api/health/ready | python3 -m json.tool
+curl -s https://fillingstation.ung.uz/api/health/metrics | python3 -m json.tool
 ```
 
 ```json
@@ -372,14 +372,14 @@ curl -s https://fuelstation.ung.uz/api/health/metrics | python3 -m json.tool
 
 ### Frontend
 
-Open `https://fuelstation.ung.uz` in a browser — you should see the login page.
+Open `https://fillingstation.ung.uz` in a browser — you should see the login page.
 
 ### Test login via API
 
 ```bash
-curl -s -X POST https://fuelstation.ung.uz/api/v1/auth/login \
+curl -s -X POST https://fillingstation.ung.uz/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@fuelstation.ung.uz","password":"YOUR_SEED_PASSWORD"}' \
+  -d '{"email":"admin@fillingstation.ung.uz","password":"YOUR_SEED_PASSWORD"}' \
   | python3 -m json.tool
 ```
 
@@ -387,7 +387,7 @@ You should receive an `accessToken`.
 
 ### TLS rating (optional)
 
-Visit `https://www.ssllabs.com/ssltest/analyze.html?d=fuelstation.ung.uz` — expect **A** or **A+**.
+Visit `https://www.ssllabs.com/ssltest/analyze.html?d=fillingstation.ung.uz` — expect **A** or **A+**.
 
 ---
 
@@ -624,7 +624,7 @@ The script creates a compressed dump, restores it into `azs_restore`, and checks
 After creating a station and copying its API key, send one small transaction batch:
 
 ```bash
-curl -s -X POST https://fuelstation.ung.uz/api/v1/sync/STATION_ID \
+curl -s -X POST https://fillingstation.ung.uz/api/v1/sync/STATION_ID \
   -H "Content-Type: application/json" \
   -H "X-Api-Key: STATION_API_KEY" \
   -d '{
@@ -693,7 +693,7 @@ docker compose logs frontend | grep "ready"
 
 ### WebSocket not connecting
 
-1. `CORS_ORIGINS` in `.env` must be exactly `https://fuelstation.ung.uz` (no trailing slash).
+1. `CORS_ORIGINS` in `.env` must be exactly `https://fillingstation.ung.uz` (no trailing slash).
 2. nginx `/dashboard` block must have `proxy_set_header Upgrade $http_upgrade;`.
 3. Browser DevTools → Network → WS tab for the error.
 
@@ -738,7 +738,7 @@ docker compose logs -f backend
 docker compose logs -f frontend
 
 # ── Health ────────────────────────────────────────────────────────────────────
-curl https://fuelstation.ung.uz/api/health
+curl https://fillingstation.ung.uz/api/health
 
 # ── Database ──────────────────────────────────────────────────────────────────
 docker compose exec postgres psql -U azs -d azs_manager

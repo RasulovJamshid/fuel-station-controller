@@ -7,26 +7,26 @@
 @layer base {
   :root {
     /* ── Light Theme ─────────────────────────────────────────────────────────
-       Optimized for long work hours. Uses a soft Slate-based palette to reduce
-       glare while maintaining crisp contrast for text and interactive elements.
+       Industrial Light Theme. Uses a deeper, cooler Slate palette to reduce
+       blinding brightness and provide strong structural contrast for cards and tables.
     ──────────────────────────────────────────────────────────────────────── */
-    --color-bg-primary:   241 245 249;   /* Soft Slate 50 — reduces eye strain */
-    --color-bg-secondary: 226 232 240;   /* Slate 200 — for header/nav surface */
-    --color-bg-tertiary:  203 213 225;   /* Slate 300 — active/pressed states */
-    --color-bg-card:      255 255 255;   /* Pure white — pops off page bg */
-    --color-bg-header:    248 250 252;   /* Crisp header bg */
-    --color-bg-meter:     226 232 240;   /* Meter track on card */
+    --color-bg-primary:   226 232 240;   /* Slate 200 — Solid industrial gray background */
+    --color-bg-secondary: 203 213 225;   /* Slate 300 — For headers and distinct zones */
+    --color-bg-tertiary:  148 163 184;   /* Slate 400 — Strong active/pressed states */
+    --color-bg-card:      255 255 255;   /* Pure white — Cards pop strongly against the bg */
+    --color-bg-header:    241 245 249;   /* Slate 50 — Crisp header */
+    --color-bg-meter:     203 213 225;   /* Slate 300 — Meter track */
     --color-bg-input:     255 255 255;   /* Pure white inputs */
 
     /* Text — Maximum readability */
     --color-text-primary:    15  23  42;  /* Slate 900 — Near black */
     --color-text-secondary:  51  65  85;  /* Slate 700 */
     --color-text-tertiary:   71  85 105;  /* Slate 600 */
-    --color-text-muted:     100 116 139;  /* Slate 500 */
+    --color-text-muted:      71  85 105;  /* Slate 600 — Darkened for better contrast on gray bg */
     --color-text-inverse:   255 255 255;
 
-    --color-border-primary:   203 213 225;  /* Slate 300 */
-    --color-border-secondary: 226 232 240;  /* Slate 200 */
+    --color-border-primary:   148 163 184;  /* Slate 400 — Strong, visible structural lines */
+    --color-border-secondary: 203 213 225;  /* Slate 300 */
     --color-border-focus:      37  99 235;  /* Blue 600 */
 
     /* Accents — Tailwind 600s for optimal contrast on light backgrounds */

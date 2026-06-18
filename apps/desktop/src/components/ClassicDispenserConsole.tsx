@@ -214,7 +214,7 @@ export function ClassicDispenserConsole({
   const focusControlClass =
     "transition-all duration-200 focus:border-accent-blue focus:bg-bg-primary focus:ring-[4px] focus:ring-accent-blue/30 focus:ring-offset-0 focus:outline-none shadow-sm focus:shadow-md";
   const bottomControlWrapClass =
-    "group flex flex-col gap-1 rounded-xl border border-border-primary/50 bg-bg-secondary/20 p-3 transition-all duration-300 hover:bg-bg-secondary/40 hover:shadow-md focus-within:-translate-y-1 focus-within:border-accent-blue focus-within:bg-accent-blue/5 focus-within:shadow-[0_8px_24px_-8px_rgba(var(--color-accent-blue),0.4)]";
+    "group flex flex-col gap-1 rounded-none border border-border-primary/50 bg-bg-secondary/20 p-3 transition-all duration-300 hover:bg-bg-secondary/40 hover:shadow-md focus-within:-translate-y-1 focus-within:border-accent-blue focus-within:bg-accent-blue/5 focus-within:shadow-[0_8px_24px_-8px_rgba(var(--color-accent-blue),0.4)]";
   const bottomLabelClass =
     "mb-1.5 block text-[10px] font-extrabold uppercase tracking-wider text-text-muted transition-colors duration-200 group-focus-within:text-accent-blue group-hover:text-text-secondary";
 
@@ -563,7 +563,7 @@ export function ClassicDispenserConsole({
     const positionActive = positionActiveByFp.get(state.fp_id) ?? true;
     const meta = getMeta(state, defaultAuthMode, positionActive);
     const paused = meta.paused;
-    const baseClass = `${ui.btnHeight} ${ui.btnPad} ${ui.btnText} rounded-md`;
+    const baseClass = `${ui.btnHeight} ${ui.btnPad} ${ui.btnText} rounded-none`;
     const cls = `${baseClass} w-full flex-1 font-black uppercase tracking-wider outline-none transition-colors duration-200 active:brightness-95 focus-visible:ring-[3px] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none`;
 
     if (meta.canAuthorize) {
@@ -572,7 +572,7 @@ export function ClassicDispenserConsole({
           type="button"
           disabled={!shiftRequired && !buildRequest(state)}
           onClick={() => startPump(state)}
-          className={`${cls} border border-accent-emerald/80 bg-accent-emerald text-text-inverse hover:bg-accent-emerald-light shadow-[0_4px_12px_rgba(var(--color-accent-emerald),0.2)] focus-visible:ring-accent-emerald/30`}
+          className={`${cls} border border-accent-emerald/80 bg-accent-emerald text-white hover:bg-accent-emerald-light shadow-[0_4px_12px_rgba(var(--color-accent-emerald),0.2)] focus-visible:ring-accent-emerald/30`}
         >
           {shiftRequired ? t("classic.startShift") : t("classic.start")}
         </button>
@@ -584,7 +584,7 @@ export function ClassicDispenserConsole({
           <button
             type="button"
             onClick={() => onStop(state.fp_id)}
-            className={`${cls} border border-accent-amber/80 bg-accent-amber text-text-inverse hover:bg-accent-amber-light shadow-[0_4px_12px_rgba(var(--color-accent-amber),0.2)] focus-visible:ring-accent-amber/30`}
+            className={`${cls} border border-accent-amber/80 bg-accent-amber text-white hover:bg-accent-amber-light shadow-[0_4px_12px_rgba(var(--color-accent-amber),0.2)] focus-visible:ring-accent-amber/30`}
           >
             {useStopMode ? t("classic.stop") : t("classic.pause")}
           </button>
@@ -592,7 +592,7 @@ export function ClassicDispenserConsole({
             <button
               type="button"
               onClick={() => onCancel(state.fp_id)}
-              className={`${cls} border border-accent-red/80 bg-accent-red text-text-inverse hover:bg-accent-red-light shadow-[0_4px_12px_rgba(var(--color-accent-red),0.2)] focus-visible:ring-accent-red/30`}
+              className={`${cls} border border-accent-red/80 bg-accent-red text-white hover:bg-accent-red-light shadow-[0_4px_12px_rgba(var(--color-accent-red),0.2)] focus-visible:ring-accent-red/30`}
             >
               {t("classic.cancel")}
             </button>
@@ -629,7 +629,7 @@ export function ClassicDispenserConsole({
             <button
               type="button"
               onClick={() => onResumeFill(state.fp_id, paused.stopped_tx_id)}
-              className={`${cls} border border-accent-emerald/80 bg-accent-emerald text-text-inverse hover:bg-accent-emerald-light shadow-[0_4px_12px_rgba(var(--color-accent-emerald),0.2)] focus-visible:ring-accent-emerald/30`}
+              className={`${cls} border border-accent-emerald/80 bg-accent-emerald text-white hover:bg-accent-emerald-light shadow-[0_4px_12px_rgba(var(--color-accent-emerald),0.2)] focus-visible:ring-accent-emerald/30`}
             >
               {t("classic.resume")}
             </button>
@@ -648,7 +648,7 @@ export function ClassicDispenserConsole({
           <button
             type="button"
             onClick={() => onContinueFill(state.fp_id, paused.stopped_tx_id)}
-            className={`${cls} border border-accent-emerald/80 bg-accent-emerald text-text-inverse hover:bg-accent-emerald-light shadow-[0_4px_12px_rgba(var(--color-accent-emerald),0.2)] focus-visible:ring-accent-emerald/30`}
+            className={`${cls} border border-accent-emerald/80 bg-accent-emerald text-white hover:bg-accent-emerald-light shadow-[0_4px_12px_rgba(var(--color-accent-emerald),0.2)] focus-visible:ring-accent-emerald/30`}
           >
             {t("classic.continue")}
           </button>
@@ -669,7 +669,7 @@ export function ClassicDispenserConsole({
     const draft = drafts[state.fp_id];
     const modes: FillMode[] = ["full", "volume", "amount"];
     return (
-      <div className="flex items-center justify-center gap-1.5 rounded-lg border border-border-primary/40 bg-bg-input/50 p-1 backdrop-blur-sm">
+      <div className="flex items-center justify-center gap-1.5 rounded-none border border-border-primary/40 bg-bg-input/50 p-1 backdrop-blur-sm">
         {modes.map((mode) => (
           <button
             key={mode}
@@ -677,9 +677,9 @@ export function ClassicDispenserConsole({
             data-classic-control={keyboardControls ? `mode-${mode}` : undefined}
             onClick={() => setDraft(state.fp_id, { mode })}
             onKeyDown={keyboardControls ? (e) => handleControlNavKeyDown(state, e) : undefined}
-              className={`flex-1 rounded transition-all duration-200 outline-none ${ui.modeBtnPad} ${ui.modeBtnText} font-black uppercase ${focusControlClass} ${
+              className={`flex-1 rounded-none transition-all duration-200 outline-none ${ui.modeBtnPad} ${ui.modeBtnText} font-black uppercase ${focusControlClass} ${
               draft?.mode === mode
-                ? "bg-accent-blue text-text-inverse shadow-[0_2px_8px_rgba(var(--color-accent-blue),0.3)] scale-100"
+                ? "bg-accent-blue text-white shadow-[0_2px_8px_rgba(var(--color-accent-blue),0.3)] scale-100"
                 : "text-text-muted hover:bg-bg-secondary hover:text-text-primary scale-95 hover:scale-100"
             }`}
           >
@@ -696,7 +696,7 @@ export function ClassicDispenserConsole({
 
   if (states.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center rounded-lg border border-border-primary bg-bg-card text-sm font-semibold text-text-muted">
+      <div className="flex h-full items-center justify-center rounded-none border border-border-primary bg-bg-card text-sm font-semibold text-text-muted">
         {t("classic.noDispensers")}
       </div>
     );
@@ -724,7 +724,7 @@ export function ClassicDispenserConsole({
     return (
       <div
         key={state.fp_id}
-        className={`min-w-0 overflow-hidden rounded-xl border bg-bg-card/80 text-left shadow-card backdrop-blur-sm transition-all duration-200 ${
+        className={`min-w-0 overflow-hidden rounded-none border bg-bg-card/80 text-left shadow-card backdrop-blur-sm transition-all duration-200 ${
           selectedCard
             ? "border-accent-blue ring-2 ring-accent-blue/20 shadow-card-hover"
             : "border-border-primary/60 hover:border-accent-blue/40"
@@ -771,7 +771,7 @@ export function ClassicDispenserConsole({
     <div
       ref={consoleRef}
       onKeyDownCapture={handleConsoleKeyDownCapture}
-      className="classic-console relative h-full min-h-0 w-full overflow-hidden rounded-2xl bg-bg-primary text-text-primary"
+      className="classic-console relative h-full min-h-0 w-full overflow-hidden rounded-none bg-bg-primary text-text-primary"
     >
       <div
         ref={contentRef}
@@ -784,34 +784,19 @@ export function ClassicDispenserConsole({
       >
       <div
         className={`grid shrink-0 ${ui.topGridGap}`}
-        style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(states.length, 1), 8)}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `8rem repeat(${Math.min(Math.max(states.length, 1), 8)}, minmax(0, 1fr))` }}
       >
+        <div className="hidden sm:flex flex-col items-center justify-center opacity-40 p-2 text-center text-[10px] font-bold uppercase tracking-widest text-text-muted">
+           {/* Structural spacer to align pump cards with the table below */}
+        </div>
         {states.map(renderPumpTile)}
       </div>
 
-      <div className="rounded-xl border border-border-primary/50 bg-bg-card/40 backdrop-blur-md shadow-inner">
+      <div className="rounded-none border border-border-primary/50 bg-bg-card/40 backdrop-blur-md shadow-inner">
         <table className="w-full table-fixed border-collapse text-center text-xs">
-          <thead>
-            <tr className={`bg-bg-secondary/60 ${ui.thText} font-black uppercase tracking-wider text-text-secondary backdrop-blur-sm`}>
-              <th className={`sticky left-0 z-20 w-32 border-b border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] align-bottom`}>
-                <div className="pb-1 text-text-muted font-bold tracking-wider uppercase">{t("classic.field")}</div>
-              </th>
-              {states.map((state) => (
-                  <th key={state.fp_id} className={`border-b border-border-primary/40 ${ui.thPad} align-bottom ${centerHeaderClass(state.fp_id)}`}>
-                    <button
-                      type="button"
-                      onClick={() => onSelectFp(state.fp_id)}
-                      onKeyDown={(e) => handlePumpKeyDown(state, e)}
-                      className={`w-full rounded ${ui.thPad} ${ui.thText} font-black tracking-wider transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-accent-blue truncate ${
-                        state.fp_id === selected.fp_id ? "bg-accent-blue text-text-inverse shadow-[0_4px_12px_rgba(var(--color-accent-blue),0.3)] scale-105" : "bg-bg-card/50 text-text-primary hover:bg-bg-tertiary hover:scale-105"
-                      }`}
-                    >
-                      {pumpTitle(state)}
-                    </button>
-                  </th>
-              ))}
-            </tr>
-          </thead>
+          <colgroup>
+            <col className="w-32" />
+          </colgroup>
           <tbody className="divide-y divide-border-primary/30">
             <tr className="hover:bg-bg-primary/20 transition-colors">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.status")}</th>
@@ -819,7 +804,7 @@ export function ClassicDispenserConsole({
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 return (
                   <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`}>
-                    <span className={`inline-flex w-full min-w-0 justify-center rounded border ${ui.modeBtnPad} font-black uppercase tracking-wider ${ui.thText} truncate ${statusClass(meta)}`}>
+                    <span className={`inline-flex w-full min-w-0 justify-center rounded-none border ${ui.modeBtnPad} font-black uppercase tracking-wider ${ui.thText} truncate ${statusClass(meta)}`}>
                       {classicStatusLabel(meta, t)}
                     </span>
                   </td>
@@ -849,7 +834,7 @@ export function ClassicDispenserConsole({
                             : drafts[state.fp_id]?.amount,
                         });
                       }}
-                      className={`${ui.inputHeight} w-full rounded border border-border-primary/40 bg-bg-input ${ui.inputPad} ${ui.inputText} font-bold text-text-primary transition-all duration-200 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/30 focus:ring-offset-0 disabled:opacity-60`}
+                      className={`${ui.inputHeight} w-full rounded-none border border-border-primary/40 bg-bg-input ${ui.inputPad} ${ui.inputText} font-bold text-text-primary transition-all duration-200 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/30 focus:ring-offset-0 disabled:opacity-60`}
                     >
                       {nozzles.length > 1 ? <option value="">--</option> : null}
                       {nozzles.map((n) => (
@@ -879,7 +864,7 @@ export function ClassicDispenserConsole({
                     onFocus={(e) => { onSelectFp(state.fp_id); e.currentTarget.select(); }}
                     onChange={(e) => updateVolume(state, e.target.value)}
                     onKeyDown={(e) => handleEditKeyDown(state, e)}
-                    className={`${ui.inputHeight} w-full rounded border ${ui.inputPad} text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-0 ${
+                    className={`${ui.inputHeight} w-full rounded-none border ${ui.inputPad} text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-0 ${
                       drafts[state.fp_id]?.mode === "volume"
                         ? "border-accent-emerald/50 bg-accent-emerald/10 text-text-primary focus:ring-accent-emerald/30 focus:border-accent-emerald shadow-inner"
                         : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
@@ -899,7 +884,7 @@ export function ClassicDispenserConsole({
                     onFocus={(e) => { onSelectFp(state.fp_id); e.currentTarget.select(); }}
                     onChange={(e) => updateAmount(state, e.target.value)}
                     onKeyDown={(e) => handleEditKeyDown(state, e)}
-                    className={`${ui.inputHeight} w-full rounded border ${ui.inputPad} text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-0 ${
+                    className={`${ui.inputHeight} w-full rounded-none border ${ui.inputPad} text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-0 ${
                       drafts[state.fp_id]?.mode === "amount"
                         ? "border-accent-emerald/50 bg-accent-emerald/10 text-text-primary focus:ring-accent-emerald/30 focus:border-accent-emerald shadow-inner"
                         : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
@@ -942,7 +927,7 @@ export function ClassicDispenserConsole({
 
       <div
         ref={bottomPanelRef}
-        className="shrink-0 overflow-hidden rounded-2xl border border-border-primary/50 bg-bg-card/80 backdrop-blur-xl shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] transition-all duration-300"
+        className="shrink-0 overflow-hidden rounded-none border border-border-primary/50 bg-bg-card/80 backdrop-blur-xl shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] transition-all duration-300"
       >
         <div className={`flex flex-wrap items-center justify-between border-b border-border-primary/30 ${ui.topCardPad} ${statusClass(selectedMeta)} bg-opacity-40`}>
           <div className="min-w-0">
@@ -982,7 +967,7 @@ export function ClassicDispenserConsole({
                   handleEditKeyDown(selected, e);
                 }
               }}
-              className={`flex-1 min-h-0 w-full flex gap-1 rounded border border-border-primary/40 bg-bg-input/60 p-1 outline-none backdrop-blur-sm transition-all duration-200 ${focusControlClass} ${selectedNozzles.length <= 1 ? "opacity-80" : "cursor-pointer"}`}
+              className={`flex-1 min-h-0 w-full flex gap-1 rounded-none border border-border-primary/40 bg-bg-input/60 p-1 outline-none backdrop-blur-sm transition-all duration-200 ${focusControlClass} ${selectedNozzles.length <= 1 ? "opacity-80" : "cursor-pointer"}`}
             >
               {selectedNozzles.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-xs font-bold tracking-wide text-text-muted">
@@ -1001,9 +986,9 @@ export function ClassicDispenserConsole({
                         setDraft(selected.fp_id, { nozzleIndex: n.index });
                         e.currentTarget.parentElement?.focus();
                       }}
-                      className={`flex-1 flex flex-col justify-center items-center min-h-0 min-w-0 rounded transition-all duration-300 outline-none ${
+                      className={`flex-1 flex flex-col justify-center items-center min-h-0 min-w-0 rounded-none transition-all duration-300 outline-none ${
                         isActive
-                          ? "bg-accent-blue border border-accent-blue/50 text-text-inverse shadow-[0_4px_12px_rgba(var(--color-accent-blue),0.4)]"
+                          ? "bg-accent-blue border border-accent-blue/50 text-white shadow-[0_4px_12px_rgba(var(--color-accent-blue),0.4)]"
                           : "bg-transparent text-text-primary hover:bg-bg-secondary"
                       }`}
                     >
@@ -1029,7 +1014,7 @@ export function ClassicDispenserConsole({
               onChange={(e) => updateVolume(selected, e.target.value)}
               onFocus={(e) => e.currentTarget.select()}
               onKeyDown={(e) => handleEditKeyDown(selected, e)}
-              className={`flex-1 min-h-0 w-full rounded border border-border-primary/40 bg-bg-input/60 ${ui.inputPad} text-center font-mono ${ui.inputText} font-black text-text-primary outline-none backdrop-blur-sm ${focusControlClass}`}
+              className={`flex-1 min-h-0 w-full rounded-none border border-border-primary/40 bg-bg-input/60 ${ui.inputPad} text-center font-mono ${ui.inputText} font-black text-text-primary outline-none backdrop-blur-sm ${focusControlClass}`}
             />
           </div>
           <div className={bottomControlWrapClass}>
@@ -1042,7 +1027,7 @@ export function ClassicDispenserConsole({
               onChange={(e) => updateAmount(selected, e.target.value)}
               onFocus={(e) => e.currentTarget.select()}
               onKeyDown={(e) => handleEditKeyDown(selected, e)}
-              className={`flex-1 min-h-0 w-full rounded border border-border-primary/40 bg-bg-input/60 ${ui.inputPad} text-center font-mono ${ui.inputText} font-black text-text-primary outline-none backdrop-blur-sm ${focusControlClass}`}
+              className={`flex-1 min-h-0 w-full rounded-none border border-border-primary/40 bg-bg-input/60 ${ui.inputPad} text-center font-mono ${ui.inputText} font-black text-text-primary outline-none backdrop-blur-sm ${focusControlClass}`}
             />
           </div>
           <div className={`${bottomControlWrapClass} flex min-w-64 flex-col justify-end gap-3`}>

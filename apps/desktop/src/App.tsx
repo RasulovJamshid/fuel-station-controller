@@ -444,6 +444,16 @@ export default function App() {
     }
   }, [workspaceTab, visibleSorted, focusDispenserByIndex, activatePrimaryAction]);
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "F12") return;
+      e.preventDefault();
+      setWorkspaceTab((current) => current === "history" ? "dispensers" : "history");
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   // Global keydown: lets the user start navigating with arrow keys immediately,
   // without first having to click a dispenser card.
   useEffect(() => {

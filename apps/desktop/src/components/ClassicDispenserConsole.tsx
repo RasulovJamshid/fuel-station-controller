@@ -6,10 +6,45 @@ import type { AuthMode, FpState, FpStatus, NozzleSnapshot } from "../types/api";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 
 const fmtSum = new Intl.NumberFormat("uz-UZ");
+const MAX_VOLUME_LITERS = 999;
+const FALLBACK_MAX_AMOUNT_SUM = 999_000_000;
 
 function parseNum(s: string): number {
   const v = Number.parseFloat(s.replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(v) ? v : 0;
+}
+
+function sanitizeVolumeInput(raw: string): string {
+  const cleaned = raw.replace(",", ".").replace(/[^\d.]/g, "");
+  const [head = "", ...tail] = cleaned.split(".");
+  const whole = head.slice(0, 4);
+  const fraction = tail.join("").slice(0, 3);
+  if (cleaned.includes(".")) return `${whole || "0"}.${fraction}`;
+  return whole;
+}
+
+function sanitizeAmountInput(raw: string): string {
+  return raw.replace(/\D/g, "").slice(0, 9);
+}
+
+function maxAmountForNozzle(nozzle: NozzleSnapshot | null): number {
+  return nozzle?.price && nozzle.price > 0
+    ? Math.floor(nozzle.price * MAX_VOLUME_LITERS)
+    : FALLBACK_MAX_AMOUNT_SUM;
+}
+
+function isValidVolume(raw: string): boolean {
+  const value = parseNum(raw);
+  return value > 0 && value <= MAX_VOLUME_LITERS;
+}
+
+function isValidAmount(raw: string, nozzle: NozzleSnapshot | null): boolean {
+  const value = parseNum(raw);
+  return value > 0 && value <= maxAmountForNozzle(nozzle);
+}
+
+function selectInputValue(input: HTMLInputElement) {
+  window.requestAnimationFrame(() => input.select());
 }
 
 function pumpTitle(state: FpState): string {
@@ -19,6 +54,10 @@ function pumpTitle(state: FpState): string {
 
 function pumpNumber(state: FpState): string {
   return state.fp_id.match(/\d+/)?.[0] ?? state.fp_id.slice(0, 2).toUpperCase();
+}
+
+function productColorFor(state: FpState, nozzle: NozzleSnapshot | null | undefined): string {
+  return nozzle?.product_color ?? state.product_color ?? "#64748b";
 }
 
 type PumpDraft = {
@@ -156,6 +195,7 @@ export function ClassicDispenserConsole({
   const consoleRef = useRef<HTMLDivElement>(null);
   const pumpButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const bottomPanelRef = useRef<HTMLDivElement>(null);
+  const fullFillArmedRef = useRef<{ fpId: string; at: number } | null>(null);
 
   // Dynamically adapt to available vertical space with mathematical scaling
   const [scale, setScale] = useState(1);
@@ -213,10 +253,12 @@ export function ClassicDispenserConsole({
 
   const focusControlClass =
     "transition-all duration-200 focus:border-accent-blue focus:bg-bg-primary focus:ring-[4px] focus:ring-accent-blue/30 focus:ring-offset-0 focus:outline-none shadow-sm focus:shadow-md";
+  const invalidInputClass =
+    "border-accent-red/70 bg-accent-red/10 text-text-primary focus:border-accent-red focus:ring-accent-red/30";
   const bottomControlWrapClass =
     "group flex flex-col gap-1 rounded-none border border-border-primary/50 bg-bg-secondary/20 p-3 transition-all duration-300 hover:bg-bg-secondary/40 hover:shadow-md focus-within:-translate-y-1 focus-within:border-accent-blue focus-within:bg-accent-blue/5 focus-within:shadow-[0_8px_24px_-8px_rgba(var(--color-accent-blue),0.4)]";
   const bottomLabelClass =
-    "mb-1.5 block text-[10px] font-extrabold uppercase tracking-wider text-text-muted transition-colors duration-200 group-focus-within:text-accent-blue group-hover:text-text-secondary";
+    "mb-1 block text-sm font-black uppercase tracking-wider text-text-secondary transition-colors duration-200 group-focus-within:text-accent-blue group-hover:text-text-primary";
 
   useEffect(() => {
     setDrafts((prev) => {
@@ -291,11 +333,11 @@ export function ClassicDispenserConsole({
     let limitValue: number | null = null;
     if (draft.mode === "volume") {
       const v = parseNum(draft.volume);
-      if (v <= 0) return null;
+      if (!isValidVolume(draft.volume)) return null;
       limitValue = v;
     } else if (draft.mode === "amount") {
       const a = parseNum(draft.amount);
-      if (a <= 0) return null;
+      if (!isValidAmount(draft.amount, nozzle)) return null;
       limitValue = a;
     }
     return {
@@ -345,7 +387,7 @@ export function ClassicDispenserConsole({
           ? control
           : control?.querySelector<HTMLElement>("button:not([disabled]), input:not([disabled]), select:not([disabled])");
       focusTarget?.focus();
-      if (focusTarget instanceof HTMLInputElement) focusTarget.select();
+      if (focusTarget instanceof HTMLInputElement) selectInputValue(focusTarget);
     });
   }, []);
 
@@ -379,7 +421,7 @@ export function ClassicDispenserConsole({
     if (!container) return;
     const focusTarget = container.matches("button,input,select") ? container : container.querySelector<HTMLElement>("button:not([disabled]), input:not([disabled]), select:not([disabled])");
     focusTarget?.focus();
-    if (focusTarget instanceof HTMLInputElement) focusTarget.select();
+    if (focusTarget instanceof HTMLInputElement) selectInputValue(focusTarget);
   }, []);
 
   const selectPumpByOffset = useCallback((fromFpId: string, offset: number, focusControlName?: string | null, tableRowName?: string | null) => {
@@ -396,7 +438,7 @@ export function ClassicDispenserConsole({
         const container = root?.querySelector<HTMLElement>(`[data-table-row='${tableRowName}'][data-fp-id='${next.fp_id}']`);
         const focusTarget = container?.matches("button,input,select") ? container : container?.querySelector<HTMLElement>("button:not([disabled]), input:not([disabled]), select:not([disabled])");
         focusTarget?.focus();
-        if (focusTarget instanceof HTMLInputElement) focusTarget.select();
+        if (focusTarget instanceof HTMLInputElement) selectInputValue(focusTarget);
       });
     } else {
       window.requestAnimationFrame(() => {
@@ -502,17 +544,103 @@ export function ClassicDispenserConsole({
     }
   }, [focusBottomControlByOffset, focusPump, selectPumpByOffset]);
 
+  const updateVolume = useCallback((state: FpState, raw: string) => {
+    const nextRaw = sanitizeVolumeInput(raw);
+    const nozzle = selectedNozzle(state);
+    const liters = parseNum(nextRaw);
+    setDraft(state.fp_id, {
+      mode: "volume",
+      volume: nextRaw,
+      amount: nozzle?.price && liters > 0 ? String(Math.round(liters * nozzle.price)) : drafts[state.fp_id]?.amount,
+    });
+  }, [drafts, selectedNozzle, setDraft]);
+
+  const updateAmount = useCallback((state: FpState, raw: string) => {
+    const nextRaw = sanitizeAmountInput(raw);
+    const nozzle = selectedNozzle(state);
+    const amount = parseNum(nextRaw);
+    setDraft(state.fp_id, {
+      mode: "amount",
+      amount: nextRaw,
+      volume: nozzle?.price && amount > 0 ? String(Math.round((amount / nozzle.price) * 10) / 10) : drafts[state.fp_id]?.volume,
+    });
+  }, [drafts, selectedNozzle, setDraft]);
+
+  const armFullFill = useCallback((state: FpState) => {
+    setDraft(state.fp_id, { mode: "full" });
+    fullFillArmedRef.current = { fpId: state.fp_id, at: Date.now() };
+    focusBottomControl("action");
+  }, [focusBottomControl, setDraft]);
+
+  const stopOrCancelSelected = useCallback((state: FpState) => {
+    const positionActive = positionActiveByFp.get(state.fp_id) ?? true;
+    const meta = getMeta(state, defaultAuthMode, positionActive);
+    if (meta.isDelivering || meta.isAuthorizing) {
+      onStop(state.fp_id);
+      return;
+    }
+    if (meta.hasActivePreAuth) {
+      onCancelPreAuth?.(state.fp_id);
+    }
+  }, [defaultAuthMode, onCancelPreAuth, onStop, positionActiveByFp]);
+
+  const cycleSelectedProduct = useCallback((state: FpState) => {
+    const nozzles = (nozzlesByFp.get(state.fp_id) ?? []).filter((n) => n.active);
+    if (nozzles.length <= 1) return;
+    const draft = drafts[state.fp_id];
+    const currentIndex = nozzles.findIndex((n) => n.index === draft?.nozzleIndex);
+    const next = nozzles[(currentIndex + 1 + nozzles.length) % nozzles.length];
+    if (!next) return;
+    const volume = draft?.volume ?? "10";
+    const amount = parseNum(volume) > 0 && next.price > 0
+      ? String(Math.round(parseNum(volume) * next.price))
+      : draft?.amount;
+    setDraft(state.fp_id, { nozzleIndex: next.index, amount });
+  }, [drafts, nozzlesByFp, setDraft]);
+
   const handleConsoleKeyDownCapture = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
-    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+    const handledKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "Delete", "Home", "Enter"];
+    if (!handledKeys.includes(e.key)) return;
     const selectedState = activeState ?? states[0];
     if (!selectedState) return;
 
+    if (e.key === "PageUp") {
+      e.preventDefault();
+      e.stopPropagation();
+      armFullFill(selectedState);
+      return;
+    }
+
+    if (e.key === "Enter") {
+      const armed = fullFillArmedRef.current;
+      if (!armed || armed.fpId !== selectedState.fp_id || Date.now() - armed.at > 5000) return;
+      e.preventDefault();
+      e.stopPropagation();
+      fullFillArmedRef.current = null;
+      startPump(selectedState);
+      return;
+    }
+
+    if (e.key === "Delete") {
+      e.preventDefault();
+      e.stopPropagation();
+      stopOrCancelSelected(selectedState);
+      return;
+    }
+
+    if (e.key === "Home") {
+      e.preventDefault();
+      e.stopPropagation();
+      cycleSelectedProduct(selectedState);
+      return;
+    }
+
     const target = e.target as HTMLElement | null;
-    
+
     // Prevent hijacking ArrowLeft/ArrowRight when editing text inputs
     const isInput = target?.tagName === "INPUT" && (target as HTMLInputElement).type === "text";
     if (isInput && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
-      return; 
+      return;
     }
 
     const currentControl = target?.closest<HTMLElement>("[data-classic-control]")?.dataset.classicControl ?? null;
@@ -537,27 +665,17 @@ export function ClassicDispenserConsole({
     }
     if (tableRowName) focusTableControlByOffset(tableRowName, selectedState.fp_id, -1);
     else focusBottomControlByOffset(currentControl, -1);
-  }, [activeState, focusBottomControlByOffset, focusTableControlByOffset, selectPumpByOffset, states]);
-
-  const updateVolume = useCallback((state: FpState, raw: string) => {
-    const nozzle = selectedNozzle(state);
-    const liters = parseNum(raw);
-    setDraft(state.fp_id, {
-      mode: "volume",
-      volume: raw,
-      amount: nozzle?.price && liters > 0 ? String(Math.round(liters * nozzle.price)) : drafts[state.fp_id]?.amount,
-    });
-  }, [drafts, selectedNozzle, setDraft]);
-
-  const updateAmount = useCallback((state: FpState, raw: string) => {
-    const nozzle = selectedNozzle(state);
-    const amount = parseNum(raw);
-    setDraft(state.fp_id, {
-      mode: "amount",
-      amount: raw,
-      volume: nozzle?.price && amount > 0 ? String(Math.round((amount / nozzle.price) * 10) / 10) : drafts[state.fp_id]?.volume,
-    });
-  }, [drafts, selectedNozzle, setDraft]);
+  }, [
+    activeState,
+    armFullFill,
+    cycleSelectedProduct,
+    focusBottomControlByOffset,
+    focusTableControlByOffset,
+    selectPumpByOffset,
+    startPump,
+    states,
+    stopOrCancelSelected,
+  ]);
 
   const renderAction = (state: FpState, compact = false) => {
     const positionActive = positionActiveByFp.get(state.fp_id) ?? true;
@@ -706,6 +824,10 @@ export function ClassicDispenserConsole({
   const selectedNozzles = (nozzlesByFp.get(selected.fp_id) ?? []).filter((n) => n.active);
   const selectedDraft = drafts[selected.fp_id];
   const selectedProduct = selectedNozzle(selected);
+  const selectedProductColor = productColorFor(selected, selectedProduct);
+  const selectedMaxAmount = maxAmountForNozzle(selectedProduct);
+  const selectedVolumeInvalid = selectedDraft?.mode === "volume" && !isValidVolume(selectedDraft.volume);
+  const selectedAmountInvalid = selectedDraft?.mode === "amount" && !isValidAmount(selectedDraft.amount, selectedProduct);
   const selectedPositionActive = positionActiveByFp.get(selected.fp_id) ?? true;
   const selectedMeta = getMeta(selected, defaultAuthMode, selectedPositionActive);
   const centerCellClass = (fpId: string) =>
@@ -720,6 +842,7 @@ export function ClassicDispenserConsole({
   const renderPumpTile = (state: FpState) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
     const nozzle = selectedNozzle(state);
+    const productColor = productColorFor(state, nozzle);
     const selectedCard = state.fp_id === selected.fp_id;
     return (
       <div
@@ -756,8 +879,14 @@ export function ClassicDispenserConsole({
             </div>
           </div>
         </button>
-        <div className={`flex items-center justify-between border-t border-border-primary/20 bg-bg-secondary/20 ${ui.topGridGap} ${ui.topCardPad} ${ui.topCardLabel}`}>
-          <span className="min-w-0 truncate font-bold text-text-secondary">{nozzle?.product_name ?? state.product_name ?? "--"}</span>
+        <div
+          className={`flex items-center justify-between border-t border-border-primary/20 bg-bg-secondary/20 ${ui.topGridGap} ${ui.topCardPad} ${ui.topCardLabel}`}
+          style={{ boxShadow: `inset 0 3px 0 ${productColor}` }}
+        >
+          <span className="flex min-w-0 items-center gap-1.5 truncate font-bold text-text-secondary">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-border-primary/40" style={{ backgroundColor: productColor }} />
+            <span className="min-w-0 truncate">{nozzle?.product_name ?? state.product_name ?? "--"}</span>
+          </span>
           <span className="shrink-0 font-mono font-bold text-text-primary">{fmtSum.format(nozzle?.price ?? state.price ?? 0)}</span>
         </div>
         <div className={`border-t border-border-primary/20 bg-bg-secondary/10 ${ui.topCardPad}`}>
@@ -816,31 +945,41 @@ export function ClassicDispenserConsole({
               {states.map((state) => {
                 const nozzles = (nozzlesByFp.get(state.fp_id) ?? []).filter((n) => n.active);
                 const draft = drafts[state.fp_id];
+                const activeNozzle = nozzles.find((n) => n.index === draft?.nozzleIndex) ?? null;
+                const activeColor = productColorFor(state, activeNozzle);
                 return (
                   <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="fuel" data-fp-id={state.fp_id}>
-                    <select
-                      value={draft?.nozzleIndex ?? ""}
-                      disabled={nozzles.length <= 1}
-                      onFocus={() => onSelectFp(state.fp_id)}
-                      onKeyDown={(e) => handleEditKeyDown(state, e)}
-                      onChange={(e) => {
-                        const nozzleIndex = e.target.value ? Number(e.target.value) : null;
-                        const nozzle = nozzles.find((n) => n.index === nozzleIndex);
-                        const volume = drafts[state.fp_id]?.volume ?? "10";
-                        setDraft(state.fp_id, {
-                          nozzleIndex,
-                          amount: nozzle?.price && parseNum(volume) > 0
-                            ? String(Math.round(parseNum(volume) * nozzle.price))
-                            : drafts[state.fp_id]?.amount,
-                        });
-                      }}
-                      className={`${ui.inputHeight} w-full rounded-none border border-border-primary/40 bg-bg-input ${ui.inputPad} ${ui.inputText} font-bold text-text-primary transition-all duration-200 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/30 focus:ring-offset-0 disabled:opacity-60`}
-                    >
-                      {nozzles.length > 1 ? <option value="">--</option> : null}
-                      {nozzles.map((n) => (
-                        <option key={n.index} value={n.index}>{n.product_name}</option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <span
+                        className="pointer-events-none absolute left-2 top-1/2 z-[1] h-3 w-3 -translate-y-1/2 rounded-full border border-border-primary/40"
+                        style={{ backgroundColor: activeColor }}
+                        aria-hidden
+                      />
+                      <select
+                        value={draft?.nozzleIndex ?? ""}
+                        disabled={nozzles.length <= 1}
+                        onFocus={() => onSelectFp(state.fp_id)}
+                        onKeyDown={(e) => handleEditKeyDown(state, e)}
+                        onChange={(e) => {
+                          const nozzleIndex = e.target.value ? Number(e.target.value) : null;
+                          const nozzle = nozzles.find((n) => n.index === nozzleIndex);
+                          const volume = drafts[state.fp_id]?.volume ?? "10";
+                          setDraft(state.fp_id, {
+                            nozzleIndex,
+                            amount: nozzle?.price && parseNum(volume) > 0
+                              ? String(Math.round(parseNum(volume) * nozzle.price))
+                              : drafts[state.fp_id]?.amount,
+                          });
+                        }}
+                        className={`${ui.inputHeight} w-full rounded-none border border-border-primary/40 bg-bg-input ${ui.inputPad} pl-7 ${ui.inputText} font-bold text-text-primary transition-all duration-200 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/30 focus:ring-offset-0 disabled:opacity-60`}
+                        style={{ boxShadow: `inset 0 3px 0 ${activeColor}` }}
+                      >
+                        {nozzles.length > 1 ? <option value="">--</option> : null}
+                        {nozzles.map((n) => (
+                          <option key={n.index} value={n.index}>{n.product_name}</option>
+                        ))}
+                      </select>
+                    </div>
                   </td>
                 );
               })}
@@ -855,43 +994,63 @@ export function ClassicDispenserConsole({
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.orderLiters")}</th>
-              {states.map((state) => (
-                <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="volume" data-fp-id={state.fp_id}>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={drafts[state.fp_id]?.volume ?? ""}
-                    onFocus={(e) => { onSelectFp(state.fp_id); e.currentTarget.select(); }}
-                    onChange={(e) => updateVolume(state, e.target.value)}
-                    onKeyDown={(e) => handleEditKeyDown(state, e)}
-                    className={`${ui.inputHeight} w-full rounded-none border ${ui.inputPad} text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-0 ${
-                      drafts[state.fp_id]?.mode === "volume"
-                        ? "border-accent-emerald/50 bg-accent-emerald/10 text-text-primary focus:ring-accent-emerald/30 focus:border-accent-emerald shadow-inner"
-                        : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
-                    }`}
-                  />
-                </td>
-              ))}
+              {states.map((state) => {
+                const draft = drafts[state.fp_id];
+                const invalid = draft?.mode === "volume" && !isValidVolume(draft.volume);
+                return (
+                  <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="volume" data-fp-id={state.fp_id}>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      aria-invalid={invalid}
+                      title={`1-${MAX_VOLUME_LITERS} L`}
+                      value={draft?.volume ?? ""}
+                      onFocus={(e) => { onSelectFp(state.fp_id); selectInputValue(e.currentTarget); }}
+                      onMouseUp={(e) => e.preventDefault()}
+                      onChange={(e) => updateVolume(state, e.target.value)}
+                      onKeyDown={(e) => handleEditKeyDown(state, e)}
+                      className={`${ui.inputHeight} w-full rounded-none border ${ui.inputPad} text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-0 ${
+                        invalid
+                          ? invalidInputClass
+                          : draft?.mode === "volume"
+                            ? "border-accent-emerald/50 bg-accent-emerald/10 text-text-primary focus:ring-accent-emerald/30 focus:border-accent-emerald shadow-inner"
+                            : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
+                      }`}
+                    />
+                  </td>
+                );
+              })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.orderAmount")}</th>
-              {states.map((state) => (
-                <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="amount" data-fp-id={state.fp_id}>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={drafts[state.fp_id]?.amount ?? ""}
-                    onFocus={(e) => { onSelectFp(state.fp_id); e.currentTarget.select(); }}
-                    onChange={(e) => updateAmount(state, e.target.value)}
-                    onKeyDown={(e) => handleEditKeyDown(state, e)}
-                    className={`${ui.inputHeight} w-full rounded-none border ${ui.inputPad} text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-0 ${
-                      drafts[state.fp_id]?.mode === "amount"
-                        ? "border-accent-emerald/50 bg-accent-emerald/10 text-text-primary focus:ring-accent-emerald/30 focus:border-accent-emerald shadow-inner"
-                        : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
-                    }`}
-                  />
-                </td>
-              ))}
+              {states.map((state) => {
+                const draft = drafts[state.fp_id];
+                const nozzle = selectedNozzle(state);
+                const maxAmount = maxAmountForNozzle(nozzle);
+                const invalid = draft?.mode === "amount" && !isValidAmount(draft.amount, nozzle);
+                return (
+                  <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="amount" data-fp-id={state.fp_id}>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      aria-invalid={invalid}
+                      title={`1-${fmtSum.format(maxAmount)}`}
+                      value={draft?.amount ?? ""}
+                      onFocus={(e) => { onSelectFp(state.fp_id); selectInputValue(e.currentTarget); }}
+                      onMouseUp={(e) => e.preventDefault()}
+                      onChange={(e) => updateAmount(state, e.target.value)}
+                      onKeyDown={(e) => handleEditKeyDown(state, e)}
+                      className={`${ui.inputHeight} w-full rounded-none border ${ui.inputPad} text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none focus:ring-2 focus:ring-offset-0 ${
+                        invalid
+                          ? invalidInputClass
+                          : draft?.mode === "amount"
+                            ? "border-accent-emerald/50 bg-accent-emerald/10 text-text-primary focus:ring-accent-emerald/30 focus:border-accent-emerald shadow-inner"
+                            : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
+                      }`}
+                    />
+                  </td>
+                );
+              })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.mode")}</th>
@@ -934,8 +1093,13 @@ export function ClassicDispenserConsole({
             <p className={`truncate ${ui.inputText} font-black uppercase tracking-wider text-text-primary`}>
               {t("classic.selectedPump")}: <span className="text-accent-blue">{pumpTitle(selected)}</span>
             </p>
-            <p className="text-sm font-extrabold uppercase tracking-wide opacity-90">
-              {t("classic.liveStatus")}: {selectedMeta.tag}
+            <p className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide opacity-90">
+              <span>{t("classic.liveStatus")}: {classicStatusLabel(selectedMeta, t)}</span>
+              <span className="h-1 w-1 rounded-full bg-current opacity-50" aria-hidden />
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full border border-border-primary/40" style={{ backgroundColor: selectedProductColor }} />
+                <span className="truncate">{selectedProduct?.product_name ?? selected.product_name ?? "--"}</span>
+              </span>
             </p>
           </div>
           <div className="flex gap-8 text-right font-mono tabular-nums">
@@ -988,10 +1152,16 @@ export function ClassicDispenserConsole({
                       }}
                       className={`flex-1 flex flex-col justify-center items-center min-h-0 min-w-0 rounded-none transition-all duration-300 outline-none ${
                         isActive
-                          ? "bg-accent-blue border border-accent-blue/50 text-white shadow-[0_4px_12px_rgba(var(--color-accent-blue),0.4)]"
-                          : "bg-transparent text-text-primary hover:bg-bg-secondary"
+                          ? "border text-white shadow-[0_4px_12px_rgb(0_0_0/0.22)]"
+                          : "border border-transparent bg-transparent text-text-primary hover:bg-bg-secondary"
                       }`}
+                      style={isActive ? { backgroundColor: n.product_color, borderColor: n.product_color } : undefined}
                     >
+                      <span
+                        className={`mb-1 h-1.5 w-8 rounded-full ${isActive ? "bg-white/80" : ""}`}
+                        style={!isActive ? { backgroundColor: n.product_color } : undefined}
+                        aria-hidden
+                      />
                       <span className={`font-black uppercase tracking-wider truncate px-1 w-full text-center ${ui.inputText}`}>
                         {n.product_name}
                       </span>
@@ -1010,12 +1180,22 @@ export function ClassicDispenserConsole({
               data-classic-control="volume"
               type="text"
               inputMode="decimal"
+              aria-invalid={selectedVolumeInvalid}
+              title={`1-${MAX_VOLUME_LITERS} L`}
               value={selectedDraft?.volume ?? ""}
               onChange={(e) => updateVolume(selected, e.target.value)}
-              onFocus={(e) => e.currentTarget.select()}
+              onFocus={(e) => selectInputValue(e.currentTarget)}
+              onMouseUp={(e) => e.preventDefault()}
               onKeyDown={(e) => handleEditKeyDown(selected, e)}
-              className={`flex-1 min-h-0 w-full rounded-none border border-border-primary/40 bg-bg-input/60 ${ui.inputPad} text-center font-mono ${ui.inputText} font-black text-text-primary outline-none backdrop-blur-sm ${focusControlClass}`}
+              className={`flex-1 min-h-0 w-full rounded-none border ${ui.inputPad} text-center font-mono ${ui.inputText} font-black text-text-primary outline-none backdrop-blur-sm ${
+                selectedVolumeInvalid
+                  ? invalidInputClass
+                  : `border-border-primary/40 bg-bg-input/60 ${focusControlClass}`
+              }`}
             />
+            <span className={`text-[10px] font-bold ${selectedVolumeInvalid ? "text-accent-red" : "text-text-muted"}`}>
+              1-{MAX_VOLUME_LITERS} L
+            </span>
           </div>
           <div className={bottomControlWrapClass}>
             <label className={bottomLabelClass}>{t("classic.orderAmount")}</label>
@@ -1023,12 +1203,22 @@ export function ClassicDispenserConsole({
               data-classic-control="amount"
               type="text"
               inputMode="numeric"
+              aria-invalid={selectedAmountInvalid}
+              title={`1-${fmtSum.format(selectedMaxAmount)}`}
               value={selectedDraft?.amount ?? ""}
               onChange={(e) => updateAmount(selected, e.target.value)}
-              onFocus={(e) => e.currentTarget.select()}
+              onFocus={(e) => selectInputValue(e.currentTarget)}
+              onMouseUp={(e) => e.preventDefault()}
               onKeyDown={(e) => handleEditKeyDown(selected, e)}
-              className={`flex-1 min-h-0 w-full rounded-none border border-border-primary/40 bg-bg-input/60 ${ui.inputPad} text-center font-mono ${ui.inputText} font-black text-text-primary outline-none backdrop-blur-sm ${focusControlClass}`}
+              className={`flex-1 min-h-0 w-full rounded-none border ${ui.inputPad} text-center font-mono ${ui.inputText} font-black text-text-primary outline-none backdrop-blur-sm ${
+                selectedAmountInvalid
+                  ? invalidInputClass
+                  : `border-border-primary/40 bg-bg-input/60 ${focusControlClass}`
+              }`}
             />
+            <span className={`text-[10px] font-bold ${selectedAmountInvalid ? "text-accent-red" : "text-text-muted"}`}>
+              1-{fmtSum.format(selectedMaxAmount)}
+            </span>
           </div>
           <div className={`${bottomControlWrapClass} flex min-w-64 flex-col justify-end gap-3`}>
             <span className={bottomLabelClass}>{t("classic.mode")}</span>

@@ -457,6 +457,7 @@ pub fn exchange_serial(backend: &SerialBackend, out: &[u8]) -> Result<Vec<u8>> {
     }
 }
 
+
 /// Write-only serial send — used for short ACK frames (`C0 FA`) where the
 /// protocol does not expect an immediate response from the dispenser.
 pub fn write_serial(backend: &SerialBackend, out: &[u8]) -> Result<()> {
@@ -1652,8 +1653,9 @@ async fn run_gilbarco_poll_loop(
     use gilbarco::GilbarcoStatus;
 
     let mut addrs: Vec<u8> = cfg.active_addresses();
-    // Flag each address for a price sync on its first Idle observation.
-    let mut pending_prices: HashMap<u8, bool> = addrs.iter().map(|&a| (a, true)).collect();
+    // Startup captures show totals reads for active addresses. Price writes only
+    // happen as part of an operator-created authorization transaction.
+    let mut pending_startup_totals: HashMap<u8, u8> = addrs.iter().map(|&a| (a, 2)).collect();
 
     let mut interval = tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -1665,22 +1667,12 @@ async fn run_gilbarco_poll_loop(
                 cfg = next_cfg;
                 disp_by_byte = active_positions_by_byte(&cfg);
                 addrs = cfg.active_addresses();
-                pending_prices = addrs.iter().map(|&a| (a, true)).collect();
+                pending_startup_totals = addrs.iter().map(|&a| (a, 2)).collect();
                 interval = tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
                 interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 continue 'poll_loop;
             }
-            gbr_apply_command(
-                &cfg,
-                &runtimes,
-                &events,
-                &backend,
-                cmd,
-                &mut pending_prices,
-                &pool,
-                &shifts,
-            )
-            .await;
+            gbr_apply_command(&cfg, &runtimes, &events, &backend, cmd, &pool, &shifts).await;
         }
 
         for byte in addrs.clone() {
@@ -1691,23 +1683,13 @@ async fn run_gilbarco_poll_loop(
                     cfg = next_cfg;
                     disp_by_byte = active_positions_by_byte(&cfg);
                     addrs = cfg.active_addresses();
-                    pending_prices = addrs.iter().map(|&a| (a, true)).collect();
+                    pending_startup_totals = addrs.iter().map(|&a| (a, 2)).collect();
                     interval =
                         tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
                     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                     continue 'poll_loop;
                 }
-                gbr_apply_command(
-                    &cfg,
-                    &runtimes,
-                    &events,
-                    &backend,
-                    cmd,
-                    &mut pending_prices,
-                    &pool,
-                    &shifts,
-                )
-                .await;
+                gbr_apply_command(&cfg, &runtimes, &events, &backend, cmd, &pool, &shifts).await;
             }
 
             let fp_cfg = match disp_by_byte.get(&byte) {
@@ -1743,7 +1725,7 @@ async fn run_gilbarco_poll_loop(
                 }
             }
 
-            let gbr_st = gilbarco::parse_status_byte(byte, resp[0]);
+            let gbr_st = gbr_parse_status_response(byte, &resp);
 
             match gbr_st {
                 GilbarcoStatus::Offline => {
@@ -1786,10 +1768,10 @@ async fn run_gilbarco_poll_loop(
                         continue;
                     }
 
-                    // Price sync on first idle observation.
-                    if pending_prices.get(&byte).copied().unwrap_or(false) {
-                        if gbr_send_set_price(byte, fp_cfg, &runtimes, &backend).await {
-                            pending_prices.insert(byte, false);
+                    if let Some(remaining) = pending_startup_totals.get_mut(&byte) {
+                        if *remaining > 0 {
+                            let _ = gbr_sync_totals(byte, fp_cfg, &backend, &runtimes).await;
+                            *remaining -= 1;
                         }
                     }
 
@@ -1814,10 +1796,7 @@ async fn run_gilbarco_poll_loop(
                         if let Some(rt) = map.get_mut(&byte) {
                             if !matches!(
                                 rt.state.status,
-                                FpStatus::Idle
-                                    | FpStatus::Offline
-                                    | FpStatus::Done
-                                    | FpStatus::Stopped { .. }
+                                FpStatus::Done | FpStatus::Stopped { .. }
                             ) {
                                 rt.state.status = FpStatus::Idle;
                                 rt.state.volume = 0.0;
@@ -1840,13 +1819,19 @@ async fn run_gilbarco_poll_loop(
                             .unwrap_or(false)
                     };
 
-                    let Some(nozzle) = gbr_query_nozzle_from_all(byte, &backend) else {
+                    let nozzle = gbr_query_nozzle_from_all(byte, &backend).unwrap_or_else(|| {
+                        let fallback = fp_cfg
+                            .active_nozzles()
+                            .first()
+                            .map(|n| n.index)
+                            .unwrap_or(1);
                         warn!(
                             addr = format_args!("0x{byte:02X}"),
-                            "Gilbarco: nozzle lifted but GetAll did not identify nozzle"
+                            fallback_nozzle = fallback,
+                            "Gilbarco: nozzle lifted but GetAll did not identify nozzle; using configured fallback"
                         );
-                        continue;
-                    };
+                        fallback
+                    });
                     let (product_id, product_name) = gbr_nozzle_product(fp_cfg, &cfg, nozzle);
                     let price = {
                         let map = runtimes.read().await;
@@ -2058,6 +2043,17 @@ async fn run_gilbarco_poll_loop(
 
 /// Identify the lifted nozzle from the 9600 `F0` all-pump/all-nozzle frame.
 fn gbr_query_nozzle_from_all(addr: u8, backend: &SerialBackend) -> Option<u8> {
+    // Old 9600 captures show the POS first entering the address-scoped nozzle
+    // query (`0x20|addr`, wait for `D0|addr`, then send `FF`). The following
+    // `F0` all-pump request then returns the frame with the active nozzle index.
+    let ack = exchange_serial(backend, &gilbarco::command_mode(addr)).ok()?;
+    let expected = 0xD0 | (addr & 0x0F);
+    if !ack.contains(&expected) {
+        return None;
+    }
+    std::thread::sleep(Duration::from_millis(15));
+    let _ = write_serial(backend, &[0xFF]);
+    std::thread::sleep(Duration::from_millis(95));
     let resp = exchange_serial(backend, &gilbarco::get_all()).ok()?;
     let (pump, nozzle) = gilbarco::parse_all_nozzle_response(&resp)?;
     (pump == (addr & 0x0F)).then_some(nozzle)
@@ -2120,26 +2116,97 @@ fn gbr_expect_nonempty_response(
 }
 
 fn gbr_send_no_response_command(backend: &SerialBackend, frame: &[u8], action: &'static str) {
-    match exchange_serial(backend, frame) {
-        Ok(resp) if resp.is_empty() => {}
-        Ok(resp) => debug!(
-            action,
-            rx = %gbr_hex(&resp),
-            "Gilbarco: no-response command returned bytes"
-        ),
-        Err(e) => warn!(?e, action, "Gilbarco: no-response command exchange failed"),
+    if let Err(e) = write_serial(backend, frame) {
+        warn!(?e, action, "Gilbarco: no-response command write failed");
     }
+}
+
+async fn gbr_sync_totals(
+    byte: u8,
+    fp_cfg: &FuelingPositionConfig,
+    backend: &SerialBackend,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+) -> bool {
+    let Some(resp) =
+        gbr_expect_nonempty_response(backend, &gilbarco::get_totals(byte), "startup_totals")
+    else {
+        return false;
+    };
+
+    let nozzle_index = {
+        let map = runtimes.read().await;
+        map.get(&byte)
+            .and_then(|rt| rt.state.nozzle_index)
+            .or_else(|| fp_cfg.active_nozzles().first().map(|n| n.index))
+            .unwrap_or(1)
+    };
+
+    let Some(totals) = gilbarco::parse_totals_response(&resp, nozzle_index) else {
+        warn!(
+            byte,
+            nozzle_index,
+            rx = %gbr_hex(&resp),
+            "Gilbarco: startup totals parse failed"
+        );
+        return true;
+    };
+
+    let mut map = runtimes.write().await;
+    if let Some(rt) = map.get_mut(&byte) {
+        rt.state.pump_total_nozzle_index = Some(totals.nozzle_index);
+        rt.state.pump_total_volume = Some(totals.volume_total_raw as f64 / 1000.0);
+        rt.state.pump_total_amount = Some(totals.amount_total_raw * 10);
+        rt.state.pump_total_price = Some((totals.unit_price_raw * 10).min(u32::MAX as u64) as u32);
+    }
+    true
+}
+
+fn gbr_enter_command_mode(byte: u8, backend: &SerialBackend, action: &'static str) -> bool {
+    let Some(resp) = gbr_expect_nonempty_response(backend, &gilbarco::command_mode(byte), action)
+    else {
+        return false;
+    };
+    let expected = 0xD0 | (byte & 0x0F);
+    if resp.contains(&expected) {
+        return true;
+    }
+    warn!(
+        byte,
+        action,
+        expected = format_args!("{expected:02X}"),
+        rx = %gbr_hex(&resp),
+        "Gilbarco: command-mode ack mismatch"
+    );
+    false
+}
+
+fn gbr_send_command_mode_frame(
+    byte: u8,
+    backend: &SerialBackend,
+    frame: &[u8],
+    action: &'static str,
+) -> bool {
+    if !gbr_enter_command_mode(byte, backend, action) {
+        return false;
+    }
+    gbr_send_no_response_command(backend, frame, action);
+    true
+}
+
+fn gbr_parse_status_response(byte: u8, resp: &[u8]) -> gilbarco::GilbarcoStatus {
+    resp.iter()
+        .rev()
+        .map(|&b| gilbarco::parse_status_byte(byte, b))
+        .find(|st| *st != gilbarco::GilbarcoStatus::Offline)
+        .unwrap_or(gilbarco::GilbarcoStatus::Offline)
 }
 
 fn gbr_confirm_status(byte: u8, backend: &SerialBackend, action: &'static str) -> bool {
     let Some(resp) = gbr_expect_nonempty_response(backend, &gilbarco::status(byte), action) else {
         return false;
     };
-    match resp.first().copied() {
-        Some(b) if gilbarco::parse_status_byte(byte, b) != gilbarco::GilbarcoStatus::Offline => {
-            true
-        }
-        _ => {
+    match gbr_parse_status_response(byte, &resp) {
+        gilbarco::GilbarcoStatus::Offline => {
             warn!(
                 byte,
                 action,
@@ -2148,6 +2215,7 @@ fn gbr_confirm_status(byte: u8, backend: &SerialBackend, action: &'static str) -
             );
             false
         }
+        _ => true,
     }
 }
 
@@ -2185,38 +2253,25 @@ fn gbr_send_price_and_preset(
     {
         return false;
     }
-    gbr_send_no_response_command(
+    if !gbr_send_command_mode_frame(
+        byte,
         backend,
         &gilbarco::set_price(nozzle, price / 10),
         "set_price",
-    );
-    if gilbarco::parse_nozzle_response(
-        &gbr_expect_nonempty_response(backend, &gilbarco::get_nozzle(byte), "get_nozzle")
-            .unwrap_or_default(),
-    )
-    .is_none()
-    {
+    ) {
         return false;
     }
-    gbr_send_no_response_command(
+    if !gbr_send_command_mode_frame(
+        byte,
         backend,
         &gilbarco::preset_amount(amount_raw),
         "preset_amount",
-    );
+    ) {
+        return false;
+    }
     if !gbr_confirm_status(byte, backend, "confirm_preset") {
         return false;
     }
-    true
-}
-
-/// Send SetPrice for all active nozzles via listen-mode.  Returns `true` if all sent.
-async fn gbr_send_set_price(
-    _byte: u8,
-    _fp_cfg: &FuelingPositionConfig,
-    _runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
-    _backend: &SerialBackend,
-) -> bool {
-    // Price sync via RS-485 not confirmed for 9600 protocol; prices are pump-side.
     true
 }
 
@@ -2385,7 +2440,6 @@ async fn gbr_apply_command(
     events: &broadcast::Sender<WsEvent>,
     backend: &SerialBackend,
     cmd: DispatchCommand,
-    pending_prices: &mut HashMap<u8, bool>,
     pool: &SqlitePool,
     shifts: &ShiftCoordinator,
 ) {
@@ -2496,7 +2550,7 @@ async fn gbr_apply_command(
                 Some(p) => p.clone(),
                 None => return,
             };
-            let _ = exchange_serial(backend, &gilbarco::halt(byte));
+            let _ = write_serial(backend, &gilbarco::halt(byte));
             let newly_stopped = {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
@@ -2512,7 +2566,7 @@ async fn gbr_apply_command(
                             stopped_volume: vol,
                             stopped_amount: amt,
                             stopped_tx_id: tx_id.clone(),
-                            stop_source: StopSource::App,
+                            stop_source: StopSource::AppFinal,
                         };
                         rt.pre_auth = None;
                         Some((vol, amt, tx_id))
@@ -2529,7 +2583,7 @@ async fn gbr_apply_command(
                     stopped_volume: vol,
                     stopped_amount: amt,
                     stopped_tx_id: tx_id,
-                    stop_source: "APP".to_string(),
+                    stop_source: "APP_FINAL".to_string(),
                 });
             }
             broadcast_status(byte, runtimes, events).await;
@@ -2537,7 +2591,7 @@ async fn gbr_apply_command(
 
         DispatchCommand::EStop => {
             for fp in cfg.active_positions() {
-                let _ = exchange_serial(backend, &gilbarco::halt(fp.address_byte));
+                let _ = write_serial(backend, &gilbarco::halt(fp.address_byte));
             }
             let mut map = runtimes.write().await;
             for fp in cfg.active_positions() {
@@ -2553,7 +2607,7 @@ async fn gbr_apply_command(
                         stopped_volume: vol,
                         stopped_amount: amt,
                         stopped_tx_id: tx_id,
-                        stop_source: StopSource::App,
+                        stop_source: StopSource::AppFinal,
                     };
                     rt.pre_auth = None;
                     let _ = events.send(WsEvent::Status(rt.snapshot_state()));
@@ -2681,7 +2735,6 @@ async fn gbr_apply_command(
                         new_price: u.price,
                         changed_by: changed_by.clone(),
                     });
-                    pending_prices.insert(fp.address_byte, true);
                 }
             }
         }

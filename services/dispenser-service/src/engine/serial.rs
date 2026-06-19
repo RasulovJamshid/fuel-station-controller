@@ -152,11 +152,19 @@ impl ReconnectingSerial {
             port.write_all(out)?;
             port.flush()?;
             let mut rx = read_response_until_silent(port, initial_ms)?;
-            // Some USB-to-serial adapters echo TX bytes back on RX when the
-            // RS232 cable is disconnected (floating RX line).  Strip the echo
-            // so it doesn't get mistaken for a real dispenser response.
+            // RS-485 dispensers echo the TX bytes back on the bus immediately,
+            // then send the actual response frame some time later (~130 ms on
+            // Gilbarco hardware).  The echo switches read_response_until_silent
+            // to the 30 ms inter-byte timeout before the real frame arrives, so
+            // we miss it.  Strip the echo; if nothing remains try one more read
+            // with the full initial timeout to catch the late-arriving frame.
+            // Offline pumps don't echo at all, so starts_with never fires and
+            // there is no extra timeout penalty for them.
             if rx.len() >= out.len() && rx.starts_with(out) {
                 rx.drain(..out.len());
+                if rx.is_empty() {
+                    rx = read_response_until_silent(port, initial_ms)?;
+                }
             }
             serial_log("RX", &rx);
             trace!(rx = %hex_bytes(&rx), "serial RX");

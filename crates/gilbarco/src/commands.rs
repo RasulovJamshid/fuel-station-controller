@@ -45,6 +45,14 @@ pub fn get_nozzle(addr: u8) -> [u8; 2] {
     [0x20 | (addr & 0x0F), 0xFF]
 }
 
+/// Enter the address-scoped command mode used before SetPrice/PresetAmount frames.
+///
+/// 9600 price-change captures show `0x20|addr` before each `FF ... F0` frame:
+/// the pump replies with `0xD0|addr`, then accepts the following data frame.
+pub fn command_mode(addr: u8) -> [u8; 1] {
+    [0x20 | (addr & 0x0F)]
+}
+
 /// Request all-pump status: `F0`.
 ///
 /// Pump responds with a 19-byte frame encoding the status of all pump addresses.
@@ -181,6 +189,12 @@ mod tests {
         assert_eq!(get_nozzle(0x02), [0x22, 0xFF]);
         // addr 03 → [0x23, 0xFF]
         assert_eq!(get_nozzle(0x03), [0x23, 0xFF]);
+    }
+
+    #[test]
+    fn command_mode_bytes() {
+        assert_eq!(command_mode(0x01), [0x21]);
+        assert_eq!(command_mode(0x04), [0x24]);
     }
 
     #[test]

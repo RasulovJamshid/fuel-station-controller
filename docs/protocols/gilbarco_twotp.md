@@ -32,7 +32,7 @@
 ```
 Station PC
     │
-    │ RS-232 (5787 baud, Even parity)
+    │ RS-232 (9600 baud, no parity)
     │ ← THIS LINE IS SNIFFED →
     │
 Gilbarco dispensers (up to 6 addresses per bus)
@@ -54,13 +54,13 @@ The captured site had 3 dispensers (2 working), 4 nozzles per side (3 active, no
 
 | Parameter | Value |
 |---|---|
-| Baud rate | **5787** |
-| Parity | **Even** |
+| Baud rate | **9600** |
+| Parity | **None** |
 | Data bits | 8 |
 | Stop bits | 1 |
 | Flow control | None |
 
-> **Important:** 5787 baud is non-standard. Confirmed by the sniffer subfolder naming (`5787/`) and clean byte capture with no framing errors. The C# reference (`ASFuelControl.Gilbarco/GilbarcoProtocol.cs` line 162) also hardcodes 5787.
+> **Important:** current site captures are from the 9600/no-parity setup. Older 5787/even captures are kept under legacy log folders for reference only.
 
 ---
 
@@ -177,10 +177,10 @@ Frame: FF E5 F4 F6 [NozzleID] F7 [p0] [p1] [p2] [p3] FB [LRC] F0
 Money preset (full-amount authorization). Must be in ListenMode first.
 
 ```
-Frame: FF E6 F2 F8 [a0] [a1] [a2] [a3] [a4] FB [LRC] F0
+Frame: FF E5 F2 F8 [a0] [a1] [a2] [a3] [a4] [a5] FB [LRC] F0
 ```
 
-- `a0..a4` = amount encoded as 5 BCD bytes, LSB first (`0xE0 | digit`)
+- `a0..a5` = amount encoded as 6 BCD bytes, LSB first (`0xE0 | digit`)
 - Not observed in captured logs at this site (operators did not use amount preset)
 
 ---

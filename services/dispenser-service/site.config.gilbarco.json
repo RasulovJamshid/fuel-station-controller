@@ -9,13 +9,13 @@
     "port": 3001,
     "log_level": "info",
     "log_file": "service.log",
-    "db_path": "transactions.db"
+    "db_path": "transactions.gilbarco.db"
   },
   "connection": {
     "protocol": "gilbarco",
     "port": "/dev/ttyUSB0",
     "baud_rate": 9600,
-    "parity": "even",
+    "parity": "none",
     "data_bits": 8,
     "stop_bits": 1,
     "response_timeout_ms": 500
@@ -48,50 +48,50 @@
   "fueling_positions": [
     {
       "id": "FP1",
-      "label": "Dispenser 1 Side A",
+      "label": "1",
       "address_byte": 1,
       "active": true,
       "nozzles": [
-        { "index": 1, "product_id": 1, "price": 12500, "active": true },
-        { "index": 2, "product_id": 1, "price": 12500, "active": true },
-        { "index": 3, "product_id": 1, "price": 12500, "active": true },
-        { "index": 4, "product_id": 1, "price": 12500, "active": false }
+        { "index": 1, "product_id": 2, "price": 11300, "active": true },
+        { "index": 2, "product_id": 1, "price": 11000, "active": true },
+        { "index": 3, "product_id": 3, "price": 14300, "active": true },
+        { "index": 4, "product_id": 1, "price": 11000, "active": false }
       ]
     },
     {
       "id": "FP2",
-      "label": "Dispenser 2 Side A",
+      "label": "2",
       "address_byte": 2,
       "active": true,
       "nozzles": [
         { "index": 1, "product_id": 2, "price": 11300, "active": true },
-        { "index": 2, "product_id": 2, "price": 11300, "active": true },
-        { "index": 3, "product_id": 2, "price": 11300, "active": true },
-        { "index": 4, "product_id": 2, "price": 11300, "active": false }
+        { "index": 2, "product_id": 1, "price": 11000, "active": true },
+        { "index": 3, "product_id": 3, "price": 14300, "active": true },
+        { "index": 4, "product_id": 1, "price": 11000, "active": false }
       ]
     },
     {
       "id": "FP3",
-      "label": "Dispenser 3 Side A",
+      "label": "3",
       "address_byte": 3,
       "active": true,
       "nozzles": [
-        { "index": 1, "product_id": 3, "price": 14300, "active": true },
-        { "index": 2, "product_id": 3, "price": 14300, "active": true },
+        { "index": 1, "product_id": 2, "price": 11300, "active": true },
+        { "index": 2, "product_id": 1, "price": 11000, "active": true },
         { "index": 3, "product_id": 3, "price": 14300, "active": true },
-        { "index": 4, "product_id": 3, "price": 14300, "active": false }
+        { "index": 4, "product_id": 1, "price": 11000, "active": false }
       ]
     },
     {
       "id": "FP4",
-      "label": "Dispenser 1 Side B",
+      "label": "4",
       "address_byte": 4,
       "active": true,
       "nozzles": [
-        { "index": 1, "product_id": 1, "price": 12500, "active": true },
-        { "index": 2, "product_id": 1, "price": 12500, "active": true },
-        { "index": 3, "product_id": 1, "price": 12500, "active": true },
-        { "index": 4, "product_id": 1, "price": 12500, "active": false }
+        { "index": 1, "product_id": 2, "price": 11300, "active": true },
+        { "index": 2, "product_id": 1, "price": 11000, "active": true },
+        { "index": 3, "product_id": 3, "price": 14300, "active": true },
+        { "index": 4, "product_id": 1, "price": 11000, "active": false }
       ]
     },
     {

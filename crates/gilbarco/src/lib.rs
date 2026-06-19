@@ -4,8 +4,8 @@ pub mod lrc;
 pub mod parser;
 
 pub use commands::{
-    authorize, encode_4digit, encode_5digit, get_all, get_display, get_nozzle, get_totals,
-    get_transaction, get_transaction2, halt, preset_amount, set_price, status,
+    authorize, command_mode, encode_4digit, encode_5digit, get_all, get_display, get_nozzle,
+    get_totals, get_transaction, get_transaction2, halt, preset_amount, set_price, status,
 };
 pub use frame::{GilbarcoStatus, TotalsData, TransactionData};
 pub use lrc::{gilbarco_lrc, gilbarco_lrc_valid};

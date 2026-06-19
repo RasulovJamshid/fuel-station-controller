@@ -79,8 +79,9 @@ pub fn live_amount_raw_to_litres(amount_raw: u64, price_per_litre: u64) -> Optio
 
 /// Parse the GetNozzle response.
 ///
-/// Command is `[0x20|addr, 0xFF]`. The serial driver strips the command echo
-/// `[0x20|addr, 0xFF]`, leaving a 7-byte payload from the gilb-v2 board:
+/// Command is `[0x20|addr, 0xFF]`. Captures may include the command/ack prefix
+/// before the 7-byte payload, while the service usually receives echo-stripped
+/// bytes. The payload from the gilb-v2 board is:
 ///
 /// ```text
 /// buf[0] : 0xE9 (nozzle up, not yet authorized)
@@ -96,11 +97,13 @@ pub fn live_amount_raw_to_litres(amount_raw: u64, price_per_litre: u64) -> Optio
 ///
 /// Note: GilbarcoMulti uses an incompatible 9-byte command for GetNozzle.
 pub fn parse_nozzle_response(buf: &[u8]) -> Option<u8> {
-    if buf.len() < 7 {
+    let start = buf.iter().position(|&b| b == 0xE9 || b == 0xE5)?;
+    let payload = &buf[start..];
+    if payload.len() < 7 {
         return None;
     }
     // First byte is E9 (not authorized) or E5 (authorized).
-    if buf[0] != 0xE9 && buf[0] != 0xE5 {
+    if payload[0] != 0xE9 && payload[0] != 0xE5 {
         return None;
     }
     // gilb-v2 board strips nozzle-index bytes; nozzle 1 is the only possible result.
@@ -124,17 +127,19 @@ pub fn parse_nozzle_response(buf: &[u8]) -> Option<u8> {
 /// pump 1 keeps `B1` at the pump byte while the nozzle byte changes
 /// `B1` → `B2` → `B3`; pump 2/3/4 use `B2`/`B3`/`B4` at the pump byte.
 pub fn parse_all_nozzle_response(buf: &[u8]) -> Option<(u8, u8)> {
-    let offset = match buf {
-        [0xF0, 0xBA, ..] => 1,
-        [0xBA, ..] => 0,
-        _ => return None,
+    let frame = if let Some(pos) = buf.windows(2).position(|w| w == [0xF0, 0xBA]) {
+        &buf[pos + 1..]
+    } else if let Some(pos) = buf.iter().position(|&b| b == 0xBA) {
+        &buf[pos..]
+    } else {
+        return None;
     };
-    if buf.len() <= offset + 14 {
+    if frame.len() <= 14 {
         return None;
     }
 
-    let pump = decode_b_no(buf[offset + 3])?;
-    let nozzle = decode_b_no(buf[offset + 14])?;
+    let pump = decode_b_no(frame[3])?;
+    let nozzle = decode_b_no(frame[14])?;
     Some((pump, nozzle))
 }
 
@@ -193,7 +198,13 @@ fn decode_le_bcd(bytes: &[u8]) -> Option<u64> {
 /// The serial driver strips the RS-485 command echo before calling this, so
 /// `buf[0]` is always `0xFF`.
 pub fn parse_transaction_response(buf: &[u8]) -> Option<TransactionData> {
-    if buf.len() < 33 || buf[0] != 0xFF {
+    // Dispenser prepends its own echo byte (0x4N) before the frame; accept both forms.
+    let buf = match buf {
+        [cmd, 0xFF, ..] if cmd & 0xF0 == 0x40 => &buf[1..],
+        [0xFF, ..] => buf,
+        _ => return None,
+    };
+    if buf.len() < 33 {
         return None;
     }
     if buf[16] != 0xF9 || buf[23] != 0xFA || buf[30] != 0xFB || buf[32] != 0xF0 {

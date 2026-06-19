@@ -166,8 +166,8 @@ Real sites differ:
   "connection": {
     "protocol":  "gilbarco",
     "port":      "COM5",
-    "baud_rate": 5787,
-    "parity":    "even",
+    "baud_rate": 9600,
+    "parity":    "none",
     "data_bits": 8,
     "stop_bits": 1,
     "response_timeout_ms": 300

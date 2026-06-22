@@ -5,6 +5,7 @@ type Props = {
   liftedProductName: string;
   expectedColor?: string;
   liftedColor?: string;
+  onClose?: () => void;
 };
 
 export function PreAuthNozzleMismatchAlert({
@@ -12,50 +13,42 @@ export function PreAuthNozzleMismatchAlert({
   liftedProductName,
   expectedColor = "#888",
   liftedColor = "#888",
+  onClose,
 }: Props) {
   const { t } = useTranslation();
 
   return (
     <div
       role="alert"
-      className="rounded-md border-2 border-red-600 bg-red-950/40 p-4"
+      className="relative flex items-center gap-2 rounded-md border border-red-600 bg-red-950/70 py-1.5 pl-2.5 pr-9 shadow-[0_4px_16px_-6px_rgba(220,38,38,0.55)]"
     >
-      <div className="flex items-center gap-2 mb-2">
-        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-        <p className="text-sm font-bold uppercase tracking-wider text-red-200">{t("mismatch.title")}</p>
-      </div>
-      <p className="mt-1 text-sm leading-snug text-red-100/95">
-        {t("mismatch.saleFor", { expected: expectedProductName, lifted: liftedProductName })}
-      </p>
-
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <div className="overflow-hidden rounded-md border-2 border-emerald-600 bg-slate-750">
-          <div className="h-2 w-full border-b border-slate-600" style={{ backgroundColor: expectedColor }} />
-          <div className="px-3 py-3 text-center">
-            <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1">
-              {t("mismatch.useThis")}
-            </p>
-            <p className="text-base font-black text-slate-50">{expectedProductName}</p>
-          </div>
-        </div>
-        <div className="overflow-hidden rounded-md border-2 border-red-600 bg-slate-750 opacity-80">
-          <div className="h-2 w-full border-b border-slate-600" style={{ backgroundColor: liftedColor }} />
-          <div className="px-3 py-3 text-center">
-            <p className="text-xs font-bold uppercase tracking-wider text-red-400 mb-1">
-              {t("mismatch.wrongNozzle")}
-            </p>
-            <p className="text-base font-black text-slate-400 line-through">
-              {liftedProductName}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-3 p-2 bg-slate-800/50 rounded-md border border-slate-600">
-        <p className="text-xs font-medium text-slate-300 text-center">
-          {t("mismatch.instructions")}
+      <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-red-500" aria-hidden />
+      <div className="min-w-0 flex-1 leading-tight">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-red-300">
+          {t("mismatch.title")}
+        </span>
+        <p className="truncate text-sm font-medium text-red-100">
+          <span className="inline-flex items-center gap-1 font-bold">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: expectedColor }} />
+            {expectedProductName}
+          </span>
+          {" ≠ "}
+          <span className="inline-flex items-center gap-1 font-bold text-red-300 line-through">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: liftedColor }} />
+            {liftedProductName}
+          </span>
         </p>
       </div>
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("mismatch.close", { defaultValue: "Close" })}
+          className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md border border-red-500/60 bg-red-900/70 text-base font-black leading-none text-red-100 transition-colors hover:bg-red-600 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+        >
+          ✕
+        </button>
+      )}
     </div>
   );
 }

@@ -175,6 +175,10 @@ export function PumpCardForm({
     if (fillMode === "volume") syncAmountFromVolume(volLiters);
   }, [price, fillMode, volLiters, syncAmountFromVolume]);
 
+  useEffect(() => {
+    if (fillMode === "amount") syncVolumeFromAmount(amtSum);
+  }, [price, fillMode, amtSum, syncVolumeFromAmount]);
+
   const projectedAmount = useMemo(() => {
     if (price <= 0) return null;
     if (fillMode === "volume") {

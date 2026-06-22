@@ -226,7 +226,7 @@ export function DispenserCard({
 
   useEffect(() => {
     if (!showPreAuthMismatchBanner) return;
-    const t = window.setTimeout(() => clearPreAuthNozzleMismatch(), 8000);
+    const t = window.setTimeout(() => clearPreAuthNozzleMismatch(), 30000);
     return () => window.clearTimeout(t);
   }, [showPreAuthMismatchBanner, clearPreAuthNozzleMismatch]);
 
@@ -650,6 +650,7 @@ export function DispenserCard({
               liftedProductName={preAuthNozzleMismatch.liftedProductName}
               expectedColor={preAuthNozzleMismatch.expectedColor}
               liftedColor={preAuthNozzleMismatch.liftedColor}
+              onClose={clearPreAuthNozzleMismatch}
             />
           )}
 

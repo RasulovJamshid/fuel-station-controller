@@ -203,8 +203,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       const incoming = ev.data;
       const next = [...get().states];
       const i = next.findIndex((s) => s.fp_id === incoming.fp_id);
+      const mismatch = get().preAuthNozzleMismatch;
+      const mismatchHere = mismatch?.fpId === incoming.fp_id;
       if (i >= 0) {
-        next[i] = mergeIncomingFpState(next[i], incoming, get().holdDoneUntil);
+        // During an active nozzle mismatch the backend has already cancelled the
+        // preauth and reports the actually-lifted nozzle. Accept it verbatim so
+        // the merge's "keep PRE_AUTHORIZED through flicker" guard does not pin the
+        // stale preauth on screen.
+        next[i] = mismatchHere
+          ? incoming
+          : mergeIncomingFpState(next[i], incoming, get().holdDoneUntil);
       } else {
         next.push(incoming);
       }
@@ -212,10 +220,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         typeof incoming.status === "object" && incoming.status !== null && "STOPPED" in incoming.status
           ? "STOPPED"
           : incoming.status;
-      const mismatch = get().preAuthNozzleMismatch;
+      // Clear the mismatch banner once the lane resolves: the operator picked the
+      // right nozzle (AUTHORIZING/DELIVERING) OR the wrong nozzle was holstered
+      // (IDLE) OR the lane went OFFLINE. Otherwise the red strip lingers and the
+      // card looks stuck after the wrong nozzle is put down.
       if (
-        mismatch?.fpId === incoming.fp_id &&
-        (tag === "AUTHORIZING" || tag === "DELIVERING")
+        mismatchHere &&
+        (tag === "AUTHORIZING" || tag === "DELIVERING" || tag === "IDLE" || tag === "OFFLINE")
       ) {
         set({ states: next, preAuthNozzleMismatch: null });
         return;
@@ -376,7 +387,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       const snapshot = get().siteSnapshot;
       const nozzles =
         snapshot?.positions.find((fp) => fp.fp_id === d.fp_id)?.nozzles ?? [];
+      // The backend has already cancelled the preauth. Drop it from the lane row
+      // immediately here so the UI never lingers on PRE_AUTHORIZED — independent of
+      // the order/merge of the accompanying fp.status broadcast.
+      const next = [...get().states];
+      const idx = next.findIndex((s) => s.fp_id === d.fp_id);
+      if (idx >= 0) {
+        const wasPreauth = next[idx].status === "PRE_AUTHORIZED";
+        next[idx] = {
+          ...next[idx],
+          status: wasPreauth ? "NOZZLE_UP" : next[idx].status,
+          pre_auth_preset: null,
+        };
+      }
       set({
+        states: next,
         preAuthNozzleMismatch: buildPreAuthNozzleMismatch(
           d.fp_id,
           d.expected_product_name,

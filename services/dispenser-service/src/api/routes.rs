@@ -759,17 +759,19 @@ pub async fn cancel_preauth(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let fp = fp_config(&st, &fp_id).await?;
     let byte = fp.address_byte;
-    {
+    // Idempotent: if the preauth was already cleared (e.g. auto-cancelled by a
+    // nozzle mismatch or timeout), the lane is already in the desired state — return
+    // ok rather than a confusing 400 to the operator who just pressed Cancel.
+    let cancellable = {
         let map = st.runtimes.read().await;
-        let cancellable = map.get(&byte).is_some_and(|r| r.has_cancellable_preauth());
-        if !cancellable {
-            return Err((StatusCode::BAD_REQUEST, "lane is not pre-authorized".into()));
-        }
+        map.get(&byte).is_some_and(|r| r.has_cancellable_preauth())
+    };
+    if cancellable {
+        st.commands
+            .send(DispatchCommand::CancelPreauth { byte })
+            .await
+            .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
     }
-    st.commands
-        .send(DispatchCommand::CancelPreauth { byte })
-        .await
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 

@@ -17,6 +17,7 @@ import { pausedInfo, statusTag } from "../types/api";
 import type { FpStatus, FpStatusTag } from "../types/api";
 import type { DispenserCardProps } from "./DispenserCard";
 import { FillSetupModal } from "./FillSetupModal";
+import { PreAuthNozzleMismatchAlert } from "./PreAuthNozzleMismatchAlert";
 
 const fmtSum = new Intl.NumberFormat("uz-UZ");
 
@@ -87,7 +88,7 @@ export function DispenserRow({
 
   useEffect(() => {
     if (!showMismatch) return;
-    const id = window.setTimeout(() => clearPreAuthMismatch(), 8000);
+    const id = window.setTimeout(() => clearPreAuthMismatch(), 30000);
     return () => window.clearTimeout(id);
   }, [showMismatch, clearPreAuthMismatch]);
 
@@ -480,6 +481,17 @@ export function DispenserRow({
             {actionButton}
           </div>
         </div>
+        {showMismatch && preAuthNozzleMismatch && (
+          <div className="border-t border-red-600/40 p-2">
+            <PreAuthNozzleMismatchAlert
+              expectedProductName={preAuthNozzleMismatch.expectedProductName}
+              liftedProductName={preAuthNozzleMismatch.liftedProductName}
+              expectedColor={preAuthNozzleMismatch.expectedColor}
+              liftedColor={preAuthNozzleMismatch.liftedColor}
+              onClose={clearPreAuthMismatch}
+            />
+          </div>
+        )}
       </div>
 
       <FillSetupModal

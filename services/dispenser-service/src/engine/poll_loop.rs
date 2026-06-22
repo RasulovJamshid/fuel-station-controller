@@ -1820,19 +1820,20 @@ async fn run_gilbarco_poll_loop(
                             .unwrap_or(false)
                     };
 
-                    let nozzle = gbr_query_nozzle_from_all(byte, &backend).unwrap_or_else(|| {
-                        let fallback = fp_cfg
-                            .active_nozzles()
-                            .first()
-                            .map(|n| n.index)
-                            .unwrap_or(1);
+                    // Never guess the lifted nozzle: a wrong guess could authorize the
+                    // wrong product/price. If GetAll can't identify it this poll (rare,
+                    // usually a transient RS-485 glitch), do nothing and retry on the
+                    // next poll — the read self-heals in ~one cycle. A genuinely
+                    // permanent failure during a preauth is caught by the preauth-timeout
+                    // task, which cancels and notifies.
+                    let Some(nozzle) = gbr_query_nozzle_from_all(byte, &backend) else {
                         warn!(
                             addr = format_args!("0x{byte:02X}"),
-                            fallback_nozzle = fallback,
-                            "Gilbarco: nozzle lifted but GetAll did not identify nozzle; using configured fallback"
+                            "Gilbarco: nozzle lifted but GetAll did not identify it — retrying next poll (no guess)"
                         );
-                        fallback
-                    });
+                        broadcast_status(byte, &runtimes, &events).await;
+                        continue;
+                    };
                     let (product_id, product_name) = gbr_nozzle_product(fp_cfg, &cfg, nozzle);
                     let price = {
                         let map = runtimes.read().await;
@@ -1853,8 +1854,19 @@ async fn run_gilbarco_poll_loop(
                                 .and_then(|rt| rt.pre_auth.as_ref().map(|p| p.nozzle_index))
                                 .unwrap_or(nozzle)
                         };
+                        // Wrong nozzle: a specific nozzle was pre-authorized but a
+                        // different one was lifted. Cancel the preauth, drop to NozzleUp
+                        // for the nozzle actually lifted, and notify the operator. The
+                        // pump is never authorized, so no wrong-product fuel can flow.
+                        // (expected_nozzle == 0 is a generic Authorize — any nozzle ok.)
                         if expected_nozzle != 0 && expected_nozzle != nozzle {
                             let expected_name = gbr_nozzle_product(fp_cfg, &cfg, expected_nozzle).1;
+                            info!(
+                                addr = format_args!("0x{byte:02X}"),
+                                expected_nozzle,
+                                lifted_nozzle = nozzle,
+                                "Gilbarco: preauth nozzle mismatch → cancel preauth + notify"
+                            );
                             let mut map = runtimes.write().await;
                             if let Some(rt) = map.get_mut(&byte) {
                                 rt.cancel_pre_auth();
@@ -1888,9 +1900,10 @@ async fn run_gilbarco_poll_loop(
                             &gilbarco::authorize(byte),
                             "authorize",
                         );
-                        if !gbr_confirm_status(byte, &backend, "confirm_authorize") {
-                            continue;
-                        }
+                        // No status confirm here: the authorize byte's echo is still
+                        // in flight, so a status poll would read the echo, not a real
+                        // status. Optimistically enter Authorizing; the main poll loop
+                        // confirms Delivering (0x9N) on the next cycles.
                         let tx = CurrentTx {
                             id: uuid::Uuid::new_v4().to_string(),
                             started_at: Utc::now().timestamp_millis(),
@@ -2200,6 +2213,11 @@ fn gbr_send_command_mode_frame(
         return false;
     }
     gbr_send_no_response_command(backend, frame, action);
+    // The frame is sent write-only, so its RS-485 echo is still arriving. Wait for
+    // the echo to fully land before returning, so the NEXT exchange's input-clear
+    // flushes it and its read waits cleanly for the pump's `D` ack instead of
+    // returning on the lingering echo (which previously aborted the next step).
+    std::thread::sleep(Duration::from_millis(80));
     true
 }
 
@@ -2209,24 +2227,6 @@ fn gbr_parse_status_response(byte: u8, resp: &[u8]) -> gilbarco::GilbarcoStatus 
         .map(|&b| gilbarco::parse_status_byte(byte, b))
         .find(|st| *st != gilbarco::GilbarcoStatus::Offline)
         .unwrap_or(gilbarco::GilbarcoStatus::Offline)
-}
-
-fn gbr_confirm_status(byte: u8, backend: &SerialBackend, action: &'static str) -> bool {
-    let Some(resp) = gbr_expect_nonempty_response(backend, &gilbarco::status(byte), action) else {
-        return false;
-    };
-    match gbr_parse_status_response(byte, &resp) {
-        gilbarco::GilbarcoStatus::Offline => {
-            warn!(
-                byte,
-                action,
-                rx = %gbr_hex(&resp),
-                "Gilbarco: follow-up status invalid"
-            );
-            false
-        }
-        _ => true,
-    }
 }
 
 fn gbr_send_price_and_preset(
@@ -2255,14 +2255,24 @@ fn gbr_send_price_and_preset(
         return false;
     }
 
-    if gilbarco::parse_nozzle_response(
-        &gbr_expect_nonempty_response(backend, &gilbarco::get_nozzle(byte), "get_nozzle")
-            .unwrap_or_default(),
-    )
-    .is_none()
-    {
-        return false;
-    }
+    // Authorize sequence (docs/logs/gilbarco/9600/fullfill.log, CH2-Pc): after the
+    // nozzle identify (done by gbr_query_nozzle_from_all before we get here):
+    //   0x20|addr .. set_price frame
+    //   0x20|addr .. preset_amount frame
+    //   0x10|addr  authorize (sent by caller)
+    //
+    // Each command frame is sent write-only, so its RS-485 echo is still in flight
+    // immediately afterward. We deliberately do NOT poll status between/after the
+    // frames here: that read returns the lingering frame echo (no real status
+    // byte) and a strict confirm would spuriously fail and abort the whole
+    // authorize — leaving the lane stuck and the pump never fueling. The
+    // command-mode entry inside gbr_send_command_mode_frame already gates on the
+    // reliable `0xD0|addr` ack, and the main poll loop confirms the pump reaches
+    // Delivering (0x9N) on the following cycles.
+    //
+    // Also do NOT gate on a bare `get_nozzle`/`parse_nozzle_response` (the pump
+    // returns only its prompt ack; the E9/E5 payload arrives too late) — same root
+    // cause as the nozzle-identification bug.
     if !gbr_send_command_mode_frame(
         byte,
         backend,
@@ -2279,9 +2289,9 @@ fn gbr_send_price_and_preset(
     ) {
         return false;
     }
-    if !gbr_confirm_status(byte, backend, "confirm_preset") {
-        return false;
-    }
+    // gbr_send_command_mode_frame already settled after the preset frame, so its
+    // echo has drained and the pump has latched it before the caller sends the
+    // authorize byte.
     true
 }
 
@@ -2476,10 +2486,8 @@ async fn gbr_apply_command(
                     return;
                 }
                 gbr_send_no_response_command(backend, &gilbarco::authorize(byte), "authorize");
-                if !gbr_confirm_status(byte, backend, "confirm_authorize") {
-                    broadcast_status(byte, runtimes, events).await;
-                    return;
-                }
+                // No status confirm: the authorize echo is still in flight; the main
+                // poll loop confirms Delivering on the next cycles.
                 let (product_id, product_name) = gbr_nozzle_product(&fp_cfg, cfg, nozzle);
                 let tx = CurrentTx {
                     id: uuid::Uuid::new_v4().to_string(),

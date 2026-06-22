@@ -212,7 +212,7 @@
     "pause": "Pauza",
     "stop": "Stop",
     "cancel": "Bekor",
-    "cancelPreAuth": "Old. bekor",
+    "cancelPreAuth": "Bekor",
     "resume": "Davom",
     "continue": "Davom",
     "close": "Yopish",
@@ -223,8 +223,8 @@
     "noDispensers": "Kolonkalar sozlanmagan",
     "statusLabels": {
       "IDLE": "Boʼsh",
-      "NOZZLE_UP": "Pistolet koʼtarildi",
-      "PRE_AUTHORIZED": "Pistolet kutilmoqda",
+      "NOZZLE_UP": "Koʼtarildi",
+      "PRE_AUTHORIZED": "Kutilmoqda",
       "AUTHORIZING": "Ishga tushmoqda",
       "DELIVERING": "Quyilmoqda",
       "STOPPED": "Toʼxtatilgan",
@@ -264,7 +264,8 @@
     "saleFor": "Bu quyish {{expected}} uchun, {{lifted}} emas.",
     "useThis": "SHU PISTOLETNI ISHLATING",
     "wrongNozzle": "NOTOʼGʼRI PISTOLET",
-    "instructions": "⚠️ Eski ruxsat bekor qilindi. Pistoletni qoʼying va yangi quyish sozlang."
+    "instructions": "⚠️ Eski ruxsat bekor qilindi. Pistoletni qoʼying va yangi quyish sozlang.",
+    "close": "Yopish"
   },
   "reservoirs": {
     "title": "Yoqilgʼi qoldigʼi",

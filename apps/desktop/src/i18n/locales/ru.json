@@ -203,6 +203,7 @@
     "mode": "Режим",
     "currentLiters": "Залито",
     "currentAmount": "Сумма",
+    "remaining": "Осталось",
     "action": "Действие",
     "selectedPump": "Выбранная колонка",
     "liveStatus": "Текущий статус",

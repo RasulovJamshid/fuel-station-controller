@@ -4,9 +4,24 @@ import { useTranslation } from "react-i18next";
 import { pausedInfo, statusTag } from "../types/api";
 import type { AuthMode, FpState, FpStatus, NozzleSnapshot } from "../types/api";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
-
 const fmtSum = new Intl.NumberFormat("uz-UZ");
 const MAX_VOLUME_LITERS = 999;
+
+function parseVolumeTarget(preset: string | null | undefined): number | null {
+  if (!preset) return null;
+  const m = preset.match(/([\d.,]+)\s*L/i);
+  if (!m) return null;
+  const v = Number.parseFloat(m[1].replace(",", "."));
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+function parseAmountTarget(preset: string | null | undefined): number | null {
+  if (!preset) return null;
+  const m = preset.match(/([\d.,\s]+)\s*sum/i);
+  if (!m) return null;
+  const v = Number.parseFloat(m[1].replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
 const FALLBACK_MAX_AMOUNT_SUM = 999_000_000;
 
 function parseNum(s: string): number {
@@ -65,6 +80,9 @@ type PumpDraft = {
   mode: FillMode;
   volume: string;
   amount: string;
+  lastFillVolume: number | null;
+  lastFillAmount: number | null;
+  lastFillPreset: string | null;
 };
 
 type PumpMeta = {
@@ -151,12 +169,20 @@ function getMeta(
   };
 }
 
-function statusClass(meta: PumpMeta): string {
+function statusTintClass(meta: PumpMeta): string {
   if (meta.isOffline) return "border-accent-red/40 bg-accent-red/10 text-accent-red shadow-[inset_0_0_20px_rgba(var(--color-accent-red),0.05)]";
   if (meta.isDelivering || meta.isAuthorizing) return "border-accent-emerald/40 bg-accent-emerald/10 text-accent-emerald shadow-[inset_0_0_20px_rgba(var(--color-accent-emerald),0.05)]";
   if (meta.hasActivePreAuth || meta.isPaused) return "border-accent-amber/40 bg-accent-amber/10 text-accent-amber shadow-[inset_0_0_20px_rgba(var(--color-accent-amber),0.05)]";
   if (meta.isNozzleUp) return "border-accent-blue/40 bg-accent-blue/10 text-accent-blue shadow-[inset_0_0_20px_rgba(var(--color-accent-blue),0.05)]";
   return "border-border-primary/50 bg-bg-secondary/40 text-text-secondary backdrop-blur-sm";
+}
+
+function statusSolidClass(meta: PumpMeta): string {
+  if (meta.isOffline) return "border-accent-red bg-accent-red text-white";
+  if (meta.isDelivering || meta.isAuthorizing) return "border-accent-emerald bg-accent-emerald text-white";
+  if (meta.hasActivePreAuth || meta.isPaused) return "border-accent-amber bg-accent-amber text-white";
+  if (meta.isNozzleUp) return "border-accent-blue bg-accent-blue text-white";
+  return "border-border-primary/50 bg-bg-secondary/80 text-text-secondary";
 }
 
 function classicStatusLabel(meta: PumpMeta, t: (key: string) => string): string {
@@ -196,6 +222,7 @@ export function ClassicDispenserConsole({
   const pumpButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const bottomPanelRef = useRef<HTMLDivElement>(null);
   const fullFillArmedRef = useRef<{ fpId: string; at: number } | null>(null);
+  const prevTagsRef = useRef<Record<string, string>>({});
 
   // Dynamically adapt to available vertical space with mathematical scaling
   const [scale, setScale] = useState(1);
@@ -261,6 +288,12 @@ export function ClassicDispenserConsole({
     "mb-1 block text-sm font-black uppercase tracking-wider text-text-secondary transition-colors duration-200 group-focus-within:text-accent-blue group-hover:text-text-primary";
 
   useEffect(() => {
+    const prevTags = prevTagsRef.current;
+    const nextPrevTags: Record<string, string> = {};
+    for (const state of states) {
+      nextPrevTags[state.fp_id] = statusTag(state.status as FpStatus);
+    }
+
     setDrafts((prev) => {
       const next: Record<string, PumpDraft> = {};
       for (const state of states) {
@@ -270,7 +303,7 @@ export function ClassicDispenserConsole({
           prevDraft?.nozzleIndex != null && nozzles.some((n) => n.index === prevDraft.nozzleIndex);
         const stateNozzleValid =
           state.nozzle_index != null && nozzles.some((n) => n.index === state.nozzle_index);
-        const tag = statusTag(state.status as FpStatus);
+        const tag = nextPrevTags[state.fp_id]!;
         const followHardwareNozzle = stateNozzleValid && tag !== "IDLE";
         const nozzleIndex = followHardwareNozzle
           ? state.nozzle_index
@@ -281,16 +314,29 @@ export function ClassicDispenserConsole({
             : nozzles.length === 1
               ? (nozzles[0]?.index ?? null)
               : null;
-        const price = nozzles.find((n) => n.index === nozzleIndex)?.price ?? 0;
+        const prevTag = prevTags[state.fp_id];
+        const wasActive = prevTag === "DELIVERING" || prevTag === "AUTHORIZING";
+        // Clear inputs after a successful fill: when status hits DONE, or if DONE was
+        // skipped and we jump straight from an active state to IDLE.
+        const clearValues = tag === "DONE" || (wasActive && tag === "IDLE");
+        // Capture last-fill snapshot when the fill just ended.
+        const captureLastFill = clearValues && state.volume > 0;
+        // Reset last-fill snapshot when a new transaction begins.
+        const clearLastFill = tag === "NOZZLE_UP" || tag === "AUTHORIZING" || tag === "DELIVERING";
         next[state.fp_id] = {
           nozzleIndex,
           mode: prevDraft?.mode ?? "volume",
-          volume: prevDraft?.volume ?? "10",
-          amount: prevDraft?.amount ?? (price > 0 ? String(price * 10) : "150000"),
+          volume: clearValues ? "" : (prevDraft?.volume ?? ""),
+          amount: clearValues ? "" : (prevDraft?.amount ?? ""),
+          lastFillVolume: clearLastFill ? null : captureLastFill ? state.volume : (prevDraft?.lastFillVolume ?? null),
+          lastFillAmount: clearLastFill ? null : captureLastFill ? state.amount : (prevDraft?.lastFillAmount ?? null),
+          lastFillPreset: clearLastFill ? null : captureLastFill ? (state.pre_auth_preset ?? null) : (prevDraft?.lastFillPreset ?? null),
         };
       }
       return next;
     });
+
+    prevTagsRef.current = nextPrevTags;
   }, [states, nozzlesByFp]);
 
   const activeState = useMemo(() => {
@@ -306,8 +352,11 @@ export function ClassicDispenserConsole({
       const current: PumpDraft = prev[fpId] ?? {
         nozzleIndex: null,
         mode: "volume",
-        volume: "10",
-        amount: "150000",
+        volume: "",
+        amount: "",
+        lastFillVolume: null,
+        lastFillAmount: null,
+        lastFillPreset: null,
       };
       return {
         ...prev,
@@ -492,14 +541,12 @@ export function ClassicDispenserConsole({
     }
     if (e.key === "ArrowRight") {
       e.preventDefault();
-      if (!tableRowName) focusBottomControlByOffset(currentControl, 1);
-      else selectPumpByOffset(state.fp_id, 1, currentControl, tableRowName);
+      selectPumpByOffset(state.fp_id, 1, currentControl, tableRowName);
       return;
     }
     if (e.key === "ArrowLeft") {
       e.preventDefault();
-      if (!tableRowName) focusBottomControlByOffset(currentControl, -1);
-      else selectPumpByOffset(state.fp_id, -1, currentControl, tableRowName);
+      selectPumpByOffset(state.fp_id, -1, currentControl, tableRowName);
       return;
     }
     if (e.key === "ArrowDown") {
@@ -572,6 +619,19 @@ export function ClassicDispenserConsole({
     focusBottomControl("action");
   }, [focusBottomControl, setDraft]);
 
+  const toggleSelectedOrderInput = useCallback((state: FpState) => {
+    const focusedControl = (document.activeElement as HTMLElement | null)
+      ?.closest<HTMLElement>("[data-classic-control]")
+      ?.dataset.classicControl;
+    const currentMode = drafts[state.fp_id]?.mode;
+    const nextMode: FillMode =
+      focusedControl === "amount" || (focusedControl == null && currentMode === "amount")
+        ? "volume"
+        : "amount";
+    setDraft(state.fp_id, { mode: nextMode });
+    focusBottomControl(nextMode);
+  }, [drafts, focusBottomControl, setDraft]);
+
   const stopOrCancelSelected = useCallback((state: FpState) => {
     const positionActive = positionActiveByFp.get(state.fp_id) ?? true;
     const meta = getMeta(state, defaultAuthMode, positionActive);
@@ -591,7 +651,7 @@ export function ClassicDispenserConsole({
     const currentIndex = nozzles.findIndex((n) => n.index === draft?.nozzleIndex);
     const next = nozzles[(currentIndex + 1 + nozzles.length) % nozzles.length];
     if (!next) return;
-    const volume = draft?.volume ?? "10";
+    const volume = draft?.volume ?? "";
     const amount = parseNum(volume) > 0 && next.price > 0
       ? String(Math.round(parseNum(volume) * next.price))
       : draft?.amount;
@@ -599,10 +659,18 @@ export function ClassicDispenserConsole({
   }, [drafts, nozzlesByFp, setDraft]);
 
   const handleConsoleKeyDownCapture = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
-    const handledKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "Delete", "Home", "Enter"];
+    const handledKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "Delete", "Home", "Enter", "Shift"];
     if (!handledKeys.includes(e.key)) return;
     const selectedState = activeState ?? states[0];
     if (!selectedState) return;
+
+    if (e.key === "Shift") {
+      if (e.repeat) return;
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSelectedOrderInput(selectedState);
+      return;
+    }
 
     if (e.key === "PageUp") {
       e.preventDefault();
@@ -675,6 +743,7 @@ export function ClassicDispenserConsole({
     startPump,
     states,
     stopOrCancelSelected,
+    toggleSelectedOrderInput,
   ]);
 
   const renderAction = (state: FpState, compact = false) => {
@@ -696,7 +765,7 @@ export function ClassicDispenserConsole({
         </button>
       );
     }
-    if (meta.isDelivering) {
+    if (meta.isDelivering || meta.isAuthorizing) {
       return (
         <div className="flex items-center justify-center gap-2">
           <button
@@ -704,9 +773,9 @@ export function ClassicDispenserConsole({
             onClick={() => onStop(state.fp_id)}
             className={`${cls} border border-accent-amber/80 bg-accent-amber text-white hover:bg-accent-amber-light shadow-[0_4px_12px_rgba(var(--color-accent-amber),0.2)] focus-visible:ring-accent-amber/30`}
           >
-            {useStopMode ? t("classic.stop") : t("classic.pause")}
+            {useStopMode || gilbarcoMode ? t("classic.stop") : t("classic.pause")}
           </button>
-          {useCancelMode && onCancel ? (
+          {useCancelMode && onCancel && !gilbarcoMode ? (
             <button
               type="button"
               onClick={() => onCancel(state.fp_id)}
@@ -780,7 +849,7 @@ export function ClassicDispenserConsole({
         </div>
       );
     }
-    return <span className="block text-center text-[11px] font-bold tracking-wider text-text-muted/60 uppercase">--</span>;
+    return <div className={`${ui.btnHeight} flex items-center justify-center`}><span className="text-[11px] font-bold tracking-wider text-text-muted/60 uppercase">--</span></div>;
   };
 
   const renderModeButtons = (state: FpState, compact = false, keyboardControls = false) => {
@@ -830,14 +899,18 @@ export function ClassicDispenserConsole({
   const selectedAmountInvalid = selectedDraft?.mode === "amount" && !isValidAmount(selectedDraft.amount, selectedProduct);
   const selectedPositionActive = positionActiveByFp.get(selected.fp_id) ?? true;
   const selectedMeta = getMeta(selected, defaultAuthMode, selectedPositionActive);
+  const selectedColumnIndex = Math.max(0, states.findIndex((s) => s.fp_id === selected.fp_id));
+  const selectedColumnRatio = selectedColumnIndex / states.length;
+  const selectedColumnWidth = `calc(${100 / states.length}% - ${8 / states.length}rem)`;
+  const selectedColumnLeft = `calc(${selectedColumnRatio * 100}% + ${8 - selectedColumnRatio * 8}rem)`;
   const centerCellClass = (fpId: string) =>
     fpId === selected.fp_id
-      ? "border-x border-accent-blue/45 bg-accent-blue/10 shadow-[inset_0_0_0_1px_rgb(var(--color-accent-blue)/0.14)] transition-colors duration-300"
-      : "border-r border-border-primary/30 transition-colors duration-300";
+      ? "relative z-10 bg-accent-blue/10 transition-colors duration-200"
+      : "border-r border-border-primary/30 bg-bg-secondary/20 transition-all duration-300";
   const centerHeaderClass = (fpId: string) =>
     fpId === selected.fp_id
-      ? "border-x border-accent-blue/55 bg-accent-blue/14 transition-colors duration-300"
-      : "border-r border-border-primary/30 transition-colors duration-300";
+      ? "relative z-10 bg-accent-blue/12 transition-colors duration-200"
+      : "border-r border-border-primary/30 bg-bg-secondary/20 transition-all duration-300";
 
   const renderPumpTile = (state: FpState) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
@@ -847,12 +920,13 @@ export function ClassicDispenserConsole({
     return (
       <div
         key={state.fp_id}
-        className={`min-w-0 overflow-hidden rounded-none border bg-bg-card/80 text-left shadow-card backdrop-blur-sm transition-all duration-200 ${
+        className={`relative min-w-0 overflow-hidden rounded-none border text-left transition-colors duration-200 ${
           selectedCard
-            ? "border-accent-blue ring-2 ring-accent-blue/20 shadow-card-hover"
-            : "border-border-primary/60 hover:border-accent-blue/40"
+            ? "z-20 border-accent-blue bg-accent-blue/10 shadow-[inset_0_0_0_2px_rgb(var(--color-accent-blue)/0.32),0_12px_28px_-20px_rgba(0,0,0,0.65)]"
+            : "border-border-primary/40 bg-bg-secondary/30 hover:bg-bg-secondary/60 cursor-pointer"
         }`}
       >
+        {selectedCard ? <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1.5 bg-accent-blue" aria-hidden /> : null}
         <button
           type="button"
           onClick={() => onSelectFp(state.fp_id)}
@@ -864,7 +938,7 @@ export function ClassicDispenserConsole({
           onKeyDown={(e) => handlePumpKeyDown(state, e)}
           className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-inset"
         >
-          <div className={`flex items-center justify-between border-b border-border-primary/25 ${ui.topCardPad} ${statusClass(meta)}`}>
+          <div className={`flex items-center justify-between border-b border-border-primary/25 ${ui.topCardPad} ${statusSolidClass(meta)}`}>
             <span className={`${ui.topCardText} font-black`}>{pumpNumber(state)}</span>
             <span className={`truncate ${ui.topCardLabel} font-black uppercase tracking-wider`}>{classicStatusLabel(meta, t)}</span>
           </div>
@@ -921,7 +995,12 @@ export function ClassicDispenserConsole({
         {states.map(renderPumpTile)}
       </div>
 
-      <div className="rounded-none border border-border-primary/50 bg-bg-card/40 backdrop-blur-md shadow-inner">
+      <div className="relative overflow-hidden rounded-none border border-border-primary/50 bg-bg-card/40 backdrop-blur-md shadow-inner">
+        <div
+          className="pointer-events-none absolute bottom-0 top-0 z-20 border-2 border-accent-blue shadow-[inset_0_0_0_1px_rgb(var(--color-accent-blue)/0.18)]"
+          style={{ left: selectedColumnLeft, width: selectedColumnWidth }}
+          aria-hidden
+        />
         <table className="w-full table-fixed border-collapse text-center text-xs">
           <colgroup>
             <col className="w-32" />
@@ -933,7 +1012,7 @@ export function ClassicDispenserConsole({
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 return (
                   <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`}>
-                    <span className={`inline-flex w-full min-w-0 justify-center rounded-none border ${ui.modeBtnPad} font-black uppercase tracking-wider ${ui.thText} truncate ${statusClass(meta)}`}>
+                    <span className={`inline-flex w-full min-w-0 justify-center rounded-none border ${ui.modeBtnPad} font-black uppercase tracking-wider ${ui.thText} truncate ${statusSolidClass(meta)}`}>
                       {classicStatusLabel(meta, t)}
                     </span>
                   </td>
@@ -963,7 +1042,7 @@ export function ClassicDispenserConsole({
                         onChange={(e) => {
                           const nozzleIndex = e.target.value ? Number(e.target.value) : null;
                           const nozzle = nozzles.find((n) => n.index === nozzleIndex);
-                          const volume = drafts[state.fp_id]?.volume ?? "10";
+                          const volume = drafts[state.fp_id]?.volume ?? "";
                           setDraft(state.fp_id, {
                             nozzleIndex,
                             amount: nozzle?.price && parseNum(volume) > 0
@@ -1004,6 +1083,7 @@ export function ClassicDispenserConsole({
                       inputMode="decimal"
                       aria-invalid={invalid}
                       title={`1-${MAX_VOLUME_LITERS} L`}
+                      placeholder="—"
                       value={draft?.volume ?? ""}
                       onFocus={(e) => { onSelectFp(state.fp_id); selectInputValue(e.currentTarget); }}
                       onMouseUp={(e) => e.preventDefault()}
@@ -1035,6 +1115,7 @@ export function ClassicDispenserConsole({
                       inputMode="numeric"
                       aria-invalid={invalid}
                       title={`1-${fmtSum.format(maxAmount)}`}
+                      placeholder="—"
                       value={draft?.amount ?? ""}
                       onFocus={(e) => { onSelectFp(state.fp_id); selectInputValue(e.currentTarget); }}
                       onMouseUp={(e) => e.preventDefault()}
@@ -1062,9 +1143,14 @@ export function ClassicDispenserConsole({
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.currentLiters")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
+                const draft = drafts[state.fp_id];
+                const isActive = meta.isDelivering || meta.isAuthorizing;
+                const displayVol = isActive
+                  ? (meta.paused?.stopped_volume ?? state.volume)
+                  : (draft?.lastFillVolume ?? state.volume);
                 return (
                   <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} ${centerCellClass(state.fp_id)}`}>
-                    {(meta.paused?.stopped_volume ?? state.volume).toFixed(2)}
+                    {displayVol.toFixed(2)}
                   </td>
                 );
               })}
@@ -1073,9 +1159,49 @@ export function ClassicDispenserConsole({
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.currentAmount")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
+                const draft = drafts[state.fp_id];
+                const isActive = meta.isDelivering || meta.isAuthorizing;
+                const displayAmt = isActive
+                  ? (meta.paused?.stopped_amount ?? state.amount)
+                  : (draft?.lastFillAmount ?? state.amount);
                 return (
                   <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} text-accent-blue ${centerCellClass(state.fp_id)}`}>
-                    {fmtSum.format(meta.paused?.stopped_amount ?? state.amount)}
+                    {fmtSum.format(displayAmt)}
+                  </td>
+                );
+              })}
+            </tr>
+            <tr className="hover:bg-bg-primary/20 transition-colors">
+              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.remaining")}</th>
+              {states.map((state) => {
+                const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
+                const draft = drafts[state.fp_id];
+                const isActive = meta.isDelivering || meta.isAuthorizing;
+                let cell = <span className="text-text-muted/50">—</span>;
+                if (isActive) {
+                  const volTarget = parseVolumeTarget(state.pre_auth_preset);
+                  const amtTarget = parseAmountTarget(state.pre_auth_preset);
+                  if (volTarget != null) {
+                    const rem = Math.max(0, volTarget - state.volume);
+                    cell = <span className="text-accent-amber">{rem.toFixed(2)} L</span>;
+                  } else if (amtTarget != null) {
+                    const rem = Math.max(0, amtTarget - state.amount);
+                    cell = <span className="text-accent-amber">{fmtSum.format(rem)}</span>;
+                  }
+                } else if (draft?.lastFillPreset != null) {
+                  const volTarget = parseVolumeTarget(draft.lastFillPreset);
+                  const amtTarget = parseAmountTarget(draft.lastFillPreset);
+                  if (volTarget != null && draft.lastFillVolume != null) {
+                    const rem = Math.max(0, volTarget - draft.lastFillVolume);
+                    cell = <span className="text-text-muted/70">{rem.toFixed(2)} L</span>;
+                  } else if (amtTarget != null && draft.lastFillAmount != null) {
+                    const rem = Math.max(0, amtTarget - draft.lastFillAmount);
+                    cell = <span className="text-text-muted/70">{fmtSum.format(rem)}</span>;
+                  }
+                }
+                return (
+                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} ${centerCellClass(state.fp_id)}`}>
+                    {cell}
                   </td>
                 );
               })}
@@ -1088,30 +1214,51 @@ export function ClassicDispenserConsole({
         ref={bottomPanelRef}
         className="shrink-0 overflow-hidden rounded-none border border-border-primary/50 bg-bg-card/80 backdrop-blur-xl shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] transition-all duration-300"
       >
-        <div className={`flex flex-wrap items-center justify-between border-b border-border-primary/30 ${ui.topCardPad} ${statusClass(selectedMeta)} bg-opacity-40`}>
-          <div className="min-w-0">
-            <p className={`truncate ${ui.inputText} font-black uppercase tracking-wider text-text-primary`}>
-              {t("classic.selectedPump")}: <span className="text-accent-blue">{pumpTitle(selected)}</span>
-            </p>
-            <p className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide opacity-90">
-              <span>{t("classic.liveStatus")}: {classicStatusLabel(selectedMeta, t)}</span>
-              <span className="h-1 w-1 rounded-full bg-current opacity-50" aria-hidden />
-              <span className="flex min-w-0 items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full border border-border-primary/40" style={{ backgroundColor: selectedProductColor }} />
-                <span className="truncate">{selectedProduct?.product_name ?? selected.product_name ?? "--"}</span>
-              </span>
-            </p>
-          </div>
-          <div className="flex gap-8 text-right font-mono tabular-nums">
-            <div>
-              <p className={`${ui.thText} font-extrabold uppercase tracking-wider opacity-70`}>{t("classic.currentLiters")}</p>
-              <p className={`${ui.inputText} font-black`}>{(selectedMeta.paused?.stopped_volume ?? selected.volume).toFixed(2)}</p>
+        <div className={`flex flex-col border-b border-border-primary/30 ${ui.topCardPad} ${statusTintClass(selectedMeta)} bg-opacity-40`}>
+          <div className="flex flex-wrap items-center justify-between">
+            <div className="min-w-0">
+              <p className={`truncate ${ui.inputText} font-black uppercase tracking-wider text-text-primary`}>
+                {t("classic.selectedPump")}: <span className="text-accent-blue">{pumpTitle(selected)}</span>
+              </p>
+              <p className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide opacity-90">
+                <span>{t("classic.liveStatus")}: {classicStatusLabel(selectedMeta, t)}</span>
+                <span className="h-1 w-1 rounded-full bg-current opacity-50" aria-hidden />
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full border border-border-primary/40" style={{ backgroundColor: selectedProductColor }} />
+                  <span className="truncate">{selectedProduct?.product_name ?? selected.product_name ?? "--"}</span>
+                </span>
+              </p>
             </div>
-            <div>
-              <p className={`${ui.thText} font-extrabold uppercase tracking-wider opacity-70`}>{t("classic.currentAmount")}</p>
-              <p className={`${ui.inputText} font-black text-accent-blue`}>{fmtSum.format(selectedMeta.paused?.stopped_amount ?? selected.amount)}</p>
+            <div className="flex gap-8 text-right font-mono tabular-nums">
+              <div>
+                <p className={`${ui.thText} font-extrabold uppercase tracking-wider opacity-70`}>{t("classic.currentLiters")}</p>
+                <p className={`${ui.inputText} font-black`}>{(selectedMeta.paused?.stopped_volume ?? selected.volume).toFixed(2)}</p>
+              </div>
+              <div>
+                <p className={`${ui.thText} font-extrabold uppercase tracking-wider opacity-70`}>{t("classic.currentAmount")}</p>
+                <p className={`${ui.inputText} font-black text-accent-blue`}>{fmtSum.format(selectedMeta.paused?.stopped_amount ?? selected.amount)}</p>
+              </div>
             </div>
           </div>
+          {/* Always-present progress track — fixed height so the panel never shifts */}
+          {(() => {
+            const delivering = selectedMeta.isDelivering || selectedMeta.isAuthorizing;
+            const vt = delivering ? parseVolumeTarget(selected.pre_auth_preset) : null;
+            const at = delivering ? parseAmountTarget(selected.pre_auth_preset) : null;
+            const pct = vt != null && vt > 0
+              ? Math.min(100, (selected.volume / vt) * 100)
+              : at != null && at > 0
+                ? Math.min(100, (selected.amount / at) * 100)
+                : 0;
+            return (
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-bg-secondary/40">
+                <div
+                  className="h-full rounded-full bg-accent-amber transition-all duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            );
+          })()}
         </div>
         <div className={`grid ${ui.topGridGap} ${ui.topCardPad} lg:grid-cols-[1.1fr_1fr_1fr_auto]`}>
           <div className={`min-w-0 ${bottomControlWrapClass}`}>
@@ -1182,6 +1329,7 @@ export function ClassicDispenserConsole({
               inputMode="decimal"
               aria-invalid={selectedVolumeInvalid}
               title={`1-${MAX_VOLUME_LITERS} L`}
+              placeholder="—"
               value={selectedDraft?.volume ?? ""}
               onChange={(e) => updateVolume(selected, e.target.value)}
               onFocus={(e) => selectInputValue(e.currentTarget)}
@@ -1205,6 +1353,7 @@ export function ClassicDispenserConsole({
               inputMode="numeric"
               aria-invalid={selectedAmountInvalid}
               title={`1-${fmtSum.format(selectedMaxAmount)}`}
+              placeholder="—"
               value={selectedDraft?.amount ?? ""}
               onChange={(e) => updateAmount(selected, e.target.value)}
               onFocus={(e) => selectInputValue(e.currentTarget)}

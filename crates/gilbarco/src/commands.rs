@@ -45,6 +45,20 @@ pub fn get_nozzle(addr: u8) -> [u8; 2] {
     [0x20 | (addr & 0x0F), 0xFF]
 }
 
+/// The full GetNozzle data frame the POS transmits after the command-mode ack
+/// (`0xD0|addr`) and before `F0` GetAll.
+///
+/// Confirmed from CH2-Pc (PC-transmit-only) captures for BOTH pump 2 and pump 3
+/// (`docs/logs/gilbarco/9600/*_nozzles_lifted_and_down.log`): the sequence is
+/// `0x2N` → (`0xDN` ack) → `FF E9 FE E0 E1 E0 FB EE` → `F0` → BA frame. The frame
+/// is address-independent (the `0x20|addr` byte already scoped the pump). The pump
+/// does not reply to this frame directly, but it will NOT answer the subsequent
+/// `F0` until it has received this complete 8-byte frame — a single `FF` is not
+/// enough.
+pub fn get_nozzle_frame() -> [u8; 8] {
+    [0xFF, 0xE9, 0xFE, 0xE0, 0xE1, 0xE0, 0xFB, 0xEE]
+}
+
 /// Enter the address-scoped command mode used before SetPrice/PresetAmount frames.
 ///
 /// 9600 price-change captures show `0x20|addr` before each `FF ... F0` frame:

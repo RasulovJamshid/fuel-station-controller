@@ -2,18 +2,20 @@
 # Unified dev launcher. Usage: ./scripts/azs.sh <mode>   or   npm run start -- <mode>
 #
 # Environment (optional):
-#   AZS_STATE_DIR       PID/log directory (default: <repo>/.azs-run)
-#   AZS_SERVICE_MOCK    Site config for mock bus (default: services/dispenser-service/site.mock.json)
-#   AZS_SERVICE_PTY     Site config for PTY + wayne-sim (default: services/dispenser-service/site.pty.json)
-#   AZS_SERVICE_REAL    Site config for real hardware (default: services/dispenser-service/site.real.json)
-#   AZS_SERVICE_CONFIG  Override site config for generic service-* modes
-#   AZS_SIM_URL         wayne-sim HTTP API (default: http://127.0.0.1:3002)
-#   AZS_SERVICE_URL     dispenser-service HTTP API (default: http://127.0.0.1:3001)
-#   AZS_PTY_REAL        PTY path for dispenser-service (default: /tmp/wayne-real)
-#   AZS_PTY_SIM         PTY path for wayne-sim (default: /tmp/wayne-sim)
-#   AZS_SERIAL_PORT     Real serial port override (default: /dev/ttyUSB0)
-#   AZS_SERIAL_LOG      Enable raw serial frame log. Set to "1" for default path
-#                       (.azs-run/serial.log) or a custom file path. Unset = off.
+#   AZS_STATE_DIR           PID/log directory (default: <repo>/.azs-run)
+#   AZS_SERVICE_MOCK        Site config for mock bus (default: services/dispenser-service/site.mock.json)
+#   AZS_SERVICE_PTY         Site config for PTY + wayne-sim (default: services/dispenser-service/site.pty.json)
+#   AZS_SERVICE_REAL        Site config for real hardware (default: services/dispenser-service/site.real.json)
+#   AZS_SERVICE_CONFIG      Override site config for generic service-* modes
+#   AZS_SIM_URL             Simulator HTTP API URL (default: auto-detected — 3002 for Wayne, 3003 for Gilbarco)
+#   AZS_SERVICE_URL         dispenser-service HTTP API (default: http://127.0.0.1:3001)
+#   AZS_PTY_REAL / AZS_PTY_SIM        Wayne PTY symlink paths (defaults: /tmp/wayne-real, /tmp/wayne-sim)
+#   AZS_GBR_PTY_REAL / AZS_GBR_PTY_SIM  Gilbarco PTY symlink paths (defaults: /tmp/gilbarco-real, /tmp/gilbarco-sim)
+#   AZS_SIM_CONFIG          Wayne sim JSON (default: tools/simulators/wayne-sim/sim.config.json)
+#   AZS_GBR_SIM_CONFIG      Gilbarco sim JSON (default: tools/simulators/gilbarco-sim/sim.config.json)
+#   AZS_SERIAL_PORT         Real serial port override (default: /dev/ttyUSB0)
+#   AZS_SERIAL_LOG          Enable raw serial frame log. Set to "1" for default path
+#                           (.azs-run/serial.log) or a custom file path. Unset = off.
 
 set -euo pipefail
 
@@ -27,8 +29,11 @@ AZS_SERVICE_MOCK="${AZS_SERVICE_MOCK:-services/dispenser-service/site.mock.json}
 AZS_SERVICE_PTY="${AZS_SERVICE_PTY:-services/dispenser-service/site.pty.json}"
 AZS_SERVICE_REAL="${AZS_SERVICE_REAL:-services/dispenser-service/site.real.json}"
 AZS_SIM_CONFIG="${AZS_SIM_CONFIG:-tools/simulators/wayne-sim/sim.config.json}"
+AZS_GBR_SIM_CONFIG="${AZS_GBR_SIM_CONFIG:-tools/simulators/gilbarco-sim/sim.config.json}"
 AZS_PTY_REAL="${AZS_PTY_REAL:-/tmp/wayne-real}"
 AZS_PTY_SIM="${AZS_PTY_SIM:-/tmp/wayne-sim}"
+AZS_GBR_PTY_REAL="${AZS_GBR_PTY_REAL:-/tmp/gilbarco-real}"
+AZS_GBR_PTY_SIM="${AZS_GBR_PTY_SIM:-/tmp/gilbarco-sim}"
 AZS_SERIAL_PORT="${AZS_SERIAL_PORT:-/dev/ttyUSB0}"
 # Resolve AZS_SERIAL_LOG: "1" → default log path; custom path → use as-is; unset → off.
 AZS_SERIAL_LOG="${AZS_SERIAL_LOG:-}"
@@ -39,6 +44,7 @@ export AZS_SERIAL_LOG
 
 SOCAT_PID=""
 SIM_PID=""
+SIM_PID_FILE=""
 SERVICE_PID=""
 
 usage() {
@@ -54,10 +60,12 @@ Environment (optional):
   AZS_SERVICE_MOCK    Mock site config (default: services/dispenser-service/site.mock.json)
   AZS_SERVICE_PTY     PTY site config (default: services/dispenser-service/site.pty.json)
   AZS_SERVICE_CONFIG  Override site config for service-* modes
-  AZS_SIM_CONFIG      Simulator JSON (default: tools/simulators/wayne-sim/sim.config.json)
-  AZS_SIM_URL         wayne-sim HTTP base (default: http://127.0.0.1:3002)
-  AZS_SERVICE_URL     dispenser-service HTTP base (default: http://127.0.0.1:3001)
-  AZS_PTY_REAL / AZS_PTY_SIM   PTY symlink paths (defaults: /tmp/wayne-real, /tmp/wayne-sim)
+  AZS_SIM_CONFIG          Wayne sim JSON (default: tools/simulators/wayne-sim/sim.config.json)
+  AZS_GBR_SIM_CONFIG      Gilbarco sim JSON (default: tools/simulators/gilbarco-sim/sim.config.json)
+  AZS_SIM_URL             Simulator HTTP base (auto: 3002 for Wayne, 3003 for Gilbarco)
+  AZS_SERVICE_URL         dispenser-service HTTP base (default: http://127.0.0.1:3001)
+  AZS_PTY_REAL / AZS_PTY_SIM             Wayne PTY paths (defaults: /tmp/wayne-real, /tmp/wayne-sim)
+  AZS_GBR_PTY_REAL / AZS_GBR_PTY_SIM    Gilbarco PTY paths (defaults: /tmp/gilbarco-real, /tmp/gilbarco-sim)
   AZS_SERIAL_LOG      Raw serial frame log. "1" → .azs-run/serial.log; custom path → that file.
                       Unset or empty = disabled (default).
 
@@ -79,8 +87,10 @@ Modes:
 
   sim-backend       Background: socat PTY pair + wayne-sim + dispenser-service (PTY stack). No UI.
   dev-mock          Background service (mock) + foreground operator desktop.
-  dev-sim           Full stack: socat + wayne-sim + service (bg) + sim control desktop (bg)
+  dev-sim           Full stack: socat + simulator + service (bg) + sim control desktop (bg)
                     + operator desktop (fg). Two windows.
+                    Protocol auto-detected from AZS_SERVICE_CONFIG (gilbarco or wayne).
+                    Example: AZS_SERVICE_CONFIG=services/dispenser-service/site.config.gilbarco.json ./scripts/azs.sh dev-sim
 
   desktop           Foreground: operator desktop only (expects service on :3001).
   sim-desktop       Foreground: Wayne sim control only (expects sim on :3002).
@@ -113,6 +123,7 @@ stop_recorded() {
   stop_one_pidfile "$STATE_DIR/sim-desktop.pid"
   stop_one_pidfile "$STATE_DIR/service.pid"
   stop_one_pidfile "$STATE_DIR/wayne-sim.pid"
+  stop_one_pidfile "$STATE_DIR/gilbarco-sim.pid"
   stop_one_pidfile "$STATE_DIR/socat.pid"
 }
 
@@ -126,7 +137,7 @@ cleanup_dev() {
   if [[ -n "${SIM_PID:-}" ]]; then
     kill "$SIM_PID" 2>/dev/null || true
     wait "$SIM_PID" 2>/dev/null || true
-    rm -f "$STATE_DIR/wayne-sim.pid"
+    rm -f "${SIM_PID_FILE:-$STATE_DIR/wayne-sim.pid}"
   fi
   if [[ -n "${SOCAT_PID:-}" ]]; then
     kill "$SOCAT_PID" 2>/dev/null || true
@@ -136,26 +147,38 @@ cleanup_dev() {
 }
 
 start_socat() {
+  local pty_real="${1:-$AZS_PTY_REAL}"
+  local pty_sim="${2:-$AZS_PTY_SIM}"
   if ! command -v socat >/dev/null 2>&1; then
     echo "error: 'socat' not found. Install it (e.g. apt install socat / brew install socat)." >&2
     exit 1
   fi
-  rm -f "$AZS_PTY_REAL" "$AZS_PTY_SIM"
+  rm -f "$pty_real" "$pty_sim"
   socat -d -d \
-    pty,raw,echo=0,link="$AZS_PTY_REAL" \
-    pty,raw,echo=0,link="$AZS_PTY_SIM" \
+    pty,raw,echo=0,link="$pty_real" \
+    pty,raw,echo=0,link="$pty_sim" \
     >"$STATE_DIR/socat.log" 2>&1 &
   SOCAT_PID=$!
   echo "$SOCAT_PID" >"$STATE_DIR/socat.pid"
-  echo "socat PID $SOCAT_PID (PTY: service=$AZS_PTY_REAL  sim=$AZS_PTY_SIM, log: $STATE_DIR/socat.log)"
+  echo "socat PID $SOCAT_PID (PTY: service=$pty_real  sim=$pty_sim, log: $STATE_DIR/socat.log)"
   sleep 0.8
 }
 
 start_sim_bg() {
   cargo run -p wayne-sim -- "$AZS_SIM_CONFIG" >"$STATE_DIR/wayne-sim.log" 2>&1 &
   SIM_PID=$!
-  echo "$SIM_PID" >"$STATE_DIR/wayne-sim.pid"
+  SIM_PID_FILE="$STATE_DIR/wayne-sim.pid"
+  echo "$SIM_PID" >"$SIM_PID_FILE"
   echo "wayne-sim PID $SIM_PID (log: $STATE_DIR/wayne-sim.log)"
+  sleep 0.8
+}
+
+start_gilbarco_sim_bg() {
+  cargo run -p gilbarco-sim -- "$AZS_GBR_SIM_CONFIG" >"$STATE_DIR/gilbarco-sim.log" 2>&1 &
+  SIM_PID=$!
+  SIM_PID_FILE="$STATE_DIR/gilbarco-sim.pid"
+  echo "$SIM_PID" >"$SIM_PID_FILE"
+  echo "gilbarco-sim PID $SIM_PID (log: $STATE_DIR/gilbarco-sim.log)"
   sleep 0.8
 }
 
@@ -188,6 +211,27 @@ PYEOF
   else
     echo "$base_cfg"
   fi
+}
+
+# Return the protocol field from connection.protocol in a site config, or "wayne" if absent/unreadable.
+detect_protocol() {
+  local cfg="${1:-}"
+  [[ -z "$cfg" ]] && { echo "wayne"; return; }
+  python3 -c "import json,sys; print(json.load(open('$cfg')).get('connection',{}).get('protocol','wayne'))" 2>/dev/null || echo "wayne"
+}
+
+# Write a temp copy of $1 with connection.port replaced by $2; print the tmp path.
+patch_config_port() {
+  local base_cfg="$1"
+  local new_port="$2"
+  local tmp_cfg="$STATE_DIR/site.pty.tmp.json"
+  python3 - "$base_cfg" "$new_port" "$tmp_cfg" <<'PYEOF'
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+cfg["connection"]["port"] = sys.argv[2]
+json.dump(cfg, open(sys.argv[3], "w"), indent=2)
+PYEOF
+  echo "$tmp_cfg"
 }
 
 start_sim_desktop_bg() {
@@ -299,11 +343,22 @@ case "$MODE" in
     # Kill anything still listening on the service / sim ports
     fuser -k 3001/tcp 2>/dev/null || true
     fuser -k 3002/tcp 2>/dev/null || true
+    fuser -k 3003/tcp 2>/dev/null || true
     sleep 0.3
-    start_socat
-    start_sim_bg
-    start_service_bg "${AZS_SERVICE_CONFIG:-$AZS_SERVICE_PTY}"
-    export AZS_SIM_URL="${AZS_SIM_URL:-http://127.0.0.1:3002}"
+    _svc_cfg="${AZS_SERVICE_CONFIG:-}"
+    _protocol="$(detect_protocol "$_svc_cfg")"
+    if [[ "$_protocol" == "gilbarco" ]]; then
+      start_socat "$AZS_GBR_PTY_REAL" "$AZS_GBR_PTY_SIM"
+      start_gilbarco_sim_bg
+      _pty_cfg="$(patch_config_port "$_svc_cfg" "$AZS_GBR_PTY_REAL")"
+      start_service_bg "$_pty_cfg"
+      export AZS_SIM_URL="${AZS_SIM_URL:-http://127.0.0.1:3003}"
+    else
+      start_socat
+      start_sim_bg
+      start_service_bg "${_svc_cfg:-$AZS_SERVICE_PTY}"
+      export AZS_SIM_URL="${AZS_SIM_URL:-http://127.0.0.1:3002}"
+    fi
     export AZS_SERVICE_URL="${AZS_SERVICE_URL:-http://127.0.0.1:3001}"
     start_sim_desktop_bg
     echo "Starting operator desktop (Ctrl+C stops both desktops, service, sim, socat)…"

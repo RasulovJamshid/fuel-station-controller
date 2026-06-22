@@ -1,0 +1,9 @@
+{
+  "virtual_port": "/tmp/gilbarco-sim",
+  "baud_rate": 9600,
+  "parity": "none",
+  "api_port": 3003,
+  "log_frames": true,
+  "default_fill_rate_lps": 1.2,
+  "site_config_path": "../../../services/dispenser-service/site.config.gilbarco.json"
+}

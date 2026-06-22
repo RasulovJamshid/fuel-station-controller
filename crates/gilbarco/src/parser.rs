@@ -58,10 +58,7 @@ pub fn parse_status_byte(addr: u8, b: u8) -> GilbarcoStatus {
 /// E0 E0 E3 E1 E1 E0 -> 11300 -> 113000 soum
 /// ```
 pub fn parse_display_response(buf: &[u8]) -> Option<u64> {
-    if buf.len() < 6 {
-        return None;
-    }
-    decode_e_digits(&buf[..6])
+    buf.windows(6).find_map(decode_e_digits)
 }
 
 /// Convert the raw live display amount to soum.
@@ -195,19 +192,31 @@ fn decode_le_bcd(bytes: &[u8]) -> Option<u64> {
 /// `amount_raw` is in units of 10 soum (multiply by 10 for soum).
 /// `unit_price_raw` is the raw 4-digit BCD integer (multiply by 10 for soum/L).
 ///
-/// The serial driver strips the RS-485 command echo before calling this, so
-/// `buf[0]` is always `0xFF`.
+/// The serial driver usually strips the RS-485 command echo before calling this,
+/// but noisy captures may include prefix bytes before the `0xFF` frame start.
 pub fn parse_transaction_response(buf: &[u8]) -> Option<TransactionData> {
-    // Dispenser prepends its own echo byte (0x4N) before the frame; accept both forms.
-    let buf = match buf {
-        [cmd, 0xFF, ..] if cmd & 0xF0 == 0x40 => &buf[1..],
-        [0xFF, ..] => buf,
-        _ => return None,
-    };
+    buf.iter()
+        .enumerate()
+        .filter(|(_, &b)| b == 0xFF)
+        .find_map(|(start, _)| parse_transaction_frame(&buf[start..]))
+}
+
+fn parse_transaction_frame(buf: &[u8]) -> Option<TransactionData> {
     if buf.len() < 33 {
         return None;
     }
-    if buf[16] != 0xF9 || buf[23] != 0xFA || buf[30] != 0xFB || buf[32] != 0xF0 {
+    if buf[0] != 0xFF
+        || buf[1] != 0xF1
+        || buf[2] != 0xF8
+        || buf[3] != 0xEB
+        || buf[8] != 0xF6
+        || buf[10] != 0xF4
+        || buf[11] != 0xF7
+        || buf[16] != 0xF9
+        || buf[23] != 0xFA
+        || buf[30] != 0xFB
+        || buf[32] != 0xF0
+    {
         return None;
     }
     if !gilbarco_lrc_valid(&buf[..31], buf[31]) {
@@ -240,12 +249,13 @@ pub fn parse_totals_response(buf: &[u8], nozzle_index: u8) -> Option<TotalsData>
         return None;
     }
 
-    let frame = match buf {
-        [cmd, 0xFF, ..] if cmd & 0xF0 == 0x50 => &buf[1..],
-        [0xFF, ..] => buf,
-        _ => return None,
-    };
+    buf.iter()
+        .enumerate()
+        .filter(|(_, &b)| b == 0xFF)
+        .find_map(|(start, _)| parse_totals_frame(&buf[start..], nozzle_index))
+}
 
+fn parse_totals_frame(frame: &[u8], nozzle_index: u8) -> Option<TotalsData> {
     let section = 1 + 30 * (nozzle_index as usize - 1);
     if frame.len() < section + 30 {
         return None;
@@ -259,12 +269,10 @@ pub fn parse_totals_response(buf: &[u8], nozzle_index: u8) -> Option<TotalsData>
     {
         return None;
     }
-    if frame.len() >= 3
-        && frame[frame.len() - 1] == 0xF0
-        && frame[frame.len() - 3] == 0xFB
-        && !gilbarco_lrc_valid(&frame[..frame.len() - 2], frame[frame.len() - 2])
-    {
-        return None;
+    if let Some(end) = find_totals_frame_end(frame, section + 30) {
+        if !gilbarco_lrc_valid(&frame[..end], frame[end]) {
+            return None;
+        }
     }
 
     Some(TotalsData {
@@ -275,9 +283,29 @@ pub fn parse_totals_response(buf: &[u8], nozzle_index: u8) -> Option<TotalsData>
     })
 }
 
+fn find_totals_frame_end(frame: &[u8], min_start: usize) -> Option<usize> {
+    frame
+        .windows(3)
+        .enumerate()
+        .skip(min_start)
+        .find_map(|(i, w)| (w[0] == 0xFB && w[1] & 0xF0 == 0xE0 && w[2] == 0xF0).then_some(i + 1))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn totals_frame_10l_fill() -> Vec<u8> {
+        vec![
+            0xFF, 0xF6, 0xE0, 0xF9, 0xE6, 0xE6, 0xE9, 0xE4, 0xE3, 0xE6, 0xE6, 0xE2, 0xFA, 0xE7,
+            0xE6, 0xE2, 0xE0, 0xE8, 0xE7, 0xE2, 0xE8, 0xF4, 0xE0, 0xE3, 0xE1, 0xE1, 0xF5, 0xE0,
+            0xE0, 0xE0, 0xE0, 0xF6, 0xE1, 0xF9, 0xE8, 0xE6, 0xE0, 0xE5, 0xE0, 0xE6, 0xE5, 0xE3,
+            0xFA, 0xE3, 0xE2, 0xE5, 0xE1, 0xE2, 0xE2, 0xE2, 0xE8, 0xF4, 0xE0, 0xE0, 0xE1, 0xE1,
+            0xF5, 0xE0, 0xE0, 0xE0, 0xE0, 0xF6, 0xE2, 0xF9, 0xE2, 0xE3, 0xE9, 0xE5, 0xE0, 0xE4,
+            0xE9, 0xE9, 0xFA, 0xE9, 0xE1, 0xE8, 0xE1, 0xE0, 0xE1, 0xE1, 0xE8, 0xF4, 0xE0, 0xE3,
+            0xE4, 0xE1, 0xF5, 0xE0, 0xE0, 0xE0, 0xE0, 0xFB, 0xEC, 0xF0,
+        ]
+    }
 
     #[test]
     fn addr01_idle() {
@@ -391,6 +419,12 @@ mod tests {
     }
 
     #[test]
+    fn display_skips_invalid_e_prefix_noise() {
+        let buf = [0xEA, 0x10, 0xE0, 0xE0, 0xE3, 0xE1, 0xE1, 0xE0];
+        assert_eq!(parse_display_response(&buf), Some(11300));
+    }
+
+    #[test]
     fn tx_response_10l_at_11000() {
         // Log: maybe9600_fill_10litre_from_start_to_end — addr 2, price 11000/L
         // vol = 10000 mL = 10 L, amount = 11000 × 10 = 110000 soum
@@ -403,6 +437,22 @@ mod tests {
         assert_eq!(td.volume_raw, 10000); // 10000 mL = 10 L
         assert_eq!(td.amount_raw, 11000); // × 10 = 110000 soum
         assert_eq!(td.unit_price_raw, 1100); // × 10 = 11000 soum/L
+    }
+
+    #[test]
+    fn tx_response_skips_invalid_ff_prefix_noise() {
+        let frame = [
+            0xFF, 0xF1, 0xF8, 0xEB, 0xE1, 0xE0, 0xE0, 0xE0, 0xF6, 0xE1, 0xF4, 0xF7, 0xE0, 0xE0,
+            0xE1, 0xE1, 0xF9, 0xE0, 0xE0, 0xE0, 0xE0, 0xE1, 0xE0, 0xFA, 0xE0, 0xE0, 0xE0, 0xE1,
+            0xE1, 0xE0, 0xFB, 0xE7, 0xF0,
+        ];
+        let mut buf = vec![0xFF, 0x00, 0xEA, 0xFF, 0x10];
+        buf.extend_from_slice(&frame);
+
+        let td = parse_transaction_response(&buf).unwrap();
+        assert_eq!(td.volume_raw, 10000);
+        assert_eq!(td.amount_raw, 11000);
+        assert_eq!(td.unit_price_raw, 1100);
     }
 
     #[test]
@@ -465,15 +515,7 @@ mod tests {
 
     #[test]
     fn totals_response_nozzle1_from_10l_fill() {
-        let buf = [
-            0xFF, 0xF6, 0xE0, 0xF9, 0xE6, 0xE6, 0xE9, 0xE4, 0xE3, 0xE6, 0xE6, 0xE2, 0xFA, 0xE7,
-            0xE6, 0xE2, 0xE0, 0xE8, 0xE7, 0xE2, 0xE8, 0xF4, 0xE0, 0xE3, 0xE1, 0xE1, 0xF5, 0xE0,
-            0xE0, 0xE0, 0xE0, 0xF6, 0xE1, 0xF9, 0xE8, 0xE6, 0xE0, 0xE5, 0xE0, 0xE6, 0xE5, 0xE3,
-            0xFA, 0xE3, 0xE2, 0xE5, 0xE1, 0xE2, 0xE2, 0xE2, 0xE8, 0xF4, 0xE0, 0xE0, 0xE1, 0xE1,
-            0xF5, 0xE0, 0xE0, 0xE0, 0xE0, 0xF6, 0xE2, 0xF9, 0xE2, 0xE3, 0xE9, 0xE5, 0xE0, 0xE4,
-            0xE9, 0xE9, 0xFA, 0xE9, 0xE1, 0xE8, 0xE1, 0xE0, 0xE1, 0xE1, 0xE8, 0xF4, 0xE0, 0xE3,
-            0xE4, 0xE1, 0xF5, 0xE0, 0xE0, 0xE0, 0xE0, 0xFB, 0xEC, 0xF0,
-        ];
+        let buf = totals_frame_10l_fill();
         let totals = parse_totals_response(&buf, 1).unwrap();
         assert_eq!(totals.nozzle_index, 1);
         assert_eq!(totals.volume_total_raw, 26634966);
@@ -483,19 +525,23 @@ mod tests {
 
     #[test]
     fn totals_response_nozzle3_with_command_echo() {
-        let buf = [
-            0x52, 0xFF, 0xF6, 0xE0, 0xF9, 0xE6, 0xE6, 0xE9, 0xE4, 0xE3, 0xE6, 0xE6, 0xE2, 0xFA,
-            0xE7, 0xE6, 0xE2, 0xE0, 0xE8, 0xE7, 0xE2, 0xE8, 0xF4, 0xE0, 0xE3, 0xE1, 0xE1, 0xF5,
-            0xE0, 0xE0, 0xE0, 0xE0, 0xF6, 0xE1, 0xF9, 0xE8, 0xE6, 0xE0, 0xE5, 0xE0, 0xE6, 0xE5,
-            0xE3, 0xFA, 0xE3, 0xE2, 0xE5, 0xE1, 0xE2, 0xE2, 0xE2, 0xE8, 0xF4, 0xE0, 0xE0, 0xE1,
-            0xE1, 0xF5, 0xE0, 0xE0, 0xE0, 0xE0, 0xF6, 0xE2, 0xF9, 0xE2, 0xE3, 0xE9, 0xE5, 0xE0,
-            0xE4, 0xE9, 0xE9, 0xFA, 0xE9, 0xE1, 0xE8, 0xE1, 0xE0, 0xE1, 0xE1, 0xE8, 0xF4, 0xE0,
-            0xE3, 0xE4, 0xE1, 0xF5, 0xE0, 0xE0, 0xE0, 0xE0, 0xFB, 0xEC, 0xF0,
-        ];
+        let mut buf = vec![0x52];
+        buf.extend_from_slice(&totals_frame_10l_fill());
         let totals = parse_totals_response(&buf, 3).unwrap();
         assert_eq!(totals.volume_total_raw, 99405932);
         assert_eq!(totals.amount_total_raw, 81101819);
         assert_eq!(totals.unit_price_raw, 1430);
+    }
+
+    #[test]
+    fn totals_response_skips_invalid_ff_prefix_noise() {
+        let mut buf = vec![0xFF, 0x00, 0xEA, 0xFF, 0x10];
+        buf.extend_from_slice(&totals_frame_10l_fill());
+
+        let totals = parse_totals_response(&buf, 1).unwrap();
+        assert_eq!(totals.volume_total_raw, 26634966);
+        assert_eq!(totals.amount_total_raw, 82780267);
+        assert_eq!(totals.unit_price_raw, 1130);
     }
 
     #[test]

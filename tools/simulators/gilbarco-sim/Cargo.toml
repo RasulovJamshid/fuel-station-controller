@@ -1,0 +1,21 @@
+[package]
+name = "gilbarco-sim"
+version = "0.1.0"
+edition = "2021"
+description = "Gilbarco TWOTP dispenser simulator for AZS Manager"
+
+[[bin]]
+name = "gilbarco-sim"
+path = "src/main.rs"
+
+[dependencies]
+site_config  = { path = "../../../crates/config" }
+gilbarco     = { path = "../../../crates/gilbarco" }
+tokio        = { workspace = true }
+axum         = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+anyhow       = { workspace = true }
+tracing      = { workspace = true }
+tracing-subscriber = { workspace = true }
+serialport   = { workspace = true }

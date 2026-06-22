@@ -15,7 +15,7 @@
     "protocol": "gilbarco",
     "port": "/dev/ttyUSB0",
     "baud_rate": 9600,
-    "parity": "none",
+    "parity": "even",
     "data_bits": 8,
     "stop_bits": 1,
     "response_timeout_ms": 500

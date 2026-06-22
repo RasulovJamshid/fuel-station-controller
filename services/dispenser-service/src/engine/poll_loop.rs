@@ -457,7 +457,6 @@ pub fn exchange_serial(backend: &SerialBackend, out: &[u8]) -> Result<Vec<u8>> {
     }
 }
 
-
 /// Write-only serial send — used for short ACK frames (`C0 FA`) where the
 /// protocol does not expect an immediate response from the dispenser.
 pub fn write_serial(backend: &SerialBackend, out: &[u8]) -> Result<()> {
@@ -1792,16 +1791,18 @@ async fn run_gilbarco_poll_loop(
                         );
                     } else {
                         // Genuinely idle — clear any lingering mid-transaction state.
+                        // Done is NOT blocked here: for Gilbarco the pump's own TC→Idle
+                        // sequence signals that the transaction is fully closed; no separate
+                        // operator acknowledgment is needed.  Stopped sales are still blocked
+                        // and require explicit operator action via ResetLane.
                         let mut map = runtimes.write().await;
                         if let Some(rt) = map.get_mut(&byte) {
-                            if !matches!(
-                                rt.state.status,
-                                FpStatus::Done | FpStatus::Stopped { .. }
-                            ) {
+                            if !matches!(rt.state.status, FpStatus::Stopped { .. }) {
                                 rt.state.status = FpStatus::Idle;
                                 rt.state.volume = 0.0;
                                 rt.state.amount = 0;
                                 rt.state.nozzle_index = None;
+                                rt.state.pre_auth_preset = None;
                                 rt.current_tx = None;
                                 rt.pre_auth = None;
                             }
@@ -2043,16 +2044,25 @@ async fn run_gilbarco_poll_loop(
 
 /// Identify the lifted nozzle from the 9600 `F0` all-pump/all-nozzle frame.
 fn gbr_query_nozzle_from_all(addr: u8, backend: &SerialBackend) -> Option<u8> {
-    // Old 9600 captures show the POS first entering the address-scoped nozzle
-    // query (`0x20|addr`, wait for `D0|addr`, then send `FF`). The following
-    // `F0` all-pump request then returns the frame with the active nozzle index.
+    // Replays the exact sequence the original 9600 POS used (docs/logs/gilbarco/
+    // 9600/*_nozzles_lifted_and_down.log, CH2-Pc = PC-transmit-only):
+    //   0x20|addr  ->  (0xD0|addr ack)
+    //   FF E9 FE E0 E1 E0 FB EE   (full GetNozzle frame)
+    //   F0         ->  BA frame   (lifted-nozzle index at offset 14)
+    //
+    // The pump will NOT answer `F0` until it has received the COMPLETE 8-byte
+    // GetNozzle frame; a single `FF` (commit 6b25944) leaves it unanswered, which
+    // both fell back to nozzle 1 AND stalled the poll loop on the 500ms `F0`
+    // timeout every cycle (tripping other pumps offline and sticking pump 3 on
+    // "lifted"). The nozzle index can only come from the `F0` BA frame — the
+    // GetNozzle frame itself has the index stripped by the gilb-v2 board.
     let ack = exchange_serial(backend, &gilbarco::command_mode(addr)).ok()?;
-    let expected = 0xD0 | (addr & 0x0F);
-    if !ack.contains(&expected) {
+    let expected_ack = 0xD0 | (addr & 0x0F);
+    if !ack.contains(&expected_ack) {
         return None;
     }
     std::thread::sleep(Duration::from_millis(15));
-    let _ = write_serial(backend, &[0xFF]);
+    let _ = write_serial(backend, &gilbarco::get_nozzle_frame());
     std::thread::sleep(Duration::from_millis(95));
     let resp = exchange_serial(backend, &gilbarco::get_all()).ok()?;
     let (pump, nozzle) = gilbarco::parse_all_nozzle_response(&resp)?;

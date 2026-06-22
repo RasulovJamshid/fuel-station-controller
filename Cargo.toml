@@ -10,6 +10,7 @@ members = [
     "apps/desktop/src-tauri",
     "apps/sim-desktop/src-tauri",
     "tools/simulators/wayne-sim",
+    "tools/simulators/gilbarco-sim",
 ]
 resolver = "2"
 

@@ -34,6 +34,8 @@ function statusTag(raw: FpState["status"]): string {
 }
 
 const WORKSPACE_TAB_IDS: WorkspaceTabId[] = ["dispensers", "shift", "reservoirs", "history", "admin"];
+const SELECTED_DISPENSER_FRAME_CLASS =
+  "bg-accent-blue/10 ring-[3px] ring-accent-blue ring-offset-2 ring-offset-bg-primary shadow-[0_0_0_1px_rgb(var(--color-accent-blue)/0.2),0_10px_24px_-18px_rgb(var(--color-accent-blue)/0.7)]";
 
 export default function App() {
   const { t } = useTranslation();
@@ -599,15 +601,18 @@ export default function App() {
                       ref={(el) => setDispenserRef(s.fp_id, el)}
                       tabIndex={activeDispenserFpId === s.fp_id ? 0 : -1}
                       data-dispenser-focusable="true"
-                      className={`rounded-xl outline-none transition-[box-shadow] duration-150 ${
+                      className={`relative rounded-xl outline-none transition-[box-shadow] duration-150 ${
                         activeDispenserFpId === s.fp_id
-                          ? "ring-[3px] ring-accent-emerald ring-offset-[3px] ring-offset-bg-primary shadow-[0_0_0_6px_rgb(var(--color-accent-emerald)/0.12),0_0_24px_rgb(var(--color-accent-emerald)/0.22)]"
+                          ? SELECTED_DISPENSER_FRAME_CLASS
                           : ""
-                      } focus-visible:ring-[3px] focus-visible:ring-accent-emerald focus-visible:ring-offset-[3px] focus-visible:ring-offset-bg-primary`}
+                      } focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary`}
                       onFocus={() => setActiveDispenserFpId(s.fp_id)}
                       onClick={() => setActiveDispenserFpId(s.fp_id)}
                       onKeyDown={(e) => onDispenserKeyDown(s.fp_id, e)}
                     >
+                      {activeDispenserFpId === s.fp_id ? (
+                        <div className="pointer-events-none absolute inset-x-4 top-0 z-20 h-1 rounded-b-full bg-accent-blue shadow-[0_1px_4px_rgb(var(--color-accent-blue)/0.45)]" aria-hidden />
+                      ) : null}
                       <DispenserRow
                         state={s}
                         fpNozzles={nozzlesByFp.get(s.fp_id) ?? []}
@@ -670,15 +675,18 @@ export default function App() {
                             ref={(el) => setDispenserRef(s.fp_id, el)}
                             tabIndex={activeDispenserFpId === s.fp_id ? 0 : -1}
                             data-dispenser-focusable="true"
-                            className={`min-h-0 rounded-xl outline-none transition-[box-shadow] duration-150 ${
+                            className={`relative min-h-0 rounded-xl outline-none transition-[box-shadow] duration-150 ${
                               activeDispenserFpId === s.fp_id
-                                ? "ring-[3px] ring-accent-emerald ring-offset-[3px] ring-offset-bg-primary shadow-[0_0_0_6px_rgb(var(--color-accent-emerald)/0.12),0_0_24px_rgb(var(--color-accent-emerald)/0.22)]"
+                                ? SELECTED_DISPENSER_FRAME_CLASS
                                 : ""
-                            } focus-visible:ring-[3px] focus-visible:ring-accent-emerald focus-visible:ring-offset-[3px] focus-visible:ring-offset-bg-primary`}
+                            } focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary`}
                             onFocus={() => setActiveDispenserFpId(s.fp_id)}
                             onClick={() => setActiveDispenserFpId(s.fp_id)}
                             onKeyDown={(e) => onDispenserKeyDown(s.fp_id, e)}
                           >
+                            {activeDispenserFpId === s.fp_id ? (
+                              <div className="pointer-events-none absolute inset-x-4 top-0 z-20 h-1 rounded-b-full bg-accent-blue shadow-[0_1px_4px_rgb(var(--color-accent-blue)/0.45)]" aria-hidden />
+                            ) : null}
                             <DispenserCard
                               state={s}
                               fpNozzles={nozzlesByFp.get(s.fp_id) ?? []}

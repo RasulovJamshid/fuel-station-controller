@@ -2,6 +2,7 @@ mod api;
 mod config;
 mod dispenser;
 mod engine;
+mod scenarios;
 
 use std::sync::{Arc, Mutex};
 

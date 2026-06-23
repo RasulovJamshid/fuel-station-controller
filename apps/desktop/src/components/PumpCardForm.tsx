@@ -554,7 +554,7 @@ export function PumpCardProgress({
             {volume.toFixed(2)} L
           </span>
         </div>
-        <div className="progress-track h-2.5 overflow-hidden rounded-full">
+        <div className="progress-track h-4 overflow-hidden rounded-full">
           <div className="progress-fill h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
         </div>
         <div className={`mt-0.5 flex justify-between font-mono tabular-nums text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>
@@ -577,7 +577,7 @@ export function PumpCardProgress({
             {volume.toFixed(2)} L
           </span>
         </div>
-        <div className="progress-track h-2.5 overflow-hidden rounded-full">
+        <div className="progress-track h-4 overflow-hidden rounded-full">
           <div className="progress-fill h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
         </div>
         <div className={`mt-0.5 flex justify-between font-mono tabular-nums text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>

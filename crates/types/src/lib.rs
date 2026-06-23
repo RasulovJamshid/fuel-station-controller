@@ -58,6 +58,16 @@ impl FpStatus {
     }
 }
 
+/// Lifetime pump totalizer for one nozzle (Gilbarco GetTotals). One entry per
+/// configured nozzle so the UI can show totals for the currently-selected product.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PumpNozzleTotals {
+    pub nozzle_index: u8,
+    pub volume: f64,
+    pub amount: u64,
+    pub price: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FpState {
     pub fp_id: String,
@@ -91,6 +101,7 @@ pub struct FpState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub segment_amount: Option<u64>,
     /// Latest pump totalizer for the currently selected/last sold nozzle.
+    /// Kept for backward compatibility; prefer `pump_totals` (per-nozzle) when present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pump_total_nozzle_index: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -99,6 +110,10 @@ pub struct FpState {
     pub pump_total_amount: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pump_total_price: Option<u32>,
+    /// Per-nozzle pump totalizer (one entry per configured nozzle). Lets the UI show
+    /// totals for the currently-selected product instead of only the first nozzle.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pump_totals: Vec<PumpNozzleTotals>,
     /// Human-readable preset while `status` is `PRE_AUTHORIZED`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pre_auth_preset: Option<String>,

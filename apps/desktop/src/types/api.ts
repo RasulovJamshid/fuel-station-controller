@@ -14,6 +14,13 @@ export type ShiftMode = "disabled" | "manual" | "scheduled";
 
 export type ShiftStatus = "ACTIVE" | "CLOSED";
 
+export interface PumpNozzleTotals {
+  nozzle_index: number;
+  volume: number;
+  amount: number;
+  price: number;
+}
+
 export interface FpState {
   fp_id: string;
   label: string;
@@ -39,6 +46,7 @@ export interface FpState {
   pump_total_volume?: number | null;
   pump_total_amount?: number | null;
   pump_total_price?: number | null;
+  pump_totals?: PumpNozzleTotals[];
   pre_auth_preset?: string | null;
   stop_source?: StopSource | null;
 }

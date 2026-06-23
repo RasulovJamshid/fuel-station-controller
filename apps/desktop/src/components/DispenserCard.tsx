@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Fuel } from "lucide-react";
+import { AlertTriangle, Fuel } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import banIcon from "@/assets/icons/ban.svg";
 import checkIcon from "@/assets/icons/check.svg";
@@ -20,7 +20,6 @@ import { pausedInfo, statusTag } from "../types/api";
 import { useAppStore } from "../store";
 import { FillSetupModal } from "./FillSetupModal";
 import { PumpCardForm, PumpCardProgress } from "./PumpCardForm";
-import { PreAuthNozzleMismatchAlert } from "./PreAuthNozzleMismatchAlert";
 
 export type FillMode = "full" | "volume" | "amount";
 
@@ -226,7 +225,7 @@ export function DispenserCard({
 
   useEffect(() => {
     if (!showPreAuthMismatchBanner) return;
-    const t = window.setTimeout(() => clearPreAuthNozzleMismatch(), 30000);
+    const t = window.setTimeout(() => clearPreAuthNozzleMismatch(), 10000);
     return () => window.clearTimeout(t);
   }, [showPreAuthMismatchBanner, clearPreAuthNozzleMismatch]);
 
@@ -452,9 +451,34 @@ export function DispenserCard({
   const displayVolume = isPaused ? (paused?.stopped_volume ?? 0) : state.volume;
   const progressTarget = parseVolumeTargetLiters(state.pre_auth_preset);
   const amountTarget = parseAmountTargetSum(state.pre_auth_preset);
-  const hasPumpTotalizer =
-    state.pump_total_volume != null || state.pump_total_amount != null;
-  const showPumpTotalizer = hasPumpTotalizer && (isIdle || isDone || isPaused);
+  // Lifetime pump totals for the currently selected product: prefer the matching
+  // per-nozzle entry, fall back to the legacy single-nozzle fields.
+  const pumpTotalizer = useMemo(() => {
+    const match =
+      effectiveNozzle != null
+        ? state.pump_totals?.find((tt) => tt.nozzle_index === effectiveNozzle)
+        : undefined;
+    if (match) {
+      return { nozzleIndex: match.nozzle_index, volume: match.volume, amount: match.amount, price: match.price };
+    }
+    if (state.pump_total_volume != null || state.pump_total_amount != null) {
+      return {
+        nozzleIndex: state.pump_total_nozzle_index ?? null,
+        volume: state.pump_total_volume ?? null,
+        amount: state.pump_total_amount ?? null,
+        price: state.pump_total_price ?? null,
+      };
+    }
+    return null;
+  }, [
+    effectiveNozzle,
+    state.pump_totals,
+    state.pump_total_nozzle_index,
+    state.pump_total_volume,
+    state.pump_total_amount,
+    state.pump_total_price,
+  ]);
+  const showPumpTotalizer = pumpTotalizer != null && (isIdle || isDone || isPaused);
 
   return (
     <>
@@ -463,6 +487,26 @@ export function DispenserCard({
           } ${showPreAuthMismatchBanner ? "ring-2 ring-accent-red/50" : ""} ${!positionActive ? "opacity-60 grayscale-[50%]" : ""
           }`}
       >
+        {/* Wrong-nozzle alert: a full-card RED overlay (same as the classic UI).
+            Absolutely positioned so it never resizes the card, and pointer-events-none
+            so the card underneath stays interactive. */}
+        {showPreAuthMismatchBanner && (
+          <div
+            role="alert"
+            className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-1.5 bg-accent-red/95 px-3 py-2 text-center text-white shadow-[inset_0_0_0_3px_rgb(var(--color-accent-red))] backdrop-blur-sm"
+            title={t("mismatch.instructions")}
+          >
+            <span className="absolute inset-0 animate-pulse ring-4 ring-inset ring-white/30" aria-hidden />
+            <AlertTriangle className="h-7 w-7 shrink-0 drop-shadow" />
+            <span className="text-sm font-black uppercase leading-tight tracking-widest">
+              {t("mismatch.wrongNozzle")}
+            </span>
+            <span className="text-[11px] font-semibold leading-snug text-red-50/90">
+              {t("mismatch.instructions")}
+            </span>
+          </div>
+        )}
+
         {/* Header */}
         <div className={`flex shrink-0 items-center justify-between border-b border-border-primary/20 ${compact ? "gap-1 pb-1.5" : "gap-2 pb-2"}`}>
           <div className={`flex min-w-0 items-center ${compact ? "gap-1.5" : "gap-2"}`}>
@@ -644,16 +688,6 @@ export function DispenserCard({
             </div>
           ) : null}
 
-          {showPreAuthMismatchBanner && preAuthNozzleMismatch && (
-            <PreAuthNozzleMismatchAlert
-              expectedProductName={preAuthNozzleMismatch.expectedProductName}
-              liftedProductName={preAuthNozzleMismatch.liftedProductName}
-              expectedColor={preAuthNozzleMismatch.expectedColor}
-              liftedColor={preAuthNozzleMismatch.liftedColor}
-              onClose={clearPreAuthNozzleMismatch}
-            />
-          )}
-
           {isContinuing && !showPumpForm && (
             <div className="grid grid-cols-3 gap-1 rounded-lg border border-border-primary bg-bg-input/50 p-2">
               <ContinuationMeterColumn
@@ -687,25 +721,25 @@ export function DispenserCard({
             />
           )}
 
-          {showPumpTotalizer && !showPumpForm && (
+          {showPumpTotalizer && pumpTotalizer && !showPumpForm && (
             <div className={`flex items-center justify-between rounded-lg border border-border-primary/50 bg-bg-input/30 ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`}>
               <div className="min-w-0">
                 <p className="truncate text-[10px] font-bold uppercase tracking-wide text-text-muted">
                   {t("dispenser.totalizer")}
-                  {state.pump_total_nozzle_index != null ? ` · ${t("dispenser.nozzle")} ${state.pump_total_nozzle_index}` : ""}
+                  {pumpTotalizer.nozzleIndex != null ? ` · ${t("dispenser.nozzle")} ${pumpTotalizer.nozzleIndex}` : ""}
                 </p>
-                {state.pump_total_price != null && state.pump_total_price > 0 ? (
+                {pumpTotalizer.price != null && pumpTotalizer.price > 0 ? (
                   <p className="truncate text-xs text-text-tertiary">
-                    {fmtSum.format(state.pump_total_price)} SUM/L
+                    {fmtSum.format(pumpTotalizer.price)} SUM/L
                   </p>
                 ) : null}
               </div>
               <div className="shrink-0 text-right">
                 <p className={`font-mono font-semibold tabular-nums text-text-secondary ${compact ? "text-xs" : "text-sm"}`}>
-                  {state.pump_total_volume != null ? `${state.pump_total_volume.toFixed(2)} L` : "—"}
+                  {pumpTotalizer.volume != null ? `${pumpTotalizer.volume.toFixed(2)} L` : "—"}
                 </p>
                 <p className={`font-mono tabular-nums text-text-muted ${compact ? "text-xs" : "text-sm"}`}>
-                  {state.pump_total_amount != null ? fmtSum.format(state.pump_total_amount) : "—"}
+                  {pumpTotalizer.amount != null ? fmtSum.format(pumpTotalizer.amount) : "—"}
                 </p>
               </div>
             </div>

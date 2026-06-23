@@ -255,6 +255,15 @@ pub fn parse_totals_response(buf: &[u8], nozzle_index: u8) -> Option<TotalsData>
         .find_map(|(start, _)| parse_totals_frame(&buf[start..], nozzle_index))
 }
 
+/// Parse every nozzle section in a GetTotals response. Sections are contiguous and
+/// 1-based (`E0`, `E1`, …); parsing stops at the first index that does not decode,
+/// so the returned vec holds one entry per configured nozzle (typically 1..=3).
+pub fn parse_all_totals_response(buf: &[u8]) -> Vec<TotalsData> {
+    (1..=8u8)
+        .map_while(|n| parse_totals_response(buf, n))
+        .collect()
+}
+
 fn parse_totals_frame(frame: &[u8], nozzle_index: u8) -> Option<TotalsData> {
     let section = 1 + 30 * (nozzle_index as usize - 1);
     if frame.len() < section + 30 {
@@ -531,6 +540,21 @@ mod tests {
         assert_eq!(totals.volume_total_raw, 99405932);
         assert_eq!(totals.amount_total_raw, 81101819);
         assert_eq!(totals.unit_price_raw, 1430);
+    }
+
+    #[test]
+    fn all_totals_response_parses_every_nozzle() {
+        let totals = parse_all_totals_response(&totals_frame_10l_fill());
+        assert_eq!(totals.len(), 3, "expected one section per nozzle");
+        assert_eq!(totals[0].nozzle_index, 1);
+        assert_eq!(totals[0].volume_total_raw, 26634966);
+        assert_eq!(totals[1].nozzle_index, 2);
+        // Distinct per nozzle — proves selection is not stuck on nozzle 1.
+        assert_eq!(totals[2].nozzle_index, 3);
+        assert_eq!(totals[2].volume_total_raw, 99405932);
+        assert_eq!(totals[2].unit_price_raw, 1430);
+        // Each section is unique.
+        assert_ne!(totals[0].volume_total_raw, totals[2].volume_total_raw);
     }
 
     #[test]

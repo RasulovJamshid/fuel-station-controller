@@ -11,7 +11,8 @@ use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
 use types::{
-    preset_label, FpStatus, Preset, StopSource, Transaction, TxStatus, UpdatePriceCmd, WsEvent,
+    preset_label, FpStatus, Preset, PumpNozzleTotals, StopSource, Transaction, TxStatus,
+    UpdatePriceCmd, WsEvent,
 };
 use wayne_europump::{
     ack, authorise_cmd, authorize_config_with_preset_block, authorize_initial, busy, done,
@@ -1795,22 +1796,53 @@ async fn run_gilbarco_poll_loop(
                         // sequence signals that the transaction is fully closed; no separate
                         // operator acknowledgment is needed.  Stopped sales are still blocked
                         // and require explicit operator action via ResetLane.
-                        let mut map = runtimes.write().await;
-                        if let Some(rt) = map.get_mut(&byte) {
-                            if !matches!(rt.state.status, FpStatus::Stopped { .. }) {
-                                rt.state.status = FpStatus::Idle;
-                                rt.state.volume = 0.0;
-                                rt.state.amount = 0;
-                                rt.state.nozzle_index = None;
-                                rt.state.pre_auth_preset = None;
-                                rt.current_tx = None;
-                                rt.pre_auth = None;
+                        let became_idle = {
+                            let mut map = runtimes.write().await;
+                            if let Some(rt) = map.get_mut(&byte) {
+                                let was = rt.state.status.clone();
+                                if !matches!(rt.state.status, FpStatus::Stopped { .. }) {
+                                    rt.state.status = FpStatus::Idle;
+                                    rt.state.volume = 0.0;
+                                    rt.state.amount = 0;
+                                    rt.state.nozzle_index = None;
+                                    rt.state.pre_auth_preset = None;
+                                    rt.current_tx = None;
+                                    rt.pre_auth = None;
+                                }
+                                rt.note_dispenser_poll(true);
+                                // Push any real transition INTO idle (e.g. NozzleUp→Idle when a
+                                // wrong/lifted nozzle is holstered) so the UI — and the
+                                // wrong-nozzle mismatch banner — updates immediately instead of
+                                // waiting for a client-side fallback timer. Steady idle→idle polls
+                                // stay silent to avoid per-poll WS spam; the frontend's holdDone
+                                // merge still protects the post-fill "last sale" display.
+                                was != FpStatus::Idle && rt.state.status == FpStatus::Idle
+                            } else {
+                                false
                             }
+                        };
+                        if became_idle {
+                            broadcast_status(byte, &runtimes, &events).await;
                         }
                     }
                 }
 
                 GilbarcoStatus::NozzleLifted => {
+                    let in_ghost_recovery = {
+                        let map = runtimes.read().await;
+                        map.get(&byte)
+                            .map(|rt| rt.ghost_recovery_active())
+                            .unwrap_or(false)
+                    };
+                    if in_ghost_recovery {
+                        debug!(
+                            addr = format_args!("0x{byte:02X}"),
+                            "Gilbarco: suppressing NozzleLifted during wrong-nozzle recovery"
+                        );
+                        broadcast_status(byte, &runtimes, &events).await;
+                        continue;
+                    }
+
                     let has_pending_auth = {
                         let map = runtimes.read().await;
                         map.get(&byte)
@@ -1855,9 +1887,10 @@ async fn run_gilbarco_poll_loop(
                                 .unwrap_or(nozzle)
                         };
                         // Wrong nozzle: a specific nozzle was pre-authorized but a
-                        // different one was lifted. Cancel the preauth, drop to NozzleUp
-                        // for the nozzle actually lifted, and notify the operator. The
-                        // pump is never authorized, so no wrong-product fuel can flow.
+                        // different one was lifted. Cancel the preauth (the pump is never
+                        // authorized, so no wrong-product fuel can flow) and reflect the
+                        // physically-lifted wrong nozzle as NozzleUp — NOT Idle, which
+                        // would be misleading while a nozzle is in the operator's hand.
                         // (expected_nozzle == 0 is a generic Authorize — any nozzle ok.)
                         if expected_nozzle != 0 && expected_nozzle != nozzle {
                             let expected_name = gbr_nozzle_product(fp_cfg, &cfg, expected_nozzle).1;
@@ -1867,14 +1900,33 @@ async fn run_gilbarco_poll_loop(
                                 lifted_nozzle = nozzle,
                                 "Gilbarco: preauth nozzle mismatch → cancel preauth + notify"
                             );
-                            let mut map = runtimes.write().await;
-                            if let Some(rt) = map.get_mut(&byte) {
-                                rt.cancel_pre_auth();
-                                rt.state.status = FpStatus::NozzleUp;
-                                rt.state.nozzle_index = Some(nozzle);
-                                rt.state.product_id = Some(product_id);
-                                rt.state.product_name = Some(product_name.clone());
-                                rt.state.price = price;
+                            // NOTE: scope the write guard so it is released BEFORE
+                            // broadcast_status (which takes a read lock on the same
+                            // RwLock). Holding the write guard across that await
+                            // deadlocks this task — the whole poll loop freezes, polling
+                            // stops, and the pump-down is never sensed.
+                            {
+                                let mut map = runtimes.write().await;
+                                if let Some(rt) = map.get_mut(&byte) {
+                                    // cancel_pre_auth() drops the pre-auth and resets to Idle.
+                                    rt.cancel_pre_auth();
+                                    // Show the lifted (wrong) nozzle as NozzleUp instead of
+                                    // Idle. We deliberately do NOT enter ghost_recovery here:
+                                    // pre_auth is now cleared, so the next poll's NozzleLifted
+                                    // handler takes the "no pending auth" path (which never
+                                    // auto-authorizes in preauth mode) and simply keeps the
+                                    // lane at NozzleUp. When the operator holsters the wrong
+                                    // nozzle the pump reports Idle and the lane clears normally,
+                                    // so a fresh pre-authorization works immediately. The 9600
+                                    // pump emits only a status byte (no unsolicited meter Data
+                                    // frames), so there is nothing stale to suppress — unlike
+                                    // the Wayne path, ghost_recovery would only mask reality.
+                                    rt.state.status = FpStatus::NozzleUp;
+                                    rt.state.nozzle_index = Some(nozzle);
+                                    rt.state.product_id = Some(product_id);
+                                    rt.state.product_name = Some(product_name.clone());
+                                    rt.state.price = price;
+                                }
                             }
                             let _ = events.send(WsEvent::PreAuthNozzleMismatch {
                                 fp_id: fp_cfg.id.clone(),
@@ -2003,10 +2055,54 @@ async fn run_gilbarco_poll_loop(
                 }
 
                 GilbarcoStatus::TransactionComplete => {
-                    gbr_close_transaction(
-                        byte, fp_cfg, &backend, &cfg, &runtimes, &events, &pool, &shifts,
-                    )
-                    .await;
+                    // A pump in Delivering/Authorizing/Stopped is closing a real sale.
+                    // But TC also fires when a lifted-but-unauthorized nozzle is simply
+                    // holstered (e.g. after a wrong-nozzle preauth mismatch, the lane
+                    // sits at NozzleUp). gbr_close_transaction bails out in that case, so
+                    // handle it here: there is no sale to record, so just return the lane
+                    // to Idle and broadcast it. Without this the lane lingers on NozzleUp
+                    // ("still shows as lifted after the nozzle is down").
+                    let closeable = {
+                        let map = runtimes.read().await;
+                        map.get(&byte)
+                            .map(|rt| {
+                                matches!(
+                                    rt.state.status,
+                                    FpStatus::Delivering
+                                        | FpStatus::Authorizing
+                                        | FpStatus::Stopped { .. }
+                                )
+                            })
+                            .unwrap_or(false)
+                    };
+                    if closeable {
+                        gbr_close_transaction(
+                            byte, fp_cfg, &backend, &cfg, &runtimes, &events, &pool, &shifts,
+                        )
+                        .await;
+                    } else {
+                        let became_idle = {
+                            let mut map = runtimes.write().await;
+                            if let Some(rt) = map.get_mut(&byte) {
+                                let was = rt.state.status.clone();
+                                if !matches!(rt.state.status, FpStatus::Stopped { .. }) {
+                                    rt.state.status = FpStatus::Idle;
+                                    rt.state.volume = 0.0;
+                                    rt.state.amount = 0;
+                                    rt.state.nozzle_index = None;
+                                    rt.state.pre_auth_preset = None;
+                                    rt.current_tx = None;
+                                    rt.pre_auth = None;
+                                }
+                                was != FpStatus::Idle && rt.state.status == FpStatus::Idle
+                            } else {
+                                false
+                            }
+                        };
+                        if became_idle {
+                            broadcast_status(byte, &runtimes, &events).await;
+                        }
+                    }
                 }
 
                 GilbarcoStatus::Stopped => {
@@ -2164,7 +2260,8 @@ async fn gbr_sync_totals(
             .unwrap_or(1)
     };
 
-    let Some(totals) = gilbarco::parse_totals_response(&resp, nozzle_index) else {
+    let all = gilbarco::parse_all_totals_response(&resp);
+    if all.is_empty() {
         warn!(
             byte,
             nozzle_index,
@@ -2172,16 +2269,38 @@ async fn gbr_sync_totals(
             "Gilbarco: startup totals parse failed"
         );
         return true;
-    };
+    }
+    let totals_vec = gbr_totals_to_state(&all);
+    // Legacy single fields track the active/selected nozzle (fallback: first entry).
+    let pick = all
+        .iter()
+        .find(|t| t.nozzle_index == nozzle_index)
+        .or_else(|| all.first());
 
     let mut map = runtimes.write().await;
     if let Some(rt) = map.get_mut(&byte) {
-        rt.state.pump_total_nozzle_index = Some(totals.nozzle_index);
-        rt.state.pump_total_volume = Some(totals.volume_total_raw as f64 / 1000.0);
-        rt.state.pump_total_amount = Some(totals.amount_total_raw * 10);
-        rt.state.pump_total_price = Some((totals.unit_price_raw * 10).min(u32::MAX as u64) as u32);
+        rt.state.pump_totals = totals_vec;
+        if let Some(t) = pick {
+            rt.state.pump_total_nozzle_index = Some(t.nozzle_index);
+            rt.state.pump_total_volume = Some(t.volume_total_raw as f64 / 1000.0);
+            rt.state.pump_total_amount = Some(t.amount_total_raw * 10);
+            rt.state.pump_total_price = Some((t.unit_price_raw * 10).min(u32::MAX as u64) as u32);
+        }
     }
     true
+}
+
+/// Map decoded GetTotals sections to the per-nozzle UI shape (raw pump units →
+/// litres / soum, matching the legacy single-field scaling).
+fn gbr_totals_to_state(all: &[gilbarco::TotalsData]) -> Vec<PumpNozzleTotals> {
+    all.iter()
+        .map(|t| PumpNozzleTotals {
+            nozzle_index: t.nozzle_index,
+            volume: t.volume_total_raw as f64 / 1000.0,
+            amount: t.amount_total_raw * 10,
+            price: (t.unit_price_raw * 10).min(u32::MAX as u64) as u32,
+        })
+        .collect()
 }
 
 fn gbr_enter_command_mode(byte: u8, backend: &SerialBackend, action: &'static str) -> bool {
@@ -2372,29 +2491,35 @@ async fn gbr_close_transaction(
         .filter(|p| *p > 0)
         .unwrap_or(state_price);
 
-    if let Some(totals) = totals_raw
+    let all_totals = totals_raw
         .as_deref()
-        .and_then(|r| gilbarco::parse_totals_response(r, nozzle_index))
-    {
-        let total_volume = totals.volume_total_raw as f64 / 1000.0;
-        let total_amount = totals.amount_total_raw * 10;
-        let total_price = (totals.unit_price_raw * 10).min(u32::MAX as u64) as u32;
+        .map(gilbarco::parse_all_totals_response)
+        .unwrap_or_default();
+    if !all_totals.is_empty() {
+        let totals_vec = gbr_totals_to_state(&all_totals);
+        // Legacy single fields track the nozzle that just sold (fallback: first entry).
+        let pick = all_totals
+            .iter()
+            .find(|t| t.nozzle_index == nozzle_index)
+            .or_else(|| all_totals.first());
 
         info!(
             addr = format_args!("0x{byte:02X}"),
             nozzle_index,
-            volume_total_raw = totals.volume_total_raw,
-            amount_total_raw = totals.amount_total_raw,
-            unit_price_raw = totals.unit_price_raw,
-            "Gilbarco: parsed pump totals"
+            nozzles = all_totals.len(),
+            "Gilbarco: parsed pump totals (all nozzles)"
         );
 
         let mut map = runtimes.write().await;
         if let Some(rt) = map.get_mut(&byte) {
-            rt.state.pump_total_nozzle_index = Some(totals.nozzle_index);
-            rt.state.pump_total_volume = Some(total_volume);
-            rt.state.pump_total_amount = Some(total_amount);
-            rt.state.pump_total_price = Some(total_price);
+            rt.state.pump_totals = totals_vec;
+            if let Some(t) = pick {
+                rt.state.pump_total_nozzle_index = Some(t.nozzle_index);
+                rt.state.pump_total_volume = Some(t.volume_total_raw as f64 / 1000.0);
+                rt.state.pump_total_amount = Some(t.amount_total_raw * 10);
+                rt.state.pump_total_price =
+                    Some((t.unit_price_raw * 10).min(u32::MAX as u64) as u32);
+            }
         }
     }
 

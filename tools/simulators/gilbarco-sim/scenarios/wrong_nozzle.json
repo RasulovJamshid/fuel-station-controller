@@ -1,0 +1,6 @@
+{
+  "name": "wrong_nozzle",
+  "description": "Wrong-nozzle-during-preauth recovery on FP3: pre-auth nozzle 3 in the UI, sim lifts nozzle 2 (mismatch → red overlay + NOZZLE_UP, not idle), holster → IDLE, then pre-auth + lift nozzle 3 succeeds (no error). Pre-auth steps are prompted in the sim log.",
+  "addr": "FP3",
+  "duration_ms": 36000
+}

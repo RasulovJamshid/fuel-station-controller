@@ -185,6 +185,7 @@ impl RuntimeFp {
                 pump_total_volume: None,
                 pump_total_amount: None,
                 pump_total_price: None,
+                pump_totals: Vec::new(),
                 pre_auth_preset: None,
                 stop_source: None,
             },
@@ -685,7 +686,7 @@ impl RuntimeFp {
         self.state.product_color = None;
     }
 
-    fn ghost_recovery_active(&self) -> bool {
+    pub fn ghost_recovery_active(&self) -> bool {
         self.ghost_recovery && self.consecutive_idle_polls < GHOST_RECOVERY_IDLE_POLLS
     }
 

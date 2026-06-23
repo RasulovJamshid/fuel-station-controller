@@ -20,6 +20,7 @@ pub fn router(dispensers: SharedDispensers) -> Router {
         .route("/sim/estop", post(estop_all))
         .route("/sim/reset", post(reset_all))
         .route("/sim/set-fill-rate", post(set_fill_rate))
+        .route("/sim/scenario", post(run_scenario))
         .with_state(dispensers)
 }
 
@@ -48,6 +49,11 @@ pub struct PreparePreAuthCmd {
     pub product: Option<u8>,
     #[serde(default)]
     pub product_name: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ScenarioCmd {
+    pub name: String,
 }
 
 #[derive(Deserialize)]
@@ -255,6 +261,26 @@ async fn reset_all(State(disps): State<SharedDispensers>) -> Json<ApiResponse> {
         d.reset();
     }
     Json(ApiResponse { ok: true, message: None })
+}
+
+async fn run_scenario(
+    State(disps): State<SharedDispensers>,
+    Json(cmd): Json<ScenarioCmd>,
+) -> (StatusCode, Json<ApiResponse>) {
+    let disps_clone = disps.clone();
+    let name = cmd.name.clone();
+    tokio::spawn(async move {
+        if let Err(e) = crate::scenarios::run(&name, disps_clone).await {
+            tracing::error!("Scenario {} failed: {}", name, e);
+        }
+    });
+    (
+        StatusCode::OK,
+        Json(ApiResponse {
+            ok: true,
+            message: Some(format!("Scenario '{}' started", cmd.name)),
+        }),
+    )
 }
 
 async fn set_fill_rate(

@@ -88,7 +88,7 @@ export function DispenserRow({
 
   useEffect(() => {
     if (!showMismatch) return;
-    const id = window.setTimeout(() => clearPreAuthMismatch(), 30000);
+    const id = window.setTimeout(() => clearPreAuthMismatch(), 10000);
     return () => window.clearTimeout(id);
   }, [showMismatch, clearPreAuthMismatch]);
 
@@ -379,7 +379,7 @@ export function DispenserRow({
                   <span className="font-mono text-base font-bold tabular-nums text-text-secondary">{fmtSum.format(state.amount)} SUM</span>
                   {pct !== null && (
                     <>
-                      <div className="h-2.5 min-w-[48px] max-w-[100px] flex-1 overflow-hidden rounded-full">
+                      <div className="h-4 min-w-[48px] max-w-[100px] flex-1 overflow-hidden rounded-full">
                         <div className="progress-track h-full w-full overflow-hidden rounded-full">
                           <div className="progress-fill h-full rounded-full" style={{ width: `${pct}%` }} />
                         </div>
@@ -434,7 +434,7 @@ export function DispenserRow({
                   {pct !== null && (
                     <>
                       <span className="text-border-primary">·</span>
-                      <div className="h-2 min-w-[60px] max-w-[140px] flex-1 overflow-hidden rounded-full">
+                      <div className="h-3.5 min-w-[60px] max-w-[140px] flex-1 overflow-hidden rounded-full">
                         <div className="progress-track h-full w-full overflow-hidden rounded-full">
                           <div className="progress-fill h-full rounded-full" style={{ width: `${pct}%` }} />
                         </div>
@@ -484,10 +484,6 @@ export function DispenserRow({
         {showMismatch && preAuthNozzleMismatch && (
           <div className="border-t border-red-600/40 p-2">
             <PreAuthNozzleMismatchAlert
-              expectedProductName={preAuthNozzleMismatch.expectedProductName}
-              liftedProductName={preAuthNozzleMismatch.liftedProductName}
-              expectedColor={preAuthNozzleMismatch.expectedColor}
-              liftedColor={preAuthNozzleMismatch.liftedColor}
               onClose={clearPreAuthMismatch}
             />
           </div>

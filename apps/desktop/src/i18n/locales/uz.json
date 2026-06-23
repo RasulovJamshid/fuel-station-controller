@@ -260,11 +260,11 @@
     "fillModeAmt": "Summa"
   },
   "mismatch": {
-    "title": "YOQILGʼI TURI MOS KELMADI",
+    "title": "NOTOʼGʼRI PISTOLET",
     "saleFor": "Bu quyish {{expected}} uchun, {{lifted}} emas.",
     "useThis": "SHU PISTOLETNI ISHLATING",
     "wrongNozzle": "NOTOʼGʼRI PISTOLET",
-    "instructions": "⚠️ Eski ruxsat bekor qilindi. Pistoletni qoʼying va yangi quyish sozlang.",
+    "instructions": "Eski ruxsat bekor qilindi. Pistoletni qoʼying va yangi quyishni sozlang.",
     "close": "Yopish"
   },
   "reservoirs": {

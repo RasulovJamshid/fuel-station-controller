@@ -140,6 +140,7 @@ export function mergeIncomingFpState(
     pump_total_volume: incoming.pump_total_volume ?? prev.pump_total_volume ?? null,
     pump_total_amount: incoming.pump_total_amount ?? prev.pump_total_amount ?? null,
     pump_total_price: incoming.pump_total_price ?? prev.pump_total_price ?? null,
+    pump_totals: incoming.pump_totals ?? prev.pump_totals,
     pre_auth_preset: preAuthPreset,
     stopped_tx_id:
       incoming.stopped_tx_id ?? (incomingTag === "STOPPED" ? prev.stopped_tx_id : null) ?? null,

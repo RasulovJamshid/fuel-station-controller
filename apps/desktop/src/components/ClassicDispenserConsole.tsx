@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { pausedInfo, statusTag } from "../types/api";
 import type { AuthMode, FpState, FpStatus, NozzleSnapshot } from "../types/api";
@@ -97,6 +98,40 @@ function pumpNumber(state: FpState): string {
 
 function productColorFor(state: FpState, nozzle: NozzleSnapshot | null | undefined): string {
   return nozzle?.product_color ?? state.product_color ?? "#64748b";
+}
+
+type PumpTotalizerView = {
+  nozzleIndex: number | null;
+  volume: number | null;
+  amount: number | null;
+  price: number | null;
+};
+
+/// Lifetime pump totals for the selected nozzle: prefer the per-nozzle `pump_totals`
+/// entry, else fall back to the legacy single-nozzle fields. Returns null when the
+/// pump reported no totals (i.e. non-Gilbarco lanes / undecodable pumps).
+function pickPumpTotalizer(state: FpState, selectedNozzleIndex: number | null): PumpTotalizerView | null {
+  const match =
+    selectedNozzleIndex != null
+      ? state.pump_totals?.find((tt) => tt.nozzle_index === selectedNozzleIndex)
+      : undefined;
+  if (match) {
+    return {
+      nozzleIndex: match.nozzle_index,
+      volume: match.volume,
+      amount: match.amount,
+      price: match.price,
+    };
+  }
+  if (state.pump_total_volume != null || state.pump_total_amount != null) {
+    return {
+      nozzleIndex: state.pump_total_nozzle_index ?? null,
+      volume: state.pump_total_volume ?? null,
+      amount: state.pump_total_amount ?? null,
+      price: state.pump_total_price ?? null,
+    };
+  }
+  return null;
 }
 
 type PumpDraft = {
@@ -247,7 +282,9 @@ export function ClassicDispenserConsole({
   const clearPreAuthNozzleMismatch = useAppStore((s) => s.clearPreAuthNozzleMismatch);
   useEffect(() => {
     if (!preAuthNozzleMismatch) return;
-    const tmr = window.setTimeout(() => clearPreAuthNozzleMismatch(), 30000);
+    // Fallback only: the backend pushes IDLE the moment the wrong nozzle is holstered,
+    // which clears the banner. This timer just bounds the case where it is never holstered.
+    const tmr = window.setTimeout(() => clearPreAuthNozzleMismatch(), 10000);
     return () => window.clearTimeout(tmr);
   }, [preAuthNozzleMismatch, clearPreAuthNozzleMismatch]);
   const [drafts, setDrafts] = useState<Record<string, PumpDraft>>({});
@@ -352,9 +389,15 @@ export function ClassicDispenserConsole({
               : null;
         const prevTag = prevTags[state.fp_id];
         const wasActive = prevTag === "DELIVERING" || prevTag === "AUTHORIZING";
-        // Clear inputs after a successful fill: when status hits DONE, or if DONE was
-        // skipped and we jump straight from an active state to IDLE.
-        const clearValues = tag === "DONE" || (wasActive && tag === "IDLE");
+        // An armed setup (pre-auth) or a bare nozzle-up that drops back to IDLE without
+        // fueling — e.g. a wrong-nozzle pre-auth mismatch that cancels and returns to
+        // idle once the wrong nozzle is holstered. The old volume/amount from that
+        // pre-auth must not linger in the inputs.
+        const setupAbandoned =
+          (prevTag === "PRE_AUTHORIZED" || prevTag === "NOZZLE_UP") && tag === "IDLE";
+        // Clear inputs after a successful fill (status hits DONE, or DONE was skipped and
+        // we jump straight from an active state to IDLE) OR when a setup was abandoned.
+        const clearValues = tag === "DONE" || (wasActive && tag === "IDLE") || setupAbandoned;
         // Capture last-fill snapshot when the fill just ended.
         const captureLastFill = clearValues && state.volume > 0;
         // Reset last-fill snapshot when a new transaction begins.
@@ -998,6 +1041,14 @@ export function ClassicDispenserConsole({
     const selectedCard = state.fp_id === selected.fp_id;
     const cardMismatch =
       preAuthNozzleMismatch != null && preAuthNozzleMismatch.fpId === state.fp_id;
+    // Lifetime pump totals (Gilbarco GetTotals) for the CURRENTLY SELECTED product:
+    // prefer the matching per-nozzle entry, falling back to the legacy single-nozzle
+    // fields. The backend only ever populates these on Gilbarco fuel points, so the
+    // null-check is the de-facto protocol gate (and hides the row on a Gilbarco pump 1
+    // whose totals can't be decoded).
+    const pumpTotalizer = pickPumpTotalizer(state, nozzle?.index ?? null);
+    const showPumpTotalizer =
+      pumpTotalizer != null && (meta.isIdle || meta.tag === "DONE" || meta.isPaused);
     return (
       <div
         key={state.fp_id}
@@ -1007,22 +1058,23 @@ export function ClassicDispenserConsole({
             : "border-border-primary/40 bg-bg-secondary/30 hover:bg-bg-secondary/60 cursor-pointer"
         }`}
       >
+        {/* Wrong-nozzle alert: a full-card RED overlay. Absolutely positioned so it
+            never resizes the tile / shifts the grid, and pointer-events-none so the
+            card underneath stays selectable. Pulsing ring + icon draw the operator's
+            eye straight to the offending pump. */}
         {cardMismatch && (
           <div
-            className="flex items-center gap-2 border-b border-accent-amber/40 bg-accent-amber/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-accent-amber shadow-[inset_0_0_20px_rgba(var(--color-accent-amber),0.05)] backdrop-blur-sm"
-            title={t("mismatch.saleFor", {
-              expected: preAuthNozzleMismatch.expectedProductName,
-              lifted: preAuthNozzleMismatch.liftedProductName,
-            })}
+            role="alert"
+            className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-1.5 bg-accent-red/95 px-3 py-2 text-center text-white shadow-[inset_0_0_0_3px_rgb(var(--color-accent-red))] backdrop-blur-sm"
+            title={t("mismatch.instructions")}
           >
-            <span className="relative flex h-2 w-2 shrink-0">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-amber opacity-75"></span>
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-amber"></span>
+            <span className="absolute inset-0 animate-pulse ring-4 ring-inset ring-white/30" aria-hidden />
+            <AlertTriangle className="h-7 w-7 shrink-0 drop-shadow" />
+            <span className="text-sm font-black uppercase leading-tight tracking-widest">
+              {t("mismatch.wrongNozzle")}
             </span>
-            <span className="min-w-0 flex-1 truncate flex items-center gap-1.5">
-              <span className="opacity-60 line-through decoration-2">{preAuthNozzleMismatch.liftedProductName}</span>
-              <span className="text-[10px] opacity-80">➔</span>
-              <span className="font-black rounded border border-accent-amber/30 bg-accent-amber/20 px-1.5 py-0.5">{preAuthNozzleMismatch.expectedProductName}</span>
+            <span className="text-[11px] font-semibold leading-snug text-red-50/90">
+              {t("mismatch.instructions")}
             </span>
           </div>
         )}
@@ -1063,6 +1115,22 @@ export function ClassicDispenserConsole({
           </span>
           <span className="shrink-0 font-mono font-bold text-text-primary">{fmtSum.format(nozzle?.price ?? state.price ?? 0)}</span>
         </div>
+        {showPumpTotalizer && pumpTotalizer && (
+          <div className={`flex items-center justify-between gap-2 border-t border-border-primary/20 bg-bg-secondary/10 px-3 py-1.5 font-mono tabular-nums ${ui.topCardLabel}`}>
+            <span className="flex min-w-0 items-center gap-1 truncate font-extrabold uppercase tracking-wider text-text-muted">
+              {t("dispenser.totalizer")}
+              {pumpTotalizer.nozzleIndex != null ? ` · ${t("dispenser.nozzle")} ${pumpTotalizer.nozzleIndex}` : ""}
+            </span>
+            <span className="flex shrink-0 items-baseline gap-2">
+              <span className="font-bold text-text-secondary">
+                {pumpTotalizer.volume != null ? `${pumpTotalizer.volume.toFixed(2)} L` : "—"}
+              </span>
+              <span className="text-text-muted">
+                {pumpTotalizer.amount != null ? fmtSum.format(pumpTotalizer.amount) : "—"}
+              </span>
+            </span>
+          </div>
+        )}
         <div className={`border-t border-border-primary/20 bg-bg-secondary/10 ${ui.topCardPad}`}>
           {renderAction(state, true)}
         </div>
@@ -1376,7 +1444,7 @@ export function ClassicDispenserConsole({
                 ? Math.min(100, (selected.amount / at) * 100)
                 : 0;
             return (
-              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-bg-secondary/40">
+              <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-bg-secondary/40">
                 <div
                   className="h-full rounded-full bg-accent-amber transition-all duration-500"
                   style={{ width: `${pct}%` }}

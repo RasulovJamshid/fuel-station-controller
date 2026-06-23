@@ -388,16 +388,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       const nozzles =
         snapshot?.positions.find((fp) => fp.fp_id === d.fp_id)?.nozzles ?? [];
       // The backend has already cancelled the preauth. Drop it from the lane row
-      // immediately here so the UI never lingers on PRE_AUTHORIZED — independent of
-      // the order/merge of the accompanying fp.status broadcast.
+      // immediately here so the UI never lingers on PRE_AUTHORIZED or pins the
+      // wrong hose as lifted while waiting for the accompanying fp.status broadcast.
       const next = [...get().states];
       const idx = next.findIndex((s) => s.fp_id === d.fp_id);
       if (idx >= 0) {
-        const wasPreauth = next[idx].status === "PRE_AUTHORIZED";
+        // The backend has already cancelled the preauth AND now reports the lane as
+        // NOZZLE_UP for the wrong nozzle that is physically in hand. Mirror that here
+        // (not IDLE) so the card shows a nozzle is lifted regardless of whether this
+        // event or the accompanying fp.status broadcast is processed first. Holstering
+        // the wrong nozzle later sends IDLE, which clears both the row and the banner.
+        const liftedNozzle = nozzles.find((n) => n.index === d.lifted_nozzle_index) ?? null;
         next[idx] = {
           ...next[idx],
-          status: wasPreauth ? "NOZZLE_UP" : next[idx].status,
+          status: "NOZZLE_UP",
           pre_auth_preset: null,
+          volume: 0,
+          amount: 0,
+          base_volume: null,
+          base_amount: null,
+          segment_volume: null,
+          segment_amount: null,
+          nozzle_index: d.lifted_nozzle_index ?? null,
+          product_id: liftedNozzle?.product_id ?? null,
+          product_name: d.lifted_product_name ?? liftedNozzle?.product_name ?? null,
+          product_color: liftedNozzle?.product_color ?? null,
         };
       }
       set({

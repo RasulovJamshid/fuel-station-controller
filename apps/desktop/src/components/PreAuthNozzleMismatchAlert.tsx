@@ -1,18 +1,10 @@
 import { useTranslation } from "react-i18next";
 
 type Props = {
-  expectedProductName: string;
-  liftedProductName: string;
-  expectedColor?: string;
-  liftedColor?: string;
   onClose?: () => void;
 };
 
 export function PreAuthNozzleMismatchAlert({
-  expectedProductName,
-  liftedProductName,
-  expectedColor = "#888",
-  liftedColor = "#888",
   onClose,
 }: Props) {
   const { t } = useTranslation();
@@ -25,18 +17,10 @@ export function PreAuthNozzleMismatchAlert({
       <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-red-500" aria-hidden />
       <div className="min-w-0 flex-1 leading-tight">
         <span className="text-[11px] font-bold uppercase tracking-wider text-red-300">
-          {t("mismatch.title")}
+          {t("mismatch.wrongNozzle")}
         </span>
         <p className="truncate text-sm font-medium text-red-100">
-          <span className="inline-flex items-center gap-1 font-bold">
-            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: expectedColor }} />
-            {expectedProductName}
-          </span>
-          {" ≠ "}
-          <span className="inline-flex items-center gap-1 font-bold text-red-300 line-through">
-            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: liftedColor }} />
-            {liftedProductName}
-          </span>
+          {t("mismatch.instructions")}
         </p>
       </div>
       {onClose && (

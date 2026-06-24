@@ -362,7 +362,7 @@ export function ClassicDispenserConsole({
   const centerOrderFocusClass =
     "focus:bg-accent-blue/20 focus:ring-[7px] focus:ring-accent-blue/45 focus:shadow-[0_0_0_2px_rgba(var(--color-accent-blue),0.75),0_12px_28px_-10px_rgba(var(--color-accent-blue),0.95)]";
   const bottomControlWrapClass =
-    "group flex flex-col gap-1 rounded-none border border-border-primary/50 bg-bg-secondary/20 p-3 transition-all duration-300 hover:bg-bg-secondary/40 hover:shadow-md focus-within:-translate-y-1 focus-within:border-accent-blue focus-within:bg-accent-blue/5 focus-within:shadow-[0_8px_24px_-8px_rgba(var(--color-accent-blue),0.4)]";
+    "group flex flex-col gap-1 rounded-none border border-border-primary/50 bg-bg-secondary/20 p-3 transition-colors duration-100 hover:bg-bg-secondary/40 hover:shadow-md focus-within:border-accent-blue focus-within:bg-accent-blue/5 focus-within:shadow-[0_8px_24px_-8px_rgba(var(--color-accent-blue),0.4)]";
   const bottomLabelClass =
     "mb-1 block text-sm font-black uppercase tracking-wider text-text-secondary transition-colors duration-200 group-focus-within:text-accent-blue group-hover:text-text-primary";
   const tableUnitSlotClass = "w-14 shrink-0";
@@ -754,7 +754,7 @@ export function ClassicDispenserConsole({
   const armFullFill = useCallback((state: FpState) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
     if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused) return;
-    setDraft(state.fp_id, { mode: "full" });
+    setDraft(state.fp_id, { mode: "full", volume: "", amount: "" });
     fullFillArmedRef.current = { fpId: state.fp_id, at: Date.now() };
     focusBottomControl("action");
   }, [defaultAuthMode, focusBottomControl, positionActiveByFp, setDraft]);
@@ -1042,17 +1042,17 @@ export function ClassicDispenserConsole({
     const modeColorClass = (mode: FillMode, active: boolean) => {
       if (mode === "full") {
         return active
-          ? "scale-100 bg-accent-emerald text-white shadow-[0_2px_8px_rgba(var(--color-accent-emerald),0.35)] hover:bg-accent-emerald active:bg-accent-emerald focus:bg-accent-emerald focus:text-white focus-visible:ring-accent-emerald/35"
-          : "scale-95 border border-accent-emerald/25 bg-accent-emerald/10 text-accent-emerald hover:scale-100 hover:bg-accent-emerald/18 hover:text-accent-emerald active:bg-accent-emerald/22 focus:bg-accent-emerald/18 focus:text-accent-emerald focus-visible:ring-accent-emerald/30";
+          ? "border-2 border-white/70 bg-accent-emerald text-white shadow-[inset_0_0_0_2px_rgba(255,255,255,0.22),0_0_0_2px_rgba(var(--color-accent-emerald),0.45),0_10px_20px_-12px_rgba(var(--color-accent-emerald),0.95)] hover:bg-accent-emerald active:bg-accent-emerald focus:bg-accent-emerald focus:text-white focus-visible:ring-accent-emerald/35"
+          : "border border-accent-emerald/25 bg-accent-emerald/10 text-accent-emerald hover:bg-accent-emerald/18 hover:text-accent-emerald active:bg-accent-emerald/22 focus:bg-accent-emerald/18 focus:text-accent-emerald focus-visible:ring-accent-emerald/30";
       }
       if (mode === "volume") {
         return active
-          ? "scale-100 bg-accent-blue text-white shadow-[0_2px_8px_rgba(var(--color-accent-blue),0.35)] hover:bg-accent-blue active:bg-accent-blue focus:bg-accent-blue focus:text-white focus-visible:ring-accent-blue/35"
-          : "scale-95 border border-accent-blue/25 bg-accent-blue/10 text-accent-blue hover:scale-100 hover:bg-accent-blue/18 hover:text-accent-blue active:bg-accent-blue/22 focus:bg-accent-blue/18 focus:text-accent-blue focus-visible:ring-accent-blue/30";
+          ? "border-2 border-white/70 bg-accent-blue text-white shadow-[inset_0_0_0_2px_rgba(255,255,255,0.22),0_0_0_2px_rgba(var(--color-accent-blue),0.45),0_10px_20px_-12px_rgba(var(--color-accent-blue),0.95)] hover:bg-accent-blue active:bg-accent-blue focus:bg-accent-blue focus:text-white focus-visible:ring-accent-blue/35"
+          : "border border-accent-blue/25 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/18 hover:text-accent-blue active:bg-accent-blue/22 focus:bg-accent-blue/18 focus:text-accent-blue focus-visible:ring-accent-blue/30";
       }
       return active
-        ? "scale-100 bg-accent-amber text-white shadow-[0_2px_8px_rgba(var(--color-accent-amber),0.35)] hover:bg-accent-amber active:bg-accent-amber focus:bg-accent-amber focus:text-white focus-visible:ring-accent-amber/35"
-        : "scale-95 border border-accent-amber/25 bg-accent-amber/10 text-accent-amber hover:scale-100 hover:bg-accent-amber/18 hover:text-accent-amber active:bg-accent-amber/22 focus:bg-accent-amber/18 focus:text-accent-amber focus-visible:ring-accent-amber/30";
+        ? "border-2 border-white/70 bg-accent-amber text-white shadow-[inset_0_0_0_2px_rgba(255,255,255,0.22),0_0_0_2px_rgba(var(--color-accent-amber),0.45),0_10px_20px_-12px_rgba(var(--color-accent-amber),0.95)] hover:bg-accent-amber active:bg-accent-amber focus:bg-accent-amber focus:text-white focus-visible:ring-accent-amber/35"
+        : "border border-accent-amber/25 bg-accent-amber/10 text-accent-amber hover:bg-accent-amber/18 hover:text-accent-amber active:bg-accent-amber/22 focus:bg-accent-amber/18 focus:text-accent-amber focus-visible:ring-accent-amber/30";
     };
     return (
       <div className="flex items-center justify-center gap-1.5 rounded-none border border-border-primary/40 bg-bg-input/50 p-1 backdrop-blur-sm">
@@ -1066,10 +1066,10 @@ export function ClassicDispenserConsole({
               disabled={setupLocked}
               onClick={() => {
                 if (setupLocked) return;
-                setDraft(state.fp_id, { mode });
+                setDraft(state.fp_id, mode === "full" ? { mode, volume: "", amount: "" } : { mode });
               }}
               onKeyDown={keyboardControls ? (e) => handleControlNavKeyDown(state, e) : undefined}
-              className={`flex-1 rounded-none transition-all duration-200 outline-none disabled:cursor-not-allowed disabled:opacity-60 ${ui.modeBtnPad} ${ui.modeBtnText} font-black uppercase focus-visible:ring-[3px] focus-visible:ring-offset-0 ${modeColorClass(mode, isActive)}`}
+              className={`flex-1 rounded-none transition-colors duration-100 outline-none disabled:cursor-not-allowed disabled:opacity-60 ${ui.modeBtnPad} ${ui.modeBtnText} font-black uppercase focus-visible:ring-[3px] focus-visible:ring-offset-0 ${modeColorClass(mode, isActive)}`}
             >
               {mode === "full"
                 ? t("classic.full")
@@ -1544,7 +1544,7 @@ export function ClassicDispenserConsole({
             );
           })()}
         </div>
-        <div className={`grid ${ui.topGridGap} ${ui.topCardPad} lg:grid-cols-[1.1fr_1fr_1fr_auto]`}>
+        <div className={`grid ${ui.topGridGap} ${ui.topCardPad} lg:grid-cols-[1.1fr_minmax(0,1fr)_minmax(0,1fr)_minmax(16rem,16rem)]`}>
 	          <div className={`min-w-0 ${bottomControlWrapClass}`}>
 	            <label className={bottomLabelClass}>{t("classic.fuel")}</label>
 	            <div
@@ -1684,7 +1684,7 @@ export function ClassicDispenserConsole({
               1-{fmtSum.format(selectedMaxAmount)}
             </span>
           </div>
-          <div className={`${bottomControlWrapClass} flex min-w-64 flex-col justify-end gap-3`}>
+          <div className={`${bottomControlWrapClass} flex min-w-0 flex-col justify-end gap-3`}>
             <span className={bottomLabelClass}>{t("classic.mode")}</span>
             {renderModeButtons(selected, false, false)}
             <div className="mt-1 flex" data-classic-control="action" onKeyDown={(e) => handleControlNavKeyDown(selected, e)}>

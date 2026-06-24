@@ -442,6 +442,8 @@
       "lightModeDesc": "Yorugʼ rang sxemasiga oʼish (issiq oq fon)",
       "smallScreenMode": "Kichik ekran rejimi",
       "smallScreenModeDesc": "Kichik ekranlar uchun optimallashtirilgan ixcham tartib",
+      "uiScale": "Interfeys masshtabi",
+      "uiScaleDesc": "Matn va boshqaruv elementlari oʼlchamini kattalashtiring yoki kichraytiring.",
       "dispenserLayout": "Dispanser ekrani tartibi",
       "dispenserLayoutDesc": "Operator asosiy ekranda kolonka bilan qanday ishlashini tanlang.",
       "layoutModern": "Zamonaviy",

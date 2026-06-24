@@ -12,6 +12,11 @@ import type { AuthMode, FpState, Shift, ShiftMode, SiteSnapshot, WsEvent } from 
 
 export type DispenserLayout = "modern" | "classic";
 
+function clampUiScale(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(1.25, Math.max(0.9, Math.round(value * 100) / 100));
+}
+
 function normalizeAuthMode(raw: string | undefined): AuthMode {
   const m = (raw ?? "reactive").toLowerCase();
   if (m === "preauth" || m === "reactive") return m;
@@ -75,6 +80,9 @@ interface AppState {
   /** Dispenser workspace layout. Persisted to localStorage. */
   dispenserLayout: DispenserLayout;
   setDispenserLayout: (layout: DispenserLayout) => void;
+  /** Global UI scale. Persisted to localStorage and applied to the root font size. */
+  uiScale: number;
+  setUiScale: (scale: number) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -122,6 +130,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   setDispenserLayout: (layout) => {
     try { localStorage.setItem("azs_dispenser_layout", layout); } catch { /* ignore */ }
     set({ dispenserLayout: layout });
+  },
+  uiScale: (() => {
+    try {
+      return clampUiScale(Number(localStorage.getItem("azs_ui_scale") ?? "1"));
+    } catch {
+      return 1;
+    }
+  })(),
+  setUiScale: (scale) => {
+    const next = clampUiScale(scale);
+    try { localStorage.setItem("azs_ui_scale", String(next)); } catch { /* ignore */ }
+    set({ uiScale: next });
   },
   setCurrentShift: (currentShift) => set({ currentShift }),
   setShiftWarningMinutes: (shiftWarningMinutes) => set({ shiftWarningMinutes }),

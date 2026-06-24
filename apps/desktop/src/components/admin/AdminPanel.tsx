@@ -131,6 +131,8 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
   const setSmallScreen = useAppStore((s) => s.setSmallScreen);
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
+  const uiScale = useAppStore((s) => s.uiScale);
+  const setUiScale = useAppStore((s) => s.setUiScale);
   const dispenserLayout = useAppStore((s) => s.dispenserLayout);
   const setDispenserLayout = useAppStore((s) => s.setDispenserLayout);
   const states = useAppStore((s) => s.states);
@@ -169,6 +171,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
   const [pinNew, setPinNew] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const uiScalePercent = Math.round(uiScale * 100);
 
   // ATG config state
   const [atgConfig, setAtgConfig] = useState<AtgConfigSnapshot | null>(null);
@@ -872,6 +875,49 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                 checked={smallScreen}
                 onChange={setSmallScreen}
               />
+            </div>
+            <div className="rounded-xl border border-border-primary/60 bg-bg-secondary/60 px-5 py-4 transition-colors hover:bg-bg-tertiary/40">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-bold text-text-primary">{t("admin.display.uiScale")}</p>
+                  <p className="mt-0.5 text-xs font-medium text-text-muted">
+                    {t("admin.display.uiScaleDesc")}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-lg border border-accent-blue/35 bg-accent-blue/10 px-3 py-1 font-mono text-sm font-black tabular-nums text-accent-blue">
+                  {uiScalePercent}%
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-xs font-bold text-text-muted">90%</span>
+                <input
+                  type="range"
+                  min={90}
+                  max={125}
+                  step={5}
+                  value={uiScalePercent}
+                  onChange={(e) => setUiScale(Number(e.target.value) / 100)}
+                  className="h-2 flex-1 cursor-pointer accent-accent-blue"
+                  aria-label={t("admin.display.uiScale")}
+                />
+                <span className="font-mono text-xs font-bold text-text-muted">125%</span>
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {[90, 100, 110, 120].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setUiScale(value / 100)}
+                    className={`rounded-lg border px-2 py-2 font-mono text-xs font-black tabular-nums transition-all ${
+                      uiScalePercent === value
+                        ? "border-accent-blue bg-accent-blue/15 text-accent-blue ring-1 ring-accent-blue/30"
+                        : "border-border-primary bg-bg-card/50 text-text-secondary hover:bg-bg-tertiary/40 hover:text-text-primary"
+                    }`}
+                  >
+                    {value}%
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="rounded-xl border border-border-primary/60 bg-bg-secondary/60 px-5 py-4 transition-colors hover:bg-bg-tertiary/40">
               <div className="mb-3">

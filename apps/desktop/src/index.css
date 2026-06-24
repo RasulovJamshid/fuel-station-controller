@@ -476,21 +476,33 @@ html.light .bg-amber-950\/50 {
   color: white;
   border-color: rgb(var(--color-accent-emerald));
   background: rgb(var(--color-accent-emerald));
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25), 0 8px 18px -12px rgb(var(--color-accent-emerald));
+  box-shadow:
+    inset 0 0 0 2px rgb(255 255 255 / 0.32),
+    0 0 0 2px rgb(var(--color-accent-emerald) / 0.42),
+    0 10px 22px -12px rgb(var(--color-accent-emerald));
+  filter: brightness(1.08);
 }
 
 .pump-mode-pill[data-mode="volume"][data-active="true"] {
   color: white;
   border-color: rgb(var(--color-accent-blue));
   background: rgb(var(--color-accent-blue));
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25), 0 8px 18px -12px rgb(var(--color-accent-blue));
+  box-shadow:
+    inset 0 0 0 2px rgb(255 255 255 / 0.32),
+    0 0 0 2px rgb(var(--color-accent-blue) / 0.42),
+    0 10px 22px -12px rgb(var(--color-accent-blue));
+  filter: brightness(1.08);
 }
 
 .pump-mode-pill[data-mode="amount"][data-active="true"] {
   color: white;
   border-color: rgb(var(--color-accent-amber));
   background: rgb(var(--color-accent-amber));
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25), 0 8px 18px -12px rgb(var(--color-accent-amber));
+  box-shadow:
+    inset 0 0 0 2px rgb(255 255 255 / 0.32),
+    0 0 0 2px rgb(var(--color-accent-amber) / 0.42),
+    0 10px 22px -12px rgb(var(--color-accent-amber));
+  filter: brightness(1.08);
 }
 
 .pump-mode-pill:focus-visible {

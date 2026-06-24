@@ -70,6 +70,7 @@ export default function App() {
   const setInvokeError = useAppStore((s) => s.setInvokeError);
   const smallScreen = useAppStore((s) => s.smallScreen);
   const theme = useAppStore((s) => s.theme);
+  const uiScale = useAppStore((s) => s.uiScale);
   const dispenserLayoutMode = useAppStore((s) => s.dispenserLayout);
   const clearPreAuthNozzleMismatch = useAppStore((s) => s.clearPreAuthNozzleMismatch);
   const setStates = useAppStore((s) => s.setStates);
@@ -84,6 +85,10 @@ export default function App() {
       document.documentElement.classList.remove("light");
     }
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${16 * uiScale}px`;
+  }, [uiScale]);
 
   useServiceEvents();
   useStatusPoll();

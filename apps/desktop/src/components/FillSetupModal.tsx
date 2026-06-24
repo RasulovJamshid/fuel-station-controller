@@ -143,6 +143,14 @@ export function FillSetupModal({
     setStep("value");
   };
 
+  const selectFillMode = (nextMode: FillMode) => {
+    setFillMode(nextMode);
+    if (nextMode === "full") {
+      setVol("");
+      setAmt("");
+    }
+  };
+
   const getFocusableElements = () => {
     if (!dialogRef.current) return [] as HTMLElement[];
     return Array.from(
@@ -204,7 +212,7 @@ export function FillSetupModal({
         const target   = e.target as HTMLElement;
         const pillMode = (target instanceof HTMLButtonElement && target.dataset.fillMode)
           ? target.dataset.fillMode as FillMode : fillMode;
-        if (pillMode !== fillMode) setFillMode(pillMode);
+        if (pillMode !== fillMode) selectFillMode(pillMode);
         if (pillMode === "full") { handleConfirm(); return; }
         setStep("value");
         return;
@@ -386,7 +394,7 @@ export function FillSetupModal({
                   aria-pressed={fillMode === m}
                   data-active={fillMode === m}
                   data-mode={m}
-                  onClick={() => { setFillMode(m); setStep(m === "full" ? "mode" : "value"); }}
+                  onClick={() => { selectFillMode(m); setStep(m === "full" ? "mode" : "value"); }}
                   className="pump-mode-pill flex-col gap-1.5 px-2 py-4"
                 >
                   <img

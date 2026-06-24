@@ -21,7 +21,8 @@ use wayne_europump::{
 };
 
 use super::state::{
-    CurrentTx, FrameEffect, PreAuthContext, RuntimeFp, TxCompleteAction, DECEL_WINDOW_TIMEOUT_MS,
+    CurrentTx, FrameEffect, PreAuthContext, PreauthOutcome, RuntimeFp, TxCompleteAction,
+    DECEL_WINDOW_TIMEOUT_MS,
 };
 use crate::shifts::ShiftCoordinator;
 
@@ -1495,14 +1496,46 @@ async fn apply_command(
                 None => return,
             };
             let preset_label_str = preset_label(&preset);
-            let lift_confirmed = {
+            let outcome = {
                 let mut map = runtimes.write().await;
-                if let Some(rt) = map.get_mut(&byte) {
-                    rt.apply_preauthorize_sent(&fp_cfg, cfg, nozzle_index, price, preset.clone());
-                    rt.preauth_nozzle_confirmed
-                } else {
-                    false
+                match map.get_mut(&byte) {
+                    Some(rt) => {
+                        rt.apply_preauthorize_sent(&fp_cfg, cfg, nozzle_index, price, preset.clone())
+                    }
+                    None => return,
                 }
+            };
+            // Wrong nozzle physically up — a TOCTOU lift the API could not see when it queued this
+            // command. STOP the pump, notify the operator, and do NOT arm CONFIG. The lane already
+            // reflects the lifted (wrong) nozzle as NozzleUp (left untouched by the state call).
+            // The write guard above is already dropped, so broadcast_status cannot deadlock.
+            let lift_confirmed = match outcome {
+                PreauthOutcome::NozzleMismatch {
+                    expected_nozzle_index,
+                    expected_product_name,
+                    lifted_nozzle_index,
+                    lifted_product_name,
+                } => {
+                    let _ = exchange_serial(backend, &stop_frame(byte));
+                    let _ = events.send(WsEvent::PreAuthNozzleMismatch {
+                        fp_id: fp_cfg.id.clone(),
+                        expected_nozzle_index,
+                        expected_product_name,
+                        lifted_nozzle_index,
+                        lifted_product_name,
+                    });
+                    info!(
+                        addr = format_args!("0x{byte:02X}"),
+                        label = %fp_cfg.label,
+                        expected = expected_nozzle_index,
+                        lifted = lifted_nozzle_index,
+                        "Preauthorize: wrong nozzle already up → STOP, no CONFIG armed"
+                    );
+                    broadcast_status(byte, runtimes, events).await;
+                    return;
+                }
+                PreauthOutcome::LiftConfirmed => true,
+                PreauthOutcome::Holstered => false,
             };
             let nozzle_prices = refresh_nozzle_prices_from_db(pool, &fp_cfg, byte, runtimes).await;
             if lift_confirmed {

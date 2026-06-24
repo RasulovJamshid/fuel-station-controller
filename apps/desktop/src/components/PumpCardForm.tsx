@@ -259,6 +259,14 @@ export function PumpCardForm({
     setSelectedNozzle(null);
   }, []);
 
+  const selectFillMode = useCallback((mode: FillMode) => {
+    setFillMode(mode);
+    if (mode === "full") {
+      setVolLiters("");
+      setAmtSum("");
+    }
+  }, []);
+
   const handleStart = useCallback(() => {
     if (effectiveNozzle == null || !selectedSnap) return;
     let limitValue: number | null = null;
@@ -399,7 +407,7 @@ export function PumpCardForm({
                   data-mode="full"
                   title={t("pumpForm.fullTank")}
                   className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-sm" : "px-2 py-2 text-base"}`}
-                  onClick={() => setFillMode("full")}
+                  onClick={() => selectFillMode("full")}
                 >
                   <img
                     src={fullTankIcon}
@@ -419,7 +427,7 @@ export function PumpCardForm({
                   data-mode="volume"
                   title={t("pumpForm.fuelVolume")}
                   className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-sm" : "px-2 py-2 text-base"}`}
-                  onClick={() => setFillMode("volume")}
+                  onClick={() => selectFillMode("volume")}
                 >
                   <img
                     src={dropletIcon}
@@ -439,7 +447,7 @@ export function PumpCardForm({
                   data-mode="amount"
                   title={t("pumpForm.amount")}
                   className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-sm" : "px-2 py-2 text-base"}`}
-                  onClick={() => setFillMode("amount")}
+                  onClick={() => selectFillMode("amount")}
                 >
                   <img
                     src={moneyIcon}

@@ -1492,7 +1492,30 @@ impl RuntimeFp {
         nozzle_index: u8,
         price: u32,
         preset: Preset,
-    ) {
+    ) -> PreauthOutcome {
+        // TOCTOU guard: the API queued this Preauthorize while the lane was Idle, but a NozzleUp
+        // for a DIFFERENT nozzle was processed before we drained the command. Do not arm CONFIG
+        // for the wrong product — emit a mismatch and leave the lane on the lifted (wrong) nozzle
+        // so the operator can holster and re-authorize. (Mirrors Gilbarco, which never touches the
+        // wire until the lifted nozzle is confirmed.)  nozzle_index == None while NozzleUp is
+        // defensive: we cannot prove a conflict, so fall through to the normal path.
+        if self.state.status == FpStatus::NozzleUp {
+            if let Some(up) = self.state.nozzle_index {
+                if up != nozzle_index {
+                    let (expected_name, _, _) = lookup_nozzle(site, fp_cfg, nozzle_index);
+                    let (lifted_name, _, _) = lookup_nozzle(site, fp_cfg, up);
+                    self.preauth_nozzle_confirmed = false;
+                    self.preauth_mismatch_active = false;
+                    self.touch();
+                    return PreauthOutcome::NozzleMismatch {
+                        expected_nozzle_index: nozzle_index,
+                        expected_product_name: expected_name,
+                        lifted_nozzle_index: up,
+                        lifted_product_name: lifted_name,
+                    };
+                }
+            }
+        }
         if self.state.status == FpStatus::Done {
             self.state.volume = 0.0;
             self.state.amount = 0;
@@ -1526,6 +1549,11 @@ impl RuntimeFp {
         }
         let _ = b;
         self.touch();
+        if self.preauth_nozzle_confirmed {
+            PreauthOutcome::LiftConfirmed
+        } else {
+            PreauthOutcome::Holstered
+        }
     }
 
     /// Returns `Some(mismatch effect)` when the lifted nozzle does not match pre-authorization.
@@ -2713,6 +2741,25 @@ pub enum FrameEffect {
     SendAuthorizeConfig,
 }
 
+/// Result of `apply_preauthorize_sent`, consumed by the poll loop's `Preauthorize` handler.
+pub enum PreauthOutcome {
+    /// Lane was holstered/idle: the poll loop must arm CONFIG on the wire now; the customer's
+    /// lift is handled on a later poll.
+    Holstered,
+    /// The matching nozzle was already physically up: send full CONFIG + BUSY and start
+    /// delivery immediately (lift-first authorization).
+    LiftConfirmed,
+    /// A *different* nozzle is physically up than the one requested (a TOCTOU lift that the API
+    /// could not see).  The pre-auth is NOT established and nothing is armed on the wire; the
+    /// poll loop emits these mismatch fields (STOP + notify the operator).
+    NozzleMismatch {
+        expected_nozzle_index: u8,
+        expected_product_name: String,
+        lifted_nozzle_index: u8,
+        lifted_product_name: String,
+    },
+}
+
 /// Look up product info by **config nozzle index** (1, 2, 3, …).
 fn lookup_nozzle(
     site: &SiteConfig,
@@ -2987,7 +3034,10 @@ mod tests {
         let fp_cfg = site.fueling_positions[0].clone();
         let mut rt = RuntimeFp::new(&fp_cfg, &site);
 
-        rt.apply_preauthorize_sent(&fp_cfg, &site, 2, 11000, Preset::Amount(10_000));
+        assert!(matches!(
+            rt.apply_preauthorize_sent(&fp_cfg, &site, 2, 11000, Preset::Amount(10_000)),
+            PreauthOutcome::Holstered
+        ));
         rt.mark_preauth_config_on_wire();
 
         let wrong_lift = Frame::NozzleUp {
@@ -3032,6 +3082,94 @@ mod tests {
         assert_eq!(rt.state.amount, 0);
         assert!(rt.current_tx.is_none());
         assert!(rt.completed_sale.is_none());
+    }
+
+    #[test]
+    fn preauth_command_holstered_when_idle() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        let outcome = rt.apply_preauthorize_sent(&fp_cfg, &site, 2, 11000, Preset::Amount(10_000));
+
+        assert!(matches!(outcome, PreauthOutcome::Holstered));
+        assert_eq!(rt.pre_auth.as_ref().map(|p| p.nozzle_index), Some(2));
+        assert_eq!(rt.state.status, FpStatus::PreAuthorized);
+        assert!(!rt.preauth_nozzle_confirmed);
+    }
+
+    #[test]
+    fn preauth_command_lift_confirmed_when_matching_nozzle_up() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        // The matching nozzle was already physically up when the operator pre-authorized.
+        rt.state.status = FpStatus::NozzleUp;
+        rt.state.nozzle_index = Some(2);
+
+        let outcome = rt.apply_preauthorize_sent(&fp_cfg, &site, 2, 11000, Preset::Amount(10_000));
+
+        assert!(matches!(outcome, PreauthOutcome::LiftConfirmed));
+        assert!(rt.preauth_nozzle_confirmed);
+        assert_eq!(rt.state.status, FpStatus::PreAuthorized);
+        assert_eq!(rt.state.nozzle_index, Some(2));
+    }
+
+    #[test]
+    fn preauth_command_wrong_nozzle_up_emits_mismatch_and_arms_nothing() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        // A DIFFERENT nozzle (3) was lifted in the TOCTOU window between the API's Idle read and
+        // the poll loop draining the Preauthorize for nozzle 2.
+        rt.state.status = FpStatus::NozzleUp;
+        rt.state.nozzle_index = Some(3);
+        rt.state.product_id = Some(5);
+        rt.state.product_name = Some("AI-95".into());
+
+        let outcome = rt.apply_preauthorize_sent(&fp_cfg, &site, 2, 11000, Preset::Amount(10_000));
+
+        match outcome {
+            PreauthOutcome::NozzleMismatch {
+                expected_nozzle_index,
+                expected_product_name,
+                lifted_nozzle_index,
+                lifted_product_name,
+            } => {
+                assert_eq!(expected_nozzle_index, 2);
+                assert_eq!(expected_product_name, "AI-92");
+                assert_eq!(lifted_nozzle_index, 3);
+                assert_eq!(lifted_product_name, "AI-95");
+            }
+            _ => panic!("expected NozzleMismatch"),
+        }
+
+        // No pre-auth established, nothing armed on the wire, lane left on the lifted nozzle so
+        // the operator can holster and re-authorize cleanly.
+        assert!(rt.pre_auth.is_none());
+        assert_eq!(rt.state.status, FpStatus::NozzleUp);
+        assert_eq!(rt.state.nozzle_index, Some(3));
+        assert!(!rt.ghost_recovery);
+        assert!(!rt.preauth_config_on_wire);
+    }
+
+    #[test]
+    fn preauth_command_none_nozzle_index_while_nozzle_up_is_defensive() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        // Pathological: NozzleUp but no resolved nozzle index. We cannot prove a conflict, so we
+        // must not fabricate a mismatch — fall through to the normal preauth path.
+        rt.state.status = FpStatus::NozzleUp;
+        rt.state.nozzle_index = None;
+
+        let outcome = rt.apply_preauthorize_sent(&fp_cfg, &site, 2, 11000, Preset::Amount(10_000));
+
+        assert!(matches!(outcome, PreauthOutcome::Holstered));
+        assert!(rt.pre_auth.is_some());
     }
 
     #[test]

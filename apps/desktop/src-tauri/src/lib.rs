@@ -22,6 +22,7 @@ pub fn run() {
             commands::preauthorize,
             commands::cancel_preauth,
             commands::stop_dispenser,
+            commands::refresh_totals,
             commands::continue_fill,
             commands::resume_fill,
             commands::close_stopped_transaction,

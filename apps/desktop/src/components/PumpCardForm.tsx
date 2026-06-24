@@ -11,6 +11,8 @@ import type { NozzleSnapshot } from "../types/api";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 
 const fmtSum = new Intl.NumberFormat("uz-UZ");
+const VOLUME_PRESETS = [5, 10, 20, 40];
+const AMOUNT_PRESETS = [50_000, 100_000, 200_000, 500_000];
 
 function parseNum(s: string): number {
   const v = Number.parseFloat(s.replace(/\s/g, "").replace(",", "."));
@@ -39,7 +41,7 @@ function FieldLabel({
 }) {
   return (
     <div
-      className={`flex items-center gap-1.5 font-medium text-accent-blue/90 ${compact ? "text-xs" : "text-sm"}`}
+      className={`flex items-center gap-1.5 font-black text-accent-blue/90 ${compact ? "text-sm" : "text-base"}`}
     >
       {icon}
       <span>{children}</span>
@@ -76,20 +78,20 @@ function StepperRow({
     }
   }, [autoFocus, disabled]);
 
-  const btnClass = `flex shrink-0 items-center justify-center rounded-md border border-border-primary bg-bg-input text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-40 ${compact ? "h-10 w-10" : "h-12 w-12"}`;
+  const btnClass = `flex shrink-0 items-center justify-center self-center rounded-md border border-border-primary bg-bg-input/70 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-40 ${compact ? "h-9 w-9" : "h-10 w-10"}`;
   return (
-    <div className="flex items-stretch gap-1">
+    <div className="flex items-stretch gap-1.5">
       <button type="button" className={btnClass} disabled={disabled} onClick={onDec} aria-label="Decrease">
         <img
           src={minusIcon}
           alt=""
           aria-hidden
-          className={compact ? "h-4 w-4" : "h-5 w-5"}
+          className={compact ? "h-3.5 w-3.5" : "h-4 w-4"}
           draggable={false}
         />
       </button>
       <div
-        className={`flex min-w-0 flex-1 items-center rounded-md border border-border-primary bg-bg-input px-3 ${compact ? "h-10" : "h-12"}`}
+        className={`flex min-w-0 flex-1 items-center rounded-lg border border-border-primary bg-bg-input px-3 shadow-sm transition focus-within:border-accent-blue/65 focus-within:ring-[3px] focus-within:ring-accent-blue/20 ${compact ? "h-14" : "h-16"}`}
       >
         <input
           ref={inputRef}
@@ -98,9 +100,9 @@ function StepperRow({
           disabled={disabled}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`min-w-0 flex-1 bg-transparent text-center font-mono font-bold tabular-nums text-text-primary outline-none ${compact ? "text-lg" : "text-xl"}`}
+          className={`min-w-0 flex-1 bg-transparent text-center font-mono font-black tabular-nums text-text-primary outline-none ${compact ? "text-3xl" : "text-4xl"}`}
         />
-        <span className={`shrink-0 font-bold text-text-muted ${compact ? "text-xs" : "text-sm"}`}>
+        <span className={`shrink-0 font-black text-text-muted ${compact ? "text-sm" : "text-base"}`}>
           {unit}
         </span>
       </div>
@@ -109,10 +111,40 @@ function StepperRow({
           src={plusIcon}
           alt=""
           aria-hidden
-          className={compact ? "h-4 w-4" : "h-5 w-5"}
+          className={compact ? "h-3.5 w-3.5" : "h-4 w-4"}
           draggable={false}
         />
       </button>
+    </div>
+  );
+}
+
+function QuickPresetRow({
+  values,
+  format,
+  onSelect,
+  disabled,
+  compact,
+}: {
+  values: number[];
+  format: (value: number) => string;
+  onSelect: (value: number) => void;
+  disabled?: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-1.5">
+      {values.map((value) => (
+        <button
+          key={value}
+          type="button"
+          disabled={disabled}
+          onClick={() => onSelect(value)}
+          className={`pump-quick-chip rounded-md disabled:cursor-not-allowed disabled:opacity-45 ${compact ? "px-1 py-1.5 text-xs" : "px-2 py-2 text-sm"}`}
+        >
+          {format(value)}
+        </button>
+      ))}
     </div>
   );
 }
@@ -157,6 +189,10 @@ export function PumpCardForm({
 
   const syncAmountFromVolume = useCallback(
     (liters: string) => {
+      if (liters.trim() === "") {
+        setAmtSum("");
+        return;
+      }
       const v = parseNum(liters);
       if (price > 0 && v > 0) setAmtSum(String(Math.round(v * price)));
     },
@@ -165,6 +201,10 @@ export function PumpCardForm({
 
   const syncVolumeFromAmount = useCallback(
     (sum: string) => {
+      if (sum.trim() === "") {
+        setVolLiters("");
+        return;
+      }
       const a = parseNum(sum);
       if (price > 0 && a > 0) setVolLiters(String(Math.round((a / price) * 10) / 10));
     },
@@ -241,6 +281,20 @@ export function PumpCardForm({
   const volStep = compact ? 1 : 5;
   const amtStep = compact ? 10000 : 25000;
 
+  const applyVolume = useCallback((value: number) => {
+    const next = String(value);
+    setFillMode("volume");
+    setVolLiters(next);
+    syncAmountFromVolume(next);
+  }, [syncAmountFromVolume]);
+
+  const applyAmount = useCallback((value: number) => {
+    const next = String(value);
+    setFillMode("amount");
+    setAmtSum(next);
+    syncVolumeFromAmount(next);
+  }, [syncVolumeFromAmount]);
+
   const { t } = useTranslation();
 
   if (activeNozzles.length === 0) {
@@ -290,7 +344,7 @@ export function PumpCardForm({
                 const raw = e.target.value;
                 setSelectedNozzle(raw ? Number(raw) : null);
               }}
-              className={`w-full appearance-none rounded-lg border border-border-primary bg-bg-input py-2 pl-7 pr-9 font-semibold text-text-primary outline-none focus:border-accent-blue/60 ${compact ? "text-sm" : "text-base"}`}
+              className={`w-full appearance-none rounded-lg border border-border-primary bg-bg-input py-2 pl-7 pr-9 font-black text-text-primary outline-none focus:border-accent-blue/60 ${compact ? "text-base" : "text-lg"}`}
             >
               {activeNozzles.length > 1 && !effectiveNozzle ? (
                 <option value="">—</option>
@@ -315,7 +369,7 @@ export function PumpCardForm({
         <div className="rounded-lg border border-border-primary/70 bg-bg-input/60 px-2.5 py-2">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className={`truncate font-semibold text-text-primary ${compact ? "text-sm" : "text-base"}`}>
+              <p className={`truncate font-black text-text-primary ${compact ? "text-base" : "text-lg"}`}>
                 {selectedSnap?.product_name ?? t("pumpForm.selectProductPlaceholder")}
               </p>
               <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>
@@ -323,7 +377,7 @@ export function PumpCardForm({
               </p>
             </div>
             <div className="text-right">
-              <p className={`font-mono font-bold tabular-nums text-accent-blue ${compact ? "text-sm" : "text-base"}`}>
+              <p className={`font-mono font-black tabular-nums text-accent-blue ${compact ? "text-xl" : "text-2xl"}`}>
                 {price > 0 ? `${fmtSum.format(price)} ${t("pumpForm.amountUnit")}` : "—"}
               </p>
               {price > 0 && (
@@ -342,8 +396,9 @@ export function PumpCardForm({
                   type="button"
                   disabled={disabled}
                   data-active={fillMode === "full"}
+                  data-mode="full"
                   title={t("pumpForm.fullTank")}
-                  className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-xs" : "px-2 py-2 text-sm"}`}
+                  className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-sm" : "px-2 py-2 text-base"}`}
                   onClick={() => setFillMode("full")}
                 >
                   <img
@@ -361,8 +416,9 @@ export function PumpCardForm({
                   type="button"
                   disabled={disabled}
                   data-active={fillMode === "volume"}
+                  data-mode="volume"
                   title={t("pumpForm.fuelVolume")}
-                  className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-xs" : "px-2 py-2 text-sm"}`}
+                  className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-sm" : "px-2 py-2 text-base"}`}
                   onClick={() => setFillMode("volume")}
                 >
                   <img
@@ -380,8 +436,9 @@ export function PumpCardForm({
                   type="button"
                   disabled={disabled}
                   data-active={fillMode === "amount"}
+                  data-mode="amount"
                   title={t("pumpForm.amount")}
-                  className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-xs" : "px-2 py-2 text-sm"}`}
+                  className={`pump-mode-pill ${compact ? "px-1.5 py-1.5 text-sm" : "px-2 py-2 text-base"}`}
                   onClick={() => setFillMode("amount")}
                 >
                   <img
@@ -437,6 +494,13 @@ export function PumpCardForm({
                     syncAmountFromVolume(s);
                   }}
                 />
+                <QuickPresetRow
+                  values={VOLUME_PRESETS}
+                  format={(value) => `${value} L`}
+                  onSelect={applyVolume}
+                  disabled={disabled}
+                  compact={compact}
+                />
               </div>
             )}
 
@@ -471,13 +535,20 @@ export function PumpCardForm({
                     syncVolumeFromAmount(s);
                   }}
                 />
+                <QuickPresetRow
+                  values={AMOUNT_PRESETS}
+                  format={(value) => fmtSum.format(value)}
+                  onSelect={applyAmount}
+                  disabled={disabled}
+                  compact={compact}
+                />
               </div>
             )}
 
             {fillMode === "full" && (
               <div className="rounded-lg border border-accent-blue/40 bg-accent-blue/10 px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className={`font-semibold text-accent-blue ${compact ? "text-xs" : "text-sm"}`}>
+                  <span className={`font-black text-accent-blue ${compact ? "text-sm" : "text-base"}`}>
                     {t("pumpForm.fullTankMode")}
                   </span>
                   <img
@@ -499,19 +570,19 @@ export function PumpCardForm({
               <div className="grid grid-cols-2 gap-2 rounded-lg border border-border-primary/70 bg-bg-input/45 p-2">
                 <div>
                   <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.selectedMode")}</p>
-                  <p className={`font-semibold text-text-primary ${compact ? "text-sm" : "text-base"}`}>
+                  <p className={`font-black text-text-primary ${compact ? "text-base" : "text-lg"}`}>
                     {fillMode === "volume" ? t("pumpForm.byVolume") : t("pumpForm.byAmount")}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.liters")}</p>
-                  <p className={`font-mono font-semibold tabular-nums text-text-primary ${compact ? "text-sm" : "text-base"}`}>
+                  <p className={`font-mono font-black tabular-nums text-text-primary ${compact ? "text-xl" : "text-2xl"}`}>
                     {projectedLiters != null ? `${projectedLiters.toFixed(1)} L` : "—"}
                   </p>
                 </div>
                 <div className="col-span-2">
                   <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.amount")}</p>
-                  <p className={`font-mono font-bold tabular-nums text-accent-amber ${compact ? "text-sm" : "text-base"}`}>
+                  <p className={`font-mono font-black tabular-nums text-accent-amber ${compact ? "text-xl" : "text-2xl"}`}>
                     {projectedAmount != null ? `${fmtSum.format(projectedAmount)} ${t("pumpForm.amountUnit")}` : "—"}
                   </p>
                 </div>
@@ -549,8 +620,8 @@ export function PumpCardProgress({
     return (
       <div className={`shrink-0 ${compact ? "mt-2" : "mt-3"}`}>
         <div className="mb-1 flex items-center justify-between">
-          <span className={`font-medium text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.filled")}</span>
-          <span className={`font-bold tabular-nums text-accent-amber ${compact ? "text-sm" : "text-base"}`}>
+          <span className={`font-black text-text-muted ${compact ? "text-sm" : "text-base"}`}>{t("pumpForm.filled")}</span>
+          <span className={`font-black tabular-nums text-accent-amber ${compact ? "text-xl" : "text-2xl"}`}>
             {volume.toFixed(2)} L
           </span>
         </div>
@@ -572,8 +643,8 @@ export function PumpCardProgress({
     return (
       <div className={`shrink-0 ${compact ? "mt-2" : "mt-3"}`}>
         <div className="mb-1 flex items-center justify-between">
-          <span className={`font-medium text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.filled")}</span>
-          <span className={`font-bold tabular-nums text-accent-amber ${compact ? "text-sm" : "text-base"}`}>
+          <span className={`font-black text-text-muted ${compact ? "text-sm" : "text-base"}`}>{t("pumpForm.filled")}</span>
+          <span className={`font-black tabular-nums text-accent-amber ${compact ? "text-xl" : "text-2xl"}`}>
             {volume.toFixed(2)} L
           </span>
         </div>
@@ -593,16 +664,16 @@ export function PumpCardProgress({
   return (
     <div className={`shrink-0 rounded-lg border border-border-primary/60 bg-bg-input/45 px-3 py-2 ${compact ? "mt-2" : "mt-3"}`}>
       <div className="mb-1 flex items-center justify-between">
-        <span className={`font-bold uppercase tracking-wide text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>{t("pumpForm.filling")}</span>
+        <span className={`font-black uppercase tracking-wide text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.filling")}</span>
         <span className="text-[10px] text-accent-emerald animate-pulse">●</span>
       </div>
       <div className="flex items-baseline gap-1.5">
-        <span className={`font-mono font-bold tabular-nums text-accent-amber ${compact ? "text-xl" : "text-2xl"}`}>
+        <span className={`font-mono font-black tabular-nums text-accent-amber ${compact ? "text-3xl" : "text-4xl"}`}>
           {volume.toFixed(2)}
         </span>
-        <span className={`font-semibold text-text-muted ${compact ? "text-xs" : "text-sm"}`}>L</span>
+        <span className={`font-black text-text-muted ${compact ? "text-sm" : "text-base"}`}>L</span>
         {amount != null && amount > 0 && (
-          <span className={`ml-auto font-mono tabular-nums text-text-secondary ${compact ? "text-xs" : "text-sm"}`}>
+          <span className={`ml-auto font-mono font-black tabular-nums text-text-secondary ${compact ? "text-base" : "text-lg"}`}>
             {fmtSum.format(amount)} {t("pumpForm.amountUnit")}
           </span>
         )}

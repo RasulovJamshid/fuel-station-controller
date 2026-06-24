@@ -38,6 +38,17 @@ const STATUS_ICONS: Partial<Record<FpStatusTag, { src: string; spin?: boolean }>
   OFFLINE:        { src: wifiOffIcon },
 };
 
+function classicStatusLabel(
+  tag: FpStatusTag,
+  isPaused: boolean,
+  hasActivePreAuth: boolean,
+  t: (key: string) => string,
+): string {
+  const key = isPaused ? "STOPPED" : hasActivePreAuth ? "PRE_AUTHORIZED" : tag;
+  const label = t(`classic.statusLabels.${key}`);
+  return label === `classic.statusLabels.${key}` ? t("classic.statusLabels.UNKNOWN") : label;
+}
+
 function parseVolumeTarget(preset: string | null | undefined): number | null {
   if (!preset) return null;
   const m = preset.match(/([\d.,]+)\s*L/i);
@@ -183,6 +194,7 @@ export function DispenserRow({
     state.label?.trim() ||
     (state.fp_id.match(/\d+/) ? `${state.fp_id.match(/\d+/)![0]}-KOLONKA` : `${state.fp_id}-KOLONKA`);
   const pumpNum = state.fp_id.match(/\d+/)?.[0] ?? state.fp_id.slice(0, 2).toUpperCase();
+  const displayStatusLabel = classicStatusLabel(tag, isPaused, hasActivePreAuth, t);
 
   const handleAuthorize = (req: Parameters<typeof onAuthorize>[0]) => {
     if (!positionActive) return;
@@ -200,16 +212,16 @@ export function DispenserRow({
         return (
           <button type="button" title={t("dispenser.shiftRequired")}
             onClick={onStartShift}
-            className="flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-lg border border-accent-amber/50 bg-accent-amber/10 px-1 text-accent-amber hover:bg-accent-amber/20">
-            <Icon src={shieldIcon} className="h-5 w-5 shrink-0" />
-            <span className="text-center text-[9px] font-bold uppercase leading-tight">{t("dispenser.shiftRequired")}</span>
+            className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-lg border border-accent-amber/50 bg-accent-amber/10 px-1.5 text-accent-amber hover:bg-accent-amber/20">
+            <Icon src={shieldIcon} className="h-6 w-6 shrink-0" />
+            <span className="text-center text-[10px] font-black uppercase leading-tight">{t("dispenser.shiftRequired")}</span>
           </button>
         );
       }
       return (
         <button type="button" data-dispenser-open-setup="true" title={t("dispenser.start")} onClick={() => setSetupOpen(true)}
           className="btn-start-glow pump-start-button flex h-full w-full items-center justify-center rounded-lg text-white">
-          <Icon src={playIcon} className="h-7 w-7" />
+          <Icon src={playIcon} className="h-9 w-9" />
         </button>
       );
     }
@@ -217,7 +229,7 @@ export function DispenserRow({
       return (
         <button type="button" data-no-keyboard="true" title={useStopMode ? t("dispenser.stop") : t("dispenser.pause")} onClick={() => onStop(state.fp_id)}
           className="flex h-full w-full items-center justify-center rounded-lg border border-amber-800/50 bg-amber-950/40 text-accent-amber hover:bg-amber-950/60">
-          <Icon src={pauseIcon} className="h-7 w-7" />
+          <Icon src={pauseIcon} className="h-9 w-9" />
         </button>
       );
     }
@@ -225,7 +237,7 @@ export function DispenserRow({
       return (
         <button type="button" data-no-keyboard="true" title={t("dispenser.cancelPreAuth")} onClick={() => onCancelPreAuth?.(state.fp_id)}
           className="flex h-full w-full items-center justify-center rounded-lg border border-border-primary bg-bg-secondary text-text-secondary hover:bg-bg-tertiary">
-          <Icon src={banIcon} className="h-7 w-7" />
+          <Icon src={banIcon} className="h-9 w-9" />
         </button>
       );
     }
@@ -234,7 +246,7 @@ export function DispenserRow({
         <div className="flex h-full w-full flex-col gap-1 py-1.5">
           <button type="button" title={t("dispenser.closeTransaction")} onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
             className="flex w-full flex-1 items-center justify-center rounded-md bg-bg-secondary text-text-secondary ring-1 ring-border-primary hover:bg-bg-tertiary">
-            <Icon src={xCircleIcon} className="h-4 w-4" />
+            <Icon src={xCircleIcon} className="h-6 w-6" />
           </button>
         </div>
       );
@@ -244,7 +256,7 @@ export function DispenserRow({
         <div className="flex h-full w-full flex-col gap-1 py-1.5">
           <button type="button" title={t("dispenser.closeTransaction")} onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
             className="flex w-full items-center justify-center rounded-md py-0.5 text-text-muted hover:text-text-secondary">
-            <Icon src={xCircleIcon} className="h-4 w-4" />
+            <Icon src={xCircleIcon} className="h-6 w-6" />
           </button>
         </div>
       );
@@ -254,11 +266,11 @@ export function DispenserRow({
         <div className="flex h-full w-full flex-col gap-1 py-1.5">
           <button type="button" title={t("dispenser.resumeFill")} onClick={() => onResumeFill(state.fp_id, paused.stopped_tx_id)}
             className="btn-start-glow pump-start-button flex flex-1 w-full items-center justify-center rounded-lg text-white">
-            <Icon src={playIcon} className="h-6 w-6" />
+            <Icon src={playIcon} className="h-8 w-8" />
           </button>
           <button type="button" title={t("dispenser.closeTransaction")} onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
             className="flex w-full items-center justify-center rounded-md py-0.5 text-text-muted hover:text-text-secondary">
-            <Icon src={xCircleIcon} className="h-4 w-4" />
+            <Icon src={xCircleIcon} className="h-6 w-6" />
           </button>
         </div>
       );
@@ -268,11 +280,11 @@ export function DispenserRow({
         <div className="flex h-full w-full flex-col gap-1 py-1.5">
           <button type="button" title={t("dispenser.continueFill")} onClick={() => onContinueFill(state.fp_id, paused.stopped_tx_id)}
             className="flex flex-1 w-full items-center justify-center rounded-xl bg-accent-emerald text-text-inverse hover:bg-accent-emerald-light active:scale-95">
-            <Icon src={playIcon} className="h-6 w-6" />
+            <Icon src={playIcon} className="h-8 w-8" />
           </button>
           <button type="button" title={t("dispenser.closeTransaction")} onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
             className="flex w-full items-center justify-center rounded-md py-0.5 text-text-muted hover:text-text-secondary">
-            <Icon src={xCircleIcon} className="h-4 w-4" />
+            <Icon src={xCircleIcon} className="h-6 w-6" />
           </button>
         </div>
       );
@@ -281,7 +293,7 @@ export function DispenserRow({
       return (
         <button type="button" title={t("dispenser.nextCustomer")} onClick={() => onDismissSale?.(state.fp_id)}
           className="btn-start-glow flex h-full w-full items-center justify-center rounded-lg bg-accent-emerald text-text-inverse hover:bg-accent-emerald-light">
-          <Icon src={checkIcon} className="h-7 w-7" />
+          <Icon src={checkIcon} className="h-9 w-9" />
         </button>
       );
     }
@@ -356,13 +368,13 @@ export function DispenserRow({
               {productLabel ? (
                 <>
                   <span className="h-3 w-3 shrink-0 rounded-full border border-border-secondary/40" style={{ backgroundColor: productColor }} />
-                  <span className="min-w-0 truncate text-base font-bold text-text-primary">{productLabel}</span>
+                  <span className="min-w-0 truncate text-lg font-black text-text-primary">{productLabel}</span>
                 </>
               ) : (
-                <span className="truncate text-base font-bold uppercase tracking-wide text-text-muted">{t(`dispenser.tag${tag.charAt(0) + tag.slice(1).toLowerCase().replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase())}`, { defaultValue: tag.replace(/_/g, " ") })}</span>
+                <span className="truncate text-lg font-black uppercase tracking-wide text-text-muted">{displayStatusLabel}</span>
               )}
               {(isDelivering || isPaused) && (
-                <span className="ml-auto shrink-0 font-mono text-2xl font-black tabular-nums text-accent-emerald">{displayVolume.toFixed(2)} L</span>
+                <span className="ml-auto shrink-0 font-mono text-4xl font-black tabular-nums text-accent-emerald">{displayVolume.toFixed(2)} L</span>
               )}
               {hasActivePreAuth && !isDelivering && !isPaused && (
                 <span className="ml-auto shrink-0 font-mono text-lg font-black tabular-nums text-accent-amber">{state.pre_auth_preset ?? t("pumpForm.fullTank")}</span>
@@ -376,7 +388,7 @@ export function DispenserRow({
             <div className="flex min-w-0 items-center gap-2 md:hidden">
               {(isDelivering || isPaused) && (
                 <>
-                  <span className="font-mono text-base font-bold tabular-nums text-text-secondary">{fmtSum.format(state.amount)} SUM</span>
+                  <span className="font-mono text-xl font-black tabular-nums text-text-secondary">{fmtSum.format(state.amount)} SUM</span>
                   {pct !== null && (
                     <>
                       <div className="h-4 min-w-[48px] max-w-[100px] flex-1 overflow-hidden rounded-full">
@@ -384,43 +396,43 @@ export function DispenserRow({
                           <div className="progress-fill h-full rounded-full" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
-                      <span className="font-mono text-base font-semibold tabular-nums text-text-muted">{Math.round(pct)}%</span>
+                      <span className="font-mono text-base font-bold tabular-nums text-text-muted">{Math.round(pct)}%</span>
                     </>
                   )}
                 </>
               )}
               {isIdle && !hasActivePreAuth && (
-                <span className="truncate text-base text-text-muted">{usePreAuth ? t("dispenser.statusIdlePreauth") : t("dispenser.statusIdle")}</span>
+                <span className="truncate text-xl font-black uppercase tracking-wide text-text-muted">{displayStatusLabel}</span>
               )}
               {isNozzleUp && !hasActivePreAuth && (
-                <span className="truncate text-base text-text-muted">{usePreAuth ? t("dispenser.statusNozzleUpPreauth") : t("dispenser.statusNozzleUp")}</span>
+                <span className="truncate text-xl font-black uppercase tracking-wide text-text-muted">{displayStatusLabel}</span>
               )}
               {hasActivePreAuth && !isDelivering && (
-                <span className="truncate text-base font-semibold text-text-secondary">{isNozzleUp ? t("dispenser.preAuthAwaitingLift") : t("dispenser.preAuthAwaitingCustomer")}</span>
+                <span className="truncate text-lg font-black uppercase tracking-wide text-text-secondary">{displayStatusLabel}</span>
               )}
               {isDone && !shouldAutoDismiss && (
-                <span className="truncate text-base font-bold tabular-nums text-accent-blue">{fmtSum.format(state.amount)} SUM</span>
+                <span className="truncate text-lg font-black tabular-nums text-accent-blue">{fmtSum.format(state.amount)} SUM</span>
               )}
-              {isOffline && <span className="text-base text-text-muted">{t("dispenser.statusOffline")}</span>}
+              {isOffline && <span className="text-xl font-black uppercase tracking-wide text-text-muted">{displayStatusLabel}</span>}
               {showMismatch && <span className="ml-auto shrink-0 text-sm font-bold uppercase text-accent-red">⚠ {t("dispenser.mismatchShort")}</span>}
             </div>
 
             {/* ── full row 1: tag + product + nozzle + price ── */}
             <div className="hidden md:flex min-w-0 items-center gap-2">
               <Icon src={statusIcon.src} className="h-4 w-4 shrink-0 opacity-55" spin={statusIcon.spin} />
-              <span className="text-sm font-bold uppercase tracking-wider text-text-muted">{t(`dispenser.tag${tag.charAt(0) + tag.slice(1).toLowerCase().replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase())}`, { defaultValue: tag.replace(/_/g, " ") })}</span>
+              <span className="text-lg font-black uppercase tracking-wider text-text-muted">{displayStatusLabel}</span>
               {productLabel && (
                 <>
                   <span className="text-border-primary">·</span>
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-border-secondary/40" style={{ backgroundColor: productColor }} />
-                  <span className="min-w-0 truncate text-sm font-semibold text-text-primary">{productLabel}</span>
+                  <span className="min-w-0 truncate text-lg font-black text-text-primary">{productLabel}</span>
                 </>
               )}
               {effectiveNozzle != null && !isOffline && (
                 <span className="shrink-0 rounded bg-bg-secondary px-1 py-px text-[10px] font-bold uppercase text-text-muted">#{effectiveNozzle}</span>
               )}
               {state.price > 0 && !isOffline && !isIdle && (
-                <span className="ml-auto shrink-0 font-mono text-sm font-bold tabular-nums text-accent-blue">{fmtSum.format(state.price)}/L</span>
+                <span className="ml-auto shrink-0 font-mono text-lg font-black tabular-nums text-accent-blue">{fmtSum.format(state.price)}/L</span>
               )}
             </div>
 
@@ -428,9 +440,9 @@ export function DispenserRow({
             <div className="hidden md:flex min-w-0 items-center gap-2 text-base">
               {(isDelivering || isPaused) && (
                 <>
-                  <span className={`shrink-0 font-mono font-bold tabular-nums ${isDelivering ? "text-accent-emerald" : "text-accent-amber-light"}`}>{displayVolume.toFixed(2)} L</span>
+                  <span className={`shrink-0 font-mono text-2xl font-black tabular-nums ${isDelivering ? "text-accent-emerald" : "text-accent-amber-light"}`}>{displayVolume.toFixed(2)} L</span>
                   <span className="text-border-primary">·</span>
-                  <span className="shrink-0 font-mono tabular-nums text-text-secondary">{fmtSum.format(state.amount)} SUM</span>
+                  <span className="shrink-0 font-mono text-xl font-black tabular-nums text-text-secondary">{fmtSum.format(state.amount)} SUM</span>
                   {pct !== null && (
                     <>
                       <span className="text-border-primary">·</span>
@@ -439,7 +451,7 @@ export function DispenserRow({
                           <div className="progress-fill h-full rounded-full" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
-                      <span className="shrink-0 font-mono tabular-nums text-text-muted">{Math.round(pct)}%</span>
+                      <span className="shrink-0 font-mono font-bold tabular-nums text-text-muted">{Math.round(pct)}%</span>
                     </>
                   )}
                   {isContinuing && <span className="ml-1 shrink-0 rounded bg-accent-blue/10 px-1 py-px text-[10px] font-bold uppercase text-accent-blue">{t("dispenser.baseBadge")}</span>}
@@ -447,26 +459,26 @@ export function DispenserRow({
               )}
               {hasActivePreAuth && !isDelivering && !isPaused && (
                 <>
-                  <span className="shrink-0 font-mono tabular-nums text-accent-amber">{state.pre_auth_preset ?? t("pumpForm.fullTank")}</span>
+                  <span className="shrink-0 font-mono text-lg font-black tabular-nums text-accent-amber">{state.pre_auth_preset ?? t("pumpForm.fullTank")}</span>
                   <span className="text-border-primary">·</span>
-                  <span className="truncate text-text-muted">{isNozzleUp ? t("dispenser.preAuthAwaitingLift") : t("dispenser.preAuthAwaitingCustomer")}</span>
+                  <span className="truncate text-lg font-black uppercase tracking-wide text-text-muted">{displayStatusLabel}</span>
                   {showTimeout && <span className="ml-1 shrink-0 rounded bg-accent-amber/10 px-1 py-px text-[10px] font-bold text-accent-amber">{t("dispenser.timeoutBadge")}</span>}
                 </>
               )}
               {isDone && !shouldAutoDismiss && (
                 <>
-                  <span className="shrink-0 font-bold text-text-primary">{state.volume.toFixed(2)} L</span>
+                  <span className="shrink-0 text-xl font-black text-text-primary">{state.volume.toFixed(2)} L</span>
                   <span className="text-border-primary">·</span>
-                  <span className="shrink-0 font-mono tabular-nums text-accent-blue">{fmtSum.format(state.amount)} SUM</span>
+                  <span className="shrink-0 font-mono text-lg font-black tabular-nums text-accent-blue">{fmtSum.format(state.amount)} SUM</span>
                   <span className="text-border-primary">·</span>
-                  <span className="truncate text-text-muted">{t("dispenser.statusDone")}</span>
+                  <span className="truncate text-lg font-black uppercase tracking-wide text-text-muted">{displayStatusLabel}</span>
                 </>
               )}
-              {isIdle && !hasActivePreAuth && <span className="truncate text-text-muted">{usePreAuth ? t("dispenser.statusIdlePreauth") : t("dispenser.statusIdle")}</span>}
-              {isNozzleUp && !hasActivePreAuth && !isDelivering && !isPaused && <span className="truncate text-text-muted">{usePreAuth ? t("dispenser.statusNozzleUpPreauth") : t("dispenser.statusNozzleUp")}</span>}
-              {isAppPause      && !isDelivering && <span className="truncate text-accent-amber-light">{t("dispenser.statusAppPause")}</span>}
-              {isExternalPause && !isDelivering && <span className="truncate text-accent-amber">{t("dispenser.statusExternalPause")}</span>}
-              {isOffline && <span className="text-text-muted">{t("dispenser.statusOffline")}</span>}
+              {isIdle && !hasActivePreAuth && <span className="truncate text-lg font-black uppercase tracking-wide text-text-muted">{displayStatusLabel}</span>}
+              {isNozzleUp && !hasActivePreAuth && !isDelivering && !isPaused && <span className="truncate text-lg font-black uppercase tracking-wide text-text-muted">{displayStatusLabel}</span>}
+              {isAppPause      && !isDelivering && <span className="truncate text-lg font-black uppercase tracking-wide text-accent-amber-light">{displayStatusLabel}</span>}
+              {isExternalPause && !isDelivering && <span className="truncate text-lg font-black uppercase tracking-wide text-accent-amber">{displayStatusLabel}</span>}
+              {isOffline && <span className="text-lg font-black uppercase tracking-wide text-text-muted">{displayStatusLabel}</span>}
               {showMismatch && preAuthNozzleMismatch && (
                 <span className="ml-auto shrink-0 rounded bg-accent-red/10 px-1.5 py-px text-[10px] font-bold uppercase text-accent-red">⚠ {t("dispenser.mismatchShort")}</span>
               )}

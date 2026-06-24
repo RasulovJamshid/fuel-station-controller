@@ -180,6 +180,11 @@ pub async fn stop_dispenser(
 }
 
 #[tauri::command]
+pub async fn refresh_totals(client: tauri::State<'_, ServiceClient>) -> Result<(), String> {
+    client.refresh_totals().await
+}
+
+#[tauri::command]
 pub async fn continue_fill(
     client: tauri::State<'_, ServiceClient>,
     fp_id: String,
@@ -535,6 +540,7 @@ pub async fn update_sync_config(
     batch_size: Option<usize>,
     max_retries: Option<u32>,
     price_pull_interval_hours: Option<u64>,
+    price_pull_enabled: Option<bool>,
 ) -> Result<(), String> {
     let mut body = serde_json::Map::new();
     if let Some(v) = enabled {
@@ -557,6 +563,9 @@ pub async fn update_sync_config(
     }
     if let Some(v) = price_pull_interval_hours {
         body.insert("price_pull_interval_hours".into(), serde_json::json!(v));
+    }
+    if let Some(v) = price_pull_enabled {
+        body.insert("price_pull_enabled".into(), serde_json::json!(v));
     }
     client
         .update_sync_config(serde_json::Value::Object(body))

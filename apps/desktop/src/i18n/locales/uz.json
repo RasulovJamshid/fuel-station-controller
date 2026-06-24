@@ -11,7 +11,9 @@
     "today": "Bugun",
     "today_short": "Bugun",
     "admin": "Admin",
-    "admin_short": "Admin"
+    "admin_short": "Admin",
+    "totalizer": "Totalizator",
+    "totalizer_short": "Total."
   },
   "header": {
     "noShift": "Smena yo'q",
@@ -469,7 +471,8 @@
       "pricePullInterval": "Narx yangilanishi (soat)",
       "refresh": "Holatni yangilash",
       "save": "Sinxronizatsiya sozlamalarini saqlash",
-      "savedMsg": "Sinxronizatsiya sozlamalari saqlandi."
+      "savedMsg": "Sinxronizatsiya sozlamalari saqlandi.",
+      "pricePullEnabled": "Narx sinxronizatsiyasi yoqilgan"
     },
     "atg": {
       "title": "ATG — Avtomatik sath oʼlchagich",
@@ -574,5 +577,18 @@
     "grade": "NAV",
     "nozzle": "NOZZLE",
     "perLiter": "/L"
+  },
+  "totalizer": {
+    "title": "Kolonka totalizatori",
+    "subtitle": "Har bir pistolet bo‘yicha umumiy quyilgan miqdor",
+    "stationVolume": "Stansiya hajmi",
+    "stationAmount": "Stansiya summasi",
+    "nozzleCount": "{{count}} pist.",
+    "product": "Mahsulot",
+    "volume": "Hajm",
+    "amount": "Summa",
+    "nozzle": "Pistolet",
+    "noData": "Totalizator ma’lumoti yo‘q",
+    "pumpTotal": "Kolonka jami"
   }
 }

@@ -6,6 +6,7 @@ import { DispenserCard, type AuthorizeRequest } from "./components/DispenserCard
 import { DispenserRow } from "./components/DispenserRow";
 import { ClassicDispenserConsole } from "./components/ClassicDispenserConsole";
 import { ReservoirsPanel } from "./components/ReservoirsPanel";
+import { TotalizerPanel } from "./components/TotalizerPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { DashboardRecentTransactions } from "./components/DashboardRecentTransactions";
 import { DashboardTanksMini } from "./components/DashboardTanksMini";
@@ -33,7 +34,7 @@ function statusTag(raw: FpState["status"]): string {
   return String(raw);
 }
 
-const WORKSPACE_TAB_IDS: WorkspaceTabId[] = ["dispensers", "shift", "reservoirs", "history", "admin"];
+const WORKSPACE_TAB_IDS: WorkspaceTabId[] = ["dispensers", "shift", "reservoirs", "totalizer", "history", "admin"];
 const SELECTED_DISPENSER_FRAME_CLASS =
   "bg-accent-blue/10 ring-[3px] ring-accent-blue ring-offset-2 ring-offset-bg-primary shadow-[0_0_0_1px_rgb(var(--color-accent-blue)/0.2),0_10px_24px_-18px_rgb(var(--color-accent-blue)/0.7)]";
 
@@ -121,6 +122,20 @@ export default function App() {
   const useStopMode = siteSnapshot?.use_stop_mode ?? false;
   const useCancelMode = siteSnapshot?.use_cancel_mode ?? false;
   const gilbarcoMode = (siteSnapshot?.protocol ?? "").toLowerCase().includes("gilbarco");
+
+  // The pump totalizer view only makes sense for protocols that report lifetime
+  // totals (currently Gilbarco). Drive it off the actual data so the tab/page is
+  // hidden entirely on protocols that don't provide it.
+  const totalizerAvailable = useMemo(
+    () =>
+      states.some(
+        (s) =>
+          (s.pump_totals?.length ?? 0) > 0 ||
+          s.pump_total_volume != null ||
+          s.pump_total_amount != null,
+      ),
+    [states],
+  );
 
   // Shift requirement: operators must start a shift before authorizing dispensers.
   const shiftRequired = shift.mode !== "disabled" && !shift.currentShift;
@@ -498,8 +513,53 @@ export default function App() {
     [setWorkspaceTab],
   );
 
+  // Hide the totalizer tab when the protocol provides no lifetime totals.
+  const visibleTabs = useMemo(
+    () => WORKSPACE_TABS.filter((tab) => tab.id !== "totalizer" || totalizerAvailable),
+    [WORKSPACE_TABS, totalizerAvailable],
+  );
+
+  // If totals disappear (e.g. protocol/site change) while the page is open, fall back.
+  useEffect(() => {
+    if (workspaceTab === "totalizer" && !totalizerAvailable) {
+      setWorkspaceTab("dispensers");
+    }
+  }, [workspaceTab, totalizerAvailable]);
+
+  // Fetch fresh pump totalizers from the dispenser each time the totalizer view is
+  // shown (between fills the cached values are only as of the last transaction).
+  useEffect(() => {
+    if (workspaceTab !== "totalizer") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        if (!cancelled) await invoke("refresh_totals");
+      } catch (e) {
+        console.error("refresh_totals failed", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceTab]);
+
+  // F11 toggles the totalizer view: open it, and pressing F11 again returns to the
+  // main dispenser page. Suppress the browser/WebView fullscreen default.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "F11") return;
+      e.preventDefault();
+      setWorkspaceTab((current) =>
+        current === "totalizer" ? "dispensers" : totalizerAvailable ? "totalizer" : current,
+      );
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [totalizerAvailable]);
+
   const workspaceNavProps = {
-    tabs: WORKSPACE_TABS,
+    tabs: visibleTabs,
     active: workspaceTab,
     smallScreen,
     onSelect: handleSelectTab,
@@ -732,6 +792,9 @@ export default function App() {
           ) : (
             <div className={`flex h-full min-h-0 flex-1 flex-col overflow-hidden ${smallScreen ? "p-2" : "p-4 md:p-6"}`}>
               {workspaceTab === "reservoirs" ? <ReservoirsPanel /> : null}
+              {workspaceTab === "totalizer" ? (
+                <TotalizerPanel states={sorted} nozzlesByFp={nozzlesByFp} />
+              ) : null}
               {workspaceTab === "history" ? <HistoryPanel visible compact={smallScreen} currentShift={shift.currentShift} /> : null}
 {workspaceTab === "shift" ? (
                 <ShiftWorkspace

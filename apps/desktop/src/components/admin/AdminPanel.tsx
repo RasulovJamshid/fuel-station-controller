@@ -56,6 +56,7 @@ interface SyncStatus {
   last_price_pull_at: number | null;
   prices_updated: number;
   price_pull_interval_hours?: number;
+  price_pull_enabled?: boolean;
 }
 
 interface DiscoveredTankSlot {
@@ -198,6 +199,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
   const [syncBatchSize, setSyncBatchSize] = useState(100);
   const [syncMaxRetries, setSyncMaxRetries] = useState(10);
   const [syncPricePullInterval, setSyncPricePullInterval] = useState(12);
+  const [syncPricePullEnabled, setSyncPricePullEnabled] = useState(true);
   const [showApiKey, setShowApiKey] = useState(false);
 
   const loadSyncStatus = useCallback(async () => {
@@ -208,6 +210,9 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
       setSyncUrl(s.backend_url);
       if (s.price_pull_interval_hours !== undefined) {
         setSyncPricePullInterval(s.price_pull_interval_hours);
+      }
+      if (s.price_pull_enabled !== undefined) {
+        setSyncPricePullEnabled(s.price_pull_enabled);
       }
     } catch {
       // not fatal — sync may not be configured yet
@@ -494,6 +499,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
         batchSize: syncBatchSize,
         maxRetries: syncMaxRetries,
         pricePullIntervalHours: syncPricePullInterval,
+        pricePullEnabled: syncPricePullEnabled,
       });
       await loadSyncStatus();
       setMsg(t("admin.sync.savedMsg"));
@@ -1032,6 +1038,15 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                   value={syncPricePullInterval}
                   onChange={(e) => setSyncPricePullInterval(Number(e.target.value))}
                 />
+              </label>
+              <label className="flex items-center gap-2 text-xs font-medium text-text-secondary sm:col-span-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-accent-blue"
+                  checked={syncPricePullEnabled}
+                  onChange={(e) => setSyncPricePullEnabled(e.target.checked)}
+                />
+                {t("admin.sync.pricePullEnabled")}
               </label>
             </div>
           </div>

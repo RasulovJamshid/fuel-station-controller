@@ -11,6 +11,8 @@ import type { FpState, NozzleSnapshot } from "../types/api";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 
 const fmtSum = new Intl.NumberFormat("uz-UZ");
+const VOLUME_PRESETS = [5, 10, 20, 40];
+const AMOUNT_PRESETS = [50_000, 100_000, 200_000, 500_000];
 
 function parseNum(s: string): number {
   const v = parseFloat(s.replace(/\s/g, "").replace(",", "."));
@@ -125,6 +127,21 @@ export function FillSetupModal({
     : "border-accent-emerald/65 bg-accent-emerald/12 ring-1 ring-accent-emerald/25";
 
   const fillModes: FillMode[] = ["full", "volume", "amount"];
+  const amountPresets = maxAmt != null
+    ? AMOUNT_PRESETS.filter((value) => value <= maxAmt)
+    : AMOUNT_PRESETS;
+
+  const applyVolume = (value: number) => {
+    setFillMode("volume");
+    setVol(String(value));
+    setStep("value");
+  };
+
+  const applyAmount = (value: number) => {
+    setFillMode("amount");
+    setAmt(String(value));
+    setStep("value");
+  };
 
   const getFocusableElements = () => {
     if (!dialogRef.current) return [] as HTMLElement[];
@@ -205,10 +222,36 @@ export function FillSetupModal({
         onMouseDown={(e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); onClick(); }}
         onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
         onKeyDown={(e) => { if (e.key !== "Enter" && e.key !== " ") return; e.preventDefault(); e.stopPropagation(); onClick(); }}
-        className="flex h-12 w-12 shrink-0 cursor-pointer select-none items-center justify-center rounded-xl border border-border-primary/70 bg-bg-secondary/95 text-text-primary shadow-sm pointer-events-auto touch-manipulation transition hover:border-border-primary hover:bg-bg-tertiary/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/45"
+        className="flex h-10 w-10 shrink-0 cursor-pointer select-none items-center justify-center self-center rounded-lg border border-border-primary/70 bg-bg-secondary/80 text-text-primary shadow-sm pointer-events-auto touch-manipulation transition hover:border-border-primary hover:bg-bg-tertiary/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/45"
       >
-        <span aria-hidden className="pointer-events-none text-2xl font-black leading-none">{label}</span>
+        <span aria-hidden className="pointer-events-none text-xl font-black leading-none">{label}</span>
       </button>
+    );
+  }
+
+  function QuickPresetRow({
+    values,
+    format,
+    onSelect,
+  }: {
+    values: number[];
+    format: (value: number) => string;
+    onSelect: (value: number) => void;
+  }) {
+    if (!values.length) return null;
+    return (
+      <div className="grid grid-cols-4 gap-2">
+        {values.map((value) => (
+          <button
+            key={value}
+            type="button"
+            className="pump-quick-chip rounded-lg px-2 py-2 text-sm"
+            onClick={() => onSelect(value)}
+          >
+            {format(value)}
+          </button>
+        ))}
+      </div>
     );
   }
 
@@ -342,8 +385,9 @@ export function FillSetupModal({
                   data-fill-mode={m}
                   aria-pressed={fillMode === m}
                   data-active={fillMode === m}
+                  data-mode={m}
                   onClick={() => { setFillMode(m); setStep(m === "full" ? "mode" : "value"); }}
-                  className="pump-mode-pill flex-col gap-1.5 px-2 py-3.5"
+                  className="pump-mode-pill flex-col gap-1.5 px-2 py-4"
                 >
                   <img
                     src={m === "full" ? fullTankIcon : m === "volume" ? dropletIcon : moneyIcon}
@@ -367,7 +411,7 @@ export function FillSetupModal({
             ].join(" ")}>
               <div className="relative isolate flex items-center gap-3">
                 <StepBtn label="-" onClick={() => setVol((v) => String(Math.max(1, parseNum(v) - 1)))} />
-                <div className="flex flex-1 items-center gap-2 rounded-xl border border-border-primary/60 bg-bg-input px-4 py-3.5 shadow-sm transition focus-within:border-accent-blue/55 focus-within:ring-2 focus-within:ring-accent-blue/20">
+                <div className="flex flex-1 items-center gap-2 rounded-xl border border-border-primary/60 bg-bg-input px-4 py-4 shadow-sm transition focus-within:border-accent-blue/55 focus-within:ring-[3px] focus-within:ring-accent-blue/20">
                   <input
                     ref={volInputRef}
                     type="text"
@@ -381,12 +425,13 @@ export function FillSetupModal({
                       else if (e.key === "ArrowDown") { e.preventDefault(); setVol((v) => String(Math.max(1, parseNum(v) - 1))); }
                       else if (e.key === "Enter")     { e.preventDefault(); handleConfirm(); }
                     }}
-                    className="w-full bg-transparent text-center font-mono text-3xl font-black tabular-nums text-text-primary outline-none"
+                    className="w-full bg-transparent text-center font-mono text-4xl font-black tabular-nums text-text-primary outline-none"
                   />
                   <span className="shrink-0 text-base font-bold text-text-muted">L</span>
                 </div>
                 <StepBtn label="+" onClick={() => setVol((v) => String(Math.min(MAX_VOL, parseNum(v) + 1)))} />
               </div>
+              <QuickPresetRow values={VOLUME_PRESETS} format={(value) => `${value} L`} onSelect={applyVolume} />
               {projectedAmt != null && (
                 <p className={`rounded-xl border py-2.5 text-center font-mono text-base font-semibold tabular-nums ${atVolLimit ? "border-accent-amber/40 bg-accent-amber/10 text-accent-amber" : "border-accent-blue/30 bg-accent-blue/10 text-accent-blue"}`}>
                   {atVolLimit ? "⚠ MAX " : "≈ "}{fmtSum.format(projectedAmt)} {t("pumpForm.amountUnit")}
@@ -403,7 +448,7 @@ export function FillSetupModal({
             ].join(" ")}>
               <div className="relative isolate flex items-center gap-3">
                 <StepBtn label="-" onClick={() => setAmt((v) => String(Math.max(10000, parseNum(v) - 10000)))} />
-                <div className="flex flex-1 items-center gap-2 rounded-xl border border-border-primary/60 bg-bg-input px-4 py-3.5 shadow-sm transition focus-within:border-accent-blue/55 focus-within:ring-2 focus-within:ring-accent-blue/20">
+                <div className="flex flex-1 items-center gap-2 rounded-xl border border-border-primary/60 bg-bg-input px-4 py-4 shadow-sm transition focus-within:border-accent-blue/55 focus-within:ring-[3px] focus-within:ring-accent-blue/20">
                   <input
                     ref={amtInputRef}
                     type="text"
@@ -420,12 +465,13 @@ export function FillSetupModal({
                       else if (e.key === "ArrowDown") { e.preventDefault(); setAmt((v) => String(Math.max(10000, parseNum(v) - 10000))); }
                       else if (e.key === "Enter")     { e.preventDefault(); handleConfirm(); }
                     }}
-                    className="w-full bg-transparent text-center font-mono text-3xl font-black tabular-nums text-text-primary outline-none"
+                    className="w-full bg-transparent text-center font-mono text-4xl font-black tabular-nums text-text-primary outline-none"
                   />
                   <span className="shrink-0 text-base font-bold text-text-muted">{t("pumpForm.amountUnit")}</span>
                 </div>
                 <StepBtn label="+" onClick={() => setAmt((v) => String(Math.min(maxAmt ?? Infinity, parseNum(v) + 10000)))} />
               </div>
+              <QuickPresetRow values={amountPresets} format={(value) => fmtSum.format(value)} onSelect={applyAmount} />
               {projectedVol != null && (
                 <p className={`rounded-xl border py-2.5 text-center font-mono text-base font-semibold tabular-nums ${atAmtLimit ? "border-accent-amber/40 bg-accent-amber/10 text-accent-amber" : "border-accent-emerald/30 bg-accent-emerald/10 text-text-secondary"}`}>
                   {atAmtLimit ? "⚠ MAX " : "≈ "}{projectedVol} L

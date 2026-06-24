@@ -397,6 +397,9 @@ pub enum DispatchCommand {
     CancelPreauth {
         byte: u8,
     },
+    /// Re-read the pump lifetime totalizer for all lanes (e.g. operator opened the
+    /// totalizer view). No-op on protocols without a totalizer.
+    RefreshTotals,
 }
 
 pub enum SerialBackend {
@@ -1635,6 +1638,8 @@ async fn apply_command(
                 }
             }
         }
+        // Wayne Europump has no lifetime totalizer query — nothing to refresh.
+        DispatchCommand::RefreshTotals => {}
     }
 }
 
@@ -2282,7 +2287,7 @@ async fn gbr_sync_totals(
         rt.state.pump_totals = totals_vec;
         if let Some(t) = pick {
             rt.state.pump_total_nozzle_index = Some(t.nozzle_index);
-            rt.state.pump_total_volume = Some(t.volume_total_raw as f64 / 1000.0);
+            rt.state.pump_total_volume = Some(t.volume_total_raw as f64 / GBR_TOTALS_VOLUME_DIVISOR);
             rt.state.pump_total_amount = Some(t.amount_total_raw * 10);
             rt.state.pump_total_price = Some((t.unit_price_raw * 10).min(u32::MAX as u64) as u32);
         }
@@ -2290,13 +2295,18 @@ async fn gbr_sync_totals(
     true
 }
 
+/// GetTotals volume is reported with one fewer decimal place than the per-transaction
+/// frame, so the lifetime totalizer volume divides by 100 (not 1000). Matching the
+/// real pump's odometer reading — without this the totalizer volume reads 10× low.
+const GBR_TOTALS_VOLUME_DIVISOR: f64 = 100.0;
+
 /// Map decoded GetTotals sections to the per-nozzle UI shape (raw pump units →
 /// litres / soum, matching the legacy single-field scaling).
 fn gbr_totals_to_state(all: &[gilbarco::TotalsData]) -> Vec<PumpNozzleTotals> {
     all.iter()
         .map(|t| PumpNozzleTotals {
             nozzle_index: t.nozzle_index,
-            volume: t.volume_total_raw as f64 / 1000.0,
+            volume: t.volume_total_raw as f64 / GBR_TOTALS_VOLUME_DIVISOR,
             amount: t.amount_total_raw * 10,
             price: (t.unit_price_raw * 10).min(u32::MAX as u64) as u32,
         })
@@ -2515,7 +2525,8 @@ async fn gbr_close_transaction(
             rt.state.pump_totals = totals_vec;
             if let Some(t) = pick {
                 rt.state.pump_total_nozzle_index = Some(t.nozzle_index);
-                rt.state.pump_total_volume = Some(t.volume_total_raw as f64 / 1000.0);
+                rt.state.pump_total_volume =
+                    Some(t.volume_total_raw as f64 / GBR_TOTALS_VOLUME_DIVISOR);
                 rt.state.pump_total_amount = Some(t.amount_total_raw * 10);
                 rt.state.pump_total_price =
                     Some((t.unit_price_raw * 10).min(u32::MAX as u64) as u32);
@@ -2900,6 +2911,31 @@ async fn gbr_apply_command(
                 fp_id: fp_cfg.id.clone(),
             });
             broadcast_status(byte, runtimes, events).await;
+        }
+        DispatchCommand::RefreshTotals => {
+            // Operator opened the totalizer view: re-read each lane's lifetime totals
+            // now (runs on the poll-loop task, so it shares the serial bus safely).
+            // Skip lanes mid-delivery so a totals read doesn't disturb live polling.
+            for fp in cfg.active_positions() {
+                let byte = fp.address_byte;
+                let busy = {
+                    let map = runtimes.read().await;
+                    map.get(&byte)
+                        .map(|rt| {
+                            matches!(
+                                rt.state.status,
+                                FpStatus::Delivering | FpStatus::Authorizing
+                            )
+                        })
+                        .unwrap_or(false)
+                };
+                if busy {
+                    continue;
+                }
+                if gbr_sync_totals(byte, fp, backend, runtimes).await {
+                    broadcast_status(byte, runtimes, events).await;
+                }
+            }
         }
     }
 }

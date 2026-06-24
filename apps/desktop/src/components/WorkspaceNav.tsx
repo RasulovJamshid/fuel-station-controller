@@ -1,5 +1,6 @@
 import dispenserIconRaw  from "@/assets/icons/dispenser.svg?raw";
 import fuelVolumeIconRaw from "@/assets/icons/fuel-volume.svg?raw";
+import fullTankIconRaw   from "@/assets/icons/full-tank.svg?raw";
 import historyIconRaw    from "@/assets/icons/history-table.svg?raw";
 import settingIconRaw    from "@/assets/icons/setting.svg?raw";
 import userIconRaw       from "@/assets/icons/user.svg?raw";
@@ -11,6 +12,7 @@ function svgToDataUri(raw: string): string {
 
 const dispenserIcon  = svgToDataUri(dispenserIconRaw);
 const fuelVolumeIcon = svgToDataUri(fuelVolumeIconRaw);
+const fullTankIcon   = svgToDataUri(fullTankIconRaw);
 const historyIcon    = svgToDataUri(historyIconRaw);
 const settingIcon    = svgToDataUri(settingIconRaw);
 const userIcon       = svgToDataUri(userIconRaw);
@@ -21,6 +23,7 @@ export type WorkspaceTabId =
   | "dispensers"
   | "shift"
   | "reservoirs"
+  | "totalizer"
   | "history"
   | "admin";
 
@@ -42,6 +45,7 @@ const TAB_ICON_MAP: Record<WorkspaceTabId, string> = {
   dispensers: dispenserIcon,
   shift:      userIcon,
   reservoirs: fuelVolumeIcon,
+  totalizer:  fullTankIcon,
   history:    historyIcon,
   admin:      settingIcon,
 };

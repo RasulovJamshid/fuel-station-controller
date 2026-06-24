@@ -64,6 +64,7 @@ pub fn router(state: AppState) -> Router {
         .route("/estop", post(emergency_stop))
         .route("/emergency-stop", post(estop_alias))
         .route("/reset", post(reset_all))
+        .route("/totals/refresh", post(refresh_totals))
         .route("/prices", post(update_prices))
         .route("/products", get(get_products))
         .route("/transactions", get(get_transactions))
@@ -893,6 +894,17 @@ pub async fn reset_all(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+/// Re-read pump lifetime totalizers on demand (operator opened the totalizer view).
+pub async fn refresh_totals(
+    st: State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    st.commands
+        .send(DispatchCommand::RefreshTotals)
+        .await
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
 pub async fn update_prices(
     State(st): State<AppState>,
     Json(cmd): Json<UpdateAllPricesCmd>,
@@ -995,6 +1007,7 @@ pub struct UpdateSyncConfigBody {
     pub batch_size: Option<usize>,
     pub max_retries: Option<u32>,
     pub price_pull_interval_hours: Option<u64>,
+    pub price_pull_enabled: Option<bool>,
 }
 
 pub async fn update_sync_config(
@@ -1023,6 +1036,9 @@ pub async fn update_sync_config(
         }
         if let Some(v) = body.price_pull_interval_hours {
             cfg.sync.price_pull_interval_hours = v;
+        }
+        if let Some(v) = body.price_pull_enabled {
+            cfg.sync.price_pull_enabled = v;
         }
 
         crate::config::save(&cfg, &st.config_path)

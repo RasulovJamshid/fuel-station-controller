@@ -203,8 +203,17 @@ pub struct SyncConfig {
     /// Set to 0 to disable scheduled pulls (startup-only).
     #[serde(default = "default_price_pull_interval_hours")]
     pub price_pull_interval_hours: u64,
+    /// Independent on/off switch for pulling prices from the server. When false,
+    /// outbound data sync still runs but remote price changes are NOT pulled — lets
+    /// the operator disable price sync alone without turning off all sync. Default: true
+    /// (preserves prior behavior: prices pull whenever sync is enabled).
+    #[serde(default = "default_true")]
+    pub price_pull_enabled: bool,
 }
 
+fn default_true() -> bool {
+    true
+}
 fn default_retry_interval_secs() -> u64 {
     30
 }

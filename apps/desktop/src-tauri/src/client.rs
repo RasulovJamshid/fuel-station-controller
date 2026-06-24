@@ -246,6 +246,18 @@ impl ServiceClient {
         Ok(())
     }
 
+    pub async fn refresh_totals(&self) -> Result<(), String> {
+        let url = self.base.join("totals/refresh").map_err(fmt_err)?;
+        self.http
+            .post(url)
+            .send()
+            .await
+            .map_err(fmt_err)?
+            .error_for_status()
+            .map_err(fmt_err)?;
+        Ok(())
+    }
+
     pub async fn dismiss_sale(&self, fp_id: String) -> Result<types::FpState, String> {
         let path = format!("dispenser/{fp_id}/dismiss");
         let url = self.base.join(&path).map_err(fmt_err)?;

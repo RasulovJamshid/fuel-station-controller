@@ -34,6 +34,7 @@ pub struct SyncStatus {
     pub last_price_pull_at: Option<i64>,
     pub prices_updated: u64,
     pub price_pull_interval_hours: u64,
+    pub price_pull_enabled: bool,
 }
 
 pub type SharedSyncStatus = Arc<Mutex<SyncStatus>>;
@@ -50,6 +51,7 @@ pub fn new_status(cfg: &site_config::SyncConfig) -> SharedSyncStatus {
         last_price_pull_at: None,
         prices_updated: 0,
         price_pull_interval_hours: cfg.price_pull_interval_hours,
+        price_pull_enabled: cfg.price_pull_enabled,
     }))
 }
 
@@ -143,6 +145,7 @@ pub async fn run(
             batch_size,
             max_retries,
             price_pull_interval_hours,
+            price_pull_enabled,
         ) = {
             let r = cfg.read().await;
             (
@@ -154,6 +157,7 @@ pub async fn run(
                 r.sync.batch_size,
                 r.sync.max_retries,
                 r.sync.price_pull_interval_hours,
+                r.sync.price_pull_enabled,
             )
         };
 
@@ -163,6 +167,7 @@ pub async fn run(
             s.enabled = enabled;
             s.backend_url = backend_url.clone();
             s.price_pull_interval_hours = price_pull_interval_hours;
+            s.price_pull_enabled = price_pull_enabled;
         }
 
         let skip = !enabled || backend_url.is_empty() || api_key.is_empty();
@@ -200,15 +205,19 @@ pub async fn run(
                 status.lock().await.pending_count = n;
             }
 
-            // Pull prices only on startup (last_price_pull is None) or after the configured interval.
-            // price_pull_interval_hours == 0 means startup-only (no scheduled re-pull).
-            let should_pull = match last_price_pull {
-                None => true,
-                Some(t) if price_pull_interval_hours > 0 => {
-                    t.elapsed() >= std::time::Duration::from_secs(price_pull_interval_hours * 3600)
-                }
-                _ => false,
-            };
+            // Price sync has its own switch, independent of the outbound data sync above:
+            // when off, we still push records but never pull remote prices.
+            // Pull prices only on startup (last_price_pull is None) or after the configured
+            // interval. price_pull_interval_hours == 0 means startup-only (no scheduled re-pull).
+            let should_pull = price_pull_enabled
+                && match last_price_pull {
+                    None => true,
+                    Some(t) if price_pull_interval_hours > 0 => {
+                        t.elapsed()
+                            >= std::time::Duration::from_secs(price_pull_interval_hours * 3600)
+                    }
+                    _ => false,
+                };
 
             if should_pull {
                 match pull_prices(

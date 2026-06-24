@@ -27,7 +27,18 @@
     "disconnected": "Отключено",
     "wsOn": "Подкл.",
     "wsOff": "Откл.",
-    "emergencyTitle": "Аварийная остановка всех насосов"
+    "emergencyTitle": "Аварийная остановка всех насосов",
+    "emergencyConfirmTitle": "Подтвердите общий стоп",
+    "emergencyConfirmSubtitle": "Команда остановит все активные насосы.",
+    "emergencyConfirmBody": "После нажатия OK система отправит аварийный стоп всем колонкам. Насосы, которые сейчас отпускают топливо, будут остановлены и при необходимости сохранены как STOPPED/PAUSED.",
+    "emergencyActiveCount": "Активные заправки",
+    "emergencyArmedCount": "Ожидают preauth",
+    "emergencyConfirmPoint1": "Колонки в отпуске или авторизации будут остановлены.",
+    "emergencyConfirmPoint2": "Колонки в IDLE или preauth не начнут отпуск; проверьте preauth после остановки.",
+    "emergencyConfirmPoint3": "После этого остановленные продажи может потребоваться завершить через Continue/Resume или Close.",
+    "emergencyCancel": "Отмена",
+    "emergencyOk": "OK, стоп",
+    "emergencyStopping": "Останавливаем…"
   },
   "shiftStart": {
     "title": "Начать смену",

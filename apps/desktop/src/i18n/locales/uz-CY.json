@@ -27,7 +27,18 @@
     "disconnected": "Узилиб қолган",
     "wsOn": "Уланган",
     "wsOff": "Узилди",
-    "emergencyTitle": "Барча насосларни авария тџхтатиш"
+    "emergencyTitle": "Барча насосларни авария тўхтатиш",
+    "emergencyConfirmTitle": "Глобал стопни тасдиқланг",
+    "emergencyConfirmSubtitle": "Бу амал барча фаол насосларга стоп юборади.",
+    "emergencyConfirmBody": "OK босилганда тизим барча диспансерларга авария стоп командаси юборади. Ҳозир қуяётган насослар тўхтатилади ва керак бўлса STOPPED/PAUSED ҳолатида сақланади.",
+    "emergencyActiveCount": "Фаол қуйишлар",
+    "emergencyArmedCount": "Preauth кутмоқда",
+    "emergencyConfirmPoint1": "Қуйиш давом этаётган ёки авторизация қилинаётган помпалар тўхтатилади.",
+    "emergencyConfirmPoint2": "Idle ёки preauth ҳолатидаги помпалар ёқилмайди; preauth ҳолатини қайта текширинг.",
+    "emergencyConfirmPoint3": "Кейин ҳар бир тўхтаган савдони Continue/Resume ёки Close орқали якунлаш керак бўлиши мумкин.",
+    "emergencyCancel": "Бекор қилиш",
+    "emergencyOk": "OK, стоп",
+    "emergencyStopping": "Тўхтатилмоқда…"
   },
   "shiftStart": {
     "title": "Сменани бошлаш",

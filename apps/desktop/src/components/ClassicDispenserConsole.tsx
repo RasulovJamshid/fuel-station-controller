@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { pausedInfo, statusTag } from "../types/api";
@@ -24,6 +24,16 @@ function parseAmountTarget(preset: string | null | undefined): number | null {
   const v = Number.parseFloat(m[1].replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(v) && v > 0 ? v : null;
 }
+
+function draftFromPreAuthPreset(preset: string | null | undefined): Partial<PumpDraft> {
+  if (!preset) return {};
+  const volume = parseVolumeTarget(preset);
+  if (volume != null) return { mode: "volume", volume: String(volume) };
+  const amount = parseAmountTarget(preset);
+  if (amount != null) return { mode: "amount", amount: String(Math.round(amount)) };
+  return { mode: "full", volume: "", amount: "" };
+}
+
 const FALLBACK_MAX_AMOUNT_SUM = 999_000_000;
 
 function parseNum(s: string): number {
@@ -85,6 +95,11 @@ function relatedDraftValues(
 
 function selectInputValue(input: HTMLInputElement) {
   window.requestAnimationFrame(() => input.select());
+}
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement &&
+    Boolean(target.closest("button, input, textarea, select, a, [role='button']"));
 }
 
 function pumpTitle(state: FpState): string {
@@ -348,23 +363,23 @@ export function ClassicDispenserConsole({
     
     btnHeight: "h-10",
     btnPad: "px-4",
-    btnText: "text-sm",
+    btnText: "text-base",
   };
 
   const focusControlClass =
-    "transition-all duration-200 focus:border-accent-blue focus:bg-bg-primary focus:ring-[4px] focus:ring-accent-blue/30 focus:ring-offset-0 focus:outline-none shadow-sm focus:shadow-md";
+    "transition-[border-color,background-color,box-shadow] duration-75 focus:border-accent-blue focus:bg-bg-primary focus:ring-[4px] focus:ring-accent-blue/30 focus:ring-offset-0 focus:outline-none shadow-sm focus:shadow-md";
   const invalidInputClass =
     "border-accent-red/70 bg-accent-red/10 text-text-primary focus:border-accent-red focus:ring-accent-red/30";
   const lockedInputClass =
     "cursor-not-allowed border-border-primary/30 bg-bg-secondary/40 text-text-muted opacity-70";
   const mirroredOrderInputClass =
-    "border-2 border-accent-blue bg-accent-blue/15 ring-[5px] ring-accent-blue/35 shadow-[0_0_0_1px_rgba(var(--color-accent-blue),0.55),0_10px_24px_-12px_rgba(var(--color-accent-blue),0.9)]";
+    "!border-accent-blue !bg-accent-blue !text-white caret-white placeholder:text-white/70 ring-[8px] ring-accent-blue/55 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.30),inset_0_0_22px_rgba(255,255,255,0.18),0_0_0_2px_rgba(var(--color-accent-blue),0.85),0_14px_32px_-10px_rgba(var(--color-accent-blue),0.95)]";
   const centerOrderFocusClass =
-    "focus:bg-accent-blue/20 focus:ring-[7px] focus:ring-accent-blue/45 focus:shadow-[0_0_0_2px_rgba(var(--color-accent-blue),0.75),0_12px_28px_-10px_rgba(var(--color-accent-blue),0.95)]";
+    "focus:bg-accent-blue/45 focus:text-white focus:caret-white focus:ring-[8px] focus:ring-accent-blue/55 focus:shadow-[inset_0_0_0_2px_rgba(255,255,255,0.24),inset_0_0_18px_rgba(255,255,255,0.14),0_0_0_2px_rgba(var(--color-accent-blue),0.82),0_14px_32px_-10px_rgba(var(--color-accent-blue),0.95)]";
   const bottomControlWrapClass =
     "group flex flex-col gap-1 rounded-none border border-border-primary/50 bg-bg-secondary/20 p-3 transition-colors duration-100 hover:bg-bg-secondary/40 hover:shadow-md focus-within:border-accent-blue focus-within:bg-accent-blue/5 focus-within:shadow-[0_8px_24px_-8px_rgba(var(--color-accent-blue),0.4)]";
   const bottomLabelClass =
-    "mb-1 block text-sm font-black uppercase tracking-wider text-text-secondary transition-colors duration-200 group-focus-within:text-accent-blue group-hover:text-text-primary";
+    "mb-1 block text-sm font-black uppercase tracking-wider text-text-secondary transition-colors duration-75 group-focus-within:text-accent-blue group-hover:text-text-primary";
   const tableUnitSlotClass = "w-14 shrink-0";
 
   useEffect(() => {
@@ -409,11 +424,15 @@ export function ClassicDispenserConsole({
         const captureLastFill = clearValues && state.volume > 0;
         // Reset last-fill snapshot when a new transaction begins.
         const clearLastFill = tag === "NOZZLE_UP" || tag === "AUTHORIZING" || tag === "DELIVERING";
+        const presetDraft =
+          !clearValues && state.pre_auth_preset != null
+            ? draftFromPreAuthPreset(state.pre_auth_preset)
+            : {};
         next[state.fp_id] = {
           nozzleIndex,
-          mode: prevDraft?.mode ?? "volume",
-          volume: clearValues ? "" : (prevDraft?.volume ?? ""),
-          amount: clearValues ? "" : (prevDraft?.amount ?? ""),
+          mode: prevDraft?.mode ?? presetDraft.mode ?? "volume",
+          volume: clearValues ? "" : (prevDraft?.volume ?? presetDraft.volume ?? ""),
+          amount: clearValues ? "" : (prevDraft?.amount ?? presetDraft.amount ?? ""),
           lastFillVolume: clearLastFill ? null : captureLastFill ? state.volume : (prevDraft?.lastFillVolume ?? null),
           lastFillAmount: clearLastFill ? null : captureLastFill ? state.amount : (prevDraft?.lastFillAmount ?? null),
           lastFillPreset: clearLastFill ? null : captureLastFill ? (state.pre_auth_preset ?? null) : (prevDraft?.lastFillPreset ?? null),
@@ -538,6 +557,19 @@ export function ClassicDispenserConsole({
     window.requestAnimationFrame(() => {
       pumpButtonRefs.current.get(fpId)?.focus();
     });
+  }, [onSelectFp]);
+
+  const handlePassivePumpMouseDown = useCallback((fpId: string, e: MouseEvent<HTMLElement>) => {
+    if (isInteractiveTarget(e.target)) return;
+    onSelectFp(fpId);
+  }, [onSelectFp]);
+
+  const handleTableMouseDown = useCallback((e: MouseEvent<HTMLTableElement>) => {
+    if (isInteractiveTarget(e.target)) return;
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    const cell = target?.closest<HTMLElement>("[data-fp-id]");
+    const fpId = cell?.dataset.fpId;
+    if (fpId) onSelectFp(fpId);
   }, [onSelectFp]);
 
   const focusBottomControl = useCallback((controlName: string) => {
@@ -902,7 +934,8 @@ export function ClassicDispenserConsole({
   useEffect(() => {
     const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      const handledKeys = ["ArrowLeft", "ArrowRight", "Delete", "PageUp", "Enter"];
+      if (!handledKeys.includes(event.key)) return;
 
       const root = consoleRef.current;
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -910,9 +943,10 @@ export function ClassicDispenserConsole({
       const focusedElement = target ?? activeElement;
 
       if (root && focusedElement && root.contains(focusedElement)) return;
+      if (focusedElement?.closest("[role='dialog']")) return;
       if (
         focusedElement &&
-        (focusedElement.matches("input, textarea, select") || focusedElement.isContentEditable)
+        (focusedElement.matches("button, input, textarea, select, a") || focusedElement.isContentEditable)
       ) {
         return;
       }
@@ -921,19 +955,31 @@ export function ClassicDispenserConsole({
       if (!selectedState) return;
 
       event.preventDefault();
-      selectPumpByOffset(selectedState.fp_id, event.key === "ArrowRight" ? 1 : -1);
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        selectPumpByOffset(selectedState.fp_id, event.key === "ArrowRight" ? 1 : -1);
+        return;
+      }
+      if (event.key === "Delete") {
+        stopOrCancelSelected(selectedState);
+        return;
+      }
+      if (event.key === "PageUp") {
+        armFullFill(selectedState);
+        return;
+      }
+      startPump(selectedState);
     };
 
     window.addEventListener("keydown", onWindowKeyDown);
     return () => window.removeEventListener("keydown", onWindowKeyDown);
-  }, [activeState, selectPumpByOffset, states]);
+  }, [activeState, armFullFill, selectPumpByOffset, startPump, states, stopOrCancelSelected]);
 
   const renderAction = (state: FpState, compact = false) => {
     const positionActive = positionActiveByFp.get(state.fp_id) ?? true;
     const meta = getMeta(state, defaultAuthMode, positionActive);
     const paused = meta.paused;
     const baseClass = `${ui.btnHeight} ${ui.btnPad} ${ui.btnText} rounded-none`;
-    const cls = `${baseClass} w-full flex-1 font-black uppercase tracking-wider outline-none transition-colors duration-200 active:brightness-95 focus-visible:ring-[3px] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none`;
+    const cls = `${baseClass} w-full flex-1 font-black [text-shadow:0_1px_0_rgba(0,0,0,0.25)] uppercase tracking-wider outline-none transition-colors duration-75 active:brightness-95 focus-visible:ring-[3px] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none`;
 
     if (meta.canAuthorize) {
       return (
@@ -1108,12 +1154,12 @@ export function ClassicDispenserConsole({
   const selectedColumnLeft = `calc(${selectedColumnRatio * 100}% + ${8 - selectedColumnRatio * 8}rem)`;
   const centerCellClass = (fpId: string) =>
     fpId === selected.fp_id
-      ? "relative z-10 bg-accent-blue/10 transition-colors duration-200"
-      : "border-r border-border-primary/30 bg-bg-secondary/20 transition-all duration-300";
+      ? "relative z-10 bg-accent-blue/10 transition-colors duration-75"
+      : "border-r border-border-primary/30 bg-bg-secondary/20 transition-colors duration-75";
   const centerHeaderClass = (fpId: string) =>
     fpId === selected.fp_id
-      ? "relative z-10 bg-accent-blue/12 transition-colors duration-200"
-      : "border-r border-border-primary/30 bg-bg-secondary/20 transition-all duration-300";
+      ? "relative z-10 bg-accent-blue/12 transition-colors duration-75"
+      : "border-r border-border-primary/30 bg-bg-secondary/20 transition-colors duration-75";
 
   const renderPumpTile = (state: FpState) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
@@ -1133,7 +1179,8 @@ export function ClassicDispenserConsole({
     return (
       <div
         key={state.fp_id}
-        className={`relative min-w-0 overflow-hidden rounded-none border text-left transition-colors duration-200 ${
+        onMouseDown={(e) => handlePassivePumpMouseDown(state.fp_id, e)}
+        className={`relative min-w-0 overflow-hidden rounded-none border text-left transition-[background-color,border-color,box-shadow] duration-75 ${
           selectedCard
             ? "z-20 border-accent-blue bg-accent-blue/10 shadow-[inset_0_0_0_2px_rgb(var(--color-accent-blue)/0.32),0_12px_28px_-20px_rgba(0,0,0,0.65)]"
             : "border-border-primary/40 bg-bg-secondary/30 hover:bg-bg-secondary/60 cursor-pointer"
@@ -1250,17 +1297,17 @@ export function ClassicDispenserConsole({
           style={{ left: selectedColumnLeft, width: selectedColumnWidth }}
           aria-hidden
         />
-        <table className="w-full table-fixed border-collapse text-center text-xs">
+        <table className="w-full table-fixed border-collapse text-center text-xs" onMouseDown={handleTableMouseDown}>
           <colgroup>
             <col className="w-32" />
           </colgroup>
           <tbody className="divide-y divide-border-primary/30">
-            <tr className="hover:bg-bg-primary/20 transition-colors">
+            <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.status")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 return (
-                  <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`}>
+                  <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
                     <span className={`inline-flex w-full min-w-0 justify-center rounded-none border ${ui.modeBtnPad} text-lg font-black uppercase tracking-wider truncate ${statusSolidClass(meta)}`}>
                       {classicStatusLabel(meta, t)}
                     </span>
@@ -1268,7 +1315,7 @@ export function ClassicDispenserConsole({
                 );
               })}
             </tr>
-            <tr className="hover:bg-bg-primary/20 transition-colors">
+            <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.fuel")}</th>
 	              {states.map((state) => {
 	                const nozzles = (nozzlesByFp.get(state.fp_id) ?? []).filter((n) => n.active);
@@ -1300,7 +1347,7 @@ export function ClassicDispenserConsole({
                             ...relatedDraftValues(draft, nozzle ?? null),
                           });
                         }}
-	                        className={`${ui.inputHeight} w-full rounded-none border ${ui.inputPad} pl-7 ${ui.inputText} font-black transition-all duration-200 outline-none disabled:cursor-not-allowed disabled:opacity-70 ${
+	                        className={`${ui.inputHeight} w-full rounded-none border ${ui.inputPad} pl-7 ${ui.inputText} font-black transition-[border-color,background-color,box-shadow] duration-75 outline-none disabled:cursor-not-allowed disabled:opacity-70 ${
 	                          setupLocked
 	                            ? lockedInputClass
 	                            : "border-border-primary/40 bg-bg-input text-text-primary focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/30 focus:ring-offset-0"
@@ -1317,15 +1364,15 @@ export function ClassicDispenserConsole({
                 );
               })}
             </tr>
-            <tr className="hover:bg-bg-primary/20 transition-colors">
+            <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.price")}</th>
               {states.map((state) => (
-	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono text-2xl font-black ${centerCellClass(state.fp_id)}`}>
+	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono text-2xl font-black ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
 	                  <span className="text-accent-blue">{fmtSum.format(selectedNozzle(state)?.price ?? state.price ?? 0)}</span>
 	                </td>
 	              ))}
             </tr>
-            <tr className="hover:bg-bg-primary/20 transition-colors">
+            <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.orderLiters")}</th>
 	              {states.map((state) => {
 	                const draft = drafts[state.fp_id];
@@ -1352,7 +1399,7 @@ export function ClassicDispenserConsole({
                         onMouseUp={(e) => e.preventDefault()}
                         onChange={(e) => updateVolume(state, e.target.value)}
                         onKeyDown={(e) => handleEditKeyDown(state, e)}
-	                        className={`${ui.inputHeight} min-w-0 flex-1 rounded-none border pl-16 pr-4 text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none disabled:cursor-not-allowed ${centerOrderFocusClass} ${
+	                        className={`${ui.inputHeight} min-w-0 flex-1 rounded-none border pl-16 pr-4 text-center ${ui.inputText} font-mono font-black tabular-nums transition-[border-color,background-color,box-shadow] duration-75 outline-none disabled:cursor-not-allowed ${centerOrderFocusClass} ${
 	                          setupLocked
 	                            ? lockedInputClass
 	                            : invalid
@@ -1370,7 +1417,7 @@ export function ClassicDispenserConsole({
                 );
               })}
             </tr>
-            <tr className="hover:bg-bg-primary/20 transition-colors">
+            <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.orderAmount")}</th>
               {states.map((state) => {
 	                const draft = drafts[state.fp_id];
@@ -1399,7 +1446,7 @@ export function ClassicDispenserConsole({
                         onMouseUp={(e) => e.preventDefault()}
                         onChange={(e) => updateAmount(state, e.target.value)}
                         onKeyDown={(e) => handleEditKeyDown(state, e)}
-	                        className={`${ui.inputHeight} min-w-0 flex-1 rounded-none border pl-16 pr-4 text-center ${ui.inputText} font-mono font-black tabular-nums transition-all duration-200 outline-none disabled:cursor-not-allowed ${centerOrderFocusClass} ${
+	                        className={`${ui.inputHeight} min-w-0 flex-1 rounded-none border pl-16 pr-4 text-center ${ui.inputText} font-mono font-black tabular-nums transition-[border-color,background-color,box-shadow] duration-75 outline-none disabled:cursor-not-allowed ${centerOrderFocusClass} ${
 	                          setupLocked
 	                            ? lockedInputClass
 	                            : invalid
@@ -1417,13 +1464,13 @@ export function ClassicDispenserConsole({
                 );
               })}
             </tr>
-            <tr className="hover:bg-bg-primary/20 transition-colors">
+            <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.mode")}</th>
               {states.map((state) => (
                 <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="mode" data-fp-id={state.fp_id}>{renderModeButtons(state, true)}</td>
               ))}
             </tr>
-            <tr className="hover:bg-bg-primary/20 transition-colors">
+            <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.currentLiters")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
@@ -1433,13 +1480,13 @@ export function ClassicDispenserConsole({
                   ? (meta.paused?.stopped_volume ?? state.volume)
                   : (draft?.lastFillVolume ?? state.volume);
                 return (
-	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} ${centerCellClass(state.fp_id)}`}>
+	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
 	                    {displayVol.toFixed(2)}
 	                  </td>
                 );
               })}
             </tr>
-            <tr className="hover:bg-bg-primary/20 transition-colors">
+            <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.currentAmount")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
@@ -1449,13 +1496,13 @@ export function ClassicDispenserConsole({
                   ? (meta.paused?.stopped_amount ?? state.amount)
                   : (draft?.lastFillAmount ?? state.amount);
                 return (
-	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} text-accent-blue ${centerCellClass(state.fp_id)}`}>
+	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} text-accent-blue ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
 	                    {fmtSum.format(displayAmt)}
 	                  </td>
                 );
               })}
             </tr>
-            <tr className="hover:bg-bg-primary/20 transition-colors">
+            <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.remaining")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
@@ -1484,7 +1531,7 @@ export function ClassicDispenserConsole({
                   }
                 }
                 return (
-	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} ${centerCellClass(state.fp_id)}`}>
+	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
 	                    {cell}
 	                  </td>
                 );
@@ -1496,7 +1543,7 @@ export function ClassicDispenserConsole({
 
       <div
         ref={bottomPanelRef}
-        className="shrink-0 overflow-hidden rounded-none border border-border-primary/50 bg-bg-card/80 backdrop-blur-xl shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] transition-all duration-300"
+        className="shrink-0 overflow-hidden rounded-none border border-border-primary/50 bg-bg-card/80 backdrop-blur-xl shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] transition-[background-color,border-color,box-shadow] duration-75"
       >
         <div className={`flex flex-col border-b border-border-primary/30 ${ui.topCardPad} ${statusTintClass(selectedMeta)} bg-opacity-40`}>
           <div className="flex flex-wrap items-center justify-between">
@@ -1566,7 +1613,7 @@ export function ClassicDispenserConsole({
                   handleEditKeyDown(selected, e);
                 }
               }}
-	              className={`flex-1 min-h-0 w-full flex gap-1 rounded-none border border-border-primary/40 p-1 outline-none backdrop-blur-sm transition-all duration-200 ${
+	              className={`flex-1 min-h-0 w-full flex gap-1 rounded-none border border-border-primary/40 p-1 outline-none backdrop-blur-sm transition-[border-color,background-color,box-shadow,opacity] duration-75 ${
 	                selectedSetupLocked
 	                  ? "cursor-not-allowed bg-bg-secondary/40 opacity-70"
 	                  : `bg-bg-input/60 ${focusControlClass} ${selectedNozzles.length <= 1 ? "opacity-80" : "cursor-pointer"}`
@@ -1594,7 +1641,7 @@ export function ClassicDispenserConsole({
                         });
                         e.currentTarget.parentElement?.focus();
                       }}
-	                      className={`flex-1 flex flex-col justify-center items-center min-h-0 min-w-0 rounded-none transition-all duration-300 outline-none disabled:cursor-not-allowed ${
+	                      className={`flex-1 flex flex-col justify-center items-center min-h-0 min-w-0 rounded-none transition-[background-color,border-color,box-shadow,color] duration-75 outline-none disabled:cursor-not-allowed ${
 	                        isActive
 	                          ? "border text-white shadow-[0_4px_12px_rgb(0_0_0/0.22)]"
 	                          : "border border-transparent bg-transparent text-text-primary hover:bg-bg-secondary"

@@ -27,7 +27,18 @@
     "disconnected": "Uzilib qolgan",
     "wsOn": "Ulangan",
     "wsOff": "Uzildi",
-    "emergencyTitle": "Barcha nasoslarni avariya toʼxtatish"
+    "emergencyTitle": "Barcha nasoslarni avariya toʼxtatish",
+    "emergencyConfirmTitle": "Global stopni tasdiqlang",
+    "emergencyConfirmSubtitle": "Bu amal barcha faol nasoslarga stop yuboradi.",
+    "emergencyConfirmBody": "OK bosilganda tizim barcha dispenserlarga avariya stop komandasi yuboradi. Hozir quyayotgan nasoslar toʼxtatiladi va kerak boʼlsa STOPPED/PAUSED holatida saqlanadi.",
+    "emergencyActiveCount": "Faol quyishlar",
+    "emergencyArmedCount": "Preauth kutmoqda",
+    "emergencyConfirmPoint1": "Quyish davom etayotgan yoki autorizatsiya qilinayotgan pompalar toʼxtatiladi.",
+    "emergencyConfirmPoint2": "Idle yoki preauth holatidagi pompalar yoqilmaydi; preauth holatini qayta tekshiring.",
+    "emergencyConfirmPoint3": "Keyin har bir toʼxtagan savdoni Continue/Resume yoki Close orqali yakunlash kerak boʼlishi mumkin.",
+    "emergencyCancel": "Bekor qilish",
+    "emergencyOk": "OK, stop",
+    "emergencyStopping": "Toʼxtatilmoqda…"
   },
   "shiftStart": {
     "title": "Smenani boshlash",

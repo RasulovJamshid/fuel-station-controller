@@ -31,12 +31,16 @@ export function Header({ shift, onOpenWorkspace }: HeaderProps) {
   const invokeError = useAppStore((s) => s.invokeError);
   const setInvokeError = useAppStore((s) => s.setInvokeError);
   const setStates = useAppStore((s) => s.setStates);
+  const states = useAppStore((s) => s.states);
   const smallScreen = useAppStore((s) => s.smallScreen);
   const [now, setNow] = useState(() => new Date());
+  const [eStopConfirmOpen, setEStopConfirmOpen] = useState(false);
+  const [eStopBusy, setEStopBusy] = useState(false);
 
   const onEStopAll = useCallback(async () => {
     const { invoke } = await import("@tauri-apps/api/core");
     try {
+      setEStopBusy(true);
       setInvokeError(null);
       const currentStates = useAppStore.getState().states;
       const wasActive = new Set(
@@ -63,8 +67,20 @@ export function Header({ shift, onOpenWorkspace }: HeaderProps) {
       const msg = e instanceof Error ? e.message : String(e);
       setInvokeError(msg);
       console.error("emergency_stop_all failed", e);
+    } finally {
+      setEStopBusy(false);
+      setEStopConfirmOpen(false);
     }
   }, [setInvokeError, setStates]);
+
+  const eStopSummary = (() => {
+    const active = states.filter((s) => {
+      const tag = statusTag(s.status);
+      return tag === "DELIVERING" || tag === "AUTHORIZING";
+    }).length;
+    const armed = states.filter((s) => statusTag(s.status) === "PRE_AUTHORIZED").length;
+    return { active, armed };
+  })();
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -152,7 +168,7 @@ const shiftInfo = shiftEnabled ? (
       type="button"
       title={t("header.emergencyTitle")}
       className="inline-flex items-center justify-center gap-1.5 rounded-md bg-accent-red px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-text-inverse shadow-sm transition hover:bg-accent-red-light"
-      onClick={() => void onEStopAll()}
+      onClick={() => setEStopConfirmOpen(true)}
     >
       <AlertTriangle className="h-4 w-4" aria-hidden />
       <span>{t("header.emergencyShort")}</span>
@@ -160,6 +176,7 @@ const shiftInfo = shiftEnabled ? (
   );
 
   return (
+    <>
     <header className="sticky top-0 z-30 shrink-0 border-b border-border-primary bg-bg-header/98 backdrop-blur-md">
       {shiftEnabled ? (
         <ShiftWarningBanner
@@ -192,5 +209,74 @@ const shiftInfo = shiftEnabled ? (
         </div>
       ) : null}
     </header>
+    {eStopConfirmOpen ? (
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="global-stop-title"
+      >
+        <div className="w-full max-w-lg overflow-hidden rounded-md border border-accent-red/60 bg-bg-card shadow-[0_24px_80px_-28px_rgba(0,0,0,0.85)]">
+          <div className="flex items-center gap-3 border-b border-accent-red/35 bg-accent-red/15 px-5 py-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-accent-red text-white">
+              <AlertTriangle className="h-6 w-6" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <h2 id="global-stop-title" className="text-lg font-black uppercase tracking-wide text-text-primary">
+                {t("header.emergencyConfirmTitle")}
+              </h2>
+              <p className="mt-1 text-sm font-semibold text-accent-red-light">
+                {t("header.emergencyConfirmSubtitle")}
+              </p>
+            </div>
+          </div>
+          <div className="space-y-4 px-5 py-4 text-sm text-text-secondary">
+            <p>{t("header.emergencyConfirmBody")}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded border border-border-primary/50 bg-bg-secondary/50 p-3">
+                <p className="text-[11px] font-black uppercase tracking-wider text-text-muted">
+                  {t("header.emergencyActiveCount")}
+                </p>
+                <p className="mt-1 font-mono text-2xl font-black text-accent-red-light">
+                  {eStopSummary.active}
+                </p>
+              </div>
+              <div className="rounded border border-border-primary/50 bg-bg-secondary/50 p-3">
+                <p className="text-[11px] font-black uppercase tracking-wider text-text-muted">
+                  {t("header.emergencyArmedCount")}
+                </p>
+                <p className="mt-1 font-mono text-2xl font-black text-accent-amber">
+                  {eStopSummary.armed}
+                </p>
+              </div>
+            </div>
+            <ul className="list-disc space-y-1 pl-5 text-text-muted">
+              <li>{t("header.emergencyConfirmPoint1")}</li>
+              <li>{t("header.emergencyConfirmPoint2")}</li>
+              <li>{t("header.emergencyConfirmPoint3")}</li>
+            </ul>
+          </div>
+          <div className="flex justify-end gap-3 border-t border-border-primary/40 bg-bg-secondary/35 px-5 py-4">
+            <button
+              type="button"
+              className="rounded border border-border-primary bg-bg-card px-4 py-2 text-sm font-bold uppercase tracking-wide text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+              onClick={() => setEStopConfirmOpen(false)}
+              disabled={eStopBusy}
+            >
+              {t("header.emergencyCancel")}
+            </button>
+            <button
+              type="button"
+              className="rounded bg-accent-red px-4 py-2 text-sm font-black uppercase tracking-wide text-white shadow-sm transition-colors hover:bg-accent-red-light disabled:cursor-wait disabled:opacity-70"
+              onClick={() => void onEStopAll()}
+              disabled={eStopBusy}
+            >
+              {eStopBusy ? t("header.emergencyStopping") : t("header.emergencyOk")}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }

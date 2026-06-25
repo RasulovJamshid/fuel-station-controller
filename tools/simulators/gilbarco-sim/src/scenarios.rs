@@ -42,7 +42,8 @@ async fn wrong_nozzle(disps: SharedDispensers) -> anyhow::Result<()> {
         "[scenario] STEP 2/5 → Lifted WRONG nozzle {} (expected {}). \
          EXPECT: backend cancels the preauth, fires PreAuthNozzleMismatch, and the FP3 \
          card shows a RED 'WRONG NOZZLE' overlay with status NOZZLE_UP — NOT idle.",
-        WRONG_NOZZLE, EXPECTED_NOZZLE
+        WRONG_NOZZLE,
+        EXPECTED_NOZZLE
     );
     sleep(Duration::from_millis(6000)).await;
 

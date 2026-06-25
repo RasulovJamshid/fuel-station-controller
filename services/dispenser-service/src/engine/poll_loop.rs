@@ -1135,6 +1135,15 @@ async fn process_parsed_frame(
             }
             broadcast_status(byte, runtimes, events).await;
         }
+        FrameEffect::CompleteGhostFillWithNozzleUp => {
+            complete_ghost_fill_on_wire(backend, byte);
+            info!(
+                addr = format_args!("0x{byte:02X}"),
+                label = %fp_cfg.label,
+                "startup ghost fill complete → GO_IDLE; nozzle remains lifted"
+            );
+            broadcast_status(byte, runtimes, events).await;
+        }
         FrameEffect::SendAuthorizeConfig => {
             let (preset, active_nozzle, price) = {
                 let map = runtimes.read().await;
@@ -1549,9 +1558,13 @@ async fn apply_command(
             let outcome = {
                 let mut map = runtimes.write().await;
                 match map.get_mut(&byte) {
-                    Some(rt) => {
-                        rt.apply_preauthorize_sent(&fp_cfg, cfg, nozzle_index, price, preset.clone())
-                    }
+                    Some(rt) => rt.apply_preauthorize_sent(
+                        &fp_cfg,
+                        cfg,
+                        nozzle_index,
+                        price,
+                        preset.clone(),
+                    ),
                     None => return,
                 }
             };
@@ -2363,7 +2376,8 @@ async fn gbr_sync_totals(
         rt.state.pump_totals = totals_vec;
         if let Some(t) = pick {
             rt.state.pump_total_nozzle_index = Some(t.nozzle_index);
-            rt.state.pump_total_volume = Some(t.volume_total_raw as f64 / GBR_TOTALS_VOLUME_DIVISOR);
+            rt.state.pump_total_volume =
+                Some(t.volume_total_raw as f64 / GBR_TOTALS_VOLUME_DIVISOR);
             rt.state.pump_total_amount = Some(t.amount_total_raw * 10);
             rt.state.pump_total_price = Some((t.unit_price_raw * 10).min(u32::MAX as u64) as u32);
         }

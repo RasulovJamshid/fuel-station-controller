@@ -116,12 +116,17 @@ async fn nozzle_up(
     State(disps): State<SharedDispensers>,
     Json(cmd): Json<NozzleUpCmd>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    let target = FpCmd { fp_id: cmd.fp_id.clone() };
+    let target = FpCmd {
+        fp_id: cmd.fp_id.clone(),
+    };
     let disps_guard = disps.lock().unwrap();
     let Some(addr) = resolve_addr(&disps_guard, &target) else {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse { ok: false, message: Some("fp_id required".into()) }),
+            Json(ApiResponse {
+                ok: false,
+                message: Some("fp_id required".into()),
+            }),
         );
     };
     drop(disps_guard);
@@ -136,10 +141,19 @@ async fn nozzle_up(
             }),
         ),
         Some(d) => match d.lift_nozzle(cmd.nozzle, cmd.price) {
-            Ok(()) => (StatusCode::OK, Json(ApiResponse { ok: true, message: None })),
+            Ok(()) => (
+                StatusCode::OK,
+                Json(ApiResponse {
+                    ok: true,
+                    message: None,
+                }),
+            ),
             Err(e) => (
                 StatusCode::CONFLICT,
-                Json(ApiResponse { ok: false, message: Some(e.to_string()) }),
+                Json(ApiResponse {
+                    ok: false,
+                    message: Some(e.to_string()),
+                }),
             ),
         },
     }
@@ -153,7 +167,10 @@ async fn nozzle_down(
     let Some(addr) = resolve_addr(&disps_guard, &cmd) else {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse { ok: false, message: Some("fp_id required".into()) }),
+            Json(ApiResponse {
+                ok: false,
+                message: Some("fp_id required".into()),
+            }),
         );
     };
     drop(disps_guard);
@@ -162,13 +179,25 @@ async fn nozzle_down(
     match disps.iter_mut().find(|d| d.addr == addr) {
         None => (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse { ok: false, message: Some("not found".into()) }),
+            Json(ApiResponse {
+                ok: false,
+                message: Some("not found".into()),
+            }),
         ),
         Some(d) => match d.replace_nozzle() {
-            Ok(()) => (StatusCode::OK, Json(ApiResponse { ok: true, message: None })),
+            Ok(()) => (
+                StatusCode::OK,
+                Json(ApiResponse {
+                    ok: true,
+                    message: None,
+                }),
+            ),
             Err(e) => (
                 StatusCode::CONFLICT,
-                Json(ApiResponse { ok: false, message: Some(e.to_string()) }),
+                Json(ApiResponse {
+                    ok: false,
+                    message: Some(e.to_string()),
+                }),
             ),
         },
     }
@@ -178,12 +207,17 @@ async fn prepare_preauth(
     State(disps): State<SharedDispensers>,
     Json(cmd): Json<PreparePreAuthCmd>,
 ) -> (StatusCode, Json<ApiResponse>) {
-    let target = FpCmd { fp_id: Some(cmd.fp_id) };
+    let target = FpCmd {
+        fp_id: Some(cmd.fp_id),
+    };
     let disps_guard = disps.lock().unwrap();
     let Some(addr) = resolve_addr(&disps_guard, &target) else {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse { ok: false, message: Some("fp_id required".into()) }),
+            Json(ApiResponse {
+                ok: false,
+                message: Some("fp_id required".into()),
+            }),
         );
     };
     drop(disps_guard);
@@ -192,13 +226,25 @@ async fn prepare_preauth(
     match disps.iter_mut().find(|d| d.addr == addr) {
         None => (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse { ok: false, message: Some("not found".into()) }),
+            Json(ApiResponse {
+                ok: false,
+                message: Some("not found".into()),
+            }),
         ),
         Some(d) => match d.lift_nozzle(Some(cmd.nozzle), None) {
-            Ok(()) => (StatusCode::OK, Json(ApiResponse { ok: true, message: None })),
+            Ok(()) => (
+                StatusCode::OK,
+                Json(ApiResponse {
+                    ok: true,
+                    message: None,
+                }),
+            ),
             Err(e) => (
                 StatusCode::CONFLICT,
-                Json(ApiResponse { ok: false, message: Some(e.to_string()) }),
+                Json(ApiResponse {
+                    ok: false,
+                    message: Some(e.to_string()),
+                }),
             ),
         },
     }
@@ -223,7 +269,10 @@ async fn go_offline(
             d.go_offline();
         }
     }
-    Json(ApiResponse { ok: true, message: None })
+    Json(ApiResponse {
+        ok: true,
+        message: None,
+    })
 }
 
 async fn go_online(
@@ -244,7 +293,10 @@ async fn go_online(
             d.go_online();
         }
     }
-    Json(ApiResponse { ok: true, message: None })
+    Json(ApiResponse {
+        ok: true,
+        message: None,
+    })
 }
 
 async fn estop_all(State(disps): State<SharedDispensers>) -> Json<ApiResponse> {
@@ -252,7 +304,10 @@ async fn estop_all(State(disps): State<SharedDispensers>) -> Json<ApiResponse> {
     for d in disps.iter_mut() {
         d.force_stop();
     }
-    Json(ApiResponse { ok: true, message: None })
+    Json(ApiResponse {
+        ok: true,
+        message: None,
+    })
 }
 
 async fn reset_all(State(disps): State<SharedDispensers>) -> Json<ApiResponse> {
@@ -260,7 +315,10 @@ async fn reset_all(State(disps): State<SharedDispensers>) -> Json<ApiResponse> {
     for d in disps.iter_mut() {
         d.reset();
     }
-    Json(ApiResponse { ok: true, message: None })
+    Json(ApiResponse {
+        ok: true,
+        message: None,
+    })
 }
 
 async fn run_scenario(
@@ -291,7 +349,10 @@ async fn set_fill_rate(
     let Some(addr) = resolve_addr(&disps_guard, &cmd.target) else {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse { ok: false, message: Some("fp_id required".into()) }),
+            Json(ApiResponse {
+                ok: false,
+                message: Some("fp_id required".into()),
+            }),
         );
     };
     drop(disps_guard);
@@ -308,7 +369,13 @@ async fn set_fill_rate(
         ),
         Some(d) => {
             d.fill_rate = rate;
-            (StatusCode::OK, Json(ApiResponse { ok: true, message: None }))
+            (
+                StatusCode::OK,
+                Json(ApiResponse {
+                    ok: true,
+                    message: None,
+                }),
+            )
         }
     }
 }

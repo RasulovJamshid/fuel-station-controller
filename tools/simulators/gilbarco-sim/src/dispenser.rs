@@ -92,9 +92,7 @@ impl SimDispenser {
         if self.status != SimStatus::Idle {
             anyhow::bail!("cannot lift nozzle: current status is {:?}", self.status);
         }
-        self.nozzle = nozzle.unwrap_or_else(|| {
-            self.nozzles.first().map(|n| n.index).unwrap_or(1)
-        });
+        self.nozzle = nozzle.unwrap_or_else(|| self.nozzles.first().map(|n| n.index).unwrap_or(1));
         self.price = price.unwrap_or_else(|| {
             self.nozzles
                 .iter()
@@ -338,11 +336,7 @@ impl SimDispenser {
     }
 
     fn commit_totals(&mut self) {
-        if let Some(i) = self
-            .nozzles
-            .iter()
-            .position(|n| n.index == self.nozzle)
-        {
+        if let Some(i) = self.nozzles.iter().position(|n| n.index == self.nozzle) {
             if let Some(v) = self.volume_totals.get_mut(i) {
                 *v = v.saturating_add(self.volume_ml);
             }
@@ -367,9 +361,20 @@ impl SimDispenser {
             _ => 0,
         };
         let mut frame = vec![
-            0xBA, 0xB0, 0xB3,
+            0xBA,
+            0xB0,
+            0xB3,
             0xB0 | pump,
-            0xB0, 0xB1, 0xB0, 0xB0, 0xB0, 0xB0, 0xB1, 0xB1, 0xB1, 0xB1,
+            0xB0,
+            0xB1,
+            0xB0,
+            0xB0,
+            0xB0,
+            0xB0,
+            0xB1,
+            0xB1,
+            0xB1,
+            0xB1,
             0xB0 | nozzle,
             0xC2,
         ];
@@ -385,12 +390,18 @@ impl SimDispenser {
         let grade = nozzle_id;
 
         let mut frame = vec![
-            0xFF, 0xF1, 0xF8, 0xEB,
+            0xFF,
+            0xF1,
+            0xF8,
+            0xEB,
             0xE0 | nozzle_id,
-            0xE0, 0xE0, 0xE0,
+            0xE0,
+            0xE0,
+            0xE0,
             0xF6,
             0xE0 | grade,
-            0xF4, 0xF7,
+            0xF4,
+            0xF7,
         ];
         frame.extend(encode_e_digits_le_vec(unit_price_raw, 4));
         frame.push(0xF9);

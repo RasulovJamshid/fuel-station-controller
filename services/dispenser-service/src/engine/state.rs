@@ -12,6 +12,12 @@ const GHOST_RECOVERY_IDLE_POLLS: u8 = 4;
 const DECEL_FROZEN_FRAME_THRESHOLD: u8 = 6;
 /// Wall-clock fallback: commit to STOPPED if the decel window stays open this long (ms).
 pub(super) const DECEL_WINDOW_TIMEOUT_MS: i64 = 10_000;
+/// Initial nonzero volume that can be a Wayne ghost pulse when the counter never advances.
+const STARTUP_GHOST_MAX_VOLUME_L: f64 = 0.05;
+/// Repeated tiny startup Data frames before aborting the ghost authorization.
+const STARTUP_GHOST_FROZEN_FRAME_THRESHOLD: u8 = 6;
+/// Minimum age of a stuck startup pulse before aborting; gives operators time to begin topping off.
+const STARTUP_GHOST_MIN_AGE_MS: i64 = 15_000;
 
 #[derive(Debug, Clone)]
 pub struct StoppedContext {
@@ -114,6 +120,12 @@ pub struct RuntimeFp {
     pub decel_pending_preset: Option<Preset>,
     /// Stop source captured at STOP time (always App for this path).
     pub decel_pending_stop_source: StopSource,
+
+    // -- Startup ghost-fill detection ---------------------------------------
+    /// Last tiny startup meter value seen while waiting for a real delivery to progress.
+    pub startup_ghost_last_meter: Option<(f64, u64)>,
+    /// Consecutive tiny startup Data frames with the same counter.
+    pub startup_ghost_frozen_count: u8,
 }
 
 /// Hose lift notifications older than this are ignored for "still up" guards.
@@ -174,6 +186,8 @@ impl RuntimeFp {
             decel_frozen_count: 0,
             decel_pending_preset: None,
             decel_pending_stop_source: StopSource::App,
+            startup_ghost_last_meter: None,
+            startup_ghost_frozen_count: 0,
             state: FpState {
                 fp_id: fp.id.clone(),
                 label: fp.label.clone(),
@@ -279,6 +293,7 @@ impl RuntimeFp {
         self.clear_continuation_fields();
         self.state.volume = 0.0;
         self.state.amount = 0;
+        self.clear_startup_ghost_watch();
     }
 
     /// Composite `02 08` frames often end with `03 04 … HH` holster while the hose is
@@ -364,6 +379,38 @@ impl RuntimeFp {
             self.state.volume = raw_vol;
             self.state.amount = raw_amt;
         }
+    }
+
+    fn clear_startup_ghost_watch(&mut self) {
+        self.startup_ghost_last_meter = None;
+        self.startup_ghost_frozen_count = 0;
+    }
+
+    fn startup_ghost_frozen(&mut self, raw_vol: f64, raw_amt: u64) -> bool {
+        if raw_vol <= 1e-6 || raw_vol > STARTUP_GHOST_MAX_VOLUME_L {
+            self.clear_startup_ghost_watch();
+            return false;
+        }
+
+        match self.startup_ghost_last_meter {
+            Some((last_vol, last_amt))
+                if (last_vol - raw_vol).abs() < 1e-6 && last_amt == raw_amt =>
+            {
+                self.startup_ghost_frozen_count = self.startup_ghost_frozen_count.saturating_add(1);
+            }
+            _ => {
+                self.startup_ghost_last_meter = Some((raw_vol, raw_amt));
+                self.startup_ghost_frozen_count = 1;
+            }
+        }
+
+        self.startup_ghost_frozen_count >= STARTUP_GHOST_FROZEN_FRAME_THRESHOLD
+    }
+
+    fn startup_ghost_old_enough(&self) -> bool {
+        self.auth_session_started_at.is_some_and(|started| {
+            Utc::now().timestamp_millis() - started >= STARTUP_GHOST_MIN_AGE_MS
+        })
     }
 
     fn combined_totals(&self) -> (f64, u64) {
@@ -807,6 +854,31 @@ impl RuntimeFp {
         self.clear_deliver_caps();
         self.current_tx = None;
         self.reset_to_idle();
+        self.ghost_recovery = true;
+        self.consecutive_idle_polls = 0;
+    }
+
+    /// Abort a frozen tiny startup pulse without pretending the lifted hose is idle.
+    fn cancel_startup_ghost_keep_nozzle_up(&mut self) {
+        self.clear_deliver_caps();
+        self.clear_decel_window();
+        self.clear_continuation_fields();
+        self.clear_unauthorized_state();
+        self.current_tx = None;
+        self.pre_auth = None;
+        self.pre_auth_started_at = None;
+        self.pending_authorize_config = false;
+        self.pending_authorize_config_repeat = false;
+        self.preauth_config_on_wire = false;
+        self.auth_session_started_at = None;
+        self.pending_holster_close = false;
+        self.pump_sale_complete = false;
+        self.state.status = FpStatus::NozzleUp;
+        self.state.stop_source = None;
+        self.state.pre_auth_preset = None;
+        self.state.volume = 0.0;
+        self.state.amount = 0;
+        self.clear_startup_ghost_watch();
         self.ghost_recovery = true;
         self.consecutive_idle_polls = 0;
     }
@@ -2407,6 +2479,21 @@ impl RuntimeFp {
                         return FrameEffect::StatusChanged;
                     }
                 }
+                if !*sale_complete
+                    && self.current_tx.is_some()
+                    && self.continuation.is_none()
+                    && !self.last_preset.is_full()
+                    && self.startup_ghost_old_enough()
+                    && matches!(
+                        self.state.status,
+                        FpStatus::Authorizing | FpStatus::Delivering
+                    )
+                    && self.startup_ghost_frozen(raw_vol, raw_amt)
+                {
+                    self.cancel_startup_ghost_keep_nozzle_up();
+                    self.touch();
+                    return FrameEffect::CompleteGhostFillWithNozzleUp;
+                }
                 if *sale_complete {
                     if matches!(
                         self.state.status,
@@ -2811,6 +2898,8 @@ pub enum FrameEffect {
     ResendAuthorize,
     /// Ghost fill complete — send GO_IDLE (done) on the wire.
     CompleteGhostFill,
+    /// Frozen startup ghost complete — send GO_IDLE, but keep UI as NozzleUp.
+    CompleteGhostFillWithNozzleUp,
     /// Send one CONFIG frame. First zero-volume Data sends the first copy; the repeat is sent
     /// after a later poll response so the pump gets the same gap seen in the sniffer.
     SendAuthorizeConfig,
@@ -3104,6 +3193,109 @@ mod tests {
     }
 
     #[test]
+    fn frozen_tiny_startup_meter_aborts_authorizing_but_keeps_nozzle_up() {
+        let site = sample_site();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.state.status = FpStatus::Authorizing;
+        rt.state.nozzle_index = Some(2);
+        rt.state.product_id = Some(3);
+        rt.state.product_name = Some("AI-92".into());
+        rt.state.price = 11000;
+        rt.set_last_preset(Preset::Amount(200_000));
+        rt.mark_preauth_config_on_wire();
+        rt.auth_session_started_at = Some(Utc::now().timestamp_millis() - STARTUP_GHOST_MIN_AGE_MS);
+        rt.current_tx = Some(CurrentTx {
+            id: "tx".into(),
+            started_at: Utc::now().timestamp_millis(),
+            product_id: 3,
+            product_name: "AI-92".into(),
+            nozzle_index: 2,
+        });
+
+        let frame = Frame::Data {
+            addr: 0x53,
+            seq: 0x31,
+            volume_x1: 0x00,
+            volume_x2: 0x00,
+            volume_l: 0x00,
+            volume_h: 0x05,
+            amount: [0x00, 0x00, 0x05, 0x50],
+            sale_complete: false,
+            hose_product: Some(0x10),
+            hose_code: Some(0x12),
+        };
+
+        for _ in 1..STARTUP_GHOST_FROZEN_FRAME_THRESHOLD {
+            let effect = rt.apply_frame(&frame, &fp_cfg, &site, None, None);
+            assert!(matches!(effect, FrameEffect::StatusChanged));
+            assert_eq!(rt.state.status, FpStatus::Delivering);
+            assert!(rt.current_tx.is_some());
+        }
+
+        let effect = rt.apply_frame(&frame, &fp_cfg, &site, None, None);
+
+        assert!(matches!(effect, FrameEffect::CompleteGhostFillWithNozzleUp));
+        assert_eq!(rt.state.status, FpStatus::NozzleUp);
+        assert!(rt.current_tx.is_none());
+        assert_eq!(rt.state.volume, 0.0);
+        assert_eq!(rt.last_wire_hose_code, Some(0x12));
+        assert!(rt.ghost_recovery);
+    }
+
+    #[test]
+    fn continuation_tiny_startup_meter_is_not_aborted_as_ghost() {
+        let site = sample_site();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.state.status = FpStatus::Delivering;
+        rt.state.nozzle_index = Some(2);
+        rt.state.product_id = Some(3);
+        rt.state.product_name = Some("AI-92".into());
+        rt.state.price = 11000;
+        rt.set_last_preset(Preset::Amount(200_000));
+        rt.mark_preauth_config_on_wire();
+        rt.auth_session_started_at = Some(Utc::now().timestamp_millis() - STARTUP_GHOST_MIN_AGE_MS);
+        rt.current_tx = Some(CurrentTx {
+            id: "tx".into(),
+            started_at: Utc::now().timestamp_millis(),
+            product_id: 3,
+            product_name: "AI-92".into(),
+            nozzle_index: 2,
+        });
+        rt.continuation = Some(ContinuationContext {
+            parent_tx_id: "parent".into(),
+            base_volume: 10.0,
+            base_amount: 110_000,
+            segment_volume: 0.0,
+            segment_amount: 0,
+        });
+
+        let frame = Frame::Data {
+            addr: 0x53,
+            seq: 0x31,
+            volume_x1: 0x00,
+            volume_x2: 0x00,
+            volume_l: 0x00,
+            volume_h: 0x05,
+            amount: [0x00, 0x00, 0x05, 0x50],
+            sale_complete: false,
+            hose_product: Some(0x10),
+            hose_code: Some(0x12),
+        };
+
+        for _ in 0..STARTUP_GHOST_FROZEN_FRAME_THRESHOLD {
+            let effect = rt.apply_frame(&frame, &fp_cfg, &site, None, None);
+            assert!(matches!(effect, FrameEffect::StatusChanged));
+            assert_eq!(rt.state.status, FpStatus::Delivering);
+            assert!(rt.current_tx.is_some());
+            assert!(rt.continuation.is_some());
+        }
+    }
+
+    #[test]
     fn wrong_nozzle_lift_cancels_preauth_and_ignores_stale_meter_data() {
         let site = sample_site_two_nozzles();
         let fp_cfg = site.fueling_positions[0].clone();
@@ -3335,7 +3527,10 @@ mod tests {
         let _ = rt.apply_frame(&lift, &fp_cfg, &site, None, None);
         rt.start_delivery_from_pre_auth(&fp_cfg, &site);
         assert_eq!(rt.state.status, FpStatus::Authorizing);
-        assert!(rt.current_tx.is_some(), "deferred arming sets current_tx on lift");
+        assert!(
+            rt.current_tx.is_some(),
+            "deferred arming sets current_tx on lift"
+        );
 
         // Customer holds the nozzle up but hasn't squeezed yet; >4s pass so the lift code goes stale.
         rt.last_wire_hose_at_ms = 0;

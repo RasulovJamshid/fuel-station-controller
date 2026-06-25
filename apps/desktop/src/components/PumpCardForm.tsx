@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import chevronDownIcon from "@/assets/icons/chevron-down.svg";
+import checkIcon from "@/assets/icons/check.svg";
 import fuelTypeIcon from "@/assets/icons/fuel.svg";
 import dropletIcon from "@/assets/icons/fuel.svg";
 import fullTankIcon from "@/assets/icons/full-tank.svg";
@@ -139,8 +140,23 @@ function QuickPresetRow({
           key={value}
           type="button"
           disabled={disabled}
-          onClick={() => onSelect(value)}
-          className={`pump-quick-chip rounded-md disabled:cursor-not-allowed disabled:opacity-45 ${compact ? "px-1 py-1.5 text-xs" : "px-2 py-2 text-sm"}`}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+            onSelect(value);
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            e.stopPropagation();
+            onSelect(value);
+          }}
+          className={`pump-quick-chip pointer-events-auto touch-manipulation rounded-md disabled:cursor-not-allowed disabled:opacity-45 ${compact ? "px-1 py-1.5 text-xs" : "px-2 py-2 text-sm"}`}
         >
           {format(value)}
         </button>
@@ -374,22 +390,32 @@ export function PumpCardForm({
         </div>
 
         {/* Product + price preview */}
-        <div className="rounded-lg border border-border-primary/70 bg-bg-input/60 px-2.5 py-2">
+        <div
+          className="pump-selected-product rounded-lg border px-2.5 py-2"
+          style={{ borderLeftColor: productColor }}
+        >
           <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className={`truncate font-black text-text-primary ${compact ? "text-base" : "text-lg"}`}>
-                {selectedSnap?.product_name ?? t("pumpForm.selectProductPlaceholder")}
-              </p>
-              <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>
-                {effectiveNozzle != null ? t("pumpForm.nozzleLabel", { n: effectiveNozzle }) : "—"}
-              </p>
+            <div className="flex min-w-0 items-center gap-2">
+              {selectedSnap ? (
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent-emerald text-white shadow-sm">
+                  <img src={checkIcon} alt="" aria-hidden className="h-4 w-4" draggable={false} />
+                </span>
+              ) : null}
+              <div className="min-w-0">
+                <p className={`truncate font-black leading-tight text-text-primary ${compact ? "text-xl" : "text-2xl"}`}>
+                  {selectedSnap?.product_name ?? t("pumpForm.selectProductPlaceholder")}
+                </p>
+                <p className={`font-black uppercase tracking-wide text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>
+                  {effectiveNozzle != null ? t("pumpForm.nozzleLabel", { n: effectiveNozzle }) : "—"}
+                </p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className={`font-mono font-black tabular-nums text-accent-blue ${compact ? "text-xl" : "text-2xl"}`}>
-                {price > 0 ? `${fmtSum.format(price)} ${t("pumpForm.amountUnit")}` : "—"}
+            <div className="shrink-0 text-right">
+              <p className={`font-mono font-black leading-tight tabular-nums text-accent-blue ${compact ? "text-xl" : "text-2xl"}`}>
+                {price > 0 ? fmtSum.format(price) : "—"}
               </p>
               {price > 0 && (
-                <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.perLiter")}</p>
+                <p className={`font-bold text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>{t("pumpForm.perLiter")}</p>
               )}
             </div>
           </div>
@@ -626,10 +652,10 @@ export function PumpCardProgress({
   if (targetLiters != null && targetLiters > 0) {
     const pct = Math.min(100, (volume / targetLiters) * 100);
     return (
-      <div className={`shrink-0 ${compact ? "mt-2" : "mt-3"}`}>
+      <div className={`pump-live-panel shrink-0 rounded-lg border px-3 py-2 ${compact ? "mt-2" : "mt-3"}`}>
         <div className="mb-1 flex items-center justify-between">
-          <span className={`font-black text-text-muted ${compact ? "text-sm" : "text-base"}`}>{t("pumpForm.filled")}</span>
-          <span className={`font-black tabular-nums text-accent-amber ${compact ? "text-xl" : "text-2xl"}`}>
+          <span className={`font-black uppercase tracking-wide text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.filled")}</span>
+          <span className={`font-mono font-black tabular-nums text-accent-amber ${compact ? "text-2xl" : "text-3xl"}`}>
             {volume.toFixed(2)} L
           </span>
         </div>
@@ -649,10 +675,10 @@ export function PumpCardProgress({
   if (targetAmount != null && targetAmount > 0 && amount != null) {
     const pct = Math.min(100, (amount / targetAmount) * 100);
     return (
-      <div className={`shrink-0 ${compact ? "mt-2" : "mt-3"}`}>
+      <div className={`pump-live-panel shrink-0 rounded-lg border px-3 py-2 ${compact ? "mt-2" : "mt-3"}`}>
         <div className="mb-1 flex items-center justify-between">
-          <span className={`font-black text-text-muted ${compact ? "text-sm" : "text-base"}`}>{t("pumpForm.filled")}</span>
-          <span className={`font-black tabular-nums text-accent-amber ${compact ? "text-xl" : "text-2xl"}`}>
+          <span className={`font-black uppercase tracking-wide text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.filled")}</span>
+          <span className={`font-mono font-black tabular-nums text-accent-amber ${compact ? "text-2xl" : "text-3xl"}`}>
             {volume.toFixed(2)} L
           </span>
         </div>
@@ -670,18 +696,18 @@ export function PumpCardProgress({
 
   // ── Full-fill / no-limit: live counter ────────────────────────────────────
   return (
-    <div className={`shrink-0 rounded-lg border border-border-primary/60 bg-bg-input/45 px-3 py-2 ${compact ? "mt-2" : "mt-3"}`}>
+    <div className={`pump-live-panel shrink-0 rounded-lg border px-3 ${compact ? "mt-2 py-2" : "mt-3 py-3"}`}>
       <div className="mb-1 flex items-center justify-between">
         <span className={`font-black uppercase tracking-wide text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.filling")}</span>
-        <span className="text-[10px] text-accent-emerald animate-pulse">●</span>
+        <span className="h-2.5 w-2.5 rounded-full bg-accent-emerald shadow-[0_0_10px_rgb(var(--color-accent-emerald))] animate-pulse" aria-hidden />
       </div>
       <div className="flex items-baseline gap-1.5">
-        <span className={`font-mono font-black tabular-nums text-accent-amber ${compact ? "text-3xl" : "text-4xl"}`}>
+        <span className={`font-mono font-black leading-none tabular-nums text-accent-amber ${compact ? "text-4xl" : "text-5xl"}`}>
           {volume.toFixed(2)}
         </span>
-        <span className={`font-black text-text-muted ${compact ? "text-sm" : "text-base"}`}>L</span>
+        <span className={`font-black text-text-muted ${compact ? "text-base" : "text-lg"}`}>L</span>
         {amount != null && amount > 0 && (
-          <span className={`ml-auto font-mono font-black tabular-nums text-text-secondary ${compact ? "text-base" : "text-lg"}`}>
+          <span className={`ml-auto font-mono font-black tabular-nums text-text-secondary ${compact ? "text-lg" : "text-2xl"}`}>
             {fmtSum.format(amount)} {t("pumpForm.amountUnit")}
           </span>
         )}

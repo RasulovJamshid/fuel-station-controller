@@ -54,6 +54,10 @@ pub struct RuntimeFp {
     pub cap_amount: Option<u64>,
     /// In-memory E-stop state (lost on service restart).
     pub stopped_context: Option<StoppedContext>,
+    /// True when the lane was stopped while the nozzle was physically up. The pump may report
+    /// idle (`70 FA`) before the customer holsters; while this is set we keep showing the STOPPED
+    /// sale (nozzle still up) and finalize only on the real NozzleReturned/holster frame.
+    pub stopped_nozzle_up: bool,
     pub continuation: Option<ContinuationContext>,
     /// Last authorize preset (for E-stop continuation).
     pub last_preset: Preset,
@@ -64,6 +68,13 @@ pub struct RuntimeFp {
     pub preauth_nozzle_confirmed: bool,
     /// Set when a nozzle mismatch is detected — blocks Data-frame transition to Authorizing.
     pub preauth_mismatch_active: bool,
+    /// Set when a pre-auth was just cancelled: the pump may still be armed, so any delivery that
+    /// arrives before the pump confirms idle is treated as unauthorized (STOP + alert), not a sale.
+    /// Cleared once the pump reports idle (`70 FA`) or the operator resets the lane.
+    pub preauth_cancel_pending: bool,
+    /// Dedup guard so an ongoing unauthorized delivery raises the operator alert once per episode
+    /// (the pump is still STOPed every poll). Cleared when the pump confirms idle / on reset.
+    pub unauthorized_alerted: bool,
     /// Block stray NozzleUp re-AUTH until the dispenser has polled idle enough times.
     pub ghost_recovery: bool,
     pub consecutive_idle_polls: u8,
@@ -138,12 +149,15 @@ impl RuntimeFp {
             cap_volume_liters: None,
             cap_amount: None,
             stopped_context: None,
+            stopped_nozzle_up: false,
             continuation: None,
             last_preset: Preset::Str("full".into()),
             pre_auth: None,
             pre_auth_started_at: None,
             preauth_nozzle_confirmed: false,
             preauth_mismatch_active: false,
+            preauth_cancel_pending: false,
+            unauthorized_alerted: false,
             ghost_recovery: false,
             consecutive_idle_polls: 0,
             pending_authorize_config: false,
@@ -483,6 +497,13 @@ impl RuntimeFp {
         stop_source: StopSource,
     ) -> FrameEffect {
         self.clear_deliver_caps();
+        // Capture whether the nozzle is up *before* apply_stopped_display overwrites the status.
+        // A stop that interrupts a fill always has the nozzle in the tank; the pump may then poll
+        // idle before the customer holsters, so we must keep showing STOPPED until the real holster.
+        self.stopped_nozzle_up = matches!(
+            self.state.status,
+            FpStatus::Delivering | FpStatus::Authorizing | FpStatus::NozzleUp
+        ) || self.nozzle_physically_up();
         let (combined_vol, combined_amt) = self.combined_totals();
         let tx = self.finish_transaction_with_totals(
             TxStatus::Stopped,
@@ -660,6 +681,7 @@ impl RuntimeFp {
 
     fn reset_to_idle(&mut self) {
         self.stopped_context = None;
+        self.stopped_nozzle_up = false;
         self.continuation = None;
         self.current_tx = None;
         self.pre_auth = None;
@@ -673,6 +695,7 @@ impl RuntimeFp {
         self.clear_deliver_caps();
         self.clear_decel_window();
         self.clear_continuation_fields();
+        self.clear_unauthorized_state();
         self.pending_holster_close = false;
         self.pump_sale_complete = false;
         self.state.status = FpStatus::Idle;
@@ -729,6 +752,20 @@ impl RuntimeFp {
         self.preauth_config_on_wire = true;
         self.pending_authorize_config = false;
         self.pending_authorize_config_repeat = false;
+    }
+
+    /// Mark that a pre-auth was just cancelled. Until the pump confirms idle, any delivery is
+    /// treated as unauthorized (the pump may have stayed armed). Set by the CancelPreauth handler.
+    pub fn mark_preauth_cancel_pending(&mut self) {
+        self.preauth_cancel_pending = true;
+        self.unauthorized_alerted = false;
+    }
+
+    /// Clear the post-cancel / unauthorized-delivery guards once the pump is confirmed idle or the
+    /// lane is reset by the operator.
+    pub fn clear_unauthorized_state(&mut self) {
+        self.preauth_cancel_pending = false;
+        self.unauthorized_alerted = false;
     }
 
     /// Called when CONFIG is sent immediately on nozzle-up (reactive mode).
@@ -971,10 +1008,13 @@ impl RuntimeFp {
             Offline => {
                 self.state.status = Idle;
                 self.state.pre_auth_preset = None;
+                self.clear_unauthorized_state();
                 self.touch();
                 FrameEffect::Online
             }
             Idle => {
+                // Pump confirmed idle — a cancelled pre-auth (if any) is now de-authorized.
+                self.clear_unauthorized_state();
                 self.touch();
                 FrameEffect::None
             }
@@ -990,6 +1030,12 @@ impl RuntimeFp {
                 ..
             } => {
                 let tx_id = stopped_tx_id.clone();
+                if self.stopped_nozzle_up {
+                    // Stopped while filling: nozzle is still in the tank and the pump is just
+                    // polling idle. Keep showing the paused sale; finalize on the real holster.
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                }
                 let tx = self.finalize_stopped_sale(
                     fp_cfg,
                     site,
@@ -1007,6 +1053,12 @@ impl RuntimeFp {
                 stop_source: StopSource::AppFinal,
                 ..
             } => {
+                if self.stopped_nozzle_up {
+                    // Stopped while filling (terminal): nozzle still up, pump polling idle.
+                    // Keep showing STOPPED until the customer holsters (NozzleReturned finalizes).
+                    self.touch();
+                    return FrameEffect::StatusChanged;
+                }
                 // Stop mode (no resume): nozzle-down or idle → finalize as Completed.
                 let tx = self.finalize_stopped_sale(
                     fp_cfg,
@@ -1653,6 +1705,7 @@ impl RuntimeFp {
         self.stopped_context = None;
         self.continuation = None;
         self.clear_completed_sale_latch();
+        self.clear_unauthorized_state();
         self.pre_auth = None;
         self.missed = 0;
         self.settle_after_reconnect = 0;
@@ -1739,6 +1792,10 @@ impl RuntimeFp {
                 self.apply_idle_response(fp_cfg, site, active_shift_id, active_operator_name)
             }
             Frame::NozzleHolstered { addr, .. } if *addr == b => {
+                // A holster frame means the nozzle is back in the boot — clear the
+                // stopped-with-nozzle-up guard so a STOPPED sale can finalize on this event
+                // (NozzleHolstered for a stopped lane delegates to apply_idle_response below).
+                self.stopped_nozzle_up = false;
                 match self.state.status {
                     FpStatus::Authorizing | FpStatus::Delivering => {
                         let (vol, amt) = self.combined_totals();
@@ -2154,6 +2211,7 @@ impl RuntimeFp {
                                 && !self.ghost_recovery_active()
                                 && !*sale_complete
                                 && wire_nozzle.is_some()
+                                && !self.preauth_cancel_pending
                             {
                                 let nozzle_index = wire_nozzle.unwrap_or(1);
                                 let (pname, pid, color) = lookup_nozzle(site, fp_cfg, nozzle_index);
@@ -2183,6 +2241,19 @@ impl RuntimeFp {
                             self.touch();
                             if *sale_complete && !self.nozzle_physically_up() {
                                 return FrameEffect::CompleteGhostFill;
+                            }
+                            // Real meter data on an Idle lane that owns no authorization. This is the
+                            // cancelled-pre-auth-still-armed case (or a bare 02 08 frame with no hose
+                            // tag, which the auto-create above cannot attribute). Never silently drop
+                            // fuel: tell the poll loop to STOP the pump and alert the operator.
+                            if matches!(self.state.status, FpStatus::Idle)
+                                && !self.ghost_recovery_active()
+                                && !*sale_complete
+                            {
+                                return FrameEffect::UnauthorizedDelivery {
+                                    volume: raw_vol,
+                                    amount: raw_amt,
+                                };
                             }
                             return FrameEffect::StatusChanged;
                         }
@@ -2699,6 +2770,12 @@ pub enum FrameEffect {
     /// holster event which will call complete_sale_from_holster with the true final volume.
     SendDoneAwaitHolster,
     PreAuthCancelled,
+    /// Meter data arrived on an unauthorized lane (e.g. pump left armed after a cancelled
+    /// pre-auth). Poll loop must STOP the pump and alert the operator; fuel is never silently dropped.
+    UnauthorizedDelivery {
+        volume: f64,
+        amount: u64,
+    },
     PreAuthNozzleMismatch {
         expected_nozzle_index: u8,
         expected_product_name: String,
@@ -3082,6 +3159,162 @@ mod tests {
         assert_eq!(rt.state.amount, 0);
         assert!(rt.current_tx.is_none());
         assert!(rt.completed_sale.is_none());
+    }
+
+    #[test]
+    fn cancelled_preauth_then_armed_delivery_emits_unauthorized_not_sale() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        // Operator pre-authorized (holstered) then cancelled on the UI.
+        assert!(matches!(
+            rt.apply_preauthorize_sent(&fp_cfg, &site, 2, 11000, Preset::Amount(10_000)),
+            PreauthOutcome::Holstered
+        ));
+        rt.cancel_pre_auth();
+        rt.mark_preauth_cancel_pending();
+        assert_eq!(rt.state.status, FpStatus::Idle);
+
+        // The pump stayed armed and starts delivering on the matching hose after the cancel.
+        let armed_delivery = Frame::Data {
+            addr: 0x53,
+            seq: 0x31,
+            volume_x1: 0x00,
+            volume_x2: 0x00,
+            volume_l: 0x01,
+            volume_h: 0x00,
+            amount: [0x00, 0x00, 0x11, 0x00],
+            sale_complete: false,
+            hose_product: Some(0x10),
+            hose_code: Some(0x12),
+        };
+        let effect = rt.apply_frame(&armed_delivery, &fp_cfg, &site, None, None);
+
+        // It must be flagged unauthorized (STOP + alert), never auto-converted into a sale.
+        assert!(matches!(effect, FrameEffect::UnauthorizedDelivery { .. }));
+        assert_ne!(rt.state.status, FpStatus::Delivering);
+        assert!(rt.current_tx.is_none());
+    }
+
+    #[test]
+    fn bare_meter_frame_on_idle_lane_is_not_silently_dropped() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+        rt.state.status = FpStatus::Idle; // lane has polled idle (fresh runtimes start Offline)
+
+        // Bare 02 08 meter frame (no hose tag) on an unauthorized Idle lane — previously dropped.
+        let bare = Frame::Data {
+            addr: 0x53,
+            seq: 0x31,
+            volume_x1: 0x00,
+            volume_x2: 0x00,
+            volume_l: 0x02,
+            volume_h: 0x00,
+            amount: [0x00, 0x00, 0x22, 0x00],
+            sale_complete: false,
+            hose_product: None,
+            hose_code: None,
+        };
+        let effect = rt.apply_frame(&bare, &fp_cfg, &site, None, None);
+
+        assert!(matches!(effect, FrameEffect::UnauthorizedDelivery { .. }));
+        assert_ne!(rt.state.status, FpStatus::Delivering);
+    }
+
+    #[test]
+    fn idle_response_clears_cancel_pending_guard() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        rt.mark_preauth_cancel_pending();
+        assert!(rt.preauth_cancel_pending);
+
+        // Pump confirmed idle (70 FA) → the post-cancel guard is cleared (de-auth verified).
+        let _ = rt.apply_idle_response(&fp_cfg, &site, None, None);
+        assert!(!rt.preauth_cancel_pending);
+        assert!(!rt.unauthorized_alerted);
+    }
+
+    #[test]
+    fn holstered_preauth_defers_arming_to_lift() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        assert!(matches!(
+            rt.apply_preauthorize_sent(&fp_cfg, &site, 2, 11000, Preset::Amount(10_000)),
+            PreauthOutcome::Holstered
+        ));
+        // Layer 3: a holstered pre-auth must NOT pre-arm the pump.
+        assert!(!rt.preauth_config_on_wire);
+
+        // Matching lift confirms the pre-auth — still no CONFIG assumed on the wire.
+        let lift = Frame::NozzleUp {
+            addr: 0x53,
+            seq: 0x31,
+            product: 0x10,
+            nozzle: 0x12,
+        };
+        let _ = rt.apply_frame(&lift, &fp_cfg, &site, None, None);
+        assert!(rt.preauth_nozzle_confirmed);
+
+        // Poll loop starts delivery → CONFIG is scheduled for the wire (deferred), not assumed sent.
+        rt.start_delivery_from_pre_auth(&fp_cfg, &site);
+        assert!(rt.pending_authorize_config);
+        assert!(!rt.preauth_config_on_wire);
+        assert_eq!(rt.state.status, FpStatus::Authorizing);
+    }
+
+    #[test]
+    fn app_stop_while_filling_stays_stopped_until_holster() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        // Actively delivering on nozzle 2, nozzle physically up.
+        rt.state.status = FpStatus::Delivering;
+        rt.state.nozzle_index = Some(2);
+        rt.state.product_id = Some(3);
+        rt.state.product_name = Some("AI-92".into());
+        rt.state.price = 11000;
+        rt.state.volume = 5.0;
+        rt.state.amount = 55000;
+        rt.current_tx = Some(CurrentTx {
+            id: "tx-stop".into(),
+            started_at: Utc::now().timestamp_millis(),
+            product_id: 3,
+            product_name: "AI-92".into(),
+            nozzle_index: 2,
+        });
+        rt.note_wire_hose(0x12);
+
+        // Operator stops from the app (terminal stop mode, no decel window).
+        let effect = rt.apply_stop(&fp_cfg, &site, None, None, false, true);
+        assert!(matches!(effect, Some(FrameEffect::Paused { .. })));
+        assert!(matches!(rt.state.status, FpStatus::Stopped { .. }));
+        assert!(rt.stopped_nozzle_up);
+
+        // Pump polls idle (70 FA) while the nozzle is STILL up → must stay STOPPED, not reset to Idle.
+        let idle = Frame::Idle { addr: 0x53 };
+        let effect = rt.apply_frame(&idle, &fp_cfg, &site, None, None);
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert!(
+            matches!(rt.state.status, FpStatus::Stopped { .. }),
+            "must still show STOPPED while the nozzle is up, not Idle"
+        );
+
+        // Customer holsters → finalize the sale and return to Idle.
+        let holster = Frame::NozzleHolstered {
+            addr: 0x53,
+            seq: 0x32,
+        };
+        let effect = rt.apply_frame(&holster, &fp_cfg, &site, None, None);
+        assert!(matches!(effect, FrameEffect::TransactionDone { .. }));
+        assert_eq!(rt.state.status, FpStatus::Idle);
+        assert!(!rt.stopped_nozzle_up);
     }
 
     #[test]

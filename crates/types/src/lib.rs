@@ -233,6 +233,14 @@ pub enum WsEvent {
     },
     #[serde(rename = "fp.pre_auth_timeout")]
     PreAuthTimeout { fp_id: String },
+    /// Meter data arrived on a lane that holds no authorization (e.g. a pump left armed after a
+    /// cancelled pre-auth). The poll loop STOPs the pump and raises this so the operator is alerted.
+    #[serde(rename = "fp.unauthorized_delivery")]
+    UnauthorizedDelivery {
+        fp_id: String,
+        volume: f64,
+        amount: u64,
+    },
     #[serde(rename = "fp.offline")]
     Offline { fp_id: String, label: String },
     #[serde(rename = "fp.online")]

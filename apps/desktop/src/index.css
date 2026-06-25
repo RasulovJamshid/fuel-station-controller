@@ -402,6 +402,19 @@ html.light .bg-amber-950\/50 {
   opacity: 1;
 }
 
+.pump-nozzle-lifted-badge {
+  color: white;
+  background: linear-gradient(
+    135deg,
+    rgb(var(--color-accent-amber)),
+    rgb(var(--color-accent-red))
+  );
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.16),
+    0 8px 20px -12px rgb(var(--color-accent-red));
+  text-shadow: 0 1px 1px rgb(0 0 0 / 0.35);
+}
+
 .pump-status-chip {
   border-color: rgb(var(--color-border-primary) / 0.7);
   background: linear-gradient(
@@ -409,6 +422,97 @@ html.light .bg-amber-950\/50 {
     rgb(var(--color-bg-input) / 0.72),
     rgb(var(--color-bg-secondary) / 0.72)
   );
+}
+
+.pump-status-icon-frame {
+  color: rgb(var(--color-text-primary));
+  background: rgb(var(--color-bg-input) / 0.72);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+
+.pump-status-chip--idle {
+  border-color: rgb(var(--color-border-primary) / 0.65);
+}
+
+.pump-status-chip--nozzle_up {
+  border-color: rgb(var(--color-accent-amber) / 0.85);
+  background:
+    linear-gradient(135deg, rgb(var(--color-accent-amber) / 0.24), rgb(var(--color-accent-red) / 0.12)),
+    rgb(var(--color-bg-input) / 0.68);
+  box-shadow: inset 4px 0 0 rgb(var(--color-accent-amber));
+}
+
+.pump-status-chip--delivering {
+  border-color: rgb(var(--color-accent-emerald) / 0.85);
+  background:
+    linear-gradient(135deg, rgb(var(--color-accent-emerald) / 0.22), rgb(var(--color-accent-blue) / 0.12)),
+    rgb(var(--color-bg-input) / 0.68);
+  box-shadow: inset 4px 0 0 rgb(var(--color-accent-emerald));
+}
+
+.pump-status-chip--preauth {
+  border-color: rgb(var(--color-accent-amber) / 0.8);
+  background:
+    linear-gradient(135deg, rgb(var(--color-accent-amber) / 0.22), rgb(var(--color-bg-input) / 0.72)),
+    rgb(var(--color-bg-input) / 0.68);
+  box-shadow: inset 4px 0 0 rgb(var(--color-accent-amber));
+}
+
+.pump-status-chip--paused {
+  border-color: rgb(var(--color-accent-red) / 0.68);
+  background:
+    linear-gradient(135deg, rgb(var(--color-accent-red) / 0.18), rgb(var(--color-accent-amber) / 0.16)),
+    rgb(var(--color-bg-input) / 0.68);
+  box-shadow: inset 4px 0 0 rgb(var(--color-accent-red));
+}
+
+.pump-status-chip--done {
+  border-color: rgb(var(--color-accent-blue) / 0.72);
+  background:
+    linear-gradient(135deg, rgb(var(--color-accent-blue) / 0.16), rgb(var(--color-accent-emerald) / 0.14)),
+    rgb(var(--color-bg-input) / 0.68);
+  box-shadow: inset 4px 0 0 rgb(var(--color-accent-blue));
+}
+
+.pump-status-chip--offline {
+  border-color: rgb(var(--color-status-offline) / 0.75);
+  background:
+    linear-gradient(135deg, rgb(var(--color-status-offline) / 0.22), rgb(var(--color-bg-input) / 0.6)),
+    rgb(var(--color-bg-input) / 0.68);
+  box-shadow: inset 4px 0 0 rgb(var(--color-status-offline));
+}
+
+.pump-info-strip {
+  border-color: rgb(var(--color-border-primary) / 0.66);
+  background: rgb(var(--color-bg-input) / 0.35);
+}
+
+.pump-info-tile {
+  border-color: rgb(var(--color-border-primary) / 0.5);
+  background: rgb(var(--color-bg-input) / 0.58);
+}
+
+.pump-info-tile--product {
+  border-left-width: 5px;
+}
+
+.pump-selected-product {
+  border-color: rgb(var(--color-accent-emerald) / 0.68);
+  border-left-width: 6px;
+  background:
+    linear-gradient(135deg, rgb(var(--color-accent-emerald) / 0.20), rgb(var(--color-accent-blue) / 0.10)),
+    rgb(var(--color-bg-input) / 0.78);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.05),
+    0 8px 24px -18px rgb(var(--color-accent-emerald));
+}
+
+.pump-live-panel {
+  border-color: rgb(var(--color-accent-emerald) / 0.54);
+  background:
+    linear-gradient(135deg, rgb(var(--color-accent-emerald) / 0.15), rgb(var(--color-bg-input) / 0.74)),
+    rgb(var(--color-bg-input) / 0.72);
+  box-shadow: inset 4px 0 0 rgb(var(--color-accent-emerald));
 }
 
 .pump-auth-badge {
@@ -702,11 +806,50 @@ html.light .pump-status-chip {
   background: rgb(var(--color-bg-secondary));
   border-color: rgb(var(--color-border-primary) / 0.7);
 }
+html.light .pump-status-chip--nozzle_up {
+  border-color: rgb(var(--color-accent-amber) / 0.75) !important;
+  background: linear-gradient(135deg, rgb(255 237 213), rgb(254 226 226)) !important;
+}
+html.light .pump-status-chip--delivering {
+  border-color: rgb(var(--color-accent-emerald) / 0.72) !important;
+  background: linear-gradient(135deg, rgb(209 250 229), rgb(219 234 254)) !important;
+}
+html.light .pump-status-chip--preauth {
+  border-color: rgb(var(--color-accent-amber) / 0.7) !important;
+  background: linear-gradient(135deg, rgb(254 243 199), rgb(var(--color-bg-input))) !important;
+}
+html.light .pump-status-chip--paused {
+  border-color: rgb(var(--color-accent-red) / 0.62) !important;
+  background: linear-gradient(135deg, rgb(254 226 226), rgb(254 243 199)) !important;
+}
+html.light .pump-status-chip--done {
+  border-color: rgb(var(--color-accent-blue) / 0.65) !important;
+  background: linear-gradient(135deg, rgb(219 234 254), rgb(209 250 229)) !important;
+}
+html.light .pump-status-chip--offline {
+  border-color: rgb(var(--color-status-offline) / 0.72) !important;
+  background: linear-gradient(135deg, rgb(226 232 240), rgb(var(--color-bg-input))) !important;
+}
 html.light .pump-mode-pill {
   background: rgb(var(--color-bg-secondary));
 }
 html.light .pump-quick-chip {
   background: rgb(var(--color-bg-secondary) / 0.85);
+}
+html.light .pump-info-strip {
+  background: rgb(var(--color-bg-secondary) / 0.55);
+}
+html.light .pump-info-tile,
+html.light .pump-live-panel,
+html.light .pump-status-icon-frame {
+  background: rgb(var(--color-bg-input) / 0.88);
+}
+html.light .pump-selected-product {
+  border-color: rgb(var(--color-accent-emerald) / 0.65) !important;
+  background: linear-gradient(135deg, rgb(209 250 229), rgb(219 234 254)) !important;
+}
+html.light .pump-live-panel {
+  background: linear-gradient(135deg, rgb(209 250 229), rgb(var(--color-bg-input))) !important;
 }
 
 /* Disabled start button — dark green is unreadable on light bg */

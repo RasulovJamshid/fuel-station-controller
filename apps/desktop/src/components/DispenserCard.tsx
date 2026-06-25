@@ -532,13 +532,13 @@ export function DispenserCard({
             </h2>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            {isNozzleUp && showPumpForm && (
+            {isNozzleUp && (
               <span
-                className="flex items-center gap-1 rounded-full bg-accent-emerald/15 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-accent-emerald"
+                className="pump-nozzle-lifted-badge flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-black uppercase tracking-wide"
                 title={liftedNozzleCaption ?? t("dispenser.nozzleUp")}
               >
-                <Fuel className="h-3 w-3" />
-                {compact ? "" : t("dispenser.nozzleUp")}
+                <Fuel className="h-3.5 w-3.5 shrink-0" />
+                <span className="whitespace-nowrap">{t("dispenser.nozzleUp")}</span>
               </span>
             )}
             {showUnplannedLift && (
@@ -578,17 +578,19 @@ export function DispenserCard({
           {/* Status chip — always visible when idle, otherwise only when form is hidden */}
           {(!showPumpForm || isIdle || useSetupModal) && !hasActivePreAuth && (
             <div
-              className={`pump-status-chip flex items-center gap-2 rounded-lg border ${compact ? "px-2 py-1.5" : "px-2.5 py-2"} ${compact ? "text-sm" : "text-base"}`}
+              className={`pump-status-chip pump-status-chip--${statusTone} flex items-center gap-2 rounded-lg border ${compact ? "px-2 py-1.5" : "px-3 py-2.5"} ${compact ? "text-sm" : "text-base"}`}
             >
-              <StatusIcon tag={tag} className="h-4 w-4 shrink-0 text-text-tertiary" />
+              <div className={`pump-status-icon-frame flex shrink-0 items-center justify-center rounded-md ${compact ? "h-7 w-7" : "h-9 w-9"}`}>
+                <StatusIcon tag={tag} className={`${compact ? "h-4 w-4" : "h-5 w-5"} shrink-0`} />
+              </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-black uppercase tracking-wide text-text-muted">
                   {statusHeader.statusLabel}
                 </p>
-                <p className={`line-clamp-2 font-black leading-snug ${compact ? "text-base" : "text-lg"} text-text-secondary`}>{statusHeader.subtitle}</p>
+                <p className={`line-clamp-2 font-black leading-snug ${compact ? "text-lg" : "text-xl"} text-text-primary`}>{statusHeader.subtitle}</p>
               </div>
               {statusHeader.rightMeta ? (
-                <span className={`shrink-0 font-mono font-black tabular-nums text-text-muted ${compact ? "text-base" : "text-lg"}`}>{statusHeader.rightMeta}</span>
+                <span className={`shrink-0 rounded-md bg-bg-input/70 px-2 py-1 font-mono font-black tabular-nums text-text-primary ${compact ? "text-base" : "text-xl"}`}>{statusHeader.rightMeta}</span>
               ) : null}
             </div>
           )}
@@ -663,18 +665,21 @@ export function DispenserCard({
                 </div>
               </div>
             ) : (
-              <div className={`grid grid-cols-3 gap-1 rounded-lg border border-border-primary/60 bg-bg-input/45 ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`}>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-text-muted">{t("dispenser.grade")}</p>
-                  <p className={`truncate font-black text-text-primary ${compact ? "text-base" : "text-lg"}`} title={productLabel ?? ""}>{productLabel ?? "—"}</p>
+              <div className={`pump-info-strip grid grid-cols-[1.35fr_0.65fr_1fr] gap-1.5 rounded-lg border ${compact ? "p-1.5" : "p-2"}`}>
+                <div
+                  className={`pump-info-tile pump-info-tile--product rounded-md border px-2 ${compact ? "py-1.5" : "py-2"}`}
+                  style={{ borderLeftColor: productColor }}
+                >
+                  <p className="text-[10px] font-black uppercase tracking-wide text-text-muted">{t("dispenser.grade")}</p>
+                  <p className={`truncate font-black leading-tight text-text-primary ${compact ? "text-lg" : "text-2xl"}`} title={productLabel ?? ""}>{productLabel ?? "—"}</p>
                 </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-text-muted">{t("dispenser.nozzle")}</p>
-                  <p className={`font-black text-text-primary ${compact ? "text-sm" : "text-sm"}`}>{effectiveNozzle ?? "—"}</p>
+                <div className={`pump-info-tile rounded-md border px-2 text-center ${compact ? "py-1.5" : "py-2"}`}>
+                  <p className="text-[10px] font-black uppercase tracking-wide text-text-muted">{t("dispenser.nozzle")}</p>
+                  <p className={`font-black leading-tight text-text-primary ${compact ? "text-xl" : "text-2xl"}`}>{effectiveNozzle ?? "—"}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] uppercase tracking-wide text-text-muted">{t("dispenser.price")}</p>
-                  <p className={`font-mono font-black tabular-nums text-accent-blue ${compact ? "text-lg" : "text-xl"}`}>
+                <div className={`pump-info-tile rounded-md border px-2 text-right ${compact ? "py-1.5" : "py-2"}`}>
+                  <p className="text-[10px] font-black uppercase tracking-wide text-text-muted">{t("dispenser.price")}</p>
+                  <p className={`font-mono font-black leading-tight tabular-nums text-accent-blue ${compact ? "text-xl" : "text-2xl"}`}>
                     {displayPrice > 0 ? fmtSum.format(displayPrice) : "—"}
                   </p>
                 </div>

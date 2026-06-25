@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import checkIcon     from "@/assets/icons/check.svg";
 import dispenserIcon from "@/assets/icons/dispenser.svg";
@@ -253,8 +254,23 @@ export function FillSetupModal({
           <button
             key={value}
             type="button"
-            className="pump-quick-chip rounded-lg px-2 py-2 text-sm"
-            onClick={() => onSelect(value)}
+            className="pump-quick-chip pointer-events-auto touch-manipulation rounded-lg px-2 py-2 text-sm"
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              e.preventDefault();
+              e.stopPropagation();
+              onSelect(value);
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" && e.key !== " ") return;
+              e.preventDefault();
+              e.stopPropagation();
+              onSelect(value);
+            }}
           >
             {format(value)}
           </button>
@@ -302,12 +318,17 @@ export function FillSetupModal({
 
           {/* Single-nozzle product chip — replaces the separate product section */}
           {!multiNozzle && selectedSnap && (
-            <div className={`flex shrink-0 items-center gap-2.5 rounded-xl border px-3 py-2 ${accentActive}`}>
-              <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: productColor }} />
-              <span className="text-sm font-bold text-text-primary">{selectedSnap.product_name}</span>
+            <div
+              className={`pump-selected-product flex shrink-0 items-center gap-2.5 rounded-xl border px-3 py-2 ${accentActive}`}
+              style={{ borderLeftColor: productColor }}
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent-emerald text-white shadow-sm">
+                <img src={checkIcon} alt="" aria-hidden className="h-4 w-4" draggable={false} />
+              </span>
+              <span className="max-w-32 truncate text-lg font-black leading-tight text-text-primary">{selectedSnap.product_name}</span>
               {price > 0 && (
                 <div className="text-right">
-                  <p className="font-mono text-base font-black tabular-nums text-accent-blue leading-none">
+                  <p className="font-mono text-lg font-black tabular-nums text-accent-blue leading-none">
                     {fmtSum.format(price)}
                   </p>
                   <p className="text-[10px] font-semibold text-text-muted">{t("pumpForm.perLiter")}</p>
@@ -320,10 +341,10 @@ export function FillSetupModal({
             type="button"
             tabIndex={-1}
             onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border-primary/50 bg-bg-secondary text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-accent-red bg-accent-red text-white shadow-[0_8px_20px_-12px_rgb(var(--color-accent-red))] transition hover:bg-accent-red-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-red/50"
             aria-label={t("saleSetup.cancel")}
           >
-            <img src={xCircleIcon} alt="" aria-hidden className="h-4 w-4" draggable={false} />
+            <X className="h-6 w-6 stroke-[3]" aria-hidden />
           </button>
         </div>
 
@@ -350,20 +371,27 @@ export function FillSetupModal({
                       data-selected={sel ? "true" : "false"}
                       aria-pressed={sel}
                       onClick={() => { setSelectedNozzle(n.index); setStep("mode"); }}
+                      style={sel ? { borderLeftColor: n.product_color ?? "#888" } : undefined}
                       className={[
                         "flex items-center gap-3 rounded-xl border px-4 py-4 text-left shadow-sm transition-all",
                         "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/45 focus-visible:ring-offset-1",
-                        sel ? accentActive : "border-border-primary/60 bg-bg-secondary/35 hover:border-border-primary hover:bg-bg-secondary/65",
+                        sel ? `pump-selected-product ${accentActive}` : "border-border-primary/60 bg-bg-secondary/35 hover:border-border-primary hover:bg-bg-secondary/65",
                       ].join(" ")}
                     >
-                      <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-border-secondary/40"
-                        style={{ backgroundColor: n.product_color ?? "#888" }} />
-                      <span className="min-w-0 flex-1 truncate text-base font-semibold text-text-primary">
+                      <span
+                        className={`shrink-0 rounded-full border border-border-secondary/40 ${sel ? "h-5 w-5 ring-2 ring-white/25" : "h-3.5 w-3.5"}`}
+                        style={{ backgroundColor: n.product_color ?? "#888" }}
+                      />
+                      <span className={`min-w-0 flex-1 truncate text-text-primary ${sel ? "text-xl font-black" : "text-base font-semibold"}`}>
                         {n.product_name}
                       </span>
-                      {sel && <img src={checkIcon} alt="" aria-hidden className="h-4 w-4 shrink-0 opacity-70" draggable={false} />}
+                      {sel && (
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent-emerald text-white shadow-sm">
+                          <img src={checkIcon} alt="" aria-hidden className="h-4 w-4" draggable={false} />
+                        </span>
+                      )}
                       <div className="shrink-0 text-right">
-                        <p className="font-mono text-base font-black tabular-nums text-accent-blue leading-none">
+                        <p className={`font-mono font-black tabular-nums text-accent-blue leading-none ${sel ? "text-xl" : "text-base"}`}>
                           {n.price > 0 ? fmtSum.format(n.price) : "—"}
                         </p>
                         {n.price > 0 && (

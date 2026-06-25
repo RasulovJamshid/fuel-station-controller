@@ -1027,6 +1027,38 @@ async fn process_parsed_frame(
             let _ = events.send(WsEvent::PreAuthCancelled { fp_id });
             broadcast_status(byte, runtimes, events).await;
         }
+        FrameEffect::UnauthorizedDelivery { volume, amount } => {
+            // The pump is delivering on a lane that holds no authorization (e.g. it stayed armed
+            // after a cancelled pre-auth). Re-assert STOP + GO_IDLE on every such frame so the pump
+            // halts, and raise the operator alert once per episode (deduped on the runtime).
+            let _ = exchange_serial(backend, &stop_frame(byte));
+            let _ = write_serial(backend, &done(byte));
+            let alert = {
+                let mut map = runtimes.write().await;
+                match map.get_mut(&byte) {
+                    Some(rt) if !rt.unauthorized_alerted => {
+                        rt.unauthorized_alerted = true;
+                        true
+                    }
+                    _ => false,
+                }
+            };
+            if alert {
+                warn!(
+                    addr = format_args!("0x{byte:02X}"),
+                    label = %fp_cfg.label,
+                    volume,
+                    amount,
+                    "unauthorized delivery on idle lane → STOP + GO_IDLE + alert operator"
+                );
+                let _ = events.send(WsEvent::UnauthorizedDelivery {
+                    fp_id: fp_cfg.id.clone(),
+                    volume,
+                    amount,
+                });
+            }
+            broadcast_status(byte, runtimes, events).await;
+        }
         FrameEffect::PreAuthNozzleMismatch {
             expected_nozzle_index,
             expected_product_name,
@@ -1570,29 +1602,20 @@ async fn apply_command(
                     "Preauthorize (nozzle already up) → full CONFIG + BUSY"
                 );
             } else {
-                // Holstered preauth: CONFIG sent before lift; StatusTransition arrives
-                // during a later POLL when the nozzle is lifted, handled normally then.
-                let auth_resp = send_auth_pair(
-                    backend,
-                    byte,
-                    &fp_cfg,
-                    &preset,
-                    nozzle_index,
-                    price,
-                    &nozzle_prices,
-                    &cfg.connection.protocol,
+                // Holstered pre-auth (lift-first, like Gilbarco): do NOT arm the pump now.
+                // Arming a holstered pump means a later cancel must de-authorize it on the wire, and
+                // if that STOP is missed the pump can dispense fuel the controller never tracks.
+                // Leave the lane PreAuthorized with CONFIG deferred: when the nozzle is lifted, the
+                // NozzleUp path calls start_delivery_from_pre_auth → begin_auth_session →
+                // SendAuthorizeConfig sends AUTH+CONFIG then (preauth_config_on_wire stays false).
+                // A cancel before the lift therefore has nothing armed on the pump to de-authorize.
+                // (nozzle_prices was refreshed from the DB above; CONFIG is built from it on lift.)
+                debug!(
+                    addr = format_args!("0x{byte:02X}"),
+                    label = %fp_cfg.label,
+                    nozzle = nozzle_index,
+                    "Preauthorize (holstered) → deferred; AUTH+CONFIG sent on nozzle lift"
                 );
-                // Only mark config on wire when the pump actually ACKed it (C0 FA in
-                // response). If CONFIG got no reply the flag stays false, so
-                // start_delivery_from_pre_auth will call begin_auth_session() on NozzleUp
-                // and the first Data frame will retrigger SendAuthorizeConfig.
-                let config_acked = auth_resp.windows(2).any(|w| w == [0xC0, 0xFA]);
-                let mut map = runtimes.write().await;
-                if let Some(rt) = map.get_mut(&byte) {
-                    if config_acked {
-                        rt.mark_preauth_config_on_wire();
-                    }
-                }
             }
             let _ = events.send(WsEvent::PreAuthorized {
                 fp_id: fp_cfg.id.clone(),
@@ -1600,10 +1623,6 @@ async fn apply_command(
                 preset: preset_label_str,
                 nozzle_index,
             });
-            if !lift_confirmed {
-                let b = busy(byte);
-                let _ = exchange_serial(backend, &b);
-            }
             broadcast_status(byte, runtimes, events).await;
             let disp_by_byte: HashMap<u8, FuelingPositionConfig> = cfg
                 .active_positions()
@@ -1628,14 +1647,20 @@ async fn apply_command(
                 Some(p) => p.clone(),
                 None => return,
             };
-            let abort_f = stop_frame(byte);
-            let _ = exchange_serial(backend, &abort_f);
+            // De-authorize the pump: STOP halts any active delivery, GO_IDLE clears a holstered
+            // authorization. A single STOP does not de-arm an armed-but-idle pump on all firmware, so
+            // we send both and set `preauth_cancel_pending` — the poll loop then verifies the pump
+            // reports idle (`70 FA`) and treats any delivery before that as unauthorized (re-STOP +
+            // alert) instead of fueling silently.
+            let _ = exchange_serial(backend, &stop_frame(byte));
+            let _ = write_serial(backend, &done(byte));
             {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
                     if rt.has_cancellable_preauth() {
                         rt.cancel_pre_auth();
                     }
+                    rt.mark_preauth_cancel_pending();
                 }
             }
             let _ = events.send(WsEvent::PreAuthCancelled {
@@ -2938,6 +2963,10 @@ async fn gbr_apply_command(
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
                     rt.cancel_pre_auth();
+                    // Gilbarco never arms the pump for a holstered pre-auth, so there is nothing on
+                    // the wire to de-authorize here; set the guard for parity with the shared
+                    // unauthorized-delivery safety net.
+                    rt.mark_preauth_cancel_pending();
                 }
             }
             let _ = events.send(WsEvent::PreAuthCancelled {

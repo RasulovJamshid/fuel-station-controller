@@ -8,6 +8,7 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
+import { formatMoneyInput, parseMoneyInput } from '@/lib/format';
 
 export default function PricesPage() {
   const t = useT();
@@ -48,12 +49,12 @@ export default function PricesPage() {
 
   function openEdit(row: any) {
     setEditing(row);
-    setEditPrice(String(row.price));
+    setEditPrice(formatMoneyInput(row.price));
     setEditError('');
   }
 
   async function saveEdit() {
-    const p = parseInt(editPrice, 10);
+    const p = Math.trunc(parseMoneyInput(editPrice));
     if (!p || p <= 0) { setEditError(t('invalidPrice')); return; }
     setSaving(true); setEditError('');
     try {
@@ -192,10 +193,10 @@ export default function PricesPage() {
             <p className="text-xs text-slate-400">{t('station')}: {editing.stationId}</p>
             <Input
               label={t('newPriceLabel')}
-              type="number"
-              min={1}
+              type="text"
+              inputMode="numeric"
               value={editPrice}
-              onChange={e => setEditPrice(e.target.value)}
+              onChange={e => setEditPrice(formatMoneyInput(e.target.value))}
               autoFocus
             />
             {editError && <p className="text-sm text-red-600">{editError}</p>}

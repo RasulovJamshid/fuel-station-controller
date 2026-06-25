@@ -8,6 +8,7 @@ import fullTankIcon  from "@/assets/icons/full-tank.svg";
 import moneyIcon     from "@/assets/icons/money.svg";
 import playIcon      from "@/assets/icons/play.svg";
 import xCircleIcon   from "@/assets/icons/x-circle.svg";
+import { formatMoneyInput, parseMoney } from "../lib/money";
 import type { FpState, NozzleSnapshot } from "../types/api";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 
@@ -43,7 +44,7 @@ export function FillSetupModal({
   const [selectedNozzle, setSelectedNozzle] = useState<number | null>(null);
   const [fillMode, setFillMode]             = useState<FillMode>("volume");
   const [vol, setVol]                       = useState("10");
-  const [amt, setAmt]                       = useState("150000"); // overwritten on open by initPrice×10
+  const [amt, setAmt]                       = useState("150 000"); // overwritten on open by initPrice×10
   const [step, setStep]                     = useState<Step>(multiNozzle ? "nozzle" : "value");
   const dialogRef   = useRef<HTMLDivElement>(null);
   const volInputRef = useRef<HTMLInputElement>(null);
@@ -59,7 +60,7 @@ export function FillSetupModal({
     setSelectedNozzle(init);
     setFillMode("volume");
     setVol("10");
-    setAmt(initPrice > 0 ? String(initPrice * 10) : "150000");
+    setAmt(initPrice > 0 ? formatMoneyInput(initPrice * 10) : "150 000");
     setStep(activeNozzles.length > 1 ? "nozzle" : "value");
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -92,7 +93,7 @@ export function FillSetupModal({
   const productColor = selectedSnap?.product_color ?? "#888";
 
   const volNum = parseNum(vol);
-  const amtNum = parseNum(amt);
+  const amtNum = parseMoney(amt);
 
   const MAX_VOL = 999;
   const maxAmt  = price > 0 ? Math.floor(price * MAX_VOL) : null;
@@ -140,7 +141,7 @@ export function FillSetupModal({
 
   const applyAmount = (value: number) => {
     setFillMode("amount");
-    setAmt(String(value));
+    setAmt(formatMoneyInput(value));
     setStep("value");
   };
 
@@ -483,7 +484,7 @@ export function FillSetupModal({
               step === "value" ? "border-accent-blue/45 ring-2 ring-accent-blue/20" : "border-border-primary/55",
             ].join(" ")}>
               <div className="relative isolate flex items-center gap-3">
-                <StepBtn label="-" onClick={() => setAmt((v) => String(Math.max(10000, parseNum(v) - 10000)))} />
+                <StepBtn label="-" onClick={() => setAmt((v) => formatMoneyInput(Math.max(10000, parseMoney(v) - 10000)))} />
                 <div className="flex flex-1 items-center gap-2 rounded-xl border border-border-primary/60 bg-bg-input px-4 py-4 shadow-sm transition focus-within:border-accent-blue/55 focus-within:ring-[3px] focus-within:ring-accent-blue/20">
                   <input
                     ref={amtInputRef}
@@ -491,21 +492,21 @@ export function FillSetupModal({
                     inputMode="numeric"
                     value={amt}
                     onFocus={() => setStep("value")}
-                    onChange={(e) => setAmt(e.target.value)}
+                    onChange={(e) => setAmt(formatMoneyInput(e.target.value))}
                     onBlur={() => setAmt((v) => {
-                      const n = Math.max(10000, parseNum(v) || 10000);
-                      return String(maxAmt != null ? Math.min(maxAmt, n) : n);
+                      const n = Math.max(10000, parseMoney(v) || 10000);
+                      return formatMoneyInput(maxAmt != null ? Math.min(maxAmt, n) : n);
                     })}
                     onKeyDown={(e) => {
-                      if (e.key === "ArrowUp")        { e.preventDefault(); setAmt((v) => String(Math.min(maxAmt ?? Infinity, parseNum(v) + 10000))); }
-                      else if (e.key === "ArrowDown") { e.preventDefault(); setAmt((v) => String(Math.max(10000, parseNum(v) - 10000))); }
+                      if (e.key === "ArrowUp")        { e.preventDefault(); setAmt((v) => formatMoneyInput(Math.min(maxAmt ?? Infinity, parseMoney(v) + 10000))); }
+                      else if (e.key === "ArrowDown") { e.preventDefault(); setAmt((v) => formatMoneyInput(Math.max(10000, parseMoney(v) - 10000))); }
                       else if (e.key === "Enter")     { e.preventDefault(); handleConfirm(); }
                     }}
                     className="w-full bg-transparent text-center font-mono text-4xl font-black tabular-nums text-text-primary outline-none"
                   />
                   <span className="shrink-0 text-base font-bold text-text-muted">{t("pumpForm.amountUnit")}</span>
                 </div>
-                <StepBtn label="+" onClick={() => setAmt((v) => String(Math.min(maxAmt ?? Infinity, parseNum(v) + 10000)))} />
+                <StepBtn label="+" onClick={() => setAmt((v) => formatMoneyInput(Math.min(maxAmt ?? Infinity, parseMoney(v) + 10000)))} />
               </div>
               <QuickPresetRow values={amountPresets} format={(value) => fmtSum.format(value)} onSelect={applyAmount} />
               {projectedVol != null && (

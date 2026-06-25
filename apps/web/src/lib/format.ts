@@ -24,6 +24,23 @@ const units = {
   },
 };
 
+export function formatMoneyInput(value: number | string | null | undefined): string {
+  if (value == null || value === '') return '';
+  const raw = typeof value === 'number' ? String(Math.trunc(value)) : value;
+  const digits = raw.replace(/[^\d-]/g, '');
+  if (digits === '' || digits === '-') return raw;
+  const sign = digits.startsWith('-') ? '-' : '';
+  const body = sign ? digits.slice(1) : digits;
+  return `${sign}${body.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}`;
+}
+
+export function parseMoneyInput(value: string | number | null | undefined): number {
+  if (typeof value === 'number') return value;
+  if (value == null) return 0;
+  const parsed = Number.parseFloat(value.replace(/\s/g, '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export function createFormatters(lang: Lang = 'ru') {
   const u = units[lang] ?? units.ru;
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, X } from "lucide-react";
 import type { NozzleSnapshot } from "../types/api";
+import { formatMoneyInput, parseMoney } from "../lib/money";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 import { ProductGradeTiles } from "./ProductGradeTiles";
 
@@ -94,7 +95,7 @@ export function SaleSetupPanel({
       if (!Number.isFinite(v) || v <= 0) return;
       limitValue = v;
     } else if (fillMode === "amount") {
-      const a = Number.parseFloat(amtSum.replace(/\s/g, "").replace(",", ""));
+      const a = parseMoney(amtSum);
       if (!Number.isFinite(a) || a <= 0) return;
       limitValue = a;
     }
@@ -110,7 +111,7 @@ export function SaleSetupPanel({
 
   useEffect(() => {
     if (fillMode === "amount" && amtSum === "" && displayPrice > 0) {
-      setAmtSum(String(Math.round(displayPrice * 10)));
+      setAmtSum(formatMoneyInput(Math.round(displayPrice * 10)));
     }
   }, [fillMode, displayPrice, amtSum]);
 
@@ -248,14 +249,14 @@ export function SaleSetupPanel({
                 <button
                   key={a}
                   type="button"
-                  onClick={() => setAmtSum(a)}
+                  onClick={() => setAmtSum(formatMoneyInput(a))}
                   className={`rounded-md border-2 py-2 text-sm font-bold transition-all duration-200 ${
-                    amtSum === a
+                    parseMoney(amtSum) === Number(a)
                       ? "border-indigo-500 bg-indigo-600 text-white"
                       : "border-slate-600 bg-slate-700 text-slate-300 hover:border-slate-500 hover:bg-slate-600"
                   }`}
                 >
-                  {parseInt(a, 10) / 1000}k
+                  {formatMoneyInput(a)}
                 </button>
               ))}
             </div>
@@ -265,11 +266,11 @@ export function SaleSetupPanel({
                 type="text"
                 inputMode="numeric"
                 value={amtSum}
-                onChange={(e) => setAmtSum(e.target.value)}
+                onChange={(e) => setAmtSum(formatMoneyInput(e.target.value))}
                 className="w-full rounded-md border-2 border-slate-600 bg-slate-800 px-4 py-3 pr-12 text-center text-xl font-black text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:bg-slate-700 transition-colors"
                 placeholder={t("saleSetup.amountPlaceholder")}
               />
-              {amtSum && Number.parseFloat(amtSum.replace(/\s/g, "")) > 0 && (
+              {amtSum && parseMoney(amtSum) > 0 && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                   <div className="w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
                     <Check className="w-3 h-3 text-white" />

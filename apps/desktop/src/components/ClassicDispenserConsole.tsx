@@ -6,6 +6,7 @@ import { pausedInfo, statusTag } from "../types/api";
 import type { AuthMode, FpState, FpStatus, NozzleSnapshot } from "../types/api";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 import { useAppStore } from "../store";
+import { formatMoneyInput, parseMoney } from "../lib/money";
 const fmtSum = new Intl.NumberFormat("uz-UZ");
 const MAX_VOLUME_LITERS = 999;
 
@@ -30,7 +31,7 @@ function draftFromPreAuthPreset(preset: string | null | undefined): Partial<Pump
   const volume = parseVolumeTarget(preset);
   if (volume != null) return { mode: "volume", volume: String(volume) };
   const amount = parseAmountTarget(preset);
-  if (amount != null) return { mode: "amount", amount: String(Math.round(amount)) };
+  if (amount != null) return { mode: "amount", amount: formatMoneyInput(Math.round(amount)) };
   return { mode: "full", volume: "", amount: "" };
 }
 
@@ -51,7 +52,7 @@ function sanitizeVolumeInput(raw: string): string {
 }
 
 function sanitizeAmountInput(raw: string): string {
-  return raw.replace(/\D/g, "").slice(0, 9);
+  return formatMoneyInput(raw.replace(/\D/g, "").slice(0, 9));
 }
 
 function maxAmountForNozzle(nozzle: NozzleSnapshot | null): number {
@@ -77,7 +78,7 @@ function relatedDraftValues(
   if (!draft || !nozzle?.price || nozzle.price <= 0) return {};
 
   if (draft.mode === "amount") {
-    const amount = parseNum(draft.amount);
+    const amount = parseMoney(draft.amount);
     if (amount > 0) {
       return { volume: String(Math.round((amount / nozzle.price) * 10) / 10) };
     }
@@ -86,7 +87,7 @@ function relatedDraftValues(
   if (draft.mode === "volume") {
     const volume = parseNum(draft.volume);
     if (volume > 0) {
-      return { amount: String(Math.round(volume * nozzle.price)) };
+      return { amount: formatMoneyInput(Math.round(volume * nozzle.price)) };
     }
   }
 
@@ -766,7 +767,7 @@ export function ClassicDispenserConsole({
     setDraft(state.fp_id, {
       mode: "volume",
       volume: nextRaw,
-      amount: nextRaw === "" ? "" : nozzle?.price && liters > 0 ? String(Math.round(liters * nozzle.price)) : drafts[state.fp_id]?.amount,
+      amount: nextRaw === "" ? "" : nozzle?.price && liters > 0 ? formatMoneyInput(Math.round(liters * nozzle.price)) : drafts[state.fp_id]?.amount,
     });
   }, [defaultAuthMode, drafts, positionActiveByFp, selectedNozzle, setDraft]);
 
@@ -775,7 +776,7 @@ export function ClassicDispenserConsole({
     if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused) return;
     const nextRaw = sanitizeAmountInput(raw);
     const nozzle = selectedNozzle(state);
-    const amount = parseNum(nextRaw);
+    const amount = parseMoney(nextRaw);
     setDraft(state.fp_id, {
       mode: "amount",
       amount: nextRaw,

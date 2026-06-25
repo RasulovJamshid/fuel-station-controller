@@ -1146,11 +1146,14 @@ impl RuntimeFp {
                         self.touch();
                         return FrameEffect::None;
                     }
-                    if self.preauth_session_armed() && self.current_tx.is_none() {
+                    if self.preauth_session_armed() {
                         // Lift-first authorization can sit on zero-volume IDLE frames
                         // until Wayne accepts CONFIG and starts metering.  A real cancel
                         // arrives as NozzleReturned, so don't clear the selected preset/nozzle
-                        // just because the lift timestamp aged out.
+                        // just because the lift timestamp aged out.  NOTE: this must NOT also
+                        // require current_tx.is_none() — deferred lift-first arming sets
+                        // current_tx the instant the lift is confirmed, so gating on it here
+                        // would ghost-cancel a still-up nozzle the moment the lift code goes stale.
                         self.touch();
                         return FrameEffect::None;
                     }
@@ -1373,10 +1376,10 @@ impl RuntimeFp {
                     self.touch();
                     return FrameEffect::StatusChanged;
                 }
-                if self.state.status == FpStatus::Authorizing
-                    && self.preauth_session_armed()
-                    && self.current_tx.is_none()
-                {
+                // Deferred lift-first preauth sets current_tx the instant the lift is confirmed, so
+                // keep the armed zero-volume lane alive on idle/done frames regardless of current_tx;
+                // a real cancel arrives as a holster frame (NozzleReturned/NozzleHolstered), not an idle.
+                if self.state.status == FpStatus::Authorizing && self.preauth_session_armed() {
                     self.touch();
                     return FrameEffect::StatusChanged;
                 }
@@ -1438,10 +1441,10 @@ impl RuntimeFp {
                     self.touch();
                     return FrameEffect::StatusChanged;
                 }
-                if self.state.status == FpStatus::Authorizing
-                    && self.preauth_session_armed()
-                    && self.current_tx.is_none()
-                {
+                // Deferred lift-first preauth sets current_tx the instant the lift is confirmed, so
+                // keep the armed zero-volume lane alive on idle/done frames regardless of current_tx;
+                // a real cancel arrives as a holster frame (NozzleReturned/NozzleHolstered), not an idle.
+                if self.state.status == FpStatus::Authorizing && self.preauth_session_armed() {
                     self.touch();
                     return FrameEffect::StatusChanged;
                 }
@@ -1764,11 +1767,6 @@ impl RuntimeFp {
             return true;
         }
         false
-    }
-
-    /// Another pump replied in our poll slot — do not count as a miss for this address.
-    pub fn on_poll_crosstalk(&mut self) {
-        self.touch();
     }
 
     pub fn on_reconnect_flush(&mut self, rounds: u32) {
@@ -3315,6 +3313,57 @@ mod tests {
         assert!(matches!(effect, FrameEffect::TransactionDone { .. }));
         assert_eq!(rt.state.status, FpStatus::Idle);
         assert!(!rt.stopped_nozzle_up);
+    }
+
+    #[test]
+    fn lifted_preauth_stays_authorizing_on_idle_after_nozzle_goes_stale() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+
+        // Deferred holstered pre-auth → customer lifts → poll loop starts delivery (CONFIG deferred).
+        assert!(matches!(
+            rt.apply_preauthorize_sent(&fp_cfg, &site, 2, 11000, Preset::Amount(10_000)),
+            PreauthOutcome::Holstered
+        ));
+        let lift = Frame::NozzleUp {
+            addr: 0x53,
+            seq: 0x31,
+            product: 0x10,
+            nozzle: 0x12,
+        };
+        let _ = rt.apply_frame(&lift, &fp_cfg, &site, None, None);
+        rt.start_delivery_from_pre_auth(&fp_cfg, &site);
+        assert_eq!(rt.state.status, FpStatus::Authorizing);
+        assert!(rt.current_tx.is_some(), "deferred arming sets current_tx on lift");
+
+        // Customer holds the nozzle up but hasn't squeezed yet; >4s pass so the lift code goes stale.
+        rt.last_wire_hose_at_ms = 0;
+        assert!(!rt.nozzle_physically_up());
+
+        // Pump polls idle (70 FA): must NOT ghost-cancel — the nozzle is still up.
+        let idle = Frame::Idle { addr: 0x53 };
+        let effect = rt.apply_frame(&idle, &fp_cfg, &site, None, None);
+        assert!(matches!(effect, FrameEffect::None));
+        assert_eq!(rt.state.status, FpStatus::Authorizing);
+        assert!(rt.current_tx.is_some());
+
+        // Same for a DispenserIdle (01 01 05) frame.
+        let disp_idle = Frame::DispenserIdle {
+            addr: 0x53,
+            seq: 0x32,
+        };
+        let effect = rt.apply_frame(&disp_idle, &fp_cfg, &site, None, None);
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert_eq!(rt.state.status, FpStatus::Authorizing);
+
+        // The real cancel still works: a holster frame ends the zero-volume session.
+        let holster = Frame::NozzleHolstered {
+            addr: 0x53,
+            seq: 0x33,
+        };
+        let _ = rt.apply_frame(&holster, &fp_cfg, &site, None, None);
+        assert_ne!(rt.state.status, FpStatus::Authorizing);
     }
 
     #[test]

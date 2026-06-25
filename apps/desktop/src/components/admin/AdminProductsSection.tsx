@@ -6,6 +6,7 @@ import type {
   AdminProductInput,
 } from "../../types/api";
 import { useAppStore } from "../../store";
+import { formatMoney, parseMoney } from "../../lib/money";
 
 export interface LiftedNozzle {
   fpId: string;
@@ -498,12 +499,12 @@ export function AdminProductsSection({
                     </td>
                     <td className="px-4 py-3">
                       <input
-                        type="number"
-                        min={1}
-                        value={n.price}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatMoney(n.price)}
                         onChange={(e) =>
                           updateNozzle(n.index, {
-                            price: Math.max(1, parseInt(e.target.value, 10) || 1),
+                            price: Math.max(1, Math.trunc(parseMoney(e.target.value)) || 1),
                           })
                         }
                         className={`w-28 font-mono ${inputCls}`}

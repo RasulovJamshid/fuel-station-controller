@@ -8,6 +8,7 @@ import fullTankIcon from "@/assets/icons/full-tank.svg";
 import minusIcon from "@/assets/icons/minus.svg";
 import moneyIcon from "@/assets/icons/money.svg";
 import plusIcon from "@/assets/icons/plus.svg";
+import { formatMoneyInput, parseMoney } from "../lib/money";
 import type { NozzleSnapshot } from "../types/api";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 
@@ -182,7 +183,7 @@ export function PumpCardForm({
   });
   const [fillMode, setFillMode] = useState<FillMode>("volume");
   const [volLiters, setVolLiters] = useState("10");
-  const [amtSum, setAmtSum] = useState("150000");
+  const [amtSum, setAmtSum] = useState("150 000");
 
   useEffect(() => {
     if (initialNozzle != null && activeNozzles.some((n) => n.index === initialNozzle)) {
@@ -210,7 +211,7 @@ export function PumpCardForm({
         return;
       }
       const v = parseNum(liters);
-      if (price > 0 && v > 0) setAmtSum(String(Math.round(v * price)));
+      if (price > 0 && v > 0) setAmtSum(formatMoneyInput(Math.round(v * price)));
     },
     [price],
   );
@@ -221,7 +222,7 @@ export function PumpCardForm({
         setVolLiters("");
         return;
       }
-      const a = parseNum(sum);
+      const a = parseMoney(sum);
       if (price > 0 && a > 0) setVolLiters(String(Math.round((a / price) * 10) / 10));
     },
     [price],
@@ -243,7 +244,7 @@ export function PumpCardForm({
       return Math.round(liters * price);
     }
     if (fillMode === "amount") {
-      const amount = parseNum(amtSum);
+      const amount = parseMoney(amtSum);
       return amount > 0 ? Math.round(amount) : null;
     }
     return null;
@@ -256,7 +257,7 @@ export function PumpCardForm({
       return liters > 0 ? liters : null;
     }
     if (fillMode === "amount") {
-      const amount = parseNum(amtSum);
+      const amount = parseMoney(amtSum);
       return amount > 0 ? Math.round((amount / price) * 10) / 10 : null;
     }
     return null;
@@ -266,7 +267,7 @@ export function PumpCardForm({
     disabled ||
     !selectedSnap ||
     (fillMode === "volume" && parseNum(volLiters) <= 0) ||
-    (fillMode === "amount" && parseNum(amtSum) <= 0);
+    (fillMode === "amount" && parseMoney(amtSum) <= 0);
 
   const hasSelection = Boolean(selectedSnap);
   const showResetSelection = activeNozzles.length > 1 && selectedNozzle != null;
@@ -291,7 +292,7 @@ export function PumpCardForm({
       if (v <= 0) return;
       limitValue = v;
     } else if (fillMode === "amount") {
-      const a = parseNum(amtSum);
+      const a = parseMoney(amtSum);
       if (a <= 0) return;
       limitValue = a;
     }
@@ -306,7 +307,7 @@ export function PumpCardForm({
   const amtStep = compact ? 10000 : 25000;
 
   const applyVolume = useCallback((value: number) => {
-    const next = String(value);
+    const next = formatMoneyInput(value);
     setFillMode("volume");
     setVolLiters(next);
     syncAmountFromVolume(next);
@@ -553,18 +554,19 @@ export function PumpCardForm({
                   disabled={disabled}
                   compact={compact}
                   onChange={(v) => {
-                    setAmtSum(v);
-                    syncVolumeFromAmount(v);
+                    const formatted = formatMoneyInput(v);
+                    setAmtSum(formatted);
+                    syncVolumeFromAmount(formatted);
                   }}
                   onDec={() => {
-                    const next = Math.max(amtStep, parseNum(amtSum) - amtStep);
-                    const s = String(next);
+                    const next = Math.max(amtStep, parseMoney(amtSum) - amtStep);
+                    const s = formatMoneyInput(next);
                     setAmtSum(s);
                     syncVolumeFromAmount(s);
                   }}
                   onInc={() => {
-                    const next = parseNum(amtSum) + amtStep;
-                    const s = String(next);
+                    const next = parseMoney(amtSum) + amtStep;
+                    const s = formatMoneyInput(next);
                     setAmtSum(s);
                     syncVolumeFromAmount(s);
                   }}

@@ -12,6 +12,7 @@ import type {
 } from "../../types/api";
 import { statusTag } from "../../types/api";
 import { useAppStore } from "../../store";
+import { formatMoney, formatMoneyInput, parseMoney } from "../../lib/money";
 import { AdminProductsSection } from "./AdminProductsSection";
 
 function ToggleSwitch({
@@ -103,7 +104,7 @@ export function setAdminToken(token: string | null) {
 
 function formatPrice(n: number): string {
   if (n <= 0) return "—";
-  return new Intl.NumberFormat("uz-UZ").format(n);
+  return formatMoney(n);
 }
 
 // Shared input/select class — adapts to both light and dark themes via CSS vars.
@@ -259,7 +260,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
     const d: Record<string, string> = {};
     for (const row of p) {
       const key = String(row.product_id);
-      if (!(key in d)) d[key] = String(row.price);
+      if (!(key in d)) d[key] = formatMoneyInput(row.price);
     }
     setDraft(d);
   }, [token, setInvokeError]);
@@ -294,7 +295,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
     for (const prod of productPrices) {
       const raw = draft[String(prod.product_id)];
       if (raw === undefined || raw.trim() === "") continue;
-      const p = parseInt(raw.trim(), 10);
+      const p = Math.trunc(parseMoney(raw));
       if (!Number.isNaN(p) && p > 0) map[prod.product_id] = p;
     }
     return map;
@@ -313,7 +314,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
         const key = String(prod.product_id);
         const raw = draft[key];
         if (raw === undefined || raw.trim() === "") continue;
-        const newPrice = parseInt(raw.trim(), 10);
+        const newPrice = Math.trunc(parseMoney(raw));
         if (Number.isNaN(newPrice) || newPrice <= 0) {
           setMsg(t("admin.prices.invalidPrice", { name: prod.product_name }));
           return;
@@ -346,7 +347,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
         const nextDraft: Record<string, string> = {};
         for (const row of next) {
           const k = String(row.product_id);
-          if (!(k in nextDraft)) nextDraft[k] = String(row.price);
+          if (!(k in nextDraft)) nextDraft[k] = formatMoneyInput(row.price);
         }
         setDraft(nextDraft);
         return next;
@@ -581,11 +582,12 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                       <td className="px-4 py-3 font-mono font-medium text-text-secondary">{formatPrice(row.price)}</td>
                       <td className="px-4 py-3">
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           className={`w-40 font-mono ${inputCls}`}
                           value={draft[key] ?? ""}
                           onChange={(e) =>
-                            setDraft((d) => ({ ...d, [key]: e.target.value }))
+                            setDraft((d) => ({ ...d, [key]: formatMoneyInput(e.target.value) }))
                           }
                         />
                       </td>

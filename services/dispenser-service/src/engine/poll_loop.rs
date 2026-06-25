@@ -547,6 +547,20 @@ pub async fn run_poll_loop(
 
     let mut accum = FrameAccumulator::default();
 
+    // Startup reset (matches the old app — see docs/logs/waynesniffer_restart.log): put every pump into
+    // a known idle state so any stale transaction or armed authorization left from before this service
+    // start is cleared, instead of being inherited. Best-effort: if the bus is down the exchanges return
+    // empty and steady-state polling proceeds/retries.
+    for &byte in &addrs {
+        let resp = exchange_serial(&backend, &done(byte)).unwrap_or_default(); // GO_IDLE  (30 01 01 05)
+        ack_frames_in_response(&backend, byte, &resp);
+        let _ = exchange_serial(&backend, &busy(byte)); // BUSY (30 01 01 04) re-sync
+        debug!(
+            addr = format_args!("0x{byte:02X}"),
+            "startup reset → GO_IDLE + BUSY"
+        );
+    }
+
     'poll_loop: loop {
         while let Ok(cmd) = commands.try_recv() {
             if let DispatchCommand::ReloadConfig { cfg: next_cfg } = cmd {
@@ -696,10 +710,14 @@ pub async fn run_poll_loop(
                         if was_offline && had_serial_misses {
                             rt.on_reconnect_flush(cfg.polling.reconnect_settle_rounds);
                         }
-                    } else if saw_foreign_response {
-                        // Bus is alive; another lane's frame arrived in our slot.
-                        rt.on_poll_crosstalk();
                     } else {
+                        if saw_foreign_response && real_bus {
+                            debug!(
+                                addr = format_args!("0x{byte:02X}"),
+                                label = %rt.state.label,
+                                "poll slot saw only foreign/noisy frames; counting as miss"
+                            );
+                        }
                         let miss = rt.missed + 1;
                         if rt.on_poll_missed(cfg.polling.offline_threshold_polls) {
                             offline_meta = Some((rt.state.fp_id.clone(), rt.state.label.clone()));

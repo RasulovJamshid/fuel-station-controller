@@ -18,6 +18,11 @@ const STARTUP_GHOST_MAX_VOLUME_L: f64 = 0.05;
 const STARTUP_GHOST_FROZEN_FRAME_THRESHOLD: u8 = 6;
 /// Minimum age of a stuck startup pulse before aborting; gives operators time to begin topping off.
 const STARTUP_GHOST_MIN_AGE_MS: i64 = 15_000;
+/// After CONFIG is put on the wire, the Wayne pump echoes a zero-volume holster frame
+/// (`01 01 02` standalone or `03 04 … 0X` embedded) before the customer has done anything.
+/// Within this window a zero-volume holster is treated as that echo and ignored, not as a real
+/// customer holster — otherwise the pump gets de-authorized ~0.5 s after being armed.
+const CONFIG_ECHO_GRACE_MS: i64 = 3_000;
 
 #[derive(Debug, Clone)]
 pub struct StoppedContext {
@@ -90,6 +95,9 @@ pub struct RuntimeFp {
     pub pending_authorize_config_repeat: bool,
     /// Holstered pre-auth already sent AUTH+CONFIG on the wire; lift only needs BUSY + delivery.
     pub preauth_config_on_wire: bool,
+    /// Wall-clock ms when CONFIG was last put on the wire; used to ignore the pump's post-CONFIG
+    /// zero-volume holster echo (see [`CONFIG_ECHO_GRACE_MS`]).
+    pub config_on_wire_at: Option<i64>,
     /// Wall-clock ms when the current authorize session started (not reset by poll touch).
     pub auth_session_started_at: Option<i64>,
     /// Latest `03 04 … HH` hose byte from NozzleUp / Data / NozzleReturned.
@@ -175,6 +183,7 @@ impl RuntimeFp {
             pending_authorize_config: false,
             pending_authorize_config_repeat: false,
             preauth_config_on_wire: false,
+            config_on_wire_at: None,
             auth_session_started_at: None,
             last_wire_hose_code: None,
             last_wire_hose_at_ms: 0,
@@ -736,6 +745,7 @@ impl RuntimeFp {
         self.pending_authorize_config = false;
         self.pending_authorize_config_repeat = false;
         self.preauth_config_on_wire = false;
+        self.config_on_wire_at = None;
         self.auth_session_started_at = None;
         self.last_wire_hose_code = None;
         self.last_wire_hose_at_ms = 0;
@@ -797,8 +807,16 @@ impl RuntimeFp {
 
     pub fn mark_preauth_config_on_wire(&mut self) {
         self.preauth_config_on_wire = true;
+        self.config_on_wire_at = Some(Utc::now().timestamp_millis());
         self.pending_authorize_config = false;
         self.pending_authorize_config_repeat = false;
+    }
+
+    /// True while we are still inside the post-CONFIG window where the pump emits its zero-volume
+    /// holster echo. A holster frame here is that echo, not a real customer holster.
+    fn within_config_echo_grace(&self) -> bool {
+        self.config_on_wire_at
+            .is_some_and(|t| Utc::now().timestamp_millis() - t < CONFIG_ECHO_GRACE_MS)
     }
 
     /// Mark that a pre-auth was just cancelled. Until the pump confirms idle, any delivery is
@@ -934,7 +952,12 @@ impl RuntimeFp {
             FpStatus::Authorizing | FpStatus::Delivering => {
                 let (vol, amt) = self.combined_totals();
                 if vol < 0.01 && amt == 0 {
-                    if self.nozzle_physically_up() {
+                    if (self.within_config_echo_grace()
+                        && self.state.status == FpStatus::Authorizing)
+                        || self.nozzle_physically_up()
+                    {
+                        // Post-CONFIG holster echo (here as a standalone NozzleReturned) or a still-up
+                        // nozzle — keep the lane armed instead of de-authorizing it.
                         self.touch();
                         return FrameEffect::StatusChanged;
                     }
@@ -1296,9 +1319,9 @@ impl RuntimeFp {
                 }
                 let (vol, amt) = self.combined_totals();
                 if vol < 0.01 && amt == 0 {
-                    if self.nozzle_physically_up()
-                        || (self.preauth_session_armed() && self.current_tx.is_none())
-                    {
+                    // Keep an armed lane alive while the nozzle is up; deferred arming sets
+                    // current_tx the instant the lift is confirmed, so do NOT gate on current_tx.
+                    if self.nozzle_physically_up() || self.preauth_session_armed() {
                         self.touch();
                         return FrameEffect::None;
                     }
@@ -1590,6 +1613,7 @@ impl RuntimeFp {
         self.clear_ghost_recovery();
         self.clear_deliver_caps();
         self.preauth_config_on_wire = false;
+        self.config_on_wire_at = None;
         self.pending_authorize_config = false;
         self.pending_authorize_config_repeat = false;
         self.auth_session_started_at = None;
@@ -1870,7 +1894,14 @@ impl RuntimeFp {
                     FpStatus::Authorizing | FpStatus::Delivering => {
                         let (vol, amt) = self.combined_totals();
                         if vol < 0.01 && amt == 0 {
-                            if self.nozzle_physically_up() {
+                            if self.within_config_echo_grace()
+                                && self.state.status == FpStatus::Authorizing
+                            {
+                                // Pump's post-CONFIG holster echo, not a customer holster —
+                                // keep the lane armed so fueling can start.
+                                self.touch();
+                                FrameEffect::StatusChanged
+                            } else if self.nozzle_physically_up() {
                                 self.touch();
                                 FrameEffect::StatusChanged
                             } else {
@@ -2163,13 +2194,13 @@ impl RuntimeFp {
                                 FpStatus::Authorizing | FpStatus::Delivering
                             )
                         {
-                            // CONFIG can make Wayne echo a zero-volume embedded holster
-                            // before the customer has lifted.  Once a real session exists,
-                            // the same wire shape means "lifted then returned with no fuel";
-                            // record HH first so stale lift state cannot keep Authorizing alive.
+                            // CONFIG can make Wayne echo a zero-volume embedded holster right
+                            // after CONFIG, before the customer has done anything.  Inside the
+                            // post-CONFIG grace window treat it as that echo and keep the lane
+                            // armed; outside it (or after fuel) the same shape is a real holster.
                             if (self.preauth_config_on_wire || self.pending_authorize_config_repeat)
                                 && self.state.status == FpStatus::Authorizing
-                                && self.current_tx.is_none()
+                                && self.within_config_echo_grace()
                             {
                                 self.touch();
                                 return FrameEffect::StatusChanged;
@@ -3558,6 +3589,108 @@ mod tests {
             seq: 0x33,
         };
         let _ = rt.apply_frame(&holster, &fp_cfg, &site, None, None);
+        assert_ne!(rt.state.status, FpStatus::Authorizing);
+    }
+
+    /// Build an armed Authorizing lane (authorize-nozzle-already-up) with a stale lift code, so the
+    /// old logic would have cancelled on a holster frame.
+    fn armed_authorizing_lane(site: &SiteConfig, fp_cfg: &FuelingPositionConfig) -> RuntimeFp {
+        let mut rt = RuntimeFp::new(fp_cfg, site);
+        rt.state.status = FpStatus::Authorizing;
+        rt.state.nozzle_index = Some(2);
+        rt.current_tx = Some(CurrentTx {
+            id: "tx-echo".into(),
+            started_at: Utc::now().timestamp_millis(),
+            product_id: 3,
+            product_name: "AI-92".into(),
+            nozzle_index: 2,
+        });
+        rt.last_wire_hose_at_ms = 0; // stale → nozzle_physically_up() == false
+        rt
+    }
+
+    #[test]
+    fn config_echo_standalone_holster_within_grace_keeps_authorizing() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = armed_authorizing_lane(&site, &fp_cfg);
+        rt.mark_preauth_config_on_wire(); // config_on_wire_at = now → within grace
+        assert!(!rt.nozzle_physically_up());
+
+        // Pump's post-CONFIG holster echo (01 01 02), zero volume.
+        let echo = Frame::NozzleHolstered {
+            addr: 0x53,
+            seq: 0x39,
+        };
+        let effect = rt.apply_frame(&echo, &fp_cfg, &site, None, None);
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert_eq!(
+            rt.state.status,
+            FpStatus::Authorizing,
+            "post-CONFIG echo must not de-authorize the lane"
+        );
+    }
+
+    #[test]
+    fn config_echo_embedded_holster_within_grace_keeps_authorizing() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = armed_authorizing_lane(&site, &fp_cfg);
+        rt.mark_preauth_config_on_wire();
+
+        // Zero-volume Data frame carrying an embedded holster tail (03 04 01 10 00 02).
+        let frame = Frame::Data {
+            addr: 0x53,
+            seq: 0x31,
+            volume_x1: 0,
+            volume_x2: 0,
+            volume_l: 0,
+            volume_h: 0,
+            amount: [0, 0, 0, 0],
+            sale_complete: false,
+            hose_product: Some(0x10),
+            hose_code: Some(0x02),
+        };
+        let effect = rt.apply_frame(&frame, &fp_cfg, &site, None, None);
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert_eq!(rt.state.status, FpStatus::Authorizing);
+    }
+
+    #[test]
+    fn config_echo_standalone_nozzle_returned_within_grace_keeps_authorizing() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = armed_authorizing_lane(&site, &fp_cfg);
+        rt.mark_preauth_config_on_wire();
+
+        // Pump echoes the holster as a standalone NozzleReturned (03 04 01 10 00 02).
+        let echo = Frame::NozzleReturned {
+            addr: 0x53,
+            seq: 0x39,
+            product: 0x10,
+            hose: 0x02,
+        };
+        let effect = rt.apply_frame(&echo, &fp_cfg, &site, None, None);
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert_eq!(rt.state.status, FpStatus::Authorizing);
+    }
+
+    #[test]
+    fn holster_after_config_echo_grace_still_cancels() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = armed_authorizing_lane(&site, &fp_cfg);
+        // CONFIG went on the wire >3 s ago → grace window has expired.
+        rt.config_on_wire_at = Some(Utc::now().timestamp_millis() - 5_000);
+        rt.preauth_config_on_wire = true;
+        assert!(!rt.within_config_echo_grace());
+
+        let holster = Frame::NozzleHolstered {
+            addr: 0x53,
+            seq: 0x39,
+        };
+        let effect = rt.apply_frame(&holster, &fp_cfg, &site, None, None);
+        assert!(matches!(effect, FrameEffect::CompleteGhostFill));
         assert_ne!(rt.state.status, FpStatus::Authorizing);
     }
 

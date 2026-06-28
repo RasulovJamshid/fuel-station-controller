@@ -2662,6 +2662,11 @@ async fn gbr_close_transaction(
         warn!(?e, byte, "Gilbarco: DB insert failed for transaction");
         return false;
     }
+    // Bump active-shift totals (Wayne does this in FrameEffect::TransactionDone;
+    // the Gilbarco close path must do the same or shift reports stay stale).
+    if let Err(e) = shifts.on_transaction_recorded(&tx).await {
+        warn!(?e, byte, "Gilbarco: shift totals update failed");
+    }
     let _ = events.send(WsEvent::Done(tx));
     {
         let mut map = runtimes.write().await;

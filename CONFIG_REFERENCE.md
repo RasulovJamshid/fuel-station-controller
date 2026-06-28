@@ -480,7 +480,7 @@ The service rejects the config at startup if any of these are violated:
   },
   "service": {
     "port": 3001,
-    "log_level": "info",
+    "": "info",
     "log_file": "service.log",
     "db_path": "transactions.db"
   },

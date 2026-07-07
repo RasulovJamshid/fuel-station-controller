@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "ApiToken" ADD COLUMN "rateLimitPerMin" INTEGER NOT NULL DEFAULT 120;

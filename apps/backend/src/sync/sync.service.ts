@@ -102,6 +102,8 @@ export class SyncService {
             },
         });
 
+        await this.setTransactionPresetMetadata(p.id, p);
+
         this.gateway.broadcast('transaction.synced', { stationId, txId: p.id });
 
         if (p.status === 'COMPLETED') {
@@ -112,6 +114,21 @@ export class SyncService {
                 startedAt: p.started_at, completedAt: p.completed_at,
                 operatorName: p.operator_name ?? null,
             }).catch(() => {});
+        }
+    }
+
+    private async setTransactionPresetMetadata(txId: string, p: any) {
+        if (p.preset_type == null && p.preset_value == null && p.preset_label == null) return;
+        try {
+            await this.prisma.$executeRaw`
+                UPDATE "Transaction"
+                SET "presetType" = ${p.preset_type ?? null},
+                    "presetValue" = ${p.preset_value ?? null},
+                    "presetLabel" = ${p.preset_label ?? null}
+                WHERE "id" = ${txId}
+            `;
+        } catch (e) {
+            this.logger.warn(`Transaction preset metadata update skipped for ${txId}: ${e}`);
         }
     }
 

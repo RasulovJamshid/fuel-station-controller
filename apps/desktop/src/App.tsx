@@ -486,12 +486,21 @@ export default function App() {
       if (focused?.closest("[data-dispenser-focusable]")) return;
       // Inside any dialog — don't interfere.
       if (focused?.closest("[role='dialog']")) return;
-      // Focus is on a real interactive element outside the dispenser grid — don't steal.
-      if (focused && focused !== document.body &&
-        ["BUTTON", "INPUT", "TEXTAREA", "SELECT", "A"].includes(focused.tagName)) return;
-
       const isArrow = e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight";
       const isActivate = e.key === "Enter" || e.key === " ";
+      const isTextEditing =
+        focused &&
+        focused !== document.body &&
+        (["INPUT", "TEXTAREA", "SELECT"].includes(focused.tagName) || focused.isContentEditable);
+      if (isTextEditing) return;
+      // Keep Enter/Space native for focused buttons/links outside the dispenser grid,
+      // but let arrows recover dispenser navigation after app/window focus changes.
+      if (
+        isActivate &&
+        focused &&
+        focused !== document.body &&
+        ["BUTTON", "A"].includes(focused.tagName)
+      ) return;
 
       if (isArrow) {
         e.preventDefault();
@@ -828,6 +837,7 @@ export default function App() {
                       setWorkspaceTab("dispensers");
                     }}
                     onSessionExpired={() => {
+                      setInvokeError(null);
                       setAdminToken(null);
                       setAdminTokenState(null);
                       setAdminPinOpen(true);
@@ -848,6 +858,7 @@ export default function App() {
         open={adminPinOpen}
         forceChange={mustChangePin}
         onSuccess={(token, must) => {
+          setInvokeError(null);
           setAdminToken(token);
           setAdminTokenState(token);
           setMustChangePin(must);

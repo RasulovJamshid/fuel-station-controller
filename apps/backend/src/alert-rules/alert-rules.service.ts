@@ -4,12 +4,16 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
 
 export class CreateAlertRuleDto {
-    @ApiPropertyOptional() @IsOptional() @IsString() stationId?: string;
-    @ApiProperty({ enum: ['tank_low', 'dispenser_offline', 'station_offline', 'sync_lag'] })
+    @ApiPropertyOptional({ description: 'Station to scope the rule to; omit for a company-wide rule', example: 'stn_abc123' })
+    @IsOptional() @IsString() stationId?: string;
+    @ApiProperty({ description: 'Type of condition that triggers the alert', enum: ['tank_low', 'dispenser_offline', 'station_offline', 'sync_lag'], example: 'tank_low' })
     @IsString() type: string;
-    @ApiPropertyOptional() @IsOptional() @IsNumber() threshold?: number;
-    @ApiPropertyOptional() @IsOptional() @IsBoolean() notifyTelegram?: boolean;
-    @ApiPropertyOptional() @IsOptional() @IsBoolean() notifyEmail?: boolean;
+    @ApiPropertyOptional({ description: 'Threshold value for the condition (units depend on type)', example: 500 })
+    @IsOptional() @IsNumber() threshold?: number;
+    @ApiPropertyOptional({ description: 'Send a Telegram notification when triggered (defaults to true)', example: true })
+    @IsOptional() @IsBoolean() notifyTelegram?: boolean;
+    @ApiPropertyOptional({ description: 'Send an email notification when triggered (defaults to false)', example: false })
+    @IsOptional() @IsBoolean() notifyEmail?: boolean;
 }
 
 @Injectable()

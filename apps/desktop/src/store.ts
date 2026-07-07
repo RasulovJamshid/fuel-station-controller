@@ -8,7 +8,7 @@ import {
   mergeIncomingFpState,
   mergeIncomingFpStates,
 } from "./fpStateMerge";
-import type { AuthMode, FpState, Shift, ShiftMode, SiteSnapshot, WsEvent } from "./types/api";
+import type { AuthMode, FpState, Shift, ShiftMode, SiteSnapshot, Transaction, WsEvent } from "./types/api";
 
 export type DispenserLayout = "modern" | "classic";
 
@@ -27,6 +27,61 @@ function normalizeShiftMode(raw: string | undefined): ShiftMode {
   const m = (raw ?? "manual").toLowerCase();
   if (m === "disabled" || m === "manual" || m === "scheduled") return m;
   return "manual";
+}
+
+function txCountsTowardShift(tx: Transaction): boolean {
+  return tx.status === "COMPLETED" || tx.status === "STOPPED" || (
+    typeof tx.status === "object" &&
+    tx.status !== null &&
+    "CONTINUED_FROM" in tx.status
+  );
+}
+
+function applyTxToCurrentShift(shift: Shift | null, tx: Transaction): Shift | null {
+  if (!shift || tx.shift_id !== shift.id || !txCountsTowardShift(tx)) return shift;
+
+  const isContinuation =
+    typeof tx.status === "object" &&
+    tx.status !== null &&
+    "CONTINUED_FROM" in tx.status;
+  const volume = isContinuation
+    ? tx.volume
+    : (tx.combined_volume ?? 0) > 0
+      ? tx.combined_volume!
+      : tx.volume;
+  const amount = isContinuation
+    ? tx.amount
+    : (tx.combined_amount ?? 0) > 0
+      ? tx.combined_amount!
+      : tx.amount;
+  const positionTotals = [...shift.position_totals];
+  const i = positionTotals.findIndex((pt) => pt.fp_id === tx.fp_id);
+  const txCountDelta = isContinuation ? 0 : 1;
+
+  if (i >= 0) {
+    positionTotals[i] = {
+      ...positionTotals[i],
+      transactions_count: positionTotals[i].transactions_count + txCountDelta,
+      total_volume: positionTotals[i].total_volume + volume,
+      total_amount: positionTotals[i].total_amount + amount,
+    };
+  } else {
+    positionTotals.push({
+      fp_id: tx.fp_id,
+      label: tx.label,
+      transactions_count: txCountDelta,
+      total_volume: volume,
+      total_amount: amount,
+    });
+  }
+
+  return {
+    ...shift,
+    total_transactions: shift.total_transactions + txCountDelta,
+    total_volume: shift.total_volume + volume,
+    total_amount: shift.total_amount + amount,
+    position_totals: positionTotals,
+  };
 }
 
 interface AppState {
@@ -314,6 +369,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           },
           lastSaleOutcome: { ...get().lastSaleOutcome, [tx.fp_id]: outcome },
           lastSale: { ...get().lastSale, [tx.fp_id]: { volume: combinedVol, amount: combinedAmt } },
+          currentShift: applyTxToCurrentShift(get().currentShift, tx),
         });
       }
       return;

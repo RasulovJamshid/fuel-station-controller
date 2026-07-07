@@ -168,6 +168,13 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
 
     let shifts = Arc::new(ShiftCoordinator::new(pool.clone(), cfg_for_shifts.clone()));
     shifts.restore().await?;
+    // Recover shifts closed locally whose CLOSED state never reached the backend (so they are
+    // stuck ACTIVE on the server admin). Idempotent + self-limiting; drains via the sync worker.
+    match db::shift_queries::backfill_unsynced_closed_shifts(&pool).await {
+        Ok(n) if n > 0 => tracing::info!(count = n, "re-enqueued unsynced CLOSED shift(s) for backend sync"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(%e, "backfill of unsynced closed shifts failed"),
+    }
     spawn_warning_task(shifts.clone(), events_tx.clone());
     spawn_preauth_timeout_task(
         cfg_for_shifts.clone(),

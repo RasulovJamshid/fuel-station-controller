@@ -165,6 +165,9 @@ export interface Transaction {
   nozzle_index: number;
   product_id: number;
   product_name: string;
+  preset_type?: "full" | "volume" | "amount" | string | null;
+  preset_value?: number | null;
+  preset_label?: string | null;
   status: TxStatus;
   shift_id?: string | null;
   operator_name?: string | null;

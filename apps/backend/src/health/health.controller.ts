@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiOkResponse, ApiServiceUnavailableResponse } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { HealthCheck, HealthCheckService, MemoryHealthIndicator } from '@nestjs/terminus';
 import Redis from 'ioredis';
@@ -19,12 +19,17 @@ export class HealthController {
     ) {}
 
     @Get()
+    @ApiOperation({ summary: 'Readiness probe alias checking database, Redis and heap memory' })
+    @ApiOkResponse({ description: 'All dependencies are healthy' })
+    @ApiServiceUnavailableResponse({ description: 'One or more dependencies are unhealthy' })
     @Public()
     check() {
         return this.ready();
     }
 
     @Get('live')
+    @ApiOperation({ summary: 'Liveness probe reporting process uptime and start time' })
+    @ApiOkResponse({ description: 'Process is alive; returns uptime and start timestamp' })
     @Public()
     live() {
         return {
@@ -35,6 +40,9 @@ export class HealthController {
     }
 
     @Get('ready')
+    @ApiOperation({ summary: 'Readiness probe checking database, Redis and heap memory' })
+    @ApiOkResponse({ description: 'All dependencies are healthy' })
+    @ApiServiceUnavailableResponse({ description: 'One or more dependencies are unhealthy' })
     @Public()
     @HealthCheck()
     async ready() {
@@ -61,6 +69,8 @@ export class HealthController {
     }
 
     @Get('metrics')
+    @ApiOperation({ summary: 'Report process and memory usage metrics' })
+    @ApiOkResponse({ description: 'Current process info and memory usage snapshot' })
     @Public()
     metrics() {
         const memory = process.memoryUsage();

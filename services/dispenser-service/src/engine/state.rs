@@ -1,7 +1,9 @@
 use chrono::Utc;
 use site_config::{FuelingPositionConfig, SiteConfig};
 use std::collections::HashMap;
-use types::{preset_label, FpState, FpStatus, Preset, StopSource, Transaction, TxStatus};
+use types::{
+    preset_label, preset_metadata, FpState, FpStatus, Preset, StopSource, Transaction, TxStatus,
+};
 use uuid::Uuid;
 use wayne_europump::{decode_amount, decode_volume, Frame};
 
@@ -23,6 +25,10 @@ const STARTUP_GHOST_MIN_AGE_MS: i64 = 15_000;
 /// Within this window a zero-volume holster is treated as that echo and ignored, not as a real
 /// customer holster — otherwise the pump gets de-authorized ~0.5 s after being armed.
 const CONFIG_ECHO_GRACE_MS: i64 = 3_000;
+/// A stopped lane whose counter advances more than this past the stopped snapshot is
+/// still delivering — the STOP frame was likely lost on the wire; re-send it once.
+/// Large enough that normal post-stop deceleration dribble never triggers it.
+const STOP_REFLOW_RESEND_DELTA_L: f64 = 0.15;
 
 #[derive(Debug, Clone)]
 pub struct StoppedContext {
@@ -134,6 +140,10 @@ pub struct RuntimeFp {
     pub startup_ghost_last_meter: Option<(f64, u64)>,
     /// Consecutive tiny startup Data frames with the same counter.
     pub startup_ghost_frozen_count: u8,
+
+    /// One-shot guard: STOP was already re-sent after the counter kept advancing past
+    /// the stopped snapshot (lost stop frame). Reset when a new stop episode begins.
+    pub stop_reflow_resent: bool,
 }
 
 /// Hose lift notifications older than this are ignored for "still up" guards.
@@ -197,6 +207,7 @@ impl RuntimeFp {
             decel_pending_stop_source: StopSource::App,
             startup_ghost_last_meter: None,
             startup_ghost_frozen_count: 0,
+            stop_reflow_resent: false,
             state: FpState {
                 fp_id: fp.id.clone(),
                 label: fp.label.clone(),
@@ -553,6 +564,7 @@ impl RuntimeFp {
         stop_source: StopSource,
     ) -> FrameEffect {
         self.clear_deliver_caps();
+        self.stop_reflow_resent = false;
         // Capture whether the nozzle is up *before* apply_stopped_display overwrites the status.
         // A stop that interrupts a fill always has the nozzle in the tank; the pump may then poll
         // idle before the customer holsters, so we must keep showing STOPPED until the real holster.
@@ -755,6 +767,7 @@ impl RuntimeFp {
         self.clear_unauthorized_state();
         self.pending_holster_close = false;
         self.pump_sale_complete = false;
+        self.stop_reflow_resent = false;
         self.state.status = FpStatus::Idle;
         self.state.stop_source = None;
         self.state.pre_auth_preset = None;
@@ -1409,6 +1422,7 @@ impl RuntimeFp {
                 )
             };
         let status = TxStatus::resolve(vol, completed_normally);
+        let (preset_type, preset_value, preset_label) = preset_metadata(&self.last_preset);
         self.reset_to_idle();
         Transaction {
             id: tx_id,
@@ -1423,6 +1437,9 @@ impl RuntimeFp {
             nozzle_index,
             product_id,
             product_name,
+            preset_type,
+            preset_value,
+            preset_label,
             status,
             shift_id: active_shift_id,
             operator_name: active_operator_name,
@@ -2134,12 +2151,15 @@ impl RuntimeFp {
                 sale_complete,
                 hose_product,
                 hose_code,
+                crc_ok,
             } if *addr == b => {
                 self.state.seq = *seq;
                 let raw_vol = decode_volume(*volume_x1, *volume_x2, *volume_l, *volume_h);
                 let raw_amt = decode_amount(amount[0], amount[1], amount[2], amount[3]);
 
-                if let (Some(_pp), Some(hh)) = (hose_product, hose_code) {
+                // Unverified (CRC-failed) frames may update the live display below, but
+                // their hose bytes are untrusted — never interpret them as holster/lift.
+                if let (true, Some(_pp), Some(hh)) = (*crc_ok, hose_product, hose_code) {
                     if Frame::is_nozzle_holster_code(*hh)
                         && self.embedded_holster_is_customer_event()
                     {
@@ -2260,7 +2280,8 @@ impl RuntimeFp {
                 }
 
                 if self.state.status == FpStatus::PreAuthorized {
-                    if let (Some(_pp), Some(hh)) = (hose_product, hose_code) {
+                    // Untrusted hose bytes must not confirm or mismatch-cancel a pre-auth.
+                    if let (true, Some(_pp), Some(hh)) = (*crc_ok, hose_product, hose_code) {
                         if Frame::is_nozzle_lift_code(*hh) {
                             if let Some(effect) = self.check_preauth_nozzle(*_pp, *hh, fp_cfg, site)
                             {
@@ -2308,6 +2329,13 @@ impl RuntimeFp {
                         let lifted_nozzle = self.state.nozzle_index;
 
                         if !self.owns_meter_data() {
+                            // A lane that owns no authorization acts only on verified frames:
+                            // never auto-create a sale, complete a ghost fill, or raise the
+                            // unauthorized-delivery alarm from a CRC-failed frame.
+                            if !*crc_ok {
+                                self.touch();
+                                return FrameEffect::StatusChanged;
+                            }
                             if matches!(self.state.status, FpStatus::Idle | FpStatus::Offline)
                                 && !self.ghost_recovery_active()
                                 && !*sale_complete
@@ -2373,6 +2401,17 @@ impl RuntimeFp {
                         // command is sent, before it physically halts.  Don't revert STOPPED
                         // back to DELIVERING — the operator must choose Resume/Continue/Close.
                         if self.state.status.is_stopped() {
+                            // STOP is otherwise fire-and-forget: a counter advancing well past
+                            // the stopped snapshot means the stop frame was likely lost on the
+                            // wire.  Ask the poll loop to re-send it, once per stop episode.
+                            if *crc_ok
+                                && !self.stop_reflow_resent
+                                && raw_vol > self.state.volume + STOP_REFLOW_RESEND_DELTA_L
+                            {
+                                self.stop_reflow_resent = true;
+                                self.touch();
+                                return FrameEffect::ResendStop;
+                            }
                             self.touch();
                             return FrameEffect::StatusChanged;
                         }
@@ -2423,6 +2462,11 @@ impl RuntimeFp {
                 // Decel window: STOP was sent but we deferred the commit to watch what
                 // the pump does.  FpStatus stays Delivering so BUSY keeps flowing.
                 if self.in_decel_window() {
+                    // An unverified frame must not advance or freeze the decel decision.
+                    if !*crc_ok {
+                        self.touch();
+                        return FrameEffect::StatusChanged;
+                    }
                     if *sale_complete {
                         // Device closed the transaction — commit to STOPPED now.
                         let preset = self
@@ -2494,7 +2538,7 @@ impl RuntimeFp {
                             });
                         }
                     }
-                } else if self.state.status == FpStatus::Delivering {
+                } else if self.state.status == FpStatus::Delivering && *crc_ok {
                     let hit_v = self
                         .cap_volume_liters
                         .map_or(false, |cap| vol + 1e-6 >= cap);
@@ -2703,6 +2747,7 @@ impl RuntimeFp {
         if combined_volume > 0.01 && !matches!(status, TxStatus::Stopped) {
             self.completed_sale = Some(CompletedSaleLatch);
         }
+        let (preset_type, preset_value, preset_label) = preset_metadata(&self.last_preset);
         Transaction {
             id,
             fp_id: self.state.fp_id.clone(),
@@ -2716,6 +2761,9 @@ impl RuntimeFp {
             nozzle_index,
             product_id,
             product_name,
+            preset_type,
+            preset_value,
+            preset_label,
             status,
             shift_id: active_shift_id,
             operator_name: active_operator_name,
@@ -2934,6 +2982,9 @@ pub enum FrameEffect {
     /// Send one CONFIG frame. First zero-volume Data sends the first copy; the repeat is sent
     /// after a later poll response so the pump gets the same gap seen in the sniffer.
     SendAuthorizeConfig,
+    /// Counter kept advancing after the lane was STOPPED — the stop frame was likely lost
+    /// on the wire. Poll loop must re-send the full stop sequence (once per stop episode).
+    ResendStop,
 }
 
 /// Result of `apply_preauthorize_sent`, consumed by the poll loop's `Preauthorize` handler.
@@ -3212,6 +3263,7 @@ mod tests {
             sale_complete: false,
             hose_product: Some(0x10),
             hose_code: Some(0x02),
+            crc_ok: true,
         };
 
         let effect = rt.apply_frame(&frame, &fp_cfg, &site, None, None);
@@ -3256,6 +3308,7 @@ mod tests {
             sale_complete: false,
             hose_product: Some(0x10),
             hose_code: Some(0x12),
+            crc_ok: true,
         };
 
         for _ in 1..STARTUP_GHOST_FROZEN_FRAME_THRESHOLD {
@@ -3315,6 +3368,7 @@ mod tests {
             sale_complete: false,
             hose_product: Some(0x10),
             hose_code: Some(0x12),
+            crc_ok: true,
         };
 
         for _ in 0..STARTUP_GHOST_FROZEN_FRAME_THRESHOLD {
@@ -3371,6 +3425,7 @@ mod tests {
             sale_complete: false,
             hose_product: Some(0x11),
             hose_code: Some(0x13),
+            crc_ok: true,
         };
         let effect = rt.apply_frame(&stale_wrong_nozzle_data, &fp_cfg, &site, None, None);
 
@@ -3409,6 +3464,7 @@ mod tests {
             sale_complete: false,
             hose_product: Some(0x10),
             hose_code: Some(0x12),
+            crc_ok: true,
         };
         let effect = rt.apply_frame(&armed_delivery, &fp_cfg, &site, None, None);
 
@@ -3437,11 +3493,108 @@ mod tests {
             sale_complete: false,
             hose_product: None,
             hose_code: None,
+            crc_ok: true,
         };
         let effect = rt.apply_frame(&bare, &fp_cfg, &site, None, None);
 
         assert!(matches!(effect, FrameEffect::UnauthorizedDelivery { .. }));
         assert_ne!(rt.state.status, FpStatus::Delivering);
+    }
+
+    #[test]
+    fn unverified_meter_frame_on_idle_lane_never_alarms_or_creates_sale() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+        rt.state.status = FpStatus::Idle;
+
+        // Same shape as the unauthorized-delivery case, but the frame failed CRC —
+        // corrupted bytes must not STOP the pump, alert the operator, or start a sale.
+        let unverified = Frame::Data {
+            addr: 0x53,
+            seq: 0x31,
+            volume_x1: 0x00,
+            volume_x2: 0x00,
+            volume_l: 0x02,
+            volume_h: 0x00,
+            amount: [0x00, 0x00, 0x22, 0x00],
+            sale_complete: false,
+            hose_product: Some(0x10),
+            hose_code: Some(0x12),
+            crc_ok: false,
+        };
+        let effect = rt.apply_frame(&unverified, &fp_cfg, &site, None, None);
+
+        assert!(matches!(effect, FrameEffect::StatusChanged));
+        assert_eq!(rt.state.status, FpStatus::Idle);
+        assert!(rt.current_tx.is_none());
+        assert!(!rt.unauthorized_alerted);
+    }
+
+    fn stopped_lane_meter_frame(volume_l: u8, volume_h: u8, crc_ok: bool) -> Frame {
+        Frame::Data {
+            addr: 0x53,
+            seq: 0x31,
+            volume_x1: 0x00,
+            volume_x2: 0x00,
+            volume_l,
+            volume_h,
+            amount: [0x00, 0x00, 0x55, 0x00],
+            sale_complete: false,
+            hose_product: None,
+            hose_code: None,
+            crc_ok,
+        }
+    }
+
+    #[test]
+    fn stopped_lane_reflow_resends_stop_once() {
+        let site = sample_site_two_nozzles();
+        let fp_cfg = site.fueling_positions[0].clone();
+        let mut rt = RuntimeFp::new(&fp_cfg, &site);
+        rt.state.status = FpStatus::Stopped {
+            stopped_volume: 5.0,
+            stopped_amount: 55_000,
+            stopped_tx_id: "tx1".into(),
+            stop_source: StopSource::App,
+        };
+        rt.state.volume = 5.0;
+        rt.state.amount = 55_000;
+        rt.auth_session_started_at = Some(Utc::now().timestamp_millis());
+
+        // Post-stop deceleration dribble (5.05 L) stays within the tolerance — no resend.
+        let dribble = stopped_lane_meter_frame(0x05, 0x05, true);
+        assert!(matches!(
+            rt.apply_frame(&dribble, &fp_cfg, &site, None, None),
+            FrameEffect::StatusChanged
+        ));
+        assert!(!rt.stop_reflow_resent);
+
+        // An unverified frame showing a big jump must not trigger the resend either.
+        let corrupt = stopped_lane_meter_frame(0x07, 0x50, false);
+        assert!(matches!(
+            rt.apply_frame(&corrupt, &fp_cfg, &site, None, None),
+            FrameEffect::StatusChanged
+        ));
+        assert!(!rt.stop_reflow_resent);
+
+        // Verified counter well past the stopped snapshot (5.20 L) → re-send STOP once.
+        let reflow = stopped_lane_meter_frame(0x05, 0x20, true);
+        assert!(matches!(
+            rt.apply_frame(&reflow, &fp_cfg, &site, None, None),
+            FrameEffect::ResendStop
+        ));
+        assert!(rt.stop_reflow_resent);
+
+        // Further advancing frames stay quiet — one resend per stop episode.
+        let reflow2 = stopped_lane_meter_frame(0x05, 0x40, true);
+        assert!(matches!(
+            rt.apply_frame(&reflow2, &fp_cfg, &site, None, None),
+            FrameEffect::StatusChanged
+        ));
+
+        // The lane stays STOPPED throughout — never reverted to Delivering.
+        assert!(rt.state.status.is_stopped());
     }
 
     #[test]
@@ -3650,6 +3803,7 @@ mod tests {
             sale_complete: false,
             hose_product: Some(0x10),
             hose_code: Some(0x02),
+            crc_ok: true,
         };
         let effect = rt.apply_frame(&frame, &fp_cfg, &site, None, None);
         assert!(matches!(effect, FrameEffect::StatusChanged));
@@ -3843,6 +3997,7 @@ mod tests {
             // Deliberately misleading wire hose/product. The active authorization must win.
             hose_product: Some(0x11),
             hose_code: Some(0x13),
+            crc_ok: true,
         };
         let effect = rt.apply_frame(&data, &fp_cfg, &site, None, None);
 
@@ -3889,6 +4044,7 @@ mod tests {
             sale_complete: true,
             hose_product: Some(0x10),
             hose_code: Some(0x12),
+            crc_ok: true,
         };
         let effect = rt.apply_frame(&stale_data, &fp_cfg, &site, None, None);
 
@@ -3931,6 +4087,7 @@ mod tests {
             sale_complete: false,
             hose_product: Some(0x11),
             hose_code: Some(0x13),
+            crc_ok: true,
         };
         let effect = rt.apply_frame(&live_data, &fp_cfg, &site, None, None);
 
@@ -3996,6 +4153,7 @@ mod tests {
             sale_complete: false,
             hose_product: Some(0x11),
             hose_code: Some(0x13),
+            crc_ok: true,
         };
         let effect = rt.apply_frame(&data, &fp_cfg, &site, None, None);
 

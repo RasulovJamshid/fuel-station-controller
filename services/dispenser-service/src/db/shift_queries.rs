@@ -263,13 +263,62 @@ pub async fn bump_shift_totals(
 }
 
 pub async fn close_all_active_shifts(pool: &SqlitePool, ended_at: i64) -> Result<u64> {
+    // Capture the ids first so we can enqueue each closed shift for sync after the
+    // bulk update — otherwise these closes never reach the backend and the shifts
+    // stay ACTIVE on the server admin (unlike the single-shift `close_shift` path).
+    let ids: Vec<String> = sqlx::query_scalar(
+        r#"SELECT id FROM shifts WHERE status = 'ACTIVE' AND ended_at IS NULL"#,
+    )
+    .fetch_all(pool)
+    .await?;
+
     let r = sqlx::query(
         r#"UPDATE shifts SET ended_at = ?, status = 'CLOSED' WHERE status = 'ACTIVE' AND ended_at IS NULL"#,
     )
     .bind(ended_at)
     .execute(pool)
     .await?;
+
+    // Re-fetch and enqueue each closed shift so the backend gets the final CLOSED state.
+    for id in &ids {
+        if let Ok(Some(shift)) = get_shift(pool, id).await {
+            enqueue_shift(pool, &shift).await;
+        }
+    }
+
     Ok(r.rows_affected())
+}
+
+/// Re-enqueue every shift that is CLOSED locally but has no confirmed-synced CLOSED sync
+/// record, so the backend receives the final state and flips the shift off "ACTIVE".
+///
+/// One-time, self-healing recovery for shifts that were closed while the enqueue was missing
+/// (or whose CLOSED record exhausted its retries): the `enqueue` upsert resets
+/// `synced_at`/`retries`, so this revives both cases. Idempotent and self-limiting — once a
+/// shift's CLOSED record actually syncs, the `NOT EXISTS` clause excludes it on later runs.
+/// Touches only the sync queue and shift reads; no protocol/poll-loop interaction.
+pub async fn backfill_unsynced_closed_shifts(pool: &SqlitePool) -> Result<u64> {
+    let ids: Vec<String> = sqlx::query_scalar(
+        r#"SELECT s.id FROM shifts s
+           WHERE s.status = 'CLOSED'
+             AND NOT EXISTS (
+                 SELECT 1 FROM sync_queue q
+                 WHERE q.entity_id = s.id AND q.entity_type = 'shift'
+                   AND q.synced_at IS NOT NULL
+                   AND q.payload_json LIKE '%"status":"CLOSED"%'
+             )"#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut enqueued = 0u64;
+    for id in &ids {
+        if let Ok(Some(shift)) = get_shift(pool, id).await {
+            enqueue_shift(pool, &shift).await;
+            enqueued += 1;
+        }
+    }
+    Ok(enqueued)
 }
 
 /// Start shift row (business rules live in `shifts::ShiftCoordinator`).
@@ -493,4 +542,127 @@ pub fn validate_handover(cmd: &HandoverCmd) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn memory_pool() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite pool");
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("run migrations");
+        pool
+    }
+
+    fn active_shift(id: &str) -> Shift {
+        Shift {
+            id: id.to_string(),
+            operator_id: None,
+            operator_name: "op".to_string(),
+            shift_name: None,
+            scheduled_start: None,
+            scheduled_end: None,
+            started_at: 1_000,
+            ended_at: None,
+            total_transactions: 0,
+            total_volume: 0.0,
+            total_amount: 0,
+            status: ShiftStatus::Active,
+            notes: None,
+            position_totals: Vec::new(),
+        }
+    }
+
+    /// Regression: the bulk close-on-restart path must enqueue a CLOSED sync record
+    /// for every shift it closes, so the backend admin flips them to CLOSED instead
+    /// of leaving them stuck ACTIVE.
+    #[tokio::test]
+    async fn close_all_active_shifts_enqueues_closed_records() {
+        let pool = memory_pool().await;
+        insert_shift(&pool, &active_shift("shift-a")).await.unwrap();
+        insert_shift(&pool, &active_shift("shift-b")).await.unwrap();
+
+        let closed = close_all_active_shifts(&pool, 2_000).await.unwrap();
+        assert_eq!(closed, 2, "both active shifts should be closed");
+
+        // Local rows are CLOSED.
+        for id in ["shift-a", "shift-b"] {
+            let s = get_shift(&pool, id).await.unwrap().expect("shift exists");
+            assert_eq!(s.status, ShiftStatus::Closed);
+            assert_eq!(s.ended_at, Some(2_000));
+        }
+
+        // A CLOSED-payload sync row exists for each closed shift.
+        for id in ["shift-a", "shift-b"] {
+            let n: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM sync_queue
+                   WHERE entity_type = 'shift' AND entity_id = ?
+                     AND payload_json LIKE '%"status":"CLOSED"%'"#,
+            )
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(n, 1, "expected one CLOSED sync record for {id}");
+        }
+    }
+
+    async fn closed_sync_rows(pool: &SqlitePool, id: &str) -> i64 {
+        sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM sync_queue
+               WHERE entity_type = 'shift' AND entity_id = ?
+                 AND payload_json LIKE '%"status":"CLOSED"%'"#,
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    /// Recovery: backfill re-enqueues locally-CLOSED shifts that lack a synced CLOSED record,
+    /// skips ones already synced, and leaves ACTIVE shifts alone.
+    #[tokio::test]
+    async fn backfill_recovers_only_unsynced_closed_shifts() {
+        let pool = memory_pool().await;
+
+        // stuck: closed locally, but no CLOSED sync record exists (H1 shape).
+        insert_shift(&pool, &active_shift("stuck")).await.unwrap();
+        close_shift(&pool, "stuck", 2_000, None).await.unwrap();
+        // Simulate "never enqueued": drop the CLOSED sync row close_shift just created.
+        sqlx::query(r#"DELETE FROM sync_queue WHERE payload_json LIKE '%"status":"CLOSED"%'"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(closed_sync_rows(&pool, "stuck").await, 0);
+
+        // already-synced: closed with a CLOSED sync row marked synced_at.
+        insert_shift(&pool, &active_shift("done")).await.unwrap();
+        close_shift(&pool, "done", 2_000, None).await.unwrap();
+        sqlx::query(
+            r#"UPDATE sync_queue SET synced_at = 9999
+               WHERE entity_id = 'done' AND payload_json LIKE '%"status":"CLOSED"%'"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // still active: must be ignored.
+        insert_shift(&pool, &active_shift("live")).await.unwrap();
+
+        let n = backfill_unsynced_closed_shifts(&pool).await.unwrap();
+        assert_eq!(n, 1, "only the stuck shift should be re-enqueued");
+
+        assert_eq!(closed_sync_rows(&pool, "stuck").await, 1, "stuck now has a CLOSED sync row");
+        // 'done' keeps exactly its one (already-synced) row — not duplicated.
+        assert_eq!(closed_sync_rows(&pool, "done").await, 1);
+        assert_eq!(closed_sync_rows(&pool, "live").await, 0, "active shift untouched");
+    }
 }

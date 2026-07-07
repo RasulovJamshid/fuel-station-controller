@@ -27,6 +27,10 @@ pub enum Frame {
         /// Trailing `03 04 01 PP 00 HH` hose status when present in composite frames.
         hose_product: Option<u8>,
         hose_code: Option<u8>,
+        /// False when the frame failed CRC and was only accepted structurally.
+        /// Unverified frames may update the live display but must never close a
+        /// sale, trigger a preset cap, or raise an unauthorized-delivery alarm.
+        crc_ok: bool,
     },
     /// Nozzle lifted (`03 04 01 PP 00 HH` with HH ≠ 0x02).
     NozzleUp {

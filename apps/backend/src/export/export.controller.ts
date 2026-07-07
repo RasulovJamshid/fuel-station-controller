@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiProduces, ApiOkResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { Response } from 'express';
 import { ExportService, ExportParams } from './export.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -16,6 +16,10 @@ export class ExportController {
     constructor(private exportSvc: ExportService, private prisma: PrismaService) {}
 
     @Get()
+    @ApiOperation({ summary: 'Export transactions or shifts as a downloadable CSV or XLSX file' })
+    @ApiProduces('text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    @ApiOkResponse({ description: 'File download stream' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     async download(
         @CurrentUser() user: any,
         @Query() params: ExportParams,

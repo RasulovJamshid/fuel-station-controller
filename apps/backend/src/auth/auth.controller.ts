@@ -2,7 +2,10 @@ import {
     Controller, Post, Get, Delete, Body, Param,
     UseGuards, Req, HttpCode, HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import {
+    ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse, ApiCreatedResponse,
+    ApiNoContentResponse, ApiBadRequestResponse, ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -17,6 +20,10 @@ export class AuthController {
     constructor(private auth: AuthService) {}
 
     @Post('login')
+    @ApiOperation({ summary: 'Authenticate user and issue access and refresh tokens' })
+    @ApiOkResponse({ description: 'Login succeeded; returns access and refresh tokens' })
+    @ApiBadRequestResponse({ description: 'Validation failed' })
+    @ApiUnauthorizedResponse({ description: 'Invalid credentials, locked account, or invalid TOTP code' })
     @Public()
     @HttpCode(HttpStatus.OK)
     login(@Body() dto: LoginDto, @Req() req: Request) {
@@ -27,6 +34,9 @@ export class AuthController {
     }
 
     @Post('refresh')
+    @ApiOperation({ summary: 'Rotate refresh token and issue a new token pair' })
+    @ApiOkResponse({ description: 'Returns a fresh access and refresh token pair' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid refresh token' })
     @Public()
     @UseGuards(AuthGuard('jwt-refresh'))
     @HttpCode(HttpStatus.OK)
@@ -35,6 +45,9 @@ export class AuthController {
     }
 
     @Post('logout')
+    @ApiOperation({ summary: 'Revoke the current session' })
+    @ApiNoContentResponse({ description: 'Session revoked' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)
@@ -43,6 +56,9 @@ export class AuthController {
     }
 
     @Post('logout-all')
+    @ApiOperation({ summary: 'Revoke all sessions for the current user' })
+    @ApiNoContentResponse({ description: 'All sessions revoked' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)
@@ -51,6 +67,9 @@ export class AuthController {
     }
 
     @Get('sessions')
+    @ApiOperation({ summary: 'List active sessions for the current user' })
+    @ApiOkResponse({ description: 'List of active sessions' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     getSessions(@CurrentUser() user: any) {
@@ -58,6 +77,9 @@ export class AuthController {
     }
 
     @Delete('sessions/:id')
+    @ApiOperation({ summary: 'Revoke a specific session by ID' })
+    @ApiNoContentResponse({ description: 'Session revoked' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)
@@ -66,6 +88,9 @@ export class AuthController {
     }
 
     @Get('me')
+    @ApiOperation({ summary: 'Get the authenticated user profile' })
+    @ApiOkResponse({ description: 'Current user profile' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     me(@CurrentUser() user: any) {
@@ -74,6 +99,10 @@ export class AuthController {
     }
 
     @Post('change-password')
+    @ApiOperation({ summary: 'Change the current user password and revoke all sessions' })
+    @ApiNoContentResponse({ description: 'Password changed; all sessions revoked' })
+    @ApiBadRequestResponse({ description: 'Validation failed' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token, or current password incorrect' })
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)
@@ -82,6 +111,9 @@ export class AuthController {
     }
 
     @Post('setup-2fa')
+    @ApiOperation({ summary: 'Generate a 2FA secret and QR code for authenticator setup' })
+    @ApiCreatedResponse({ description: 'Returns a QR code data URL and the shared secret' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     setup2fa(@CurrentUser() user: any) {
@@ -89,6 +121,10 @@ export class AuthController {
     }
 
     @Post('confirm-2fa')
+    @ApiOperation({ summary: 'Confirm the TOTP code and enable two-factor authentication' })
+    @ApiNoContentResponse({ description: 'Two-factor authentication enabled' })
+    @ApiBadRequestResponse({ description: 'Validation failed' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)
@@ -97,6 +133,10 @@ export class AuthController {
     }
 
     @Delete('disable-2fa')
+    @ApiOperation({ summary: 'Disable two-factor authentication' })
+    @ApiNoContentResponse({ description: 'Two-factor authentication disabled' })
+    @ApiBadRequestResponse({ description: 'Validation failed' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token, or invalid TOTP code' })
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)

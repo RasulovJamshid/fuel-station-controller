@@ -25,6 +25,7 @@ import { PricesModule } from './prices/prices.module';
 import { AlertRulesModule } from './alert-rules/alert-rules.module';
 import { OilBasesModule } from './oil-bases/oil-bases.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { IntegrationApiModule } from './integration-api/integration-api.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 
 @Module({
@@ -62,7 +63,7 @@ import { MaintenanceModule } from './maintenance/maintenance.module';
                     : undefined,
                 level: process.env.NODE_ENV !== 'production' ? 'debug' : process.env.LOG_LEVEL ?? 'info',
                 autoLogging: { ignore: (req) => req.url === '/api/health' },
-                redact: ['req.headers.authorization', 'req.headers["x-api-key"]'],
+                redact: ['req.headers.authorization', 'req.headers["x-api-key"]', 'req.headers["x-api-token"]'],
             },
         }),
 
@@ -94,6 +95,7 @@ import { MaintenanceModule } from './maintenance/maintenance.module';
         AlertRulesModule,
         OilBasesModule,
         IntegrationsModule,
+        IntegrationApiModule,
         MaintenanceModule,
     ],
 })

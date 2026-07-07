@@ -23,6 +23,7 @@ model Company {
   stations     Station[]
   oilBases     OilBase[]
   integrations Integration[]
+  apiTokens    ApiToken[]
 }
 
 // ── Oil Bases (нефтебазы) ──────────────────────────────────────
@@ -64,7 +65,7 @@ model User {
   updatedAt         DateTime  @updatedAt
   deletedAt         DateTime?
 
-  company         Company         @relation(fields: [companyId], references: [id])
+  company         Company           @relation(fields: [companyId], references: [id])
   stationAccess   StationAccess[]
   sessions        Session[]
   auditLogs       AuditLog[]
@@ -194,6 +195,9 @@ model Transaction {
   nozzleIndex    Int
   productId      Int
   productName    String
+  presetType     String?
+  presetValue    Float?
+  presetLabel    String?
   status         TxStatus
   parentTxId     String?
   combinedVolume Float?
@@ -271,7 +275,7 @@ model Reservoir {
   active      Boolean   @default(true)
   deletedAt   DateTime?
 
-  station  Station          @relation(fields: [stationId], references: [id])
+  station  Station            @relation(fields: [stationId], references: [id])
   readings ReservoirReading[]
 
   @@unique([stationId, tankId])
@@ -380,42 +384,72 @@ model AlertRule {
 // ── Integrations (outbound webhooks) ──────────────────────────
 
 model Integration {
-  id          String   @id @default(uuid())
-  companyId   String
-  name        String
-  url         String
-  authType    String   @default("none")  // none | bearer | hmac
-  authSecret  String?
-  events      String[] // transaction.completed | shift.closed | price.changed | health.event | tank.reading
-  active      Boolean  @default(true)
-  retryLimit  Int      @default(3)
-  timeoutMs   Int      @default(5000)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  companyId  String
+  name       String
+  url        String
+  authType   String   @default("none") // none | bearer | hmac
+  authSecret String?
+  events     String[] // transaction.completed | shift.closed | price.changed | health.event | tank.reading
+  active     Boolean  @default(true)
+  retryLimit Int      @default(3)
+  timeoutMs  Int      @default(5000)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  company    Company          @relation(fields: [companyId], references: [id])
+  company    Company           @relation(fields: [companyId], references: [id])
   deliveries WebhookDelivery[]
 }
 
 model WebhookDelivery {
-  id             String      @id @default(uuid())
+  id             String    @id @default(uuid())
   integrationId  String
   eventType      String
   stationId      String?
   payload        Json
-  status         String      @default("pending") // pending | delivered | failed
-  attempts       Int         @default(0)
+  status         String    @default("pending") // pending | delivered | failed
+  attempts       Int       @default(0)
   nextRetryAt    DateTime?
   lastAttemptAt  DateTime?
   responseStatus Int?
   responseBody   String?
   error          String?
-  createdAt      DateTime    @default(now())
+  createdAt      DateTime  @default(now())
 
   integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
 
   @@index([status, nextRetryAt])
   @@index([integrationId, createdAt])
+}
+
+// ── Integration API tokens (inbound read-only access) ─────────
+// Bearer-style tokens external services present (via the X-Api-Token
+// header) to pull data from the read-only /integration/* endpoints.
+// The plaintext token is shown once at creation; only its SHA-256
+// hash is stored. Access is company-scoped and narrowed by scopes
+// plus optional oil-base / station restrictions.
+
+model ApiToken {
+  id              String    @id @default(uuid())
+  companyId       String
+  name            String
+  tokenPrefix     String // public identifier shown in listings, e.g. "azs_live_9f3c2a"
+  tokenHash       String    @unique // SHA-256 hex of the full token
+  scopes          String[] // read:transactions | read:shifts | read:prices | read:stations | read:tank_readings
+  oilBaseIds      String[]  @default([]) // empty = all oil bases in the company
+  stationIds      String[]  @default([]) // empty = all stations within the allowed oil bases
+  ipAllowlist     String[]  @default([]) // empty = any source IP
+  rateLimitPerMin Int       @default(120) // max requests per minute for this token
+  active          Boolean   @default(true)
+  lastUsedAt      DateTime?
+  expiresAt       DateTime?
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  revokedAt       DateTime?
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
 }
 
 // ── Sync deduplication ─────────────────────────────────────────

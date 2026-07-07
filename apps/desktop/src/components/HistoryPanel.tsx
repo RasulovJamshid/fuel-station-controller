@@ -154,6 +154,18 @@ const fmtTime = (ms: number) => {
 const fmtInt = new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 0 });
 const fmtVol = (v: number) => v.toFixed(2);
 
+function presetDisplay(r: Transaction, t: (key: string) => string): string | null {
+  const type = r.preset_type?.toLowerCase();
+  if (type === "full") return t("history.presetFull");
+  if (type === "volume" && typeof r.preset_value === "number") {
+    return `${fmtVol(r.preset_value)} L`;
+  }
+  if (type === "amount" && typeof r.preset_value === "number") {
+    return `${fmtInt.format(Math.round(r.preset_value))} ${t("history.currency")}`;
+  }
+  return r.preset_label ?? null;
+}
+
 // ── date-range helpers ────────────────────────────────────────────────────────
 
 function startOfDay(d: Date) {
@@ -733,7 +745,9 @@ export function HistoryPanel(props: {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-secondary/50 print:divide-gray-200">
-                {processedRows.map((r, i) => (
+                {processedRows.map((r, i) => {
+                  const preset = presetDisplay(r, t);
+                  return (
                   <tr key={r.id} className="hover:bg-bg-tertiary/40 transition-colors print:text-black">
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-semibold tabular-nums text-text-muted print:text-gray-600">
                       {page * PAGE_SIZE + i + 1}
@@ -742,6 +756,11 @@ export function HistoryPanel(props: {
                       <span className={`${productPill(r.product_name)} print:border print:border-gray-300 print:text-black print:bg-transparent`}>
                         {r.product_name}
                       </span>
+                      {preset ? (
+                        <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted print:text-gray-600">
+                          {preset}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold tabular-nums text-text-primary print:text-black">
                       {fmtVol(rowVol(r))}
@@ -769,7 +788,8 @@ export function HistoryPanel(props: {
                       </td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
               <tfoot className="sticky bottom-0 z-[1] border-t border-border-primary bg-bg-secondary/95 text-xs font-bold text-text-primary backdrop-blur-md shadow-[0_-4px_10px_rgba(0,0,0,0.1)] print:bg-transparent print:border-gray-400 print:text-black">
                 <tr>

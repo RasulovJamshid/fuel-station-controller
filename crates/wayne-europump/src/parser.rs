@@ -251,8 +251,9 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
         if !verify_crc(raw) {
             // CRC failed. Some real-world Wayne firmware variants send incorrect CRC bytes
             // on fill-data frames (observed: pump computes different CRC than IBM-16).
-            // For fill-data (02 08 block), meter values are non-critical and do not trigger
-            // irreversible state changes, so we accept structurally valid fill-data frames.
+            // Accept structurally valid fill-data frames for live display only, flagged
+            // `crc_ok: false` with `sale_complete` forced off — an unverified frame must
+            // never close a sale, trigger a preset cap, or raise an unauthorized alarm.
             let inner_fb = &raw[..n - 4];
             if inner_fb.len() >= 2 && (0x31..=0x3F).contains(&inner_fb[1]) {
                 let seq_fb = inner_fb[1];
@@ -265,9 +266,10 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
                         volume_l: data.volume_l,
                         volume_h: data.volume_h,
                         amount: data.amount,
-                        sale_complete: data.sale_complete,
+                        sale_complete: false,
                         hose_product: data.hose_product,
                         hose_code: data.hose_code,
+                        crc_ok: false,
                     };
                 }
             }
@@ -295,6 +297,7 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
                     sale_complete: data.sale_complete,
                     hose_product: data.hose_product,
                     hose_code: data.hose_code,
+                    crc_ok: true,
                 };
             }
             let product = inner[5];
@@ -342,6 +345,7 @@ pub fn parse_frame(raw: &[u8]) -> Frame {
                 sale_complete: data.sale_complete,
                 hose_product: data.hose_product,
                 hose_code: data.hose_code,
+                crc_ok: true,
             };
         }
         // Variant firmware: `03 04 00 PP 00 HH` — NozzleUp without a meter block.
@@ -1041,7 +1045,9 @@ mod tests {
 
     /// Real hardware pump 0x52 sends a composite data frame with wrong CRC bytes.
     /// CRC-16/IBM of the 22-byte payload = 0x00FA, but the pump sends 0x10 0xFA.
-    /// The fill-data structural fallback must accept this as Frame::Data.
+    /// The fill-data structural fallback must accept this as Frame::Data, but flag
+    /// it unverified and never let it carry sale_complete (the payload's `01 01 05`
+    /// tail would otherwise close the sale from a corrupted frame).
     #[test]
     fn crc_fail_data_frame_accepted_via_structural_fallback() {
         let raw = &[
@@ -1057,14 +1063,38 @@ mod tests {
                 volume_l,
                 volume_h,
                 amount,
+                sale_complete,
+                crc_ok,
                 ..
             } => {
                 assert_eq!(addr, 0x52);
                 assert_eq!(seq, 0x33);
                 assert_eq!(decode_volume(volume_x1, volume_x2, volume_l, volume_h), 0.0);
                 assert_eq!(decode_amount(amount[0], amount[1], amount[2], amount[3]), 0);
+                assert!(!crc_ok);
+                assert!(!sale_complete);
             }
             f => panic!("expected Data (CRC-fail fallback), got {:?}", f),
+        }
+    }
+
+    /// A clean-CRC fill frame keeps its sale_complete tail and is marked verified.
+    #[test]
+    fn crc_ok_data_frame_keeps_sale_complete() {
+        let raw = &[
+            0x52, 0x39, 0x02, 0x08, 0x00, 0x00, 0x23, 0x00, 0x00, 0x24, 0x15, 0x00, 0x01, 0x01,
+            0x05, 0x01, 0x01, 0x01, 0xB9, 0x57, 0x03, 0xFA,
+        ];
+        match parse_frame(raw) {
+            Frame::Data {
+                sale_complete,
+                crc_ok,
+                ..
+            } => {
+                assert!(crc_ok);
+                assert!(sale_complete);
+            }
+            f => panic!("expected Data, got {:?}", f),
         }
     }
 }

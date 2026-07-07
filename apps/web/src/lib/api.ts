@@ -144,6 +144,15 @@ export const integrationsApi = {
   deliveries:(id: string) => api.get(`/integrations/${id}/deliveries`),
 };
 
+// ── Integration API tokens ──────────────────────────────────────────────────────
+
+export const apiTokensApi = {
+  list:   () => api.get('/api-tokens'),
+  create: (data: unknown) => api.post('/api-tokens', data),
+  update: (id: string, data: unknown) => api.patch(`/api-tokens/${id}`, data),
+  revoke: (id: string) => api.delete(`/api-tokens/${id}`),
+};
+
 // ── Oil Bases ─────────────────────────────────────────────────────────────────
 
 export const oilBasesApi = {

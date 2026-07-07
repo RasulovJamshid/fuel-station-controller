@@ -369,7 +369,8 @@
     "printRecords": "та ёзув чоп этилди",
     "periodBadge": "Давр",
     "currentShift": "Жорий смена",
-    "colOperator": "Оператор"
+    "colOperator": "Оператор",
+    "presetFull": "Тўлиқ бак"
   },
   "txStatus": {
     "COMPLETED": "Бажарилди",

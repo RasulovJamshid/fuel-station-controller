@@ -369,7 +369,8 @@
     "printRecords": "записей напечатано",
     "periodBadge": "Период",
     "currentShift": "Текущая смена",
-    "colOperator": "Оператор"
+    "colOperator": "Оператор",
+    "presetFull": "Полный бак"
   },
   "txStatus": {
     "COMPLETED": "Выполнена",

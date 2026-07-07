@@ -2,25 +2,25 @@ import { IsString, MinLength, Matches, IsOptional, IsBoolean } from 'class-valid
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCompanyDto {
-    @ApiProperty({ example: 'UNG Fuel' })
+    @ApiProperty({ description: 'Display name of the company', example: 'UNG Fuel' })
     @IsString()
     @MinLength(2)
     name: string;
 
-    @ApiProperty({ example: 'ung', description: 'URL-safe identifier' })
+    @ApiProperty({ description: 'URL-safe unique identifier (lowercase, digits, dashes)', example: 'ung' })
     @IsString()
     @Matches(/^[a-z0-9-]+$/, { message: 'slug must be lowercase alphanumeric with dashes' })
     slug: string;
 }
 
 export class UpdateCompanyDto {
-    @ApiPropertyOptional()
+    @ApiPropertyOptional({ description: 'Display name of the company', example: 'UNG Fuel' })
     @IsOptional()
     @IsString()
     @MinLength(2)
     name?: string;
 
-    @ApiPropertyOptional()
+    @ApiPropertyOptional({ description: 'Whether the company is active', example: true })
     @IsOptional()
     @IsBoolean()
     active?: boolean;

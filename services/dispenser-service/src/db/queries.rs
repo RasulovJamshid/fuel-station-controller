@@ -18,8 +18,8 @@ fn status_str(status: &TxStatus) -> String {
 pub async fn insert_transaction(pool: &SqlitePool, tx: &Transaction) -> Result<()> {
     sqlx::query(
         r#"INSERT INTO transactions
-        (id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, operator_name, parent_tx_id, combined_volume, combined_amount)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        (id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, preset_type, preset_value, preset_label, status, shift_id, operator_name, parent_tx_id, combined_volume, combined_amount)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(&tx.id)
     .bind(&tx.fp_id)
@@ -33,6 +33,9 @@ pub async fn insert_transaction(pool: &SqlitePool, tx: &Transaction) -> Result<(
     .bind(tx.nozzle_index as i64)
     .bind(tx.product_id as i64)
     .bind(&tx.product_name)
+    .bind(&tx.preset_type)
+    .bind(tx.preset_value)
+    .bind(&tx.preset_label)
     .bind(status_str(&tx.status))
     .bind(&tx.shift_id)
     .bind(&tx.operator_name)
@@ -156,7 +159,9 @@ pub async fn persist_closed_transaction(pool: &SqlitePool, tx: &Transaction) -> 
 }
 
 /// Fire-and-forget sync enqueue — failures are logged but never propagate.
-async fn enqueue_tx(pool: &SqlitePool, tx: &Transaction) {
+/// Every final-state transaction mutation must reach this (directly or via
+/// `persist_closed_transaction`) or the backend admin never learns about the sale.
+pub(crate) async fn enqueue_tx(pool: &SqlitePool, tx: &Transaction) {
     let payload = match serde_json::to_value(tx) {
         Ok(v) => v,
         Err(e) => {
@@ -192,7 +197,7 @@ pub async fn list_transactions(
     from_ms: Option<i64>,
     until_ms: Option<i64>,
 ) -> Result<Vec<Transaction>> {
-    let select = r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, operator_name, parent_tx_id, combined_volume, combined_amount FROM transactions WHERE 1=1"#;
+    let select = r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, preset_type, preset_value, preset_label, status, shift_id, operator_name, parent_tx_id, combined_volume, combined_amount FROM transactions WHERE 1=1"#;
     let mut qb: QueryBuilder<sqlx::Sqlite> = QueryBuilder::new(select);
     if let Some(fp) = fp_id {
         qb.push(" AND fp_id = ").push_bind(fp);
@@ -271,7 +276,7 @@ pub async fn summarize_transactions(
 
 pub async fn get_transaction(pool: &SqlitePool, id: &str) -> Result<Option<Transaction>> {
     let row = sqlx::query_as::<_, TxRow>(
-        r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, status, shift_id, operator_name, parent_tx_id, combined_volume, combined_amount
+        r#"SELECT id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, preset_type, preset_value, preset_label, status, shift_id, operator_name, parent_tx_id, combined_volume, combined_amount
            FROM transactions WHERE id = ?"#,
     )
     .bind(id)
@@ -294,6 +299,9 @@ struct TxRow {
     nozzle_index: i64,
     product_id: i64,
     product_name: String,
+    preset_type: Option<String>,
+    preset_value: Option<f64>,
+    preset_label: Option<String>,
     status: String,
     shift_id: Option<String>,
     operator_name: Option<String>,
@@ -327,6 +335,9 @@ impl TxRow {
             nozzle_index: self.nozzle_index as u8,
             product_id: self.product_id as u8,
             product_name: self.product_name,
+            preset_type: self.preset_type,
+            preset_value: self.preset_value,
+            preset_label: self.preset_label,
             status: st,
             shift_id: self.shift_id,
             operator_name: self.operator_name,

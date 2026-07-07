@@ -369,7 +369,8 @@
     "printRecords": "ta yozuv chop etildi",
     "periodBadge": "Davr",
     "currentShift": "Joriy smena",
-    "colOperator": "Operator"
+    "colOperator": "Operator",
+    "presetFull": "Toʼliq bak"
   },
   "txStatus": {
     "COMPLETED": "Bajarildi",

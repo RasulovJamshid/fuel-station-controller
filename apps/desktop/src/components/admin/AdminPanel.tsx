@@ -206,6 +206,12 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
   const [syncPricePullEnabled, setSyncPricePullEnabled] = useState(true);
   const [showApiKey, setShowApiKey] = useState(false);
 
+  const expireSession = useCallback(() => {
+    setMsg(null);
+    setInvokeError(null);
+    onSessionExpired();
+  }, [onSessionExpired, setInvokeError]);
+
   const loadSyncStatus = useCallback(async () => {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
@@ -235,7 +241,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
       | PromiseRejectedResult
       | undefined;
     if (err) {
-      if (is401(err.reason)) { onSessionExpired(); return; }
+      if (is401(err.reason)) { expireSession(); return; }
       const msg =
         err.reason instanceof Error ? err.reason.message : String(err.reason);
       setInvokeError(msg);
@@ -263,13 +269,16 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
       if (!(key in d)) d[key] = formatMoneyInput(row.price);
     }
     setDraft(d);
-  }, [token, setInvokeError]);
+  }, [token, setInvokeError, expireSession]);
 
   useEffect(() => {
-    loadAll().catch((e) => setInvokeError(e instanceof Error ? e.message : String(e)));
+    loadAll().catch((e) => {
+      if (is401(e)) { expireSession(); return; }
+      setInvokeError(e instanceof Error ? e.message : String(e));
+    });
     loadSyncStatus();
     loadAtgConfig();
-  }, [loadAll, setInvokeError, loadSyncStatus, loadAtgConfig]);
+  }, [loadAll, setInvokeError, loadSyncStatus, loadAtgConfig, expireSession]);
 
   const refreshConfig = async () => {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -359,7 +368,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
         .catch(() => {});
       refreshConfig().catch(() => {});
     } catch (e) {
-      if (is401(e)) { onSessionExpired(); return; }
+      if (is401(e)) { expireSession(); return; }
       setMsg(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(false);
@@ -382,7 +391,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
       });
       setMsg(t("admin.settings.savedMsg"));
     } catch (e) {
-      if (is401(e)) { onSessionExpired(); return; }
+      if (is401(e)) { expireSession(); return; }
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -397,7 +406,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
       await refreshConfig();
       setMsg(t("admin.shiftSchedule.savedMsg"));
     } catch (e) {
-      if (is401(e)) { onSessionExpired(); return; }
+      if (is401(e)) { expireSession(); return; }
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -418,7 +427,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
       setNewOpPin("");
       await loadAll();
     } catch (e) {
-      if (is401(e)) { onSessionExpired(); return; }
+      if (is401(e)) { expireSession(); return; }
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -439,7 +448,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
       onPinChanged?.();
       setMsg(t("admin.changePin.updatedMsg"));
     } catch (e) {
-      if (is401(e)) { onSessionExpired(); return; }
+      if (is401(e)) { expireSession(); return; }
       setInvokeError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -517,8 +526,11 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
   // Stable callback — avoids re-triggering AdminProductsSection's useEffect
   // every render (inline arrows change identity every render).
   const handleProductsError = useCallback(
-    (m: string) => setInvokeError(m),
-    [setInvokeError],
+    (m: string) => {
+      if (is401(m)) { expireSession(); return; }
+      setInvokeError(m);
+    },
+    [expireSession, setInvokeError],
   );
 
   return (
@@ -550,6 +562,65 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         <div className="xl:col-span-8 flex flex-col gap-6">
+          <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+            <h2 className="text-lg font-bold text-text-primary">{t("admin.prices.title")}</h2>
+            <p className="mt-1 mb-4 text-sm font-medium text-text-secondary">
+              {t("admin.prices.description")}
+            </p>
+            <div className="overflow-x-auto rounded-xl border border-border-primary/60 shadow-sm">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-bg-secondary/95 text-[10px] font-bold uppercase tracking-wider text-text-muted backdrop-blur-sm">
+                  <tr>
+                    <th className="px-4 py-3">{t("admin.prices.colProduct")}</th>
+                    <th className="px-4 py-3">{t("admin.prices.colCurrentPrice")}</th>
+                    <th className="px-4 py-3">{t("admin.prices.colNewPrice")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-secondary/60 bg-bg-card/40">
+                  {productPrices.map((row) => {
+                    const key = String(row.product_id);
+                    return (
+                      <tr key={key} className="transition-colors hover:bg-bg-tertiary/40">
+                        <td className="px-4 py-3 font-semibold text-text-primary">{row.product_name}</td>
+                        <td className="px-4 py-3 font-mono font-medium text-text-secondary">{formatPrice(row.price)}</td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            className={`w-40 font-mono ${inputCls}`}
+                            value={draft[key] ?? ""}
+                            onChange={(e) =>
+                              setDraft((d) => ({ ...d, [key]: formatMoneyInput(e.target.value) }))
+                            }
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={savePrices}
+              className="mt-4 rounded-xl border border-accent-amber/40 bg-accent-amber/15 px-5 py-2.5 text-sm font-bold tracking-wide text-accent-amber shadow-button transition-all hover:bg-accent-amber/25 hover:shadow-button-hover disabled:opacity-50"
+            >
+              {t("admin.prices.save")}
+            </button>
+
+            <h3 className="mb-2 mt-6 text-[10px] font-bold uppercase tracking-wider text-text-muted">{t("admin.prices.historyTitle")}</h3>
+            <ul className="max-h-40 space-y-1.5 overflow-y-auto pr-2">
+              {history.map((h) => (
+                <li key={h.id} className="flex flex-wrap items-center justify-between rounded-lg border border-border-primary/40 bg-bg-secondary/30 px-3 py-2 text-xs transition-colors hover:bg-bg-secondary/60">
+                  <span className="font-mono font-medium text-text-tertiary">{new Date(h.changed_at).toLocaleString()}</span>
+                  <span className="font-semibold text-text-primary">{h.fp_id} #{h.nozzle_index} <span className="text-text-muted">·</span> {h.product_name}</span>
+                  <span className="font-mono font-bold text-accent-blue">{formatPrice(h.old_price)} <span className="text-text-muted font-normal">→</span> {formatPrice(h.new_price)}</span>
+                  <span className="text-text-secondary font-medium">({h.changed_by})</span>
+                </li>
+              ))}
+            </ul>
+          </section>
           <AdminProductsSection
             token={token}
             onMessage={setMsg}
@@ -558,67 +629,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
             liftedNozzles={liftedNozzles}
             productPriceMap={productPriceMap}
           />
-
-        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
-          <h2 className="text-lg font-bold text-text-primary">{t("admin.prices.title")}</h2>
-          <p className="mt-1 mb-4 text-sm font-medium text-text-secondary">
-            {t("admin.prices.description")}
-          </p>
-          <div className="overflow-x-auto rounded-xl border border-border-primary/60 shadow-sm">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-bg-secondary/95 text-[10px] font-bold uppercase tracking-wider text-text-muted backdrop-blur-sm">
-                <tr>
-                  <th className="px-4 py-3">{t("admin.prices.colProduct")}</th>
-                  <th className="px-4 py-3">{t("admin.prices.colCurrentPrice")}</th>
-                  <th className="px-4 py-3">{t("admin.prices.colNewPrice")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-secondary/60 bg-bg-card/40">
-                {productPrices.map((row) => {
-                  const key = String(row.product_id);
-                  return (
-                    <tr key={key} className="transition-colors hover:bg-bg-tertiary/40">
-                      <td className="px-4 py-3 font-semibold text-text-primary">{row.product_name}</td>
-                      <td className="px-4 py-3 font-mono font-medium text-text-secondary">{formatPrice(row.price)}</td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          className={`w-40 font-mono ${inputCls}`}
-                          value={draft[key] ?? ""}
-                          onChange={(e) =>
-                            setDraft((d) => ({ ...d, [key]: formatMoneyInput(e.target.value) }))
-                          }
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={savePrices}
-            className="mt-4 rounded-xl border border-accent-amber/40 bg-accent-amber/15 px-5 py-2.5 text-sm font-bold tracking-wide text-accent-amber shadow-button transition-all hover:bg-accent-amber/25 hover:shadow-button-hover disabled:opacity-50"
-          >
-            {t("admin.prices.save")}
-          </button>
-
-          <h3 className="mb-2 mt-6 text-[10px] font-bold uppercase tracking-wider text-text-muted">{t("admin.prices.historyTitle")}</h3>
-          <ul className="max-h-40 space-y-1.5 overflow-y-auto pr-2">
-            {history.map((h) => (
-              <li key={h.id} className="flex flex-wrap items-center justify-between rounded-lg border border-border-primary/40 bg-bg-secondary/30 px-3 py-2 text-xs transition-colors hover:bg-bg-secondary/60">
-                <span className="font-mono font-medium text-text-tertiary">{new Date(h.changed_at).toLocaleString()}</span>
-                <span className="font-semibold text-text-primary">{h.fp_id} #{h.nozzle_index} <span className="text-text-muted">·</span> {h.product_name}</span>
-                <span className="font-mono font-bold text-accent-blue">{formatPrice(h.old_price)} <span className="text-text-muted font-normal">→</span> {formatPrice(h.new_price)}</span>
-                <span className="text-text-secondary font-medium">({h.changed_by})</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
+        </div>
 
       <div className="xl:col-span-4 flex flex-col gap-6">
 

@@ -350,6 +350,10 @@ export function ClassicDispenserConsole({
     topCardPad: "p-3",
     topCardText: "text-xl",
     topCardLabel: "text-sm",
+    bottomLiveText: "text-5xl",
+    tableLiveText: "text-3xl",
+    priceText: "text-3xl",
+    productPriceText: "text-lg",
     
     thPad: "px-4 py-3",
     tdPad: "px-3 py-2",
@@ -382,6 +386,8 @@ export function ClassicDispenserConsole({
   const bottomLabelClass =
     "mb-1 block text-sm font-black uppercase tracking-wider text-text-secondary transition-colors duration-75 group-focus-within:text-accent-blue group-hover:text-text-primary";
   const tableUnitSlotClass = "w-14 shrink-0";
+  const centerUnitClass = "text-xs font-black uppercase tracking-widest text-text-primary";
+  const centerValueUnitClass = "text-base font-black uppercase tracking-widest text-text-primary/85";
 
   useEffect(() => {
     const prevTags = prevTagsRef.current;
@@ -945,9 +951,17 @@ export function ClassicDispenserConsole({
 
       if (root && focusedElement && root.contains(focusedElement)) return;
       if (focusedElement?.closest("[role='dialog']")) return;
-      if (
+      const isArrow = event.key === "ArrowRight" || event.key === "ArrowLeft";
+      const isTextEditing =
         focusedElement &&
-        (focusedElement.matches("button, input, textarea, select, a") || focusedElement.isContentEditable)
+        (focusedElement.matches("input, textarea, select") || focusedElement.isContentEditable);
+      if (isTextEditing) {
+        return;
+      }
+      if (
+        !isArrow &&
+        focusedElement &&
+        focusedElement.matches("button, a")
       ) {
         return;
       }
@@ -956,7 +970,7 @@ export function ClassicDispenserConsole({
       if (!selectedState) return;
 
       event.preventDefault();
-      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      if (isArrow) {
         selectPumpByOffset(selectedState.fp_id, event.key === "ArrowRight" ? 1 : -1);
         return;
       }
@@ -1242,7 +1256,9 @@ export function ClassicDispenserConsole({
             <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-border-primary/40" style={{ backgroundColor: productColor }} />
             <span className="min-w-0 truncate">{nozzle?.product_name ?? state.product_name ?? "--"}</span>
           </span>
-          <span className="shrink-0 font-mono font-black text-text-primary">{fmtSum.format(nozzle?.price ?? state.price ?? 0)}</span>
+          <span className={`shrink-0 font-mono font-black ${ui.productPriceText}`} style={{ color: productColor }}>
+            {fmtSum.format(nozzle?.price ?? state.price ?? 0)}
+          </span>
         </div>
         {showPumpTotalizer && pumpTotalizer && (
           <div className={`flex items-center justify-between gap-2 border-t border-border-primary/20 bg-bg-secondary/10 px-3 py-1.5 font-mono tabular-nums ${ui.topCardLabel}`}>
@@ -1367,11 +1383,15 @@ export function ClassicDispenserConsole({
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.price")}</th>
-              {states.map((state) => (
-	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono text-2xl font-black ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
-	                  <span className="text-accent-blue">{fmtSum.format(selectedNozzle(state)?.price ?? state.price ?? 0)}</span>
-	                </td>
-	              ))}
+              {states.map((state) => {
+                const nozzle = selectedNozzle(state);
+                const productColor = productColorFor(state, nozzle);
+                return (
+                  <td key={state.fp_id} className={`${ui.tdPad} font-mono ${ui.priceText} font-black ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
+                    <span style={{ color: productColor }}>{fmtSum.format(nozzle?.price ?? state.price ?? 0)}</span>
+                  </td>
+                );
+              })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
               <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.orderLiters")}</th>
@@ -1410,7 +1430,7 @@ export function ClassicDispenserConsole({
                               : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
                         } ${activeOrderField?.fpId === state.fp_id && activeOrderField.field === "volume" ? mirroredOrderInputClass : ""}`}
                       />
-	                      <span aria-hidden className={`${ui.inputHeight} -ml-px flex ${tableUnitSlotClass} items-center justify-center border border-border-primary/40 bg-bg-secondary/80 text-[10px] font-black tracking-wide text-text-muted`}>
+	                      <span aria-hidden className={`${ui.inputHeight} -ml-px flex ${tableUnitSlotClass} ${centerUnitClass} items-center justify-center border border-border-primary/40 bg-bg-secondary/80`}>
 	                        L
 	                      </span>
                     </div>
@@ -1457,7 +1477,7 @@ export function ClassicDispenserConsole({
                               : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
                         } ${activeOrderField?.fpId === state.fp_id && activeOrderField.field === "amount" ? mirroredOrderInputClass : ""}`}
                       />
-	                      <span aria-hidden className={`${ui.inputHeight} -ml-px flex ${tableUnitSlotClass} items-center justify-center border border-border-primary/40 bg-bg-secondary/80 text-[10px] font-black tracking-wide text-text-muted`}>
+	                      <span aria-hidden className={`${ui.inputHeight} -ml-px flex ${tableUnitSlotClass} ${centerUnitClass} items-center justify-center border border-border-primary/40 bg-bg-secondary/80`}>
 	                        SO'M
 	                      </span>
                     </div>
@@ -1481,8 +1501,11 @@ export function ClassicDispenserConsole({
                   ? (meta.paused?.stopped_volume ?? state.volume)
                   : (draft?.lastFillVolume ?? state.volume);
                 return (
-	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
-	                    {displayVol.toFixed(2)}
+	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.tableLiveText} ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
+	                    <span className="inline-flex items-baseline justify-center gap-2">
+	                      <span>{displayVol.toFixed(2)}</span>
+	                      <span className={centerValueUnitClass}>L</span>
+	                    </span>
 	                  </td>
                 );
               })}
@@ -1497,8 +1520,11 @@ export function ClassicDispenserConsole({
                   ? (meta.paused?.stopped_amount ?? state.amount)
                   : (draft?.lastFillAmount ?? state.amount);
                 return (
-	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.topCardText} text-accent-blue ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
-	                    {fmtSum.format(displayAmt)}
+	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.tableLiveText} text-accent-blue ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
+	                    <span className="inline-flex items-baseline justify-center gap-2">
+	                      <span>{fmtSum.format(displayAmt)}</span>
+	                      <span className={centerValueUnitClass}>SO'M</span>
+	                    </span>
 	                  </td>
                 );
               })}
@@ -1515,20 +1541,20 @@ export function ClassicDispenserConsole({
                   const amtTarget = parseAmountTarget(state.pre_auth_preset);
                   if (volTarget != null) {
                     const rem = Math.max(0, volTarget - state.volume);
-                    cell = <span className="text-accent-amber">{rem.toFixed(2)} L</span>;
+                    cell = <span className="inline-flex items-baseline gap-2 text-accent-amber"><span>{rem.toFixed(2)}</span><span className={centerValueUnitClass}>L</span></span>;
                   } else if (amtTarget != null) {
                     const rem = Math.max(0, amtTarget - state.amount);
-                    cell = <span className="text-accent-amber">{fmtSum.format(rem)}</span>;
+                    cell = <span className="inline-flex items-baseline gap-2 text-accent-amber"><span>{fmtSum.format(rem)}</span><span className={centerValueUnitClass}>SO'M</span></span>;
                   }
                 } else if (draft?.lastFillPreset != null) {
                   const volTarget = parseVolumeTarget(draft.lastFillPreset);
                   const amtTarget = parseAmountTarget(draft.lastFillPreset);
                   if (volTarget != null && draft.lastFillVolume != null) {
                     const rem = Math.max(0, volTarget - draft.lastFillVolume);
-                    cell = <span className="text-text-muted/70">{rem.toFixed(2)} L</span>;
+                    cell = <span className="inline-flex items-baseline gap-2 text-text-muted/70"><span>{rem.toFixed(2)}</span><span className={centerValueUnitClass}>L</span></span>;
                   } else if (amtTarget != null && draft.lastFillAmount != null) {
                     const rem = Math.max(0, amtTarget - draft.lastFillAmount);
-                    cell = <span className="text-text-muted/70">{fmtSum.format(rem)}</span>;
+                    cell = <span className="inline-flex items-baseline gap-2 text-text-muted/70"><span>{fmtSum.format(rem)}</span><span className={centerValueUnitClass}>SO'M</span></span>;
                   }
                 }
                 return (
@@ -1564,11 +1590,11 @@ export function ClassicDispenserConsole({
             <div className="flex gap-8 text-right font-mono tabular-nums">
               <div>
                 <p className={`${ui.thText} font-extrabold uppercase tracking-wider opacity-70`}>{t("classic.currentLiters")}</p>
-                <p className="font-mono text-3xl font-black tabular-nums">{(selectedMeta.paused?.stopped_volume ?? selected.volume).toFixed(2)}</p>
+                <p className={`font-mono ${ui.bottomLiveText} font-black tabular-nums`}>{(selectedMeta.paused?.stopped_volume ?? selected.volume).toFixed(2)}</p>
               </div>
               <div>
                 <p className={`${ui.thText} font-extrabold uppercase tracking-wider opacity-70`}>{t("classic.currentAmount")}</p>
-                <p className="font-mono text-3xl font-black tabular-nums text-accent-blue">{fmtSum.format(selectedMeta.paused?.stopped_amount ?? selected.amount)}</p>
+                <p className={`font-mono ${ui.bottomLiveText} font-black tabular-nums text-accent-blue`}>{fmtSum.format(selectedMeta.paused?.stopped_amount ?? selected.amount)}</p>
               </div>
             </div>
           </div>
@@ -1577,10 +1603,18 @@ export function ClassicDispenserConsole({
             const delivering = selectedMeta.isDelivering || selectedMeta.isAuthorizing;
             const vt = delivering ? parseVolumeTarget(selected.pre_auth_preset) : null;
             const at = delivering ? parseAmountTarget(selected.pre_auth_preset) : null;
+            const liveVolume = selectedMeta.paused?.stopped_volume ?? selected.volume;
+            const liveAmount = selectedMeta.paused?.stopped_amount ?? selected.amount;
+            const estimatedAmount =
+              liveAmount > 0
+                ? liveAmount
+                : selectedProduct?.price && selectedProduct.price > 0
+                  ? Math.round(liveVolume * selectedProduct.price)
+                  : 0;
             const pct = vt != null && vt > 0
-              ? Math.min(100, (selected.volume / vt) * 100)
+              ? Math.min(100, (liveVolume / vt) * 100)
               : at != null && at > 0
-                ? Math.min(100, (selected.amount / at) * 100)
+                ? Math.min(100, (estimatedAmount / at) * 100)
                 : 0;
             return (
               <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-bg-secondary/40">
@@ -1657,7 +1691,10 @@ export function ClassicDispenserConsole({
                       <span className={`font-black uppercase tracking-wider truncate px-1 w-full text-center ${ui.inputText}`}>
                         {n.product_name}
                       </span>
-                      <span className="w-full truncate px-1 text-center font-mono text-sm font-bold opacity-90">
+                      <span
+                        className={`w-full truncate px-1 text-center font-mono ${ui.productPriceText} font-bold opacity-90`}
+                        style={!isActive ? { color: n.product_color } : undefined}
+                      >
                         {fmtSum.format(n.price)}
                       </span>
                     </button>

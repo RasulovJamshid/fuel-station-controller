@@ -90,6 +90,10 @@ async function bootstrap() {
         keyGenerator: (req: any) => (req.headers['x-api-key'] as string) ?? req.ip ?? 'unknown',
     }));
 
+    // NOTE: the external integration read API (/api/v1/integration/) is
+    // rate-limited per-token inside ApiTokenGuard, using each token's
+    // configurable rateLimitPerMin, so it needs no fixed limiter here.
+
     // General API
     app.use('/api/', rateLimit({
         windowMs:  60_000,
@@ -109,6 +113,7 @@ async function bootstrap() {
             .setVersion('1.0')
             .addBearerAuth()
             .addApiKey({ type: 'apiKey', in: 'header', name: 'X-Api-Key' }, 'station-key')
+            .addApiKey({ type: 'apiKey', in: 'header', name: 'X-Api-Token' }, 'integration-token')
             .build();
         SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, config), {
             swaggerOptions: { persistAuthorization: true },

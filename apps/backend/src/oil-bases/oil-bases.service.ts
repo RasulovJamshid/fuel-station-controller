@@ -4,17 +4,20 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
 
 export class CreateOilBaseDto {
-    @ApiProperty({ example: 'Нефтебаза №1 Ташкент' })
+    @ApiProperty({ description: 'Oil base name (at least 2 characters)', example: 'Нефтебаза №1 Ташкент' })
     @IsString() @MinLength(2) name: string;
 
-    @ApiPropertyOptional()
+    @ApiPropertyOptional({ description: 'Physical address of the oil base', example: 'ул. Навои 15, Ташкент' })
     @IsOptional() @IsString() address?: string;
 }
 
 export class UpdateOilBaseDto {
-    @ApiPropertyOptional() @IsOptional() @IsString() @MinLength(2) name?: string;
-    @ApiPropertyOptional() @IsOptional() @IsString() address?: string;
-    @ApiPropertyOptional() @IsOptional() active?: boolean;
+    @ApiPropertyOptional({ description: 'Oil base name (at least 2 characters)', example: 'Нефтебаза №1 Ташкент' })
+    @IsOptional() @IsString() @MinLength(2) name?: string;
+    @ApiPropertyOptional({ description: 'Physical address of the oil base', example: 'ул. Навои 15, Ташкент' })
+    @IsOptional() @IsString() address?: string;
+    @ApiPropertyOptional({ description: 'Whether the oil base is active', example: true })
+    @IsOptional() active?: boolean;
 }
 
 @Injectable()

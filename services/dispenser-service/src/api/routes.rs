@@ -822,6 +822,10 @@ pub async fn close_stopped_tx(
     // Emit fp.done so the UI shows the dispensed amount and populates lastSale for "oxirgi quyish".
     // Must be sent before fp.status so holdDoneUntil prevents the IDLE status from clearing the DONE display.
     if let Ok(Some(tx)) = queries::get_transaction(&st.pool, &cmd.stopped_tx_id).await {
+        // finalize_stopped_transaction bypasses persist_closed_transaction (the normal
+        // enqueue funnel), so enqueue here — otherwise operator-closed stopped sales
+        // never reach the backend.
+        queries::enqueue_tx(&st.pool, &tx).await;
         let _ = st.events.send(WsEvent::Done(tx));
     }
     let states: Vec<FpState> = {

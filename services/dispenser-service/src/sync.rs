@@ -78,16 +78,16 @@ struct SyncResponse {
 
 // ── Public enqueue helpers (called from db layer) ─────────────────────────────
 
-/// Upsert a sync queue record.  A conflict on `id` resets the record so it
-/// will be re-sent with the latest payload (e.g. STOPPED → COMPLETED update).
+/// Upsert a sync queue record.  The id includes the serialized payload so
+/// state changes such as ACTIVE → CLOSED are processed by backend dedup.
 pub async fn enqueue(
     pool: &SqlitePool,
     entity_type: &str,
     entity_id: &str,
     payload: &serde_json::Value,
 ) -> anyhow::Result<()> {
-    let sync_id = deterministic_id(entity_type, entity_id);
     let json = serde_json::to_string(payload)?;
+    let sync_id = deterministic_id(entity_type, entity_id, &json);
     let now = chrono::Utc::now().timestamp_millis();
 
     sqlx::query(
@@ -110,12 +110,29 @@ pub async fn enqueue(
     Ok(())
 }
 
-fn deterministic_id(entity_type: &str, entity_id: &str) -> String {
+fn deterministic_id(entity_type: &str, entity_id: &str, payload_json: &str) -> String {
     uuid::Uuid::new_v5(
         &uuid::Uuid::NAMESPACE_OID,
-        format!("{entity_type}:{entity_id}").as_bytes(),
+        format!("{entity_type}:{entity_id}:{payload_json}").as_bytes(),
     )
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::deterministic_id;
+
+    #[test]
+    fn sync_id_changes_when_payload_changes() {
+        let active = deterministic_id("shift", "shift-1", r#"{"status":"ACTIVE"}"#);
+        let closed = deterministic_id("shift", "shift-1", r#"{"status":"CLOSED"}"#);
+
+        assert_ne!(active, closed);
+        assert_eq!(
+            active,
+            deterministic_id("shift", "shift-1", r#"{"status":"ACTIVE"}"#)
+        );
+    }
 }
 
 // ── Worker loop ───────────────────────────────────────────────────────────────

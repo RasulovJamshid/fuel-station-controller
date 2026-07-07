@@ -138,6 +138,12 @@ pub struct Transaction {
     pub nozzle_index: u8,
     pub product_id: u8,
     pub product_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset_value: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset_label: Option<String>,
     pub status: TxStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shift_id: Option<String>,
@@ -309,6 +315,23 @@ pub fn preset_label(preset: &Preset) -> String {
         Preset::Volume(v) => format!("{v:.2} L"),
         Preset::Amount(a) => format!("{a} sum"),
         Preset::Str(_) => "Preset".into(),
+    }
+}
+
+/// Optional metadata for persisted transactions. This is informational only:
+/// pump authorization and close logic continue to use `Preset` directly.
+pub fn preset_metadata(preset: &Preset) -> (Option<String>, Option<f64>, Option<String>) {
+    match preset {
+        Preset::Str(s) if s.eq_ignore_ascii_case("full") => {
+            (Some("full".into()), None, Some(preset_label(preset)))
+        }
+        Preset::Volume(v) => (Some("volume".into()), Some(*v), Some(preset_label(preset))),
+        Preset::Amount(a) => (
+            Some("amount".into()),
+            Some(*a as f64),
+            Some(preset_label(preset)),
+        ),
+        Preset::Str(_) => (None, None, None),
     }
 }
 

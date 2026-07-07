@@ -5,12 +5,12 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export class CreateReservoirDto {
-    @ApiProperty() @IsString() stationId: string;
-    @ApiProperty() @IsString() tankId: string;
-    @ApiProperty() @IsString() label: string;
-    @ApiProperty() @IsNumber() productId: number;
-    @ApiProperty() @IsString() productName: string;
-    @ApiProperty() @IsNumber() capacity: number;
+    @ApiProperty({ description: 'Station the reservoir belongs to', example: 'stn_abc123' }) @IsString() stationId: string;
+    @ApiProperty({ description: 'Tank identifier unique within the station', example: 'tank1' }) @IsString() tankId: string;
+    @ApiProperty({ description: 'Human-readable reservoir label', example: 'Tank 1 - AI-92' }) @IsString() label: string;
+    @ApiProperty({ description: 'Numeric product code stored in the tank', example: 92 }) @IsNumber() productId: number;
+    @ApiProperty({ description: 'Human-readable product name', example: 'AI-92' }) @IsString() productName: string;
+    @ApiProperty({ description: 'Tank capacity in litres', example: 50000 }) @IsNumber() capacity: number;
 }
 
 @Injectable()

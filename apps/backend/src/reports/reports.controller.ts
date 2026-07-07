@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Query, Body, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse, ApiCreatedResponse, ApiUnauthorizedResponse, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsEnum, IsDateString, IsArray } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ReportsService } from './reports.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,12 +9,12 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { resolveStationIds } from '../common/helpers/station-access.helper';
 
 class ReportQueryDto {
-    @ApiPropertyOptional()  @IsOptional() @IsDateString() from?: string;
-    @ApiPropertyOptional()  @IsOptional() @IsDateString() to?: string;
-    @ApiPropertyOptional()  @IsOptional() @IsString()     oilBaseId?: string;
-    @ApiPropertyOptional()  @IsOptional() @IsString()     stationId?: string;
-    @ApiPropertyOptional()  @IsOptional() @IsArray() @IsString({ each: true }) @Type(() => String) stationIds?: string[];
-    @ApiPropertyOptional({ enum: ['day', 'week', 'month'] }) @IsOptional() @IsEnum(['day', 'week', 'month']) groupBy?: 'day' | 'week' | 'month';
+    @ApiPropertyOptional({ description: 'Range start (ISO date-time); defaults to 30 days ago', example: '2026-01-01T00:00:00.000Z' })  @IsOptional() @IsDateString() from?: string;
+    @ApiPropertyOptional({ description: 'Range end (ISO date-time); defaults to now', example: '2026-01-31T23:59:59.000Z' })  @IsOptional() @IsDateString() to?: string;
+    @ApiPropertyOptional({ description: 'Filter by oil base; expands to all its stations', example: 'oilbase-uuid' })  @IsOptional() @IsString()     oilBaseId?: string;
+    @ApiPropertyOptional({ description: 'Filter by a single station ID', example: 'station-uuid' })  @IsOptional() @IsString()     stationId?: string;
+    @ApiPropertyOptional({ description: 'Filter by multiple station IDs', type: [String], example: ['station-a', 'station-b'] })  @IsOptional() @IsArray() @IsString({ each: true }) @Type(() => String) stationIds?: string[];
+    @ApiPropertyOptional({ description: 'Time bucket granularity for grouping', enum: ['day', 'week', 'month'], example: 'day' }) @IsOptional() @IsEnum(['day', 'week', 'month']) groupBy?: 'day' | 'week' | 'month';
 }
 
 @ApiTags('reports')
@@ -40,6 +39,9 @@ export class ReportsController {
     }
 
     @Get('revenue')
+    @ApiOperation({ summary: 'Get revenue summary bucketed by day/week/month, station and product' })
+    @ApiOkResponse({ description: 'Revenue rows grouped by period, station and product' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     async revenue(@CurrentUser() user: any, @Query() q: ReportQueryDto) {
         const from = q.from ? new Date(q.from) : new Date(Date.now() - 30 * 86_400_000);
         const to   = q.to   ? new Date(q.to)   : new Date();
@@ -48,6 +50,9 @@ export class ReportsController {
     }
 
     @Get('operators')
+    @ApiOperation({ summary: 'Get per-operator transaction totals over the given range' })
+    @ApiOkResponse({ description: 'Aggregated totals grouped by operator and station' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     async operators(@CurrentUser() user: any, @Query() q: ReportQueryDto) {
         const from = q.from ? new Date(q.from) : new Date(Date.now() - 30 * 86_400_000);
         const to   = q.to   ? new Date(q.to)   : new Date();
@@ -56,6 +61,9 @@ export class ReportsController {
     }
 
     @Get('products')
+    @ApiOperation({ summary: 'Get per-product transaction totals over the given range' })
+    @ApiOkResponse({ description: 'Aggregated totals grouped by product' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     async products(@CurrentUser() user: any, @Query() q: ReportQueryDto) {
         const from = q.from ? new Date(q.from) : new Date(Date.now() - 30 * 86_400_000);
         const to   = q.to   ? new Date(q.to)   : new Date();
@@ -64,6 +72,9 @@ export class ReportsController {
     }
 
     @Post('export')
+    @ApiOperation({ summary: 'Queue a background report export job and return its job ID' })
+    @ApiCreatedResponse({ description: 'Export job queued; returns the job ID' })
+    @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     async requestExport(@CurrentUser() user: any, @Body() params: any) {
         const requested = params.stationIds ?? (params.stationId ? [params.stationId] : []);
         const allowed = await resolveStationIds(this.prisma, user, requested);

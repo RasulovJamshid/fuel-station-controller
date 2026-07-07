@@ -11,8 +11,8 @@ use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
 use types::{
-    preset_label, FpStatus, Preset, PumpNozzleTotals, StopSource, Transaction, TxStatus,
-    UpdatePriceCmd, WsEvent,
+    preset_label, preset_metadata, FpStatus, Preset, PumpNozzleTotals, StopSource, Transaction,
+    TxStatus, UpdatePriceCmd, WsEvent,
 };
 use wayne_europump::{
     ack, authorise_cmd, authorize_config_with_preset_block, authorize_initial, busy, done,
@@ -1194,6 +1194,20 @@ async fn process_parsed_frame(
             // leaving status stuck in Delivering until the 4-second timestamp timeout.
             let done_f = done(byte);
             let _ = write_serial(backend, &done_f);
+            broadcast_status(byte, runtimes, events).await;
+        }
+        FrameEffect::ResendStop => {
+            // The lane is STOPPED but the pump's counter kept advancing — the stop
+            // frame was likely lost to bus noise. Re-send the full §8.2 stop sequence
+            // (the state machine allows this once per stop episode).
+            warn!(
+                addr = format_args!("0x{byte:02X}"),
+                label = %fp_cfg.label,
+                "volume still rising after STOP → re-sending stop sequence"
+            );
+            let _ = exchange_serial(backend, &stop_pre_frame(byte)); // dispenser replies C1 FA
+            let _ = write_serial(backend, &ack(byte)); // PC ACKs the C1 FA
+            let _ = exchange_serial(backend, &stop_frame(byte));
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::StatusChanged => {
@@ -2552,7 +2566,7 @@ async fn gbr_close_transaction(
         });
     let totals_raw = exchange_serial(backend, &gilbarco::get_totals(byte)).ok();
 
-    let (ctx, state_price, nozzle_index) = {
+    let (ctx, state_price, nozzle_index, preset) = {
         let map = runtimes.read().await;
         let Some(rt) = map.get(&byte) else {
             return false;
@@ -2561,6 +2575,7 @@ async fn gbr_close_transaction(
             rt.current_tx.clone(),
             rt.state.price,
             rt.state.nozzle_index.unwrap_or(1),
+            rt.last_preset.clone(),
         )
     };
 
@@ -2637,6 +2652,7 @@ async fn gbr_close_transaction(
 
     let (shift_id, operator_name) = shifts.active_info().await;
     let now_ms = Utc::now().timestamp_millis();
+    let (preset_type, preset_value, preset_label) = preset_metadata(&preset);
     let tx = Transaction {
         id: ctx.id.clone(),
         fp_id: fp_cfg.id.clone(),
@@ -2650,6 +2666,9 @@ async fn gbr_close_transaction(
         nozzle_index: ctx.nozzle_index,
         product_id: ctx.product_id,
         product_name: ctx.product_name.clone(),
+        preset_type,
+        preset_value,
+        preset_label,
         status: TxStatus::resolve(volume, true),
         shift_id,
         operator_name,
@@ -2658,8 +2677,8 @@ async fn gbr_close_transaction(
         combined_amount: amount,
     };
 
-    if let Err(e) = crate::db::queries::insert_transaction(pool, &tx).await {
-        warn!(?e, byte, "Gilbarco: DB insert failed for transaction");
+    if let Err(e) = crate::db::queries::persist_closed_transaction(pool, &tx).await {
+        warn!(?e, byte, "Gilbarco: DB persist failed for transaction");
         return false;
     }
     // Bump active-shift totals (Wayne does this in FrameEffect::TransactionDone;

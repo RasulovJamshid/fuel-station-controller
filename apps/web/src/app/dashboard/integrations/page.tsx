@@ -13,7 +13,9 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Modal, Confirm } from '@/components/ui/modal';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { useAuthStore } from '@/store/auth';
 import { cn } from '@/lib/utils';
+import { ApiTokensTab } from './api-tokens-tab';
 
 type EventDef = { id: string; label: string; desc: string };
 
@@ -42,6 +44,9 @@ export default function IntegrationsPage() {
   const t = useT();
   const { fmtRelative } = useFormats();
   const { connected } = useWebSocket();
+  const role = useAuthStore(s => s.user?.role);
+  const canManageTokens = role === 'SUPER_ADMIN' || role === 'COMPANY_ADMIN';
+  const [tab, setTab] = useState<'webhooks' | 'tokens'>('webhooks');
 
   const ALL_EVENTS: EventDef[] = [
     { id: 'transaction.completed', label: t('transactions'),  desc: t('evtTransactionsDesc') },
@@ -253,6 +258,27 @@ export default function IntegrationsPage() {
       />
 
       <div className="p-2 sm:p-4">
+        {canManageTokens && (
+          <div className="mb-6 flex gap-1 border-b border-slate-200">
+            {([['webhooks', t('tabWebhooks')], ['tokens', t('tabApiTokens')]] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                className={cn(
+                  '-mb-px px-4 py-2.5 text-sm font-medium border-b-2 transition-colors',
+                  tab === id
+                    ? 'border-brand-600 text-brand-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {canManageTokens && tab === 'tokens' ? <ApiTokensTab /> : (
+        <>
         <div className="mb-6 flex justify-end">
           <Button onClick={openCreate}><Plus size={16} /> {t('addIntegration')}</Button>
         </div>
@@ -375,6 +401,8 @@ export default function IntegrationsPage() {
               </div>
             ))}
           </div>
+        )}
+        </>
         )}
       </div>
 

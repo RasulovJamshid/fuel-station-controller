@@ -191,12 +191,13 @@ export class SyncService {
     }
 
     private async upsertReservoirReading(stationId: string, companyId: string, p: any) {
-        const reservoir = await this.prisma.reservoir.findFirst({
+        let reservoir = await this.prisma.reservoir.findFirst({
             where: { stationId, tankId: p.tank_id },
         });
         if (!reservoir) {
-            this.logger.warn(`Unknown reservoir tank_id=${p.tank_id} on station ${stationId}`);
-            return;
+            // Auto-provision the tank on its first reading so ATG data is never
+            // dropped. The label/capacity are placeholders an admin can edit later.
+            reservoir = await this.autoCreateReservoir(stationId, p);
         }
 
         await this.prisma.reservoirReading.create({
@@ -220,6 +221,33 @@ export class SyncService {
             volumeLitres: p.volume_litres, fillPercent: p.fill_percent ?? null,
             levelMm: p.level_mm ?? null, readingAt: p.reading_at,
         }).catch(() => {});
+    }
+
+    /**
+     * Create a reservoir for a tank we've never seen before. The product name
+     * is resolved from the station's nozzles when possible; label and capacity
+     * are placeholders (capacity 0 = unknown) that an admin can edit afterwards.
+     */
+    private async autoCreateReservoir(stationId: string, p: any) {
+        const productId = p.product_id ?? 0;
+        const nozzle = await this.prisma.nozzle.findFirst({
+            where:  { productId, position: { stationId } },
+            select: { productName: true },
+        });
+        const reservoir = await this.prisma.reservoir.upsert({
+            where:  { stationId_tankId: { stationId, tankId: p.tank_id } },
+            create: {
+                stationId,
+                tankId:      p.tank_id,
+                label:       `Tank ${p.tank_id}`,
+                productId,
+                productName: nozzle?.productName ?? '',
+                capacity:    0,
+            },
+            update: {},
+        });
+        this.logger.log(`Auto-created reservoir tank_id=${p.tank_id} on station ${stationId}`);
+        return reservoir;
     }
 
     private async recordPriceChange(stationId: string, companyId: string, p: any) {

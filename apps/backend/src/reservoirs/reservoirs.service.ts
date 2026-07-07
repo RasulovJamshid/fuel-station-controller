@@ -21,7 +21,12 @@ export class ReservoirsService {
         return this.prisma.reservoir.upsert({
             where: { stationId_tankId: { stationId: dto.stationId, tankId: dto.tankId } },
             create: dto,
-            update: { label: dto.label, capacity: dto.capacity },
+            update: {
+                label:       dto.label,
+                capacity:    dto.capacity,
+                productId:   dto.productId,
+                productName: dto.productName,
+            },
         });
     }
 
@@ -55,7 +60,7 @@ export class ReservoirsService {
 
         const result: any[] = await this.prisma.$queryRaw`
             SELECT DISTINCT ON (r.id)
-                r.id, r."stationId", r."tankId", r.label, r."productName",
+                r.id, r."stationId", r."tankId", r.label, r."productId", r."productName",
                 r.capacity, rr."volumeLitres", rr."fillPercent",
                 rr."levelMm", rr."temperatureC", rr."readingAt"
             FROM "Reservoir" r

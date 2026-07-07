@@ -150,7 +150,7 @@ export const apiTokensApi = {
   list:   () => api.get('/api-tokens'),
   create: (data: unknown) => api.post('/api-tokens', data),
   update: (id: string, data: unknown) => api.patch(`/api-tokens/${id}`, data),
-  revoke: (id: string) => api.delete(`/api-tokens/${id}`),
+  remove: (id: string) => api.delete(`/api-tokens/${id}`),
 };
 
 // ── Oil Bases ─────────────────────────────────────────────────────────────────

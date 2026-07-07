@@ -46,7 +46,7 @@ export default function IntegrationsPage() {
   const { connected } = useWebSocket();
   const role = useAuthStore(s => s.user?.role);
   const canManageTokens = role === 'SUPER_ADMIN' || role === 'COMPANY_ADMIN';
-  const [tab, setTab] = useState<'webhooks' | 'tokens'>('webhooks');
+  const [tab, setTab] = useState<'webhooks' | 'tokens'>(canManageTokens ? 'tokens' : 'webhooks');
 
   const ALL_EVENTS: EventDef[] = [
     { id: 'transaction.completed', label: t('transactions'),  desc: t('evtTransactionsDesc') },
@@ -260,7 +260,7 @@ export default function IntegrationsPage() {
       <div className="p-2 sm:p-4">
         {canManageTokens && (
           <div className="mb-6 flex gap-1 border-b border-slate-200">
-            {([['webhooks', t('tabWebhooks')], ['tokens', t('tabApiTokens')]] as const).map(([id, label]) => (
+            {([['tokens', t('tabApiTokens')], ['webhooks', t('tabWebhooks')]] as const).map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setTab(id)}

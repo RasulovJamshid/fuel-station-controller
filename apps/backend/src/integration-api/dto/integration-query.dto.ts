@@ -82,6 +82,25 @@ export class QueryIntegrationSummaryDto {
     to?: string;
 }
 
+// ── Shift summary (per-shift aggregates over a period, paginated) ─
+export class QueryIntegrationShiftSummaryDto extends PaginationDto {
+    @ApiPropertyOptional({ description: 'Restrict to a single station ID', example: 'station-1' })
+    @IsOptional() @IsString()
+    stationId?: string;
+
+    @ApiPropertyOptional({ description: 'Restrict to all stations under an oil base', example: 'oilbase-uuid' })
+    @IsOptional() @IsString()
+    oilBaseId?: string;
+
+    @ApiPropertyOptional({ description: 'Include shifts started on or after this ISO date-time', example: '2026-01-01T00:00:00.000Z' })
+    @IsOptional() @IsDateString()
+    from?: string;
+
+    @ApiPropertyOptional({ description: 'Include shifts started on or before this ISO date-time', example: '2026-01-31T23:59:59.000Z' })
+    @IsOptional() @IsDateString()
+    to?: string;
+}
+
 // ── Shifts ──────────────────────────────────────────────────────
 const SHIFT_SORT = ['startedAt', 'endedAt', 'totalVolume', 'totalAmount', 'totalTransactions'] as const;
 
@@ -131,6 +150,25 @@ export class QueryIntegrationStationsDto extends IntegrationQueryDto {
     @ApiPropertyOptional({ description: 'Field to sort by', enum: STATION_SORT, default: 'name' })
     @IsOptional() @IsIn(STATION_SORT as unknown as string[])
     sort: string = 'name';
+
+    @ApiPropertyOptional({ description: 'Filter by active state', example: true })
+    @IsOptional()
+    @Transform(({ value }) => value === true || value === 'true')
+    @IsBoolean()
+    active?: boolean;
+}
+
+// ── Oil bases ───────────────────────────────────────────────────
+const OILBASE_SORT = ['name', 'createdAt'] as const;
+
+export class QueryIntegrationOilBasesDto extends PaginationDto {
+    @ApiPropertyOptional({ description: 'Field to sort by', enum: OILBASE_SORT, default: 'name' })
+    @IsOptional() @IsIn(OILBASE_SORT as unknown as string[])
+    sort: string = 'name';
+
+    @ApiPropertyOptional({ description: 'Sort direction', enum: ['asc', 'desc'], default: 'asc' })
+    @IsOptional() @IsIn(['asc', 'desc'])
+    order: 'asc' | 'desc' = 'asc';
 
     @ApiPropertyOptional({ description: 'Filter by active state', example: true })
     @IsOptional()

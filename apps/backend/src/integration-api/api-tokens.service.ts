@@ -62,13 +62,18 @@ export class ApiTokensService {
         return rows.map(r => this.serialize(r));
     }
 
-    async revoke(companyId: string, id: string) {
+    /**
+     * Permanently delete a token. Only inactive (disabled) tokens can be
+     * deleted — an active token must be disabled first, so a live
+     * integration is never cut off by an accidental delete.
+     */
+    async remove(companyId: string, id: string) {
         const existing = await this.prisma.apiToken.findFirst({ where: { id, companyId } });
         if (!existing) throw new NotFoundException('API token not found');
-        await this.prisma.apiToken.update({
-            where: { id },
-            data:  { active: false, revokedAt: new Date() },
-        });
+        if (existing.active) {
+            throw new BadRequestException('Disable the token before deleting it');
+        }
+        await this.prisma.apiToken.delete({ where: { id } });
     }
 
     /** Strip the secret hash before returning a token record to a client. */

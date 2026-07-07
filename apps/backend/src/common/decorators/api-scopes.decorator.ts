@@ -11,6 +11,7 @@ export const API_SCOPES = {
     PRICES:        'read:prices',
     STATIONS:      'read:stations',
     TANK_READINGS: 'read:tank_readings',
+    OIL_BASES:     'read:oil_bases',
 } as const;
 
 export type ApiScope = (typeof API_SCOPES)[keyof typeof API_SCOPES];

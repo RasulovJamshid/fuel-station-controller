@@ -5,9 +5,11 @@ import { AuthenticatedToken } from '../common/decorators/current-token.decorator
 import {
     QueryIntegrationTransactionsDto,
     QueryIntegrationSummaryDto,
+    QueryIntegrationShiftSummaryDto,
     QueryIntegrationShiftsDto,
     QueryIntegrationPricesDto,
     QueryIntegrationStationsDto,
+    QueryIntegrationOilBasesDto,
     QueryIntegrationReadingsDto,
 } from './dto/integration-query.dto';
 
@@ -199,6 +201,109 @@ export class IntegrationApiService {
         return PaginatedResponse.of(data, total, q);
     }
 
+    /**
+     * Per-shift summary for a station/period: a paginated list of shifts,
+     * each recomputed from its transactions with by-product and by-operator
+     * breakdowns. Aggregates cover only the shifts on the requested page.
+     */
+    async shiftsSummary(token: AuthenticatedToken, q: QueryIntegrationShiftSummaryDto) {
+        const stationIds = await this.resolveStationScope(token, q);
+        if (stationIds.length === 0) return PaginatedResponse.of([], 0, q);
+
+        const shiftWhere: any = {
+            companyId: token.companyId,
+            deletedAt: null,
+            stationId: { in: stationIds },
+            ...(q.from || q.to ? { startedAt: {
+                ...(q.from ? { gte: new Date(q.from) } : {}),
+                ...(q.to   ? { lte: new Date(q.to)   } : {}),
+            } } : {}),
+        };
+
+        const [shifts, total] = await this.prisma.$transaction([
+            this.prisma.shift.findMany({
+                where:   shiftWhere,
+                orderBy: { startedAt: 'desc' },
+                skip:    q.skip,
+                take:    q.limit,
+                select: {
+                    id: true, stationId: true, operatorName: true, shiftName: true,
+                    startedAt: true, endedAt: true, status: true,
+                },
+            }),
+            this.prisma.shift.count({ where: shiftWhere }),
+        ]);
+
+        const shiftIds = shifts.map(s => s.id);
+        if (shiftIds.length === 0) return PaginatedResponse.of([], total, q);
+
+        const txWhere: any = { companyId: token.companyId, deletedAt: null, shiftId: { in: shiftIds } };
+        const [byProductRaw, byOperatorRaw] = await Promise.all([
+            this.prisma.transaction.groupBy({
+                by:      ['shiftId', 'productId', 'productName'],
+                where:   txWhere,
+                _count:  { _all: true },
+                _sum:    { volume: true, amount: true },
+                _min:    { price: true },
+                _max:    { price: true },
+                orderBy: { shiftId: 'asc' },
+            }),
+            this.prisma.transaction.groupBy({
+                by:      ['shiftId', 'operatorName'],
+                where:   txWhere,
+                _count:  { _all: true },
+                _sum:    { volume: true, amount: true },
+                orderBy: { shiftId: 'asc' },
+            }),
+        ]);
+
+        // Index the aggregates by shiftId
+        const productsByShift = new Map<string, any[]>();
+        for (const g of byProductRaw) {
+            if (!g.shiftId) continue;
+            const volume = g._sum.volume ?? 0;
+            const amount = Number(g._sum.amount ?? 0);
+            (productsByShift.get(g.shiftId) ?? productsByShift.set(g.shiftId, []).get(g.shiftId)!).push({
+                productId:    g.productId,
+                productName:  g.productName,
+                transactions: g._count._all,
+                volume,
+                amount,
+                avgPrice:     volume > 0 ? Math.round(amount / volume) : 0,
+                minPrice:     g._min.price ?? 0,
+                maxPrice:     g._max.price ?? 0,
+            });
+        }
+
+        const operatorsByShift = new Map<string, any[]>();
+        for (const g of byOperatorRaw) {
+            if (!g.shiftId) continue;
+            (operatorsByShift.get(g.shiftId) ?? operatorsByShift.set(g.shiftId, []).get(g.shiftId)!).push({
+                operatorName: g.operatorName,
+                transactions: g._count._all,
+                volume:       g._sum.volume ?? 0,
+                amount:       Number(g._sum.amount ?? 0),
+            });
+        }
+
+        const data = shifts.map(s => {
+            const byProduct  = (productsByShift.get(s.id) ?? []).sort((a, b) => b.amount - a.amount);
+            const byOperator = (operatorsByShift.get(s.id) ?? []).sort((a, b) => b.amount - a.amount);
+            return {
+                ...s,
+                totals: {
+                    transactions: byProduct.reduce((n, p) => n + p.transactions, 0),
+                    volume:       byProduct.reduce((n, p) => n + p.volume, 0),
+                    amount:       byProduct.reduce((n, p) => n + p.amount, 0),
+                },
+                byProduct,
+                byOperator,
+            };
+        });
+
+        return PaginatedResponse.of(data, total, q);
+    }
+
     async shift(token: AuthenticatedToken, id: string) {
         const stationIds = await this.resolveStationScope(token, {});
         const shift = stationIds.length === 0 ? null : await this.prisma.shift.findFirst({
@@ -263,6 +368,22 @@ export class IntegrationApiService {
         });
         if (!station) throw new NotFoundException('Station not found');
         return station;
+    }
+
+    // ── Oil bases ───────────────────────────────────────────────
+    async oilBases(token: AuthenticatedToken, q: QueryIntegrationOilBasesDto) {
+        const where: any = { companyId: token.companyId, deletedAt: null };
+        if (token.oilBaseIds.length > 0) where.id = { in: token.oilBaseIds };
+        if (q.active != null) where.active = q.active;
+
+        const [data, total] = await this.prisma.$transaction([
+            this.prisma.oilBase.findMany({
+                where, orderBy: { [q.sort]: q.order }, skip: q.skip, take: q.limit,
+                select: { id: true, name: true, address: true, active: true, createdAt: true },
+            }),
+            this.prisma.oilBase.count({ where }),
+        ]);
+        return PaginatedResponse.of(data, total, q);
     }
 
     // ── Tank (reservoir) readings ───────────────────────────────

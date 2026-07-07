@@ -57,13 +57,14 @@ export class ApiTokensController {
     }
 
     @Delete(':id')
-    @ApiOperation({ summary: 'Revoke an integration API token' })
-    @ApiNoContentResponse({ description: 'Token revoked' })
+    @ApiOperation({ summary: 'Permanently delete an inactive integration API token' })
+    @ApiNoContentResponse({ description: 'Token deleted' })
+    @ApiBadRequestResponse({ description: 'Token is still active — disable it before deleting' })
     @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     @ApiForbiddenResponse({ description: 'Insufficient role' })
     @ApiNotFoundResponse({ description: 'Token not found' })
     @HttpCode(HttpStatus.NO_CONTENT)
-    revoke(@CurrentUser() user: any, @Param('id') id: string) {
-        return this.tokens.revoke(user.companyId, id);
+    remove(@CurrentUser() user: any, @Param('id') id: string) {
+        return this.tokens.remove(user.companyId, id);
     }
 }

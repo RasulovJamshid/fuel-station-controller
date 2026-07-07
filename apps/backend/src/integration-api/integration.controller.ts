@@ -10,9 +10,11 @@ import { CurrentToken, AuthenticatedToken } from '../common/decorators/current-t
 import {
     QueryIntegrationTransactionsDto,
     QueryIntegrationSummaryDto,
+    QueryIntegrationShiftSummaryDto,
     QueryIntegrationShiftsDto,
     QueryIntegrationPricesDto,
     QueryIntegrationStationsDto,
+    QueryIntegrationOilBasesDto,
     QueryIntegrationReadingsDto,
 } from './dto/integration-query.dto';
 
@@ -66,6 +68,14 @@ export class IntegrationController {
         return this.api.shifts(token, q);
     }
 
+    @Get('shifts/summary')
+    @RequireScopes(API_SCOPES.SHIFTS)
+    @ApiOperation({ summary: 'Per-shift summary for a station/period (by product and by operator), paginated' })
+    @ApiOkResponse({ description: 'Paginated list of shifts, each with totals and product/operator breakdowns' })
+    shiftsSummary(@CurrentToken() token: AuthenticatedToken, @Query() q: QueryIntegrationShiftSummaryDto) {
+        return this.api.shiftsSummary(token, q);
+    }
+
     @Get('shifts/:id')
     @RequireScopes(API_SCOPES.SHIFTS)
     @ApiOperation({ summary: 'Get a single shift by ID' })
@@ -100,6 +110,15 @@ export class IntegrationController {
     @ApiNotFoundResponse({ description: 'Station not found or not within token scope' })
     station(@CurrentToken() token: AuthenticatedToken, @Param('id') id: string) {
         return this.api.station(token, id);
+    }
+
+    // ── Oil bases ───────────────────────────────────────────────
+    @Get('oil-bases')
+    @RequireScopes(API_SCOPES.OIL_BASES)
+    @ApiOperation({ summary: 'List oil bases visible to the token (filterable, sortable, paginated)' })
+    @ApiOkResponse({ description: 'Paginated list of oil bases' })
+    oilBases(@CurrentToken() token: AuthenticatedToken, @Query() q: QueryIntegrationOilBasesDto) {
+        return this.api.oilBases(token, q);
     }
 
     // ── Tank readings ───────────────────────────────────────────

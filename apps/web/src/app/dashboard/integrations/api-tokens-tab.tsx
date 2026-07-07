@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import {
-  Plus, KeyRound, Pencil, Trash2, Power, Copy, Check, Gauge,
+  Plus, KeyRound, Pencil, Trash2, Power, Copy, Check, Gauge, Eye, EyeOff,
 } from 'lucide-react';
 import { apiTokensApi, stationsApi, oilBasesApi } from '@/lib/api';
 import { useT } from '@/hooks/use-t';
@@ -37,6 +37,7 @@ export function ApiTokensTab() {
     { id: 'read:prices',        label: t('navPrices') },
     { id: 'read:stations',      label: t('navStations') },
     { id: 'read:tank_readings', label: t('navTanks') },
+    { id: 'read:oil_bases',     label: t('navOilBases') },
   ];
 
   const [tokens, setTokens]     = useState<any[]>([]);
@@ -46,13 +47,14 @@ export function ApiTokensTab() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing]   = useState<any>(null);
-  const [revoking, setRevoking] = useState<any>(null);
+  const [deleting, setDeleting] = useState<any>(null);
   const [form, setForm]         = useState<TokenForm>({ ...EMPTY_FORM });
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState('');
 
   const [created, setCreated]   = useState<{ name: string; token: string } | null>(null);
   const [copied, setCopied]     = useState(false);
+  const [revealed, setRevealed] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -105,7 +107,7 @@ export function ApiTokensTab() {
       if (isCreate) {
         const res: any = await apiTokensApi.create(payload);
         setShowCreate(false);
-        if (res?.token) { setCreated({ name: res.name, token: res.token }); setCopied(false); }
+        if (res?.token) { setCreated({ name: res.name, token: res.token }); setCopied(false); setRevealed(false); }
       } else {
         await apiTokensApi.update(editing.id, payload);
         setEditing(null);
@@ -120,9 +122,9 @@ export function ApiTokensTab() {
     catch { /* surfaced on reload */ }
   }
 
-  async function confirmRevoke() {
+  async function confirmDelete() {
     setSaving(true);
-    try { await apiTokensApi.revoke(revoking.id); setRevoking(null); load(); }
+    try { await apiTokensApi.remove(deleting.id); setDeleting(null); load(); }
     finally { setSaving(false); }
   }
 
@@ -133,7 +135,6 @@ export function ApiTokensTab() {
   }
 
   function statusBadge(tk: any) {
-    if (tk.revokedAt) return <Badge variant="danger">{t('tokRevoked')}</Badge>;
     return <Badge variant={tk.active ? 'success' : 'neutral'}>{tk.active ? t('active') : t('inactive')}</Badge>;
   }
 
@@ -254,7 +255,7 @@ export function ApiTokensTab() {
               <div className="flex items-start gap-4 p-5">
                 <div className={cn(
                   'h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0',
-                  tk.active && !tk.revokedAt ? 'bg-brand-50 text-brand-600' : 'bg-slate-100 text-slate-400',
+                  tk.active ? 'bg-brand-50 text-brand-600' : 'bg-slate-100 text-slate-400',
                 )}>
                   <KeyRound size={18} />
                 </div>
@@ -272,23 +273,24 @@ export function ApiTokensTab() {
                     ))}
                   </div>
                 </div>
-                {!tk.revokedAt && (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => toggleActive(tk)} title={tk.active ? t('tokDisable') : t('tokEnable')}
-                      className={cn('p-2 rounded-lg transition-colors',
-                        tk.active ? 'text-emerald-500 hover:bg-emerald-50' : 'text-slate-400 hover:bg-slate-100')}>
-                      <Power size={14} />
-                    </button>
-                    <button onClick={() => openEdit(tk)}
-                      className="p-2 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors">
-                      <Pencil size={14} />
-                    </button>
-                    <button onClick={() => setRevoking(tk)}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={() => toggleActive(tk)} title={tk.active ? t('tokDisable') : t('tokEnable')}
+                    className={cn('p-2 rounded-lg transition-colors',
+                      tk.active ? 'text-emerald-500 hover:bg-emerald-50' : 'text-slate-400 hover:bg-slate-100')}>
+                    <Power size={14} />
+                  </button>
+                  <button onClick={() => openEdit(tk)}
+                    className="p-2 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors">
+                    <Pencil size={14} />
+                  </button>
+                  {/* Delete only permitted once the token is disabled */}
+                  {!tk.active && (
+                    <button onClick={() => setDeleting(tk)} title={t('delete')}
                       className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
                       <Trash2 size={14} />
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               <div className="border-t border-slate-100 bg-slate-50 px-5 py-2.5 flex items-center justify-between text-xs text-slate-400">
                 <span className="flex items-center gap-1.5">
@@ -314,9 +316,13 @@ export function ApiTokensTab() {
           <p className="text-sm text-slate-600">{t('tokCreatedDesc')}</p>
           <div className="flex items-stretch gap-2">
             <code className="flex-1 min-w-0 break-all rounded-lg bg-slate-900 text-emerald-300 text-xs p-3 font-mono">
-              {created?.token}
+              {revealed ? created?.token : '•'.repeat(Math.min(40, created?.token.length ?? 24))}
             </code>
-            <button onClick={copyToken}
+            <button onClick={() => setRevealed(r => !r)} title={revealed ? t('tokHide') : t('tokShow')}
+              className="flex-shrink-0 px-3 rounded-lg border border-slate-200 text-slate-500 hover:text-brand-600 hover:border-brand-300 transition-colors">
+              {revealed ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+            <button onClick={copyToken} title={t('tokCopy')}
               className="flex-shrink-0 px-3 rounded-lg border border-slate-200 text-slate-500 hover:text-brand-600 hover:border-brand-300 transition-colors">
               {copied ? <Check size={16} /> : <Copy size={16} />}
             </button>
@@ -328,13 +334,13 @@ export function ApiTokensTab() {
       </Modal>
 
       <Confirm
-        open={!!revoking}
-        onClose={() => setRevoking(null)}
-        onConfirm={confirmRevoke}
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={confirmDelete}
         loading={saving}
-        title={t('tokRevoke')}
-        message={`${t('tokRevoke')} "${revoking?.name}"? ${t('tokRevokeConfirm')}`}
-        confirmLabel={t('tokRevoke')}
+        title={t('delete')}
+        message={`${t('delete')} "${deleting?.name}"? ${t('tokDeleteConfirm')}`}
+        confirmLabel={t('delete')}
         danger
       />
     </div>

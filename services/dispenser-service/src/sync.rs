@@ -120,7 +120,7 @@ fn deterministic_id(entity_type: &str, entity_id: &str, payload_json: &str) -> S
 
 #[cfg(test)]
 mod tests {
-    use super::deterministic_id;
+    use super::{decode_sync_response, deterministic_id};
 
     #[test]
     fn sync_id_changes_when_payload_changes() {
@@ -132,6 +132,22 @@ mod tests {
             active,
             deterministic_id("shift", "shift-1", r#"{"status":"ACTIVE"}"#)
         );
+    }
+
+    #[test]
+    fn sync_response_accepts_backend_envelope() {
+        let resp = decode_sync_response(serde_json::json!({
+            "data": {
+                "accepted": ["a"],
+                "rejected": ["b"]
+            },
+            "meta": {
+                "requestId": "r1",
+                "timestamp": "2026-07-07T00:00:00.000Z"
+            }
+        }));
+        assert_eq!(resp.accepted, vec!["a"]);
+        assert_eq!(resp.rejected, vec!["b"]);
     }
 }
 
@@ -151,6 +167,9 @@ pub async fn run(
         .expect("sync reqwest client");
 
     let mut last_price_pull: Option<std::time::Instant> = None;
+    if let Err(e) = revive_no_verdict_records(&pool).await {
+        tracing::warn!(?e, "sync: failed to revive no-verdict queue records");
+    }
 
     loop {
         let (
@@ -334,7 +353,8 @@ async fn do_batch(
         return Err(format!("HTTP {code}: {body}"));
     }
 
-    let resp: SyncResponse = http_resp.json().await.unwrap_or_default();
+    let resp_json: serde_json::Value = http_resp.json().await.unwrap_or_default();
+    let resp = decode_sync_response(resp_json);
     let now = chrono::Utc::now().timestamp_millis();
 
     let accepted_set: std::collections::HashSet<_> = resp.accepted.iter().collect();
@@ -372,6 +392,22 @@ async fn pending_count(pool: &SqlitePool) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE synced_at IS NULL")
         .fetch_one(pool)
         .await
+}
+
+fn decode_sync_response(value: serde_json::Value) -> SyncResponse {
+    let payload = value.get("data").cloned().unwrap_or(value);
+    serde_json::from_value(payload).unwrap_or_default()
+}
+
+async fn revive_no_verdict_records(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+    let r = sqlx::query(
+        r#"UPDATE sync_queue
+           SET retries = 0, last_error = NULL
+           WHERE synced_at IS NULL AND last_error = 'no server verdict'"#,
+    )
+    .execute(pool)
+    .await?;
+    Ok(r.rows_affected())
 }
 
 #[derive(Deserialize)]

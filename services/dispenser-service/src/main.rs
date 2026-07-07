@@ -120,6 +120,11 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
     sqlx::migrate!("./migrations").run(&pool).await?;
     db::repair::ensure_price_history_columns(&pool).await?;
     db::repair::ensure_fp_nozzles_schema(&pool).await?;
+    match db::shift_queries::recompute_shift_totals_from_transactions(&pool).await {
+        Ok(n) if n > 0 => tracing::info!(count = n, "repaired shift totals from transactions"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(%e, "shift total repair failed"),
+    }
 
     admin::ensure_admin_defaults(&pool).await?;
 
@@ -171,7 +176,10 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
     // Recover shifts closed locally whose CLOSED state never reached the backend (so they are
     // stuck ACTIVE on the server admin). Idempotent + self-limiting; drains via the sync worker.
     match db::shift_queries::backfill_unsynced_closed_shifts(&pool).await {
-        Ok(n) if n > 0 => tracing::info!(count = n, "re-enqueued unsynced CLOSED shift(s) for backend sync"),
+        Ok(n) if n > 0 => tracing::info!(
+            count = n,
+            "re-enqueued unsynced CLOSED shift(s) for backend sync"
+        ),
         Ok(_) => {}
         Err(e) => tracing::warn!(%e, "backfill of unsynced closed shifts failed"),
     }

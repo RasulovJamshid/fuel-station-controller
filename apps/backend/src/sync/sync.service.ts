@@ -103,6 +103,9 @@ export class SyncService {
         });
 
         await this.setTransactionPresetMetadata(p.id, p);
+        if (p.shift_id) {
+            await this.refreshShiftTotalsFromTransactions(stationId, companyId, p.shift_id);
+        }
 
         this.gateway.broadcast('transaction.synced', { stationId, txId: p.id });
 
@@ -177,6 +180,7 @@ export class SyncService {
                 })),
             });
         }
+        await this.refreshShiftTotalsFromTransactions(stationId, companyId, p.id);
 
         this.gateway.broadcast('shift.synced', { stationId, shiftId: p.id, status: p.status });
 
@@ -188,6 +192,52 @@ export class SyncService {
                 totalVolume: p.total_volume, totalAmount: p.total_amount,
             }).catch(() => {});
         }
+    }
+
+    private async refreshShiftTotalsFromTransactions(stationId: string, companyId: string, shiftId: string) {
+        const rows = await this.prisma.transaction.groupBy({
+            by: ['fpId', 'label'],
+            where: {
+                stationId,
+                companyId,
+                shiftId,
+                deletedAt: null,
+                status: { in: ['COMPLETED', 'STOPPED'] },
+            },
+            _count: { id: true },
+            _sum: { volume: true, amount: true },
+        });
+
+        const totalTransactions = rows.reduce((sum, r) => sum + r._count.id, 0);
+        const totalVolume = rows.reduce((sum, r) => sum + (r._sum.volume ?? 0), 0);
+        const totalAmount = rows.reduce((sum, r) => sum + this.toBigInt(r._sum.amount), BigInt(0));
+
+        const updated = await this.prisma.shift.updateMany({
+            where: { id: shiftId, stationId, companyId },
+            data: { totalTransactions, totalVolume, totalAmount },
+        });
+        if (updated.count === 0) return;
+
+        await this.prisma.shiftPositionTotal.deleteMany({ where: { shiftId } });
+        if (rows.length > 0) {
+            await this.prisma.shiftPositionTotal.createMany({
+                data: rows.map((r) => ({
+                    shiftId,
+                    fpId: r.fpId,
+                    label: r.label,
+                    transactionsCount: r._count.id,
+                    totalVolume: r._sum.volume ?? 0,
+                    totalAmount: this.toBigInt(r._sum.amount),
+                })),
+            });
+        }
+
+        this.gateway.broadcast('shift.synced', { stationId, shiftId, status: 'REFRESHED' });
+    }
+
+    private toBigInt(value: bigint | number | null | undefined): bigint {
+        if (typeof value === 'bigint') return value;
+        return BigInt(value ?? 0);
     }
 
     private async upsertReservoirReading(stationId: string, companyId: string, p: any) {

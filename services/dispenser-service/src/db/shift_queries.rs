@@ -161,6 +161,28 @@ async fn position_totals_for_shift(
         .collect())
 }
 
+async fn aggregate_totals_for_shift(pool: &SqlitePool, shift_id: &str) -> Result<(i64, f64, i64)> {
+    sqlx::query_as(
+        r#"SELECT COUNT(CASE WHEN status != 'CONTINUED_FROM' THEN 1 END),
+                  COALESCE(SUM(CASE
+                    WHEN status = 'CONTINUED_FROM' THEN volume
+                    WHEN combined_volume > 0 THEN combined_volume
+                    ELSE volume
+                  END), 0.0),
+                  COALESCE(SUM(CASE
+                    WHEN status = 'CONTINUED_FROM' THEN amount
+                    WHEN combined_amount > 0 THEN combined_amount
+                    ELSE amount
+                  END), 0)
+           FROM transactions
+           WHERE shift_id = ? AND status IN ('COMPLETED', 'STOPPED', 'CONTINUED_FROM')"#,
+    )
+    .bind(shift_id)
+    .fetch_one(pool)
+    .await
+    .map_err(Into::into)
+}
+
 pub async fn insert_shift(pool: &SqlitePool, shift: &Shift) -> Result<()> {
     let st = match shift.status {
         ShiftStatus::Active => "ACTIVE",
@@ -226,6 +248,12 @@ async fn enqueue_shift(pool: &SqlitePool, shift: &Shift) {
     }
 }
 
+async fn enqueue_shift_by_id(pool: &SqlitePool, shift_id: &str) {
+    if let Ok(Some(shift)) = get_shift(pool, shift_id).await {
+        enqueue_shift(pool, &shift).await;
+    }
+}
+
 pub async fn bump_shift_totals(
     pool: &SqlitePool,
     shift_id: &str,
@@ -259,18 +287,57 @@ pub async fn bump_shift_totals(
         .execute(pool)
         .await?;
     }
+    enqueue_shift_by_id(pool, shift_id).await;
     Ok(())
+}
+
+/// Recompute stored shift totals from transaction rows and enqueue changed shifts.
+/// Safe on every startup; repairs older DBs where Gilbarco transactions were saved
+/// with shift_id but the shift aggregate row stayed at zero.
+pub async fn recompute_shift_totals_from_transactions(pool: &SqlitePool) -> Result<u64> {
+    let rows: Vec<(String, i64, f64, i64)> =
+        sqlx::query_as(r#"SELECT id, total_transactions, total_volume, total_amount FROM shifts"#)
+            .fetch_all(pool)
+            .await?;
+
+    let mut repaired = 0u64;
+    for (id, old_count, old_volume, old_amount) in rows {
+        let (count, volume, amount) = aggregate_totals_for_shift(pool, &id).await?;
+        let changed =
+            old_count != count || old_amount != amount || (old_volume - volume).abs() > 0.000_001;
+        if !changed {
+            continue;
+        }
+
+        sqlx::query(
+            r#"UPDATE shifts SET
+                   total_transactions = ?,
+                   total_volume       = ?,
+                   total_amount       = ?
+               WHERE id = ?"#,
+        )
+        .bind(count)
+        .bind(volume)
+        .bind(amount)
+        .bind(&id)
+        .execute(pool)
+        .await?;
+
+        enqueue_shift_by_id(pool, &id).await;
+        repaired += 1;
+    }
+
+    Ok(repaired)
 }
 
 pub async fn close_all_active_shifts(pool: &SqlitePool, ended_at: i64) -> Result<u64> {
     // Capture the ids first so we can enqueue each closed shift for sync after the
     // bulk update — otherwise these closes never reach the backend and the shifts
     // stay ACTIVE on the server admin (unlike the single-shift `close_shift` path).
-    let ids: Vec<String> = sqlx::query_scalar(
-        r#"SELECT id FROM shifts WHERE status = 'ACTIVE' AND ended_at IS NULL"#,
-    )
-    .fetch_all(pool)
-    .await?;
+    let ids: Vec<String> =
+        sqlx::query_scalar(r#"SELECT id FROM shifts WHERE status = 'ACTIVE' AND ended_at IS NULL"#)
+            .fetch_all(pool)
+            .await?;
 
     let r = sqlx::query(
         r#"UPDATE shifts SET ended_at = ?, status = 'CLOSED' WHERE status = 'ACTIVE' AND ended_at IS NULL"#,
@@ -384,6 +451,7 @@ pub async fn backfill_unassigned_to_shift(
         count,
         "backfilled unassigned transactions to shift"
     );
+    enqueue_shift_by_id(pool, shift_id).await;
     Ok(())
 }
 
@@ -464,6 +532,8 @@ pub async fn reassign_from_shift_since(
         count,
         "reassigned transactions between shifts"
     );
+    enqueue_shift_by_id(pool, from_shift_id).await;
+    enqueue_shift_by_id(pool, to_shift_id).await;
     Ok(())
 }
 
@@ -660,9 +730,17 @@ mod tests {
         let n = backfill_unsynced_closed_shifts(&pool).await.unwrap();
         assert_eq!(n, 1, "only the stuck shift should be re-enqueued");
 
-        assert_eq!(closed_sync_rows(&pool, "stuck").await, 1, "stuck now has a CLOSED sync row");
+        assert_eq!(
+            closed_sync_rows(&pool, "stuck").await,
+            1,
+            "stuck now has a CLOSED sync row"
+        );
         // 'done' keeps exactly its one (already-synced) row — not duplicated.
         assert_eq!(closed_sync_rows(&pool, "done").await, 1);
-        assert_eq!(closed_sync_rows(&pool, "live").await, 0, "active shift untouched");
+        assert_eq!(
+            closed_sync_rows(&pool, "live").await,
+            0,
+            "active shift untouched"
+        );
     }
 }

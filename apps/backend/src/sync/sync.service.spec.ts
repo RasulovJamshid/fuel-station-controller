@@ -9,6 +9,14 @@ describe('SyncService', () => {
             },
             transaction: {
                 upsert: jest.fn().mockResolvedValue({}),
+                groupBy: jest.fn().mockResolvedValue([]),
+            },
+            shift: {
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+            },
+            shiftPositionTotal: {
+                deleteMany: jest.fn().mockResolvedValue({}),
+                createMany: jest.fn().mockResolvedValue({ count: 0 }),
             },
             station: {
                 update: jest.fn().mockResolvedValue({}),

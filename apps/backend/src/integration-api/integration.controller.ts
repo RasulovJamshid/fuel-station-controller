@@ -9,6 +9,7 @@ import { RequireScopes, API_SCOPES } from '../common/decorators/api-scopes.decor
 import { CurrentToken, AuthenticatedToken } from '../common/decorators/current-token.decorator';
 import {
     QueryIntegrationTransactionsDto,
+    QueryIntegrationSummaryDto,
     QueryIntegrationShiftsDto,
     QueryIntegrationPricesDto,
     QueryIntegrationStationsDto,
@@ -37,6 +38,14 @@ export class IntegrationController {
     @ApiOkResponse({ description: 'Paginated list of transactions' })
     transactions(@CurrentToken() token: AuthenticatedToken, @Query() q: QueryIntegrationTransactionsDto) {
         return this.api.transactions(token, q);
+    }
+
+    @Get('transactions/summary')
+    @RequireScopes(API_SCOPES.TRANSACTIONS)
+    @ApiOperation({ summary: 'Aggregate transaction totals for a station/period, broken down by product and status' })
+    @ApiOkResponse({ description: 'Totals plus per-product and per-status breakdowns' })
+    transactionsSummary(@CurrentToken() token: AuthenticatedToken, @Query() q: QueryIntegrationSummaryDto) {
+        return this.api.transactionsSummary(token, q);
     }
 
     @Get('transactions/:id')

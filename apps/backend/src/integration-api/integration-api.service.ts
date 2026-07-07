@@ -4,6 +4,7 @@ import { PaginatedResponse } from '../common/dto/pagination.dto';
 import { AuthenticatedToken } from '../common/decorators/current-token.decorator';
 import {
     QueryIntegrationTransactionsDto,
+    QueryIntegrationSummaryDto,
     QueryIntegrationShiftsDto,
     QueryIntegrationPricesDto,
     QueryIntegrationStationsDto,
@@ -81,6 +82,85 @@ export class IntegrationApiService {
             this.prisma.transaction.count({ where }),
         ]);
         return PaginatedResponse.of(data, total, q);
+    }
+
+    /**
+     * Aggregated totals for a station over a period: overall count/volume/amount,
+     * plus breakdowns by product (with weighted avg + min/max price) and by status.
+     */
+    async transactionsSummary(token: AuthenticatedToken, q: QueryIntegrationSummaryDto) {
+        const stationIds = await this.resolveStationScope(token, q);
+        const empty = {
+            period:     { from: q.from ?? null, to: q.to ?? null },
+            stationIds,
+            totals:     { transactions: 0, volume: 0, amount: 0 },
+            byProduct:  [] as any[],
+            byStatus:   [] as any[],
+        };
+        if (stationIds.length === 0) return empty;
+
+        const where: any = {
+            companyId: token.companyId,
+            deletedAt: null,
+            stationId: { in: stationIds },
+            ...(q.from || q.to ? { startedAt: {
+                ...(q.from ? { gte: new Date(q.from) } : {}),
+                ...(q.to   ? { lte: new Date(q.to)   } : {}),
+            } } : {}),
+        };
+
+        const [byProductRaw, byStatusRaw] = await Promise.all([
+            this.prisma.transaction.groupBy({
+                by:      ['productId', 'productName'],
+                where,
+                _count:  { _all: true },
+                _sum:    { volume: true, amount: true },
+                _min:    { price: true },
+                _max:    { price: true },
+                orderBy: { productId: 'asc' },
+            }),
+            this.prisma.transaction.groupBy({
+                by:      ['status'],
+                where,
+                _count:  { _all: true },
+                _sum:    { volume: true, amount: true },
+                orderBy: { status: 'asc' },
+            }),
+        ]);
+
+        const byProduct = byProductRaw.map(g => {
+            const volume = g._sum.volume ?? 0;
+            const amount = Number(g._sum.amount ?? 0);
+            return {
+                productId:    g.productId,
+                productName:  g.productName,
+                transactions: g._count._all,
+                volume,
+                amount,
+                avgPrice:     volume > 0 ? Math.round(amount / volume) : 0,
+                minPrice:     g._min.price ?? 0,
+                maxPrice:     g._max.price ?? 0,
+            };
+        }).sort((a, b) => b.amount - a.amount);
+
+        const byStatus = byStatusRaw.map(g => ({
+            status:       g.status,
+            transactions: g._count._all,
+            volume:       g._sum.volume ?? 0,
+            amount:       Number(g._sum.amount ?? 0),
+        }));
+
+        return {
+            period:    { from: q.from ?? null, to: q.to ?? null },
+            stationIds,
+            totals: {
+                transactions: byProduct.reduce((s, p) => s + p.transactions, 0),
+                volume:       byProduct.reduce((s, p) => s + p.volume, 0),
+                amount:       byProduct.reduce((s, p) => s + p.amount, 0),
+            },
+            byProduct,
+            byStatus,
+        };
     }
 
     async transaction(token: AuthenticatedToken, id: string) {

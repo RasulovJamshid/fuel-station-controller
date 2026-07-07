@@ -63,6 +63,25 @@ export class QueryIntegrationTransactionsDto extends IntegrationQueryDto {
     to?: string;
 }
 
+// ── Transaction summary (aggregates, no pagination) ─────────────
+export class QueryIntegrationSummaryDto {
+    @ApiPropertyOptional({ description: 'Restrict to a single station ID', example: 'station-1' })
+    @IsOptional() @IsString()
+    stationId?: string;
+
+    @ApiPropertyOptional({ description: 'Restrict to all stations under an oil base', example: 'oilbase-uuid' })
+    @IsOptional() @IsString()
+    oilBaseId?: string;
+
+    @ApiPropertyOptional({ description: 'Include transactions started on or after this ISO date-time', example: '2026-01-01T00:00:00.000Z' })
+    @IsOptional() @IsDateString()
+    from?: string;
+
+    @ApiPropertyOptional({ description: 'Include transactions started on or before this ISO date-time', example: '2026-01-31T23:59:59.000Z' })
+    @IsOptional() @IsDateString()
+    to?: string;
+}
+
 // ── Shifts ──────────────────────────────────────────────────────
 const SHIFT_SORT = ['startedAt', 'endedAt', 'totalVolume', 'totalAmount', 'totalTransactions'] as const;
 

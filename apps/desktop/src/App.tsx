@@ -126,7 +126,13 @@ export default function App() {
   const defaultAuthMode = siteSnapshot?.default_auth_mode ?? "preauth";
   const useStopMode = siteSnapshot?.use_stop_mode ?? false;
   const useCancelMode = siteSnapshot?.use_cancel_mode ?? false;
-  const gilbarcoMode = (siteSnapshot?.protocol ?? "").toLowerCase().includes("gilbarco");
+  // Terminal-stop protocols: every stop ends the sale (no pause/continue), and
+  // stopped sales are closed by the service poll loop via dismiss/ResetLane —
+  // not the Wayne stopped-transaction flow. Gilbarco and AZT 2.0 both behave
+  // this way, so they share the UI mode.
+  const gilbarcoMode = ["gilbarco", "azt"].some((p) =>
+    (siteSnapshot?.protocol ?? "").toLowerCase().includes(p),
+  );
 
   // The pump totalizer view only makes sense for protocols that report lifetime
   // totals (currently Gilbarco). Drive it off the actual data so the tab/page is

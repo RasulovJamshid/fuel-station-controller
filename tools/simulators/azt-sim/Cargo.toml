@@ -1,0 +1,21 @@
+[package]
+name = "azt-sim"
+version = "0.1.0"
+edition = "2021"
+description = "AZT 2.0 dispenser (TRK) simulator for AZS Manager"
+
+[[bin]]
+name = "azt-sim"
+path = "src/main.rs"
+
+[dependencies]
+site_config  = { path = "../../../crates/config" }
+azt          = { path = "../../../crates/azt" }
+tokio        = { workspace = true }
+axum         = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+anyhow       = { workspace = true }
+tracing      = { workspace = true }
+tracing-subscriber = { workspace = true }
+serialport   = { workspace = true }

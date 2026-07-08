@@ -260,6 +260,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "azt"
+version = "0.1.0"
+
+[[package]]
+name = "azt-sim"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "azt",
+ "serde",
+ "serde_json",
+ "serialport",
+ "site_config",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -908,6 +928,7 @@ dependencies = [
  "anyhow",
  "atg",
  "axum",
+ "azt",
  "bcrypt",
  "chrono",
  "clap",

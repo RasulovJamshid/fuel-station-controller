@@ -1,0 +1,9 @@
+{
+  "virtual_port": "/tmp/azt-sim",
+  "baud_rate": 4800,
+  "parity": "none",
+  "api_port": 3006,
+  "log_frames": true,
+  "site_config_path": "../../../services/dispenser-service/site.config.azt.json",
+  "default_fill_rate_lps": 2.0
+}

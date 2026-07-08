@@ -6,11 +6,13 @@ members = [
     "crates/wayne-europump",
     "crates/atg",
     "crates/gilbarco",
+    "crates/azt",
     "services/dispenser-service",
     "apps/desktop/src-tauri",
     "apps/sim-desktop/src-tauri",
     "tools/simulators/wayne-sim",
     "tools/simulators/gilbarco-sim",
+    "tools/simulators/azt-sim",
 ]
 resolver = "2"
 

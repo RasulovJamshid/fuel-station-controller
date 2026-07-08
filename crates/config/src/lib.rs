@@ -116,6 +116,9 @@ pub enum Protocol {
     WayneDartV1,
     WayneDartV2,
     Gilbarco,
+    /// AZT 2.0 (ОАО АЗТ) RS-485 protocol — 4800 baud, complementary-byte framing.
+    #[serde(rename = "azt2_0")]
+    Azt20,
     #[serde(rename = "mock")]
     Mock,
 }

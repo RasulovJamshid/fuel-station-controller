@@ -1,0 +1,124 @@
+{
+  "site": {
+    "id": "dev-azt",
+    "name": "Dev station (azt-sim PTY)",
+    "timezone": "UTC",
+    "address": null
+  },
+  "service": {
+    "port": 3005,
+    "log_level": "info",
+    "log_file": "service-azt.log",
+    "db_path": "transactions-azt.db",
+    "serial_log_file": null
+  },
+  "connection": {
+    "protocol": "azt2_0",
+    "port": "/tmp/azt-real",
+    "baud_rate": 4800,
+    "parity": "none",
+    "data_bits": 8,
+    "stop_bits": 1,
+    "response_timeout_ms": 400
+  },
+  "polling": {
+    "interval_ms": 200,
+    "offline_threshold_polls": 5,
+    "reconnect_settle_rounds": 0
+  },
+  "products": [
+    {
+      "id": 3,
+      "uuid": "36557fab-9f24-4cdf-98be-61ef22e9fba6",
+      "name": "AI-92",
+      "color": "#2196F3",
+      "unit": "litre"
+    },
+    {
+      "id": 4,
+      "uuid": "0205fa9c-ebd3-48d7-84d9-265bff236c73",
+      "name": "AI-95",
+      "color": "#FF9800",
+      "unit": "litre"
+    }
+  ],
+  "fueling_positions": [
+    {
+      "id": "FP1",
+      "label": "AZT Lane 1",
+      "address_byte": 1,
+      "active": true,
+      "nozzles": [
+        {
+          "index": 1,
+          "product_id": 3,
+          "price": 11300,
+          "active": true,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        }
+      ]
+    },
+    {
+      "id": "FP2",
+      "label": "AZT Lane 2",
+      "address_byte": 2,
+      "active": true,
+      "nozzles": [
+        {
+          "index": 1,
+          "product_id": 4,
+          "price": 12500,
+          "active": true,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        }
+      ]
+    }
+  ],
+  "ui": {
+    "default_auth_mode": "preauth",
+    "preauth_timeout_seconds": 300,
+    "use_decel_window_on_stop": true,
+    "use_stop_mode": true,
+    "use_cancel_mode": false
+  },
+  "sync": {
+    "enabled": false,
+    "backend_url": "",
+    "api_key": "",
+    "retry_interval_secs": 30,
+    "batch_size": 100,
+    "max_retries": 10,
+    "price_pull_interval_hours": 12
+  },
+  "shifts": {
+    "mode": "manual",
+    "scheduled": [
+      {
+        "name": "Smena",
+        "start": "08:00",
+        "end": "10:47"
+      }
+    ],
+    "require_operator_pin": false,
+    "warn_before_end_minutes": 15,
+    "allow_overlap_minutes": 30,
+    "auto_close_on_restart": false
+  },
+  "tanks": [
+    {
+      "product_id": 3,
+      "label": "AI-92",
+      "capacity_l": 20000.0,
+      "current_l": 7600.0
+    },
+    {
+      "product_id": 4,
+      "label": "AI-95",
+      "capacity_l": 20000.0,
+      "current_l": 13000.0
+    }
+  ],
+  "atg": null
+}

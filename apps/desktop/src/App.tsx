@@ -68,6 +68,23 @@ export default function App() {
   const siteSnapshot = useAppStore((s) => s.siteSnapshot);
   const simOnline = useAppStore((s) => s.simOnline);
   const setInvokeError = useAppStore((s) => s.setInvokeError);
+
+  // Stable AdminPanel callbacks. App re-renders on every WS status update, so
+  // inline arrow props here would give AdminPanel new identities each poll —
+  // re-running its data-load effect and wiping in-progress edits (e.g. the price
+  // field resetting while you type). useCallback keeps them referentially stable.
+  const onAdminLogout = useCallback(() => {
+    setAdminToken(null);
+    setAdminTokenState(null);
+    setWorkspaceTab("dispensers");
+  }, []);
+  const onAdminPinChanged = useCallback(() => setMustChangePin(false), []);
+  const onAdminSessionExpired = useCallback(() => {
+    setInvokeError(null);
+    setAdminToken(null);
+    setAdminTokenState(null);
+    setAdminPinOpen(true);
+  }, [setInvokeError]);
   const smallScreen = useAppStore((s) => s.smallScreen);
   const theme = useAppStore((s) => s.theme);
   const uiScale = useAppStore((s) => s.uiScale);
@@ -836,18 +853,9 @@ export default function App() {
                   <AdminPanel
                     token={adminToken}
                     mustChangePin={mustChangePin}
-                    onPinChanged={() => setMustChangePin(false)}
-                    onLogout={() => {
-                      setAdminToken(null);
-                      setAdminTokenState(null);
-                      setWorkspaceTab("dispensers");
-                    }}
-                    onSessionExpired={() => {
-                      setInvokeError(null);
-                      setAdminToken(null);
-                      setAdminTokenState(null);
-                      setAdminPinOpen(true);
-                    }}
+                    onPinChanged={onAdminPinChanged}
+                    onLogout={onAdminLogout}
+                    onSessionExpired={onAdminSessionExpired}
                   />
                 ) : (
                   <p className="text-sm text-slate-400">{t("adminPin.unlockPrompt")}</p>

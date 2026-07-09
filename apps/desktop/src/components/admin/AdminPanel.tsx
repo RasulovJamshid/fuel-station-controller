@@ -262,13 +262,17 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
       setShiftMode((s.shift_mode as ShiftMode) || "manual");
       setShiftSlots(s.shift_schedule ?? []);
     }
-    // One draft entry per product (first price seen wins).
-    const d: Record<string, string> = {};
-    for (const row of p) {
-      const key = String(row.product_id);
-      if (!(key in d)) d[key] = formatMoneyInput(row.price);
-    }
-    setDraft(d);
+    // One draft entry per product (first price seen wins). Preserve any entry
+    // the user is already editing — never overwrite an in-progress edit if this
+    // reload happens to run while the price field has unsaved text.
+    setDraft((prev) => {
+      const next = { ...prev };
+      for (const row of p) {
+        const key = String(row.product_id);
+        if (!(key in next)) next[key] = formatMoneyInput(row.price);
+      }
+      return next;
+    });
   }, [token, setInvokeError, expireSession]);
 
   useEffect(() => {

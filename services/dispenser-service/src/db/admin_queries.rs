@@ -325,6 +325,9 @@ pub async fn load_fp_nozzles_from_db(
             product_id: r.product_id as u8,
             price: r.price as u32,
             active: r.active != 0,
+            // azt_address is persisted in the JSON site config, not this DB
+            // catalog table; the poll loop reads it from there.
+            azt_address: 0,
             wayne_code: r.wayne_code as u8,
             wayne_product_code: r.wayne_product_code as u8,
         });

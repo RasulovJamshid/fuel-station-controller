@@ -3180,9 +3180,12 @@ async fn run_azt_poll_loop(
                 Some(x) => x,
                 None => continue,
             };
-            let net = byte & 0x0F;
 
-            let Some(status) = azt_query_status(net, &backend) else {
+            // Resolve which hose of this pump card is active and poll it. `net`
+            // is that hose's RS-485 address; `active_nozzle` its 1-based index.
+            let Some((net, active_nozzle, status)) =
+                azt_resolve_active(byte, fp_cfg, &backend, &runtimes).await
+            else {
                 let went_offline = {
                     let mut map = runtimes.write().await;
                     map.get_mut(&byte)
@@ -3288,11 +3291,8 @@ async fn run_azt_poll_loop(
 
                     if lifted {
                         // Nozzle up with no pending authorization → notify UI.
-                        let nozzle = fp_cfg
-                            .active_nozzles()
-                            .first()
-                            .map(|n| n.index)
-                            .unwrap_or(1);
+                        // `active_nozzle` is the hose that reported lifted.
+                        let nozzle = active_nozzle;
                         let (product_id, product_name) =
                             azt_nozzle_product(fp_cfg, &cfg, nozzle);
                         let price = {
@@ -3392,20 +3392,22 @@ async fn run_azt_poll_loop(
                     let mut map = runtimes.write().await;
                     if let Some(rt) = map.get_mut(&byte) {
                         rt.state.status = FpStatus::Delivering;
+                        // Lock the card to the dispensing hose so later polls
+                        // stay on this nozzle's address.
+                        rt.state.nozzle_index = Some(active_nozzle);
                         if let Some(cd) = live {
                             rt.state.volume = cd.volume_centilitres as f64 / 100.0;
                             rt.state.amount =
                                 (cd.volume_centilitres * rt.state.price as u64 + 50) / 100;
                         }
                         if rt.current_tx.is_none() {
-                            let nozzle = rt.state.nozzle_index.unwrap_or(1);
-                            let (pid, pname) = azt_nozzle_product(fp_cfg, &cfg, nozzle);
+                            let (pid, pname) = azt_nozzle_product(fp_cfg, &cfg, active_nozzle);
                             rt.current_tx = Some(CurrentTx {
                                 id: uuid::Uuid::new_v4().to_string(),
                                 started_at: Utc::now().timestamp_millis(),
                                 product_id: pid,
                                 product_name: pname,
-                                nozzle_index: nozzle,
+                                nozzle_index: active_nozzle,
                             });
                         }
                     }
@@ -3496,6 +3498,107 @@ fn azt_query_status(net: u8, backend: &SerialBackend) -> Option<azt::AztStatus> 
         // Short replies are never valid for a status poll.
         azt::Response::Short(_) => Some(azt::AztStatus::Unknown),
     }
+}
+
+/// The AZT hoses of one pump card as `(network address, nozzle index)`.
+///
+/// AZT puts each hose on its own RS-485 address, so a pump card groups several
+/// nozzles at different addresses (`nozzle.azt_address`). A nozzle with no
+/// explicit address (single-hose pumps) falls back to the position's
+/// `address_byte` low nibble.
+fn azt_fp_nozzles(fp_cfg: &FuelingPositionConfig) -> Vec<(u8, u8)> {
+    let fallback = fp_cfg.address_byte & 0x0F;
+    fp_cfg
+        .active_nozzles()
+        .iter()
+        .map(|n| {
+            let addr = if n.azt_address != 0 {
+                n.azt_address & 0x0F
+            } else {
+                fallback
+            };
+            (addr, n.index)
+        })
+        .collect()
+}
+
+/// Whether a status means the hose is doing something the card should display.
+fn azt_status_active(st: azt::AztStatus) -> bool {
+    matches!(
+        st,
+        azt::AztStatus::OffLifted
+            | azt::AztStatus::Authorized
+            | azt::AztStatus::Dispensing
+            | azt::AztStatus::Finished(_)
+            | azt::AztStatus::LocalPreset
+    )
+}
+
+/// Resolve the active hose for a pump card and poll its status.
+///
+/// Returns `(net, nozzle_index, status)`. While a sale/arm is in progress the
+/// card stays on the nozzle it started (from `rt.state.nozzle_index`); otherwise
+/// every hose address is polled and the first non-idle one wins (one nozzle
+/// dispenses at a time). `None` means no hose answered → the card is offline.
+async fn azt_resolve_active(
+    byte: u8,
+    fp_cfg: &FuelingPositionConfig,
+    backend: &SerialBackend,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+) -> Option<(u8, u8, azt::AztStatus)> {
+    let nozzles = azt_fp_nozzles(fp_cfg);
+    if nozzles.is_empty() {
+        return None;
+    }
+
+    // Mid-transaction: keep polling the nozzle the sale started on.
+    let active_idx = {
+        let map = runtimes.read().await;
+        map.get(&byte).and_then(|rt| {
+            let busy = matches!(
+                rt.state.status,
+                FpStatus::Authorizing
+                    | FpStatus::Delivering
+                    | FpStatus::PreAuthorized
+                    | FpStatus::Stopped { .. }
+            ) || rt.current_tx.is_some();
+            if busy {
+                rt.state.nozzle_index
+            } else {
+                None
+            }
+        })
+    };
+    if let Some(nidx) = active_idx {
+        if let Some(&(addr, _)) = nozzles.iter().find(|(_, i)| *i == nidx) {
+            let st = azt_query_status(addr, backend).unwrap_or(azt::AztStatus::Unknown);
+            return Some((addr, nidx, st));
+        }
+    }
+
+    // Idle: sweep every hose; first active wins, else first that responds at all.
+    let mut idle_fallback: Option<(u8, u8, azt::AztStatus)> = None;
+    for (addr, nidx) in nozzles {
+        if let Some(st) = azt_query_status(addr, backend) {
+            if azt_status_active(st) {
+                return Some((addr, nidx, st));
+            }
+            if idle_fallback.is_none() {
+                idle_fallback = Some((addr, nidx, st));
+            }
+        }
+    }
+    idle_fallback
+}
+
+/// Network address of a pump card's currently-selected nozzle (from runtime
+/// `nozzle_index`), used by the close/stop paths.
+fn azt_active_net(fp_cfg: &FuelingPositionConfig, nozzle_index: Option<u8>) -> u8 {
+    let nozzles = azt_fp_nozzles(fp_cfg);
+    nozzle_index
+        .and_then(|nidx| nozzles.iter().find(|(_, i)| *i == nidx).map(|(a, _)| *a))
+        .or_else(|| nozzles.first().map(|(a, _)| *a))
+        .unwrap_or(fp_cfg.address_byte & 0x0F)
 }
 
 /// Send a data-query command and return the frame payload.
@@ -3633,31 +3736,42 @@ async fn azt_sync_totals(
     backend: &SerialBackend,
     runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
 ) -> bool {
-    let net = byte & 0x0F;
-    let Some((litres_cl, amount_wire)) =
-        azt_query_data(net, &azt::totals(net), backend).and_then(|d| azt::parse_totals(&d))
-    else {
+    // One totalizer read per hose on this pump card (each has its own address).
+    let mut totals: Vec<PumpNozzleTotals> = Vec::new();
+    for (addr, nozzle_index) in azt_fp_nozzles(fp_cfg) {
+        if let Some((litres_cl, amount_wire)) =
+            azt_query_data(addr, &azt::totals(addr), backend).and_then(|d| azt::parse_totals(&d))
+        {
+            let price = fp_cfg
+                .active_nozzles()
+                .iter()
+                .find(|n| n.index == nozzle_index)
+                .map(|n| n.price)
+                .unwrap_or(0);
+            totals.push(PumpNozzleTotals {
+                nozzle_index,
+                volume: litres_cl as f64 / 100.0,
+                amount: amount_wire * AZT_WIRE_UNIT,
+                price,
+            });
+        }
+    }
+    if totals.is_empty() {
         return false;
-    };
-    let amount_soum = amount_wire * AZT_WIRE_UNIT;
-    let nozzle = fp_cfg
-        .active_nozzles()
-        .first()
-        .map(|n| n.index)
-        .unwrap_or(1);
+    }
     let mut map = runtimes.write().await;
     if let Some(rt) = map.get_mut(&byte) {
-        let price = rt.state.price;
-        rt.state.pump_totals = vec![PumpNozzleTotals {
-            nozzle_index: nozzle,
-            volume: litres_cl as f64 / 100.0,
-            amount: amount_soum,
-            price,
-        }];
-        rt.state.pump_total_nozzle_index = Some(nozzle);
-        rt.state.pump_total_volume = Some(litres_cl as f64 / 100.0);
-        rt.state.pump_total_amount = Some(amount_soum);
-        rt.state.pump_total_price = Some(price);
+        let pick = totals
+            .iter()
+            .find(|t| Some(t.nozzle_index) == rt.state.nozzle_index)
+            .or_else(|| totals.first());
+        if let Some(t) = pick {
+            rt.state.pump_total_nozzle_index = Some(t.nozzle_index);
+            rt.state.pump_total_volume = Some(t.volume);
+            rt.state.pump_total_amount = Some(t.amount);
+            rt.state.pump_total_price = Some(t.price);
+        }
+        rt.state.pump_totals = totals;
     }
     true
 }
@@ -3676,7 +3790,11 @@ async fn azt_close_transaction(
     shifts: &ShiftCoordinator,
     trk_types: &mut HashMap<u8, azt::TrkType>,
 ) -> bool {
-    let net = byte & 0x0F;
+    // Close on the hose the sale ran on (its own RS-485 address), not the card.
+    let net = {
+        let map = runtimes.read().await;
+        azt_active_net(fp_cfg, map.get(&byte).and_then(|rt| rt.state.nozzle_index))
+    };
     let should_close = {
         let map = runtimes.read().await;
         map.get(&byte)
@@ -3864,7 +3982,11 @@ async fn azt_apply_command(
                 Some(p) => p.clone(),
                 None => return,
             };
-            let net = byte & 0x0F;
+            // Reset the hose the sale is running on.
+            let net = {
+                let map = runtimes.read().await;
+                azt_active_net(&fp_cfg, map.get(&byte).and_then(|rt| rt.state.nozzle_index))
+            };
             // §7.3: reset switches the pump off; it lands in '4' and the poll
             // loop closes the partial sale from the Stopped state.
             azt_expect_ack(net, &azt::reset(net), backend, "stop_reset");
@@ -3907,9 +4029,11 @@ async fn azt_apply_command(
         }
 
         DispatchCommand::EStop => {
+            // Reset every hose on every pump — any nozzle could be dispensing.
             for fp in cfg.active_positions() {
-                let net = fp.address_byte & 0x0F;
-                azt_expect_ack(net, &azt::reset(net), backend, "estop_reset");
+                for (net, _) in azt_fp_nozzles(fp) {
+                    azt_expect_ack(net, &azt::reset(net), backend, "estop_reset");
+                }
             }
             let mut map = runtimes.write().await;
             for fp in cfg.active_positions() {
@@ -4060,7 +4184,11 @@ async fn azt_apply_command(
                 Some(p) => p.clone(),
                 None => return,
             };
-            let net = byte & 0x0F;
+            // De-arm the hose that was armed (the card's selected nozzle).
+            let net = {
+                let map = runtimes.read().await;
+                azt_active_net(&fp_cfg, map.get(&byte).and_then(|rt| rt.state.nozzle_index))
+            };
             // De-arm on the wire: reset drops '2' → '4' with zero data, and the
             // immediate confirm returns the pump to '0'/'1' (§7.3, §7.8).
             if azt_expect_ack(net, &azt::reset(net), backend, "cancel_preauth_reset") {
@@ -4126,7 +4254,16 @@ async fn azt_do_authorize(
         Some(p) => p.clone(),
         None => return,
     };
-    let net = byte & 0x0F;
+    // Target the selected hose. Default to the first nozzle when the caller did
+    // not name one (direct authorize on a single-active-hose pump).
+    let nozzle = preauth_nozzle.filter(|n| *n > 0).unwrap_or_else(|| {
+        fp_cfg
+            .active_nozzles()
+            .first()
+            .map(|n| n.index)
+            .unwrap_or(1)
+    });
+    let net = azt_active_net(&fp_cfg, Some(nozzle));
 
     // Refuse from non-idle lanes: the wire would CAN anyway (§7.10/§7.13 require
     // status '0'/'1'), this just fails earlier with a clearer message.
@@ -4156,13 +4293,6 @@ async fn azt_do_authorize(
         return;
     }
 
-    let nozzle = preauth_nozzle.filter(|n| *n > 0).unwrap_or_else(|| {
-        fp_cfg
-            .active_nozzles()
-            .first()
-            .map(|n| n.index)
-            .unwrap_or(1)
-    });
     let (product_id, product_name) = azt_nozzle_product(&fp_cfg, cfg, nozzle);
     let preset_label_str = preset_label(&preset);
     let tx = CurrentTx {

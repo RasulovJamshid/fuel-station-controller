@@ -29,68 +29,64 @@
   "products": [
     {
       "id": 1,
-      "uuid": "4508ccc2-efc4-4b21-858e-cb051918f020",
+      "uuid": "00000000-0000-0000-0000-000000000092",
       "name": "AI-92",
       "color": "#2196F3",
       "unit": "litre"
     },
     {
       "id": 2,
-      "uuid": "6e943096-7c98-4bc9-ba60-08f9a39f5b90",
-      "name": "Diesel Euro 6",
-      "color": "#795548",
-      "unit": "litre"
-    },
-    {
-      "id": 3,
-      "uuid": "b4b2e2fe-7bd4-49bf-ba33-6f02930cd703",
-      "name": "Diesel Euro K4",
-      "color": "#4CAF50",
-      "unit": "litre"
-    },
-    {
-      "id": 4,
-      "uuid": "8b16692b-0af2-49d5-9dbe-ae8966c31f03",
+      "uuid": "00000000-0000-0000-0000-000000000095",
       "name": "AI-95",
       "color": "#FF9800",
       "unit": "litre"
     },
     {
-      "id": 5,
-      "uuid": "f0e1c8d2-3b6a-4f7e-9c1b-2f3e4d5a6b7c",
-      "name": "Diesel ECO",
-      "color": "#FFC107",
+      "id": 3,
+      "uuid": "00000000-0000-0000-0000-0000000000d4",
+      "name": "Diesel Euro K4",
+      "color": "#795548",
+      "unit": "litre"
+    },
+    {
+      "id": 4,
+      "uuid": "00000000-0000-0000-0000-0000000000e6",
+      "name": "Diesel Euro 6",
+      "color": "#4CAF50",
       "unit": "litre"
     }
   ],
   "fueling_positions": [
     {
       "id": "FP1",
-      "label": "1",
+      "label": "Pump 1",
       "address_byte": 1,
       "active": true,
       "nozzles": [
         {
           "index": 1,
+          "azt_address": 1,
           "product_id": 1,
-          "price": 12000,
-          "active": false,
-          "wayne_code": 0,
-          "wayne_product_code": 0
-        },
-        {
-          "index": 3,
-          "product_id": 3,
-          "price": 12800,
+          "price": 11300,
           "active": true,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
-          "index": 5,
-          "product_id": 1,
-          "price": 12000,
-          "active": false,
+          "index": 2,
+          "azt_address": 3,
+          "product_id": 3,
+          "price": 11800,
+          "active": true,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 3,
+          "azt_address": 5,
+          "product_id": 2,
+          "price": 12500,
+          "active": true,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -98,95 +94,34 @@
     },
     {
       "id": "FP2",
-      "label": "2",
+      "label": "Pump 2",
       "address_byte": 2,
       "active": true,
       "nozzles": [
         {
-          "index": 2,
+          "index": 1,
+          "azt_address": 2,
           "product_id": 2,
-          "price": 11600,
-          "active": false,
-          "wayne_code": 0,
-          "wayne_product_code": 0
-        },
-        {
-          "index": 4,
-          "product_id": 3,
-          "price": 11400,
+          "price": 12500,
           "active": true,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
-          "index": 6,
-          "product_id": 1,
-          "price": 12000,
-          "active": false,
-          "wayne_code": 0,
-          "wayne_product_code": 0
-        }
-      ]
-    },
-    {
-      "id": "FP3",
-      "label": "3",
-      "address_byte": 3,
-      "active": true,
-      "nozzles": [
-        {
-          "index": 1,
-          "product_id": 2,
-          "price": 11600,
-          "active": false,
+          "index": 2,
+          "azt_address": 4,
+          "product_id": 3,
+          "price": 11800,
+          "active": true,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 3,
+          "azt_address": 6,
           "product_id": 1,
-          "price": 11400,
+          "price": 11300,
           "active": true,
-          "wayne_code": 0,
-          "wayne_product_code": 0
-        },
-        {
-          "index": 5,
-          "product_id": 4,
-          "price": 12000,
-          "active": false,
-          "wayne_code": 0,
-          "wayne_product_code": 0
-        }
-      ]
-    },
-    {
-      "id": "FP4",
-      "label": "4",
-      "address_byte": 4,
-      "active": true,
-      "nozzles": [
-        {
-          "index": 2,
-          "product_id": 2,
-          "price": 11600,
-          "active": false,
-          "wayne_code": 0,
-          "wayne_product_code": 0
-        },
-        {
-          "index": 4,
-          "product_id": 1,
-          "price": 11400,
-          "active": true,
-          "wayne_code": 0,
-          "wayne_product_code": 0
-        },
-        {
-          "index": 6,
-          "product_id": 4,
-          "price": 12000,
-          "active": false,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -221,26 +156,26 @@
     {
       "product_id": 1,
       "label": "AI-92",
-      "capacity_l": 25000,
-      "current_l": 3831.0
+      "capacity_l": 20000.0,
+      "current_l": 10000.0
     },
     {
       "product_id": 2,
       "label": "AI-95",
-      "capacity_l": 25000,
-      "current_l": 6531.0
+      "capacity_l": 20000.0,
+      "current_l": 10000.0
     },
     {
       "product_id": 3,
-      "label": "Diesel Euro 6",
-      "capacity_l": 25000,
-      "current_l": 951.0
+      "label": "Diesel Euro K4",
+      "capacity_l": 20000.0,
+      "current_l": 10000.0
     },
     {
       "product_id": 4,
-      "label": "Diesel ECO",
-      "capacity_l": 25000,
-      "current_l": 9120.0
+      "label": "Diesel Euro 6",
+      "capacity_l": 20000.0,
+      "current_l": 10000.0
     }
   ],
   "atg": {

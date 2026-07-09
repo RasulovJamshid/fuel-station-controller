@@ -179,6 +179,12 @@ pub struct NozzleConfig {
     pub product_id: u8,
     pub price: u32,
     pub active: bool,
+    /// AZT 2.0 only: this nozzle's own RS-485 network address (1..=15). AZT puts
+    /// each hose on its own address, so one pump card groups several nozzles at
+    /// different addresses. `None`/0 → fall back to the position's `address_byte`
+    /// (single-hose pumps and all other protocols ignore this field).
+    #[serde(default)]
+    pub azt_address: u8,
     /// Wayne hose byte on lift (`>= 0x10`) and holster (`lift - 0x10`, e.g. 18/2, 17/1, 19/3).
     #[serde(default)]
     pub wayne_code: u8,

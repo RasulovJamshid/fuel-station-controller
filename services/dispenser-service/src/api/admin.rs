@@ -836,6 +836,9 @@ fn nozzles_from_input(
             product_id: n.product_id,
             price: n.price,
             active: n.active,
+            // Not editable via this form; the caller re-applies the existing
+            // per-nozzle AZT address so a nozzle edit never wipes it.
+            azt_address: 0,
             wayne_code: n.wayne_code,
             wayne_product_code: n.wayne_product_code,
         });
@@ -853,10 +856,19 @@ async fn admin_save_position_nozzles(
     let who = require_admin(&st, &headers).await?;
     let nozzles = {
         let cfg = st.cfg.read().await;
-        if cfg.position_by_id(&fp_id).is_none() {
+        let Some(existing) = cfg.position_by_id(&fp_id) else {
             return Err((StatusCode::BAD_REQUEST, format!("unknown fp_id {fp_id}")));
+        };
+        let mut nozzles = nozzles_from_input(cmd.nozzles, &cfg)?;
+        // Preserve each nozzle's AZT RS-485 address (edited only in the site
+        // config JSON, not this form) so a price/product edit keeps multi-hose
+        // addressing intact.
+        for n in &mut nozzles {
+            if let Some(e) = existing.nozzles.iter().find(|e| e.index == n.index) {
+                n.azt_address = e.azt_address;
+            }
         }
-        nozzles_from_input(cmd.nozzles, &cfg)?
+        nozzles
     };
     let nozzles_for_db = nozzles.clone();
     let cfg_snapshot = {

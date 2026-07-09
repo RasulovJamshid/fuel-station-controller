@@ -113,28 +113,32 @@ impl ServiceClient {
 
     pub async fn authorize(&self, cmd: AuthorizeCmd) -> Result<(), String> {
         let url = self.base.join("authorize").map_err(fmt_err)?;
-        self.http
+        let resp = self
+            .http
             .post(url)
             .json(&cmd)
             .send()
             .await
-            .map_err(fmt_err)?
-            .error_for_status()
             .map_err(fmt_err)?;
+        if !resp.status().is_success() {
+            return Err(Self::response_error(resp).await);
+        }
         Ok(())
     }
 
     pub async fn preauthorize(&self, cmd: AuthorizeCmd) -> Result<(), String> {
         let path = format!("dispenser/{}/preauthorize", cmd.fp_id);
         let url = self.base.join(&path).map_err(fmt_err)?;
-        self.http
+        let resp = self
+            .http
             .post(url)
             .json(&cmd)
             .send()
             .await
-            .map_err(fmt_err)?
-            .error_for_status()
             .map_err(fmt_err)?;
+        if !resp.status().is_success() {
+            return Err(Self::response_error(resp).await);
+        }
         Ok(())
     }
 

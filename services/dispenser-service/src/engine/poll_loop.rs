@@ -30,6 +30,7 @@ use crate::shifts::ShiftCoordinator;
 const RS485_TURNAROUND_MS: u64 = 50;
 const GBR_RESET_CLOSE_RETRIES: usize = 5;
 const GBR_RESET_CLOSE_RETRY_DELAY_MS: u64 = 750;
+const AZT_REACTIVE_AUTHORIZE_START_TIMEOUT_MS: i64 = 15_000;
 
 /// Wayne PP byte per nozzle for CONFIG (`01 PP 00` triplets). Never use nozzle index on wire.
 fn wayne_pp_byte(n: &site_config::NozzleConfig) -> u8 {
@@ -3374,13 +3375,62 @@ async fn run_azt_poll_loop(
                     // Pump armed. Keep PreAuthorized lanes as-is (operator armed a
                     // holstered pump: the customer has not lifted yet); everything
                     // else shows Authorizing until fuel flows.
-                    let mut map = runtimes.write().await;
-                    if let Some(rt) = map.get_mut(&byte) {
-                        if !matches!(
-                            rt.state.status,
-                            FpStatus::PreAuthorized | FpStatus::Authorizing
+                    let stale_reactive_auth = {
+                        let map = runtimes.read().await;
+                        map.get(&byte).and_then(|rt| {
+                            let started = rt.auth_session_started_at?;
+                            let elapsed = Utc::now().timestamp_millis().saturating_sub(started);
+                            let stale = rt.state.status == FpStatus::Authorizing
+                                && rt.pre_auth.is_none()
+                                && rt.state.volume <= 0.0
+                                && elapsed >= AZT_REACTIVE_AUTHORIZE_START_TIMEOUT_MS;
+                            stale.then_some((elapsed, rt.state.nozzle_index))
+                        })
+                    };
+                    if let Some((elapsed_ms, nozzle_index)) = stale_reactive_auth {
+                        warn!(
+                            net,
+                            ?nozzle_index,
+                            elapsed_ms,
+                            "AZT: reactive authorize stayed in status 2 with no flow — resetting"
+                        );
+                        if azt_expect_ack(
+                            net,
+                            &azt::reset(net),
+                            &backend,
+                            "reactive_auth_timeout_reset",
                         ) {
-                            rt.state.status = FpStatus::Authorizing;
+                            azt_expect_ack(
+                                net,
+                                &azt::confirm_totals(net),
+                                &backend,
+                                "reactive_auth_timeout_confirm",
+                            );
+                        }
+                        {
+                            let mut map = runtimes.write().await;
+                            if let Some(rt) = map.get_mut(&byte) {
+                                rt.state.status = FpStatus::Idle;
+                                rt.state.volume = 0.0;
+                                rt.state.amount = 0;
+                                rt.state.pre_auth_preset = None;
+                                rt.current_tx = None;
+                                rt.pre_auth = None;
+                                rt.pre_auth_started_at = None;
+                                rt.auth_session_started_at = None;
+                            }
+                        }
+                        broadcast_status(byte, &runtimes, &events).await;
+                        continue;
+                    } else {
+                        let mut map = runtimes.write().await;
+                        if let Some(rt) = map.get_mut(&byte) {
+                            if !matches!(
+                                rt.state.status,
+                                FpStatus::PreAuthorized | FpStatus::Authorizing
+                            ) {
+                                rt.state.status = FpStatus::Authorizing;
+                            }
                         }
                     }
                 }
@@ -3391,17 +3441,33 @@ async fn run_azt_poll_loop(
                         .and_then(|d| azt::parse_current_data(&d));
                     let mut map = runtimes.write().await;
                     if let Some(rt) = map.get_mut(&byte) {
+                        let (pid, pname) = azt_nozzle_product(fp_cfg, &cfg, active_nozzle);
+                        let price = rt
+                            .nozzle_prices
+                            .get(&active_nozzle)
+                            .copied()
+                            .or_else(|| {
+                                fp_cfg
+                                    .nozzles
+                                    .iter()
+                                    .find(|n| n.index == active_nozzle)
+                                    .map(|n| n.price)
+                            })
+                            .unwrap_or(rt.state.price);
                         rt.state.status = FpStatus::Delivering;
                         // Lock the card to the dispensing hose so later polls
                         // stay on this nozzle's address.
                         rt.state.nozzle_index = Some(active_nozzle);
+                        rt.state.product_id = Some(pid);
+                        rt.state.product_name = Some(pname.clone());
+                        rt.state.price = price;
+                        rt.auth_session_started_at = None;
                         if let Some(cd) = live {
                             rt.state.volume = cd.volume_centilitres as f64 / 100.0;
                             rt.state.amount =
                                 (cd.volume_centilitres * rt.state.price as u64 + 50) / 100;
                         }
                         if rt.current_tx.is_none() {
-                            let (pid, pname) = azt_nozzle_product(fp_cfg, &cfg, active_nozzle);
                             rt.current_tx = Some(CurrentTx {
                                 id: uuid::Uuid::new_v4().to_string(),
                                 started_at: Utc::now().timestamp_millis(),
@@ -3439,8 +3505,20 @@ async fn run_azt_poll_loop(
                     } else {
                         // No sale of ours (cancelled arming, rejected local dose,
                         // service restart after the fact): acknowledge so the pump
-                        // returns to idle, then clear the lane.
-                        azt_expect_ack(net, &azt::confirm_totals(net), &backend, "confirm_totals");
+                        // returns to idle, then clear the lane. If the ACK is
+                        // missed, keep the lane as-is and retry on the next poll;
+                        // otherwise the pump can remain stuck in '4' while the UI
+                        // has already moved on.
+                        let confirmed = azt_expect_ack(
+                            net,
+                            &azt::confirm_totals(net),
+                            &backend,
+                            "confirm_totals",
+                        );
+                        if !confirmed {
+                            warn!(net, "AZT: confirm totals failed — retrying next poll");
+                            continue;
+                        }
                         let mut map = runtimes.write().await;
                         if let Some(rt) = map.get_mut(&byte) {
                             if !matches!(rt.state.status, FpStatus::Stopped { .. }) {
@@ -3505,15 +3583,15 @@ fn azt_query_status(net: u8, backend: &SerialBackend) -> Option<azt::AztStatus> 
 /// AZT puts each hose on its own RS-485 address, so a pump card groups several
 /// nozzles at different addresses (`nozzle.azt_address`). A nozzle with no
 /// explicit address (single-hose pumps) falls back to the position's
-/// `address_byte` low nibble.
+/// `address_byte`.
 fn azt_fp_nozzles(fp_cfg: &FuelingPositionConfig) -> Vec<(u8, u8)> {
-    let fallback = fp_cfg.address_byte & 0x0F;
+    let fallback = fp_cfg.address_byte;
     fp_cfg
         .active_nozzles()
         .iter()
         .map(|n| {
             let addr = if n.azt_address != 0 {
-                n.azt_address & 0x0F
+                n.azt_address
             } else {
                 fallback
             };
@@ -3598,7 +3676,7 @@ fn azt_active_net(fp_cfg: &FuelingPositionConfig, nozzle_index: Option<u8>) -> u
     nozzle_index
         .and_then(|nidx| nozzles.iter().find(|(_, i)| *i == nidx).map(|(a, _)| *a))
         .or_else(|| nozzles.first().map(|(a, _)| *a))
-        .unwrap_or(fp_cfg.address_byte & 0x0F)
+        .unwrap_or(fp_cfg.address_byte)
 }
 
 /// Send a data-query command and return the frame payload.
@@ -3926,9 +4004,18 @@ async fn azt_close_transaction(
         }
     }
 
-    // §7.8: acknowledge the totals write; the pump returns to '0'/'1'.
-    azt_expect_ack(net, &azt::confirm_totals(net), backend, "confirm_totals");
-    let _ = azt_sync_totals(byte, fp_cfg, backend, runtimes).await;
+    // §7.8: acknowledge the totals write; the pump returns to '0'/'1'. If the
+    // ACK is missed, keep the app-side transaction saved and retry confirmation
+    // from the next Finished poll instead of pretending the pump cleared.
+    if azt_expect_ack(net, &azt::confirm_totals(net), backend, "confirm_totals") {
+        let _ = azt_sync_totals(byte, fp_cfg, backend, runtimes).await;
+    } else {
+        warn!(
+            net,
+            tx_id = %ctx.id,
+            "AZT: transaction saved but confirm totals failed — retrying next poll"
+        );
+    }
 
     info!(net, volume, amount, "AZT: transaction complete, Done emitted");
     true
@@ -4254,16 +4341,49 @@ async fn azt_do_authorize(
         Some(p) => p.clone(),
         None => return,
     };
-    // Target the selected hose. Default to the first nozzle when the caller did
-    // not name one (direct authorize on a single-active-hose pump).
-    let nozzle = preauth_nozzle.filter(|n| *n > 0).unwrap_or_else(|| {
-        fp_cfg
-            .active_nozzles()
-            .first()
-            .map(|n| n.index)
-            .unwrap_or(1)
-    });
+    // Target the selected hose. For direct authorize, prefer the nozzle already
+    // observed as lifted; otherwise multi-product AZT pumps can briefly show the
+    // first nozzle's product while the customer is using a different hose.
+    let lifted_nozzle = if preauth_nozzle.is_none() {
+        let map = runtimes.read().await;
+        map.get(&byte).and_then(|rt| {
+            if rt.state.status == FpStatus::NozzleUp {
+                rt.state.nozzle_index
+            } else {
+                None
+            }
+        })
+    } else {
+        None
+    };
+    let nozzle = preauth_nozzle
+        .filter(|n| *n > 0)
+        .or(lifted_nozzle)
+        .unwrap_or_else(|| {
+            fp_cfg
+                .active_nozzles()
+                .first()
+                .map(|n| n.index)
+                .unwrap_or(1)
+        });
+    let direct_start = preauth_nozzle.is_none() && lifted_nozzle.is_some();
     let net = azt_active_net(&fp_cfg, Some(nozzle));
+
+    if direct_start {
+        match azt_query_status(net, backend) {
+            Some(azt::AztStatus::OffLifted) => {}
+            other => {
+                warn!(
+                    net,
+                    nozzle,
+                    ?other,
+                    "AZT: direct authorize refused — live nozzle status is not lifted"
+                );
+                broadcast_status(byte, runtimes, events).await;
+                return;
+            }
+        }
+    }
 
     // Refuse from non-idle lanes: the wire would CAN anyway (§7.10/§7.13 require
     // status '0'/'1'), this just fails earlier with a clearer message.
@@ -4291,6 +4411,26 @@ async fn azt_do_authorize(
         warn!(net, reason, "AZT: authorize failed");
         broadcast_status(byte, runtimes, events).await;
         return;
+    }
+    if direct_start {
+        if azt_expect_ack(
+            net,
+            &azt::unconditional_start(net),
+            backend,
+            "unconditional_start",
+        ) {
+            info!(
+                net,
+                nozzle,
+                "AZT: direct authorize start command ACKed after status 2"
+            );
+        } else {
+            warn!(
+                net,
+                nozzle,
+                "AZT: direct authorize start command failed; status-2 timeout guard will recover"
+            );
+        }
     }
 
     let (product_id, product_name) = azt_nozzle_product(&fp_cfg, cfg, nozzle);
@@ -4321,9 +4461,13 @@ async fn azt_do_authorize(
                 rt.state.status = FpStatus::PreAuthorized;
                 rt.state.pre_auth_preset = Some(preset_label_str.clone());
                 rt.pre_auth_started_at = Some(Utc::now().timestamp_millis());
+                rt.auth_session_started_at = None;
             } else {
                 rt.state.status = FpStatus::Authorizing;
+                rt.state.pre_auth_preset = Some(preset_label_str.clone());
                 rt.pre_auth = None;
+                rt.pre_auth_started_at = None;
+                rt.auth_session_started_at = Some(Utc::now().timestamp_millis());
             }
         }
     }

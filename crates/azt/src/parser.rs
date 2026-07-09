@@ -145,7 +145,7 @@ mod tests {
     fn full_data_type_a() {
         // Type 'A': L=6, M=4 (price), T=6 (cost).
         // 30.00 L → 003000 (0.01 L); cost 42900 kopecks → 042900; price 1430 → 1430.
-        let trk = TrkType::from_identifier(0x3A).unwrap();
+        let trk = TrkType::from_identifier(b'A').unwrap();
         let mut data = Vec::new();
         data.extend_from_slice(&encode_digits(3000, 6)); // volume, 0.01 L
         data.extend_from_slice(&encode_digits(42900, 6)); // cost, kopecks
@@ -174,8 +174,19 @@ mod tests {
 
     #[test]
     fn trk_type_identifier() {
-        let t = parse_trk_type(&decoded(&[0x3A])).unwrap();
+        let t = parse_trk_type(&decoded(b"A")).unwrap();
         assert_eq!(t.volume_digits, 6);
+    }
+
+    #[test]
+    fn trk_type_identifier_h_from_serial_log() {
+        // Real AZT hardware in .azs-run/serial.log replies to command '7' as:
+        // 7F 02 48 37 03 03 4B, decoded payload 'H'.
+        let t = parse_trk_type(&decoded(b"H")).unwrap();
+        assert_eq!(t.identifier, b'H');
+        assert_eq!(t.volume_digits, 5);
+        assert_eq!(t.price_digits, 4);
+        assert_eq!(t.cost_digits, 7);
     }
 
     #[test]

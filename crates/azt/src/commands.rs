@@ -168,6 +168,7 @@ mod tests {
         assert_eq!(reset(1)[4], CMD_RESET);
         assert_eq!(current_data(1)[4], CMD_CURRENT_DATA);
         assert_eq!(full_data(1)[4], CMD_FULL_DATA);
+        assert_eq!(unconditional_start(1)[4], CMD_UNCONDITIONAL_START);
     }
 
     #[test]

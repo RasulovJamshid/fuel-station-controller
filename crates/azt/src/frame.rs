@@ -73,7 +73,7 @@ pub struct FullData {
 /// Digit widths for the full-data frame, keyed by TRK identifier (разд. 7.7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TrkType {
-    /// Identifier byte (`'A'`..`'H'`, 0x3A..0x41).
+    /// Identifier byte (`'A'`..`'H'`, 0x41..0x48).
     pub identifier: u8,
     /// Number of volume digits (L).
     pub volume_digits: u8,
@@ -88,14 +88,14 @@ impl TrkType {
     pub fn from_identifier(identifier: u8) -> Option<TrkType> {
         // (volume L, price M, cost T)
         let (l, m, t) = match identifier {
-            0x3A => (6, 4, 6), // 'A'
-            0x3B => (6, 6, 8), // 'B'
-            0x3C => (6, 4, 6), // 'C'
-            0x3D => (6, 4, 6), // 'D'
-            0x3E => (6, 4, 6), // 'E'
-            0x3F => (6, 6, 8), // 'F'
-            0x40 => (6, 6, 8), // 'G'
-            0x41 => (5, 4, 7), // 'H'
+            b'A' => (6, 4, 6),
+            b'B' => (6, 6, 8),
+            b'C' => (6, 4, 6),
+            b'D' => (6, 4, 6),
+            b'E' => (6, 4, 6),
+            b'F' => (6, 6, 8),
+            b'G' => (6, 6, 8),
+            b'H' => (5, 4, 7),
             _ => return None,
         };
         Some(TrkType {
@@ -174,15 +174,15 @@ mod tests {
     #[test]
     fn trk_type_widths() {
         assert_eq!(
-            TrkType::from_identifier(0x3A),
+            TrkType::from_identifier(b'A'),
             Some(TrkType {
-                identifier: 0x3A,
+                identifier: b'A',
                 volume_digits: 6,
                 price_digits: 4,
                 cost_digits: 6
             })
         );
-        assert_eq!(TrkType::from_identifier(0x41).unwrap().cost_digits, 7);
+        assert_eq!(TrkType::from_identifier(b'H').unwrap().cost_digits, 7);
         assert_eq!(TrkType::from_identifier(0x00), None);
     }
 }

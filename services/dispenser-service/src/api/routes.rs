@@ -654,6 +654,10 @@ pub async fn preauthorize(
         }
     }
     let byte = fp.address_byte;
+    let is_azt = {
+        let cfg = st.cfg.read().await;
+        cfg.connection.protocol == Protocol::Azt20
+    };
     let (nozzle_index, route_as_reactive) = {
         let map = st.runtimes.read().await;
         let Some(rt) = map.get(&byte) else {
@@ -671,6 +675,12 @@ pub async fn preauthorize(
         } else {
             None
         };
+        if lifted_nozzle.is_some() && is_azt {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "AZT requires pre-authorization while the nozzle is holstered; put the nozzle down, pre-authorize, then lift the nozzle".into(),
+            ));
+        }
         let nozzle_index = if lifted_nozzle.is_some() {
             cmd.nozzle_index.ok_or_else(|| {
                 (

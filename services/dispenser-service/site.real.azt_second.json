@@ -60,33 +60,33 @@
     {
       "id": "FP1",
       "label": "Pump 1/1",
-      "address_byte": 1,
+      "address_byte": 3,
       "active": true,
       "nozzles": [
         {
           "index": 1,
-          "azt_address": 1,
           "product_id": 1,
           "price": 11400,
           "active": true,
+          "azt_address": 11,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 2,
-          "azt_address": 3,
           "product_id": 3,
           "price": 12800,
           "active": true,
+          "azt_address": 13,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 3,
-          "azt_address": 5,
           "product_id": 2,
           "price": 12500,
           "active": true,
+          "azt_address": 15,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -95,33 +95,33 @@
     {
       "id": "FP2",
       "label": "Pump 2",
-      "address_byte": 2,
+      "address_byte": 4,
       "active": true,
       "nozzles": [
         {
           "index": 1,
-          "azt_address": 2,
           "product_id": 2,
           "price": 12500,
           "active": true,
+          "azt_address": 12,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 2,
-          "azt_address": 4,
           "product_id": 3,
           "price": 12800,
           "active": true,
+          "azt_address": 14,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 3,
-          "azt_address": 6,
           "product_id": 1,
           "price": 11400,
           "active": true,
+          "azt_address": 16,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -130,33 +130,33 @@
     {
       "id": "FP3",
       "label": "Pump 3",
-      "address_byte": 3,
+      "address_byte": 1,
       "active": true,
       "nozzles": [
         {
           "index": 1,
-          "azt_address": 7,
           "product_id": 4,
-          "price": 12000,
+          "price": 11600,
           "active": true,
+          "azt_address": 1,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 2,
-          "azt_address": 9,
           "product_id": 1,
           "price": 11400,
           "active": true,
+          "azt_address": 3,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 3,
-          "azt_address": 11,
           "product_id": 2,
           "price": 12500,
-          "active": true,
+          "active": false,
+          "azt_address": 5,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -165,33 +165,33 @@
     {
       "id": "FP4",
       "label": "Pump 4",
-      "address_byte": 4,
+      "address_byte": 2,
       "active": true,
       "nozzles": [
         {
           "index": 1,
-          "azt_address": 8,
           "product_id": 4,
           "price": 12000,
           "active": true,
+          "azt_address": 2,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 2,
-          "azt_address": 10,
           "product_id": 1,
           "price": 11400,
           "active": true,
+          "azt_address": 4,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 3,
-          "azt_address": 12,
           "product_id": 2,
           "price": 12500,
-          "active": true,
+          "active": false,
+          "azt_address": 6,
           "wayne_code": 0,
           "wayne_product_code": 0
         }

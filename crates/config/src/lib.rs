@@ -802,6 +802,7 @@ impl SiteConfig {
 
         let product_ids: HashSet<u8> = self.products.iter().map(|p| p.id).collect();
         let mut addr_bytes = HashSet::new();
+        let mut azt_addresses = HashSet::new();
         let mut fp_ids = HashSet::new();
 
         for fp in &self.fueling_positions {
@@ -858,6 +859,29 @@ impl SiteConfig {
                         nozzle.index,
                         fp.id
                     );
+                }
+                if self.connection.protocol == Protocol::Azt20 && fp.active && nozzle.active {
+                    let azt_addr = if nozzle.azt_address == 0 {
+                        fp.address_byte
+                    } else {
+                        nozzle.azt_address
+                    };
+                    if !(1..=225).contains(&azt_addr) {
+                        bail!(
+                            "Nozzle {} in position '{}' has invalid AZT address {}",
+                            nozzle.index,
+                            fp.id,
+                            azt_addr
+                        );
+                    }
+                    if !azt_addresses.insert(azt_addr) {
+                        bail!(
+                            "Duplicate AZT address {} in active nozzle {} of position '{}'",
+                            azt_addr,
+                            nozzle.index,
+                            fp.id
+                        );
+                    }
                 }
             }
         }
@@ -1020,6 +1044,26 @@ mod tests {
     fn rejects_zero_price_on_active_nozzle() {
         let mut cfg = sample_config();
         cfg.fueling_positions[0].nozzles[0].price = 0;
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn azt_allows_offset_addresses() {
+        let mut cfg = sample_config();
+        cfg.connection.protocol = Protocol::Azt20;
+        cfg.fueling_positions[0].address_byte = 1;
+        cfg.fueling_positions[1].address_byte = 2;
+        cfg.fueling_positions[1].nozzles[1].azt_address = 16;
+        cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn azt_rejects_duplicate_active_nozzle_address() {
+        let mut cfg = sample_config();
+        cfg.connection.protocol = Protocol::Azt20;
+        cfg.fueling_positions[0].address_byte = 1;
+        cfg.fueling_positions[1].address_byte = 2;
+        cfg.fueling_positions[1].nozzles[1].azt_address = 1;
         assert!(cfg.validate().is_err());
     }
 }

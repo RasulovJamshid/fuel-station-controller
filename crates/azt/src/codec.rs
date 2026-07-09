@@ -37,7 +37,7 @@ pub fn complement(b: u8) -> u8 {
     !b & 0x7F
 }
 
-/// Network-address byte for AZT address `n` (1..=15) at offset 0: `0x20 | n`.
+/// Network-address byte for an address within one 15-address offset: `0x20 | n`.
 #[inline]
 pub fn address_byte(n: u8) -> u8 {
     0x20 | (n & 0x0F)
@@ -70,25 +70,29 @@ pub fn checksum(normal_bytes: &[u8]) -> u8 {
     xored | 0x40
 }
 
+fn split_network_address(n: u8) -> (u8, u8) {
+    let zero_based = n.saturating_sub(1);
+    let offset_index = zero_based / 15;
+    let local = (zero_based % 15) + 1;
+    (start_byte_for_offset(offset_index), address_byte(local))
+}
+
 /// Build a complete addressed request frame (Variant 1, разд. 2.1).
 ///
-/// `addr` is the AZT network number (1..=15 at offset 0). `cmd` is the command
-/// byte; `data` are the raw payload bytes (already digit-encoded by the caller).
-/// The returned buffer is ready to transmit: `DEL STX <pairs> ETX ETX CheckSum`.
+/// `addr` is the AZT network number. Addresses 1..=15 use offset 0 (`STX`);
+/// addresses 16..=30 use offset 15 (`BEL`), and so on. `cmd` is the command byte;
+/// `data` are the raw payload bytes (already digit-encoded by the caller). The
+/// returned buffer is ready to transmit: `DEL <start> <pairs> ETX ETX CheckSum`.
 pub fn build_request(addr: u8, cmd: u8, data: &[u8]) -> Vec<u8> {
-    build_request_with_start(STX, address_byte(addr), cmd, data)
+    let (start, addr_byte) = split_network_address(addr);
+    build_request_with_start(start, addr_byte, cmd, data)
 }
 
 /// Build a request with an explicit start byte and pre-formed address byte.
 ///
 /// Broadcast commands (e.g. `W`, разд. 7.18) omit the address entirely — pass
 /// `addr_byte = None`.
-pub fn build_request_with_start(
-    start: u8,
-    addr_byte: u8,
-    cmd: u8,
-    data: &[u8],
-) -> Vec<u8> {
+pub fn build_request_with_start(start: u8, addr_byte: u8, cmd: u8, data: &[u8]) -> Vec<u8> {
     build_frame(start, Some(addr_byte), cmd, data)
 }
 
@@ -329,6 +333,13 @@ mod tests {
     }
 
     #[test]
+    fn request_address_16_uses_first_offset() {
+        let f = build_request(16, 0x31, &[]);
+        assert_eq!(&f[..6], &[DEL, 0x07, 0x21, 0x5E, 0x31, 0x4E]);
+        assert_eq!(f[8], checksum(&[0x21, 0x31]));
+    }
+
+    #[test]
     fn status_request_frame_matches_spec_layout() {
         // Разд. 7.1: DEL STX 21 5E 31 4E 03 03 CS — 9 bytes total.
         let f = build_request(1, 0x31, &[]);
@@ -361,10 +372,7 @@ mod tests {
         frame.push(ETX);
         frame.push(checksum(&[0x32]));
 
-        assert_eq!(
-            decode_response(&frame),
-            Some(Response::Data(vec![0x32]))
-        );
+        assert_eq!(decode_response(&frame), Some(Response::Data(vec![0x32])));
     }
 
     #[test]
@@ -376,7 +384,14 @@ mod tests {
 
     #[test]
     fn decode_rejects_bad_complement() {
-        let frame = vec![STX, 0x32, 0x00 /* wrong comp */, ETX, ETX, checksum(&[0x32])];
+        let frame = vec![
+            STX,
+            0x32,
+            0x00, /* wrong comp */
+            ETX,
+            ETX,
+            checksum(&[0x32]),
+        ];
         assert_eq!(decode_response(&frame), None);
     }
 

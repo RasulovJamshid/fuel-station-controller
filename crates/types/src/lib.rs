@@ -114,7 +114,7 @@ pub struct FpState {
     /// totals for the currently-selected product instead of only the first nozzle.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pump_totals: Vec<PumpNozzleTotals>,
-    /// Human-readable preset while `status` is `PRE_AUTHORIZED`.
+    /// Human-readable active preset/limit shown while pre-authorized or filling.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pre_auth_preset: Option<String>,
     /// Mirror of `STOPPED` payload for clients that read flat fields.

@@ -14,7 +14,7 @@
   },
   "connection": {
     "protocol": "azt2_0",
-    "port": "/tmp/azt-real",
+    "port": "/dev/ttyS0",
     "baud_rate": 4800,
     "parity": "none",
     "data_bits": 8,

@@ -1,7 +1,7 @@
 {
   "site": {
-    "id": "AZT-AZS",
-    "name": "AZT 2.0 Station",
+    "id": "guliston-ayoqsh7-AZS",
+    "name": "Guliston 7 AYOQSH",
     "timezone": "Asia/Tashkent",
     "address": null
   },
@@ -36,38 +36,61 @@
     },
     {
       "id": 2,
+      "uuid": "6e943096-7c98-4bc9-ba60-08f9a39f5b90",
+      "name": "Diesel Euro 6",
+      "color": "#795548",
+      "unit": "litre"
+    },
+    {
+      "id": 3,
+      "uuid": "b4b2e2fe-7bd4-49bf-ba33-6f02930cd703",
+      "name": "Diesel Euro K4",
+      "color": "#4CAF50",
+      "unit": "litre"
+    },
+    {
+      "id": 4,
       "uuid": "8b16692b-0af2-49d5-9dbe-ae8966c31f03",
       "name": "AI-95",
       "color": "#FF9800",
       "unit": "litre"
     },
     {
-      "id": 3,
-      "uuid": "6e943096-7c98-4bc9-ba60-08f9a39f5b90",
-      "name": "Diesel",
-      "color": "#795548",
-      "unit": "litre"
-    },
-    {
-      "id": 4,
-      "uuid": "b4b2e2fe-7bd4-49bf-ba33-6f02930cd703",
-      "name": "AI-91",
-      "color": "#4CAF50",
+      "id": 5,
+      "uuid": "f0e1c8d2-3b6a-4f7e-9c1b-2f3e4d5a6b7c",
+      "name": "Diesel ECO",
+      "color": "#FFC107",
       "unit": "litre"
     }
   ],
   "fueling_positions": [
     {
       "id": "FP1",
-      "label": "Lane 1 AI-92",
+      "label": "1",
       "address_byte": 1,
       "active": true,
       "nozzles": [
         {
           "index": 1,
           "product_id": 1,
-          "price": 10500,
+          "price": 12000,
+          "active": false,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 3,
+          "product_id": 3,
+          "price": 12800,
           "active": true,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 5,
+          "product_id": 1,
+          "price": 12000,
+          "active": false,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -75,15 +98,31 @@
     },
     {
       "id": "FP2",
-      "label": "Lane 2 AI-95",
+      "label": "2",
       "address_byte": 2,
       "active": true,
       "nozzles": [
         {
-          "index": 1,
+          "index": 2,
           "product_id": 2,
-          "price": 14300,
+          "price": 11600,
+          "active": false,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 4,
+          "product_id": 3,
+          "price": 11400,
           "active": true,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 6,
+          "product_id": 1,
+          "price": 12000,
+          "active": false,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -91,15 +130,31 @@
     },
     {
       "id": "FP3",
-      "label": "Lane 3 Diesel",
+      "label": "3",
       "address_byte": 3,
       "active": true,
       "nozzles": [
         {
           "index": 1,
-          "product_id": 3,
-          "price": 12400,
+          "product_id": 2,
+          "price": 11600,
+          "active": false,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 3,
+          "product_id": 1,
+          "price": 11400,
           "active": true,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 5,
+          "product_id": 4,
+          "price": 12000,
+          "active": false,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -107,15 +162,31 @@
     },
     {
       "id": "FP4",
-      "label": "Lane 4 AI-95",
+      "label": "4",
       "address_byte": 4,
       "active": true,
       "nozzles": [
         {
-          "index": 1,
+          "index": 2,
           "product_id": 2,
-          "price": 14300,
+          "price": 11600,
+          "active": false,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 4,
+          "product_id": 1,
+          "price": 11400,
           "active": true,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 6,
+          "product_id": 4,
+          "price": 12000,
+          "active": false,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -123,13 +194,14 @@
     }
   ],
   "sync": {
-    "enabled": false,
+    "enabled": true,
     "backend_url": "",
-    "api_key": "",
+    "api_key": "bdffefc0-2ce7-4b14-b1c1-99fcddd2f062",
     "retry_interval_secs": 30,
     "batch_size": 100,
     "max_retries": 10,
-    "price_pull_interval_hours": 12
+    "price_pull_interval_hours": 12,
+    "price_pull_enabled": false
   },
   "shifts": {
     "mode": "manual",
@@ -149,36 +221,36 @@
     {
       "product_id": 1,
       "label": "AI-92",
-      "capacity_l": 12640.0,
+      "capacity_l": 25000,
       "current_l": 3831.0
     },
     {
       "product_id": 2,
       "label": "AI-95",
-      "capacity_l": 12640.0,
+      "capacity_l": 25000,
       "current_l": 6531.0
     },
     {
       "product_id": 3,
-      "label": "Diesel",
-      "capacity_l": 12640.0,
+      "label": "Diesel Euro 6",
+      "capacity_l": 25000,
       "current_l": 951.0
     },
     {
       "product_id": 4,
-      "label": "AI-91",
-      "capacity_l": 12640.0,
+      "label": "Diesel ECO",
+      "capacity_l": 25000,
       "current_l": 9120.0
     }
   ],
   "atg": {
     "poll_interval_secs": 300,
     "modbus_timeout_secs": 10.0,
-    "api_url": "https://ps.ung.uz/api/integration/fuel-levels",
+    "api_url": "",
     "branches": [
       {
         "id": 1,
-        "name": "Bostonliquid AZS",
+        "name": "Guliston 7 AZS",
         "host": "192.168.127.254",
         "port": 6400,
         "unit_id": 1,
@@ -192,7 +264,7 @@
             "type": "AI-92",
             "product_id": 1,
             "label": null,
-            "capacity_l": 12640.0,
+            "capacity_l": 25000,
             "maxima": {}
           },
           {
@@ -201,7 +273,7 @@
             "type": "AI-95",
             "product_id": 2,
             "label": null,
-            "capacity_l": 12640.0,
+            "capacity_l": 25000,
             "maxima": {}
           },
           {
@@ -210,7 +282,7 @@
             "type": "Diesel",
             "product_id": 3,
             "label": null,
-            "capacity_l": 12640.0,
+            "capacity_l": 25000,
             "maxima": {}
           },
           {
@@ -219,7 +291,7 @@
             "type": "AI-91",
             "product_id": 4,
             "label": null,
-            "capacity_l": 12640.0,
+            "capacity_l": 25000.0,
             "maxima": {}
           }
         ]

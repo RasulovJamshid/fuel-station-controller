@@ -206,7 +206,8 @@ cfg = json.load(open(sys.argv[1]))
 cfg["connection"]["port"] = sys.argv[2]
 json.dump(cfg, open(sys.argv[3], "w"), indent=2)
 PYEOF
-    echo "  (serial port overridden: $cfg_port → $AZS_SERIAL_PORT)"
+    # Status message → stderr so command substitution captures ONLY the path.
+    echo "  (serial port overridden: $cfg_port → $AZS_SERIAL_PORT)" >&2
     echo "$tmp_cfg"
   else
     echo "$base_cfg"

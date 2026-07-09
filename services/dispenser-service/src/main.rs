@@ -3,6 +3,7 @@ mod api;
 mod config;
 mod db;
 mod engine;
+mod scan;
 mod shifts;
 mod sync;
 
@@ -40,6 +41,13 @@ struct Cli {
 enum Commands {
     /// Run HTTP + WebSocket API and poll loop (foreground).
     Run,
+    /// Read-only AZT RS-485 bus scan (addresses 1..=15) → JSON report.
+    /// Requires the serial port to be free (stop the running service first).
+    Scan {
+        /// Output JSON path.
+        #[arg(long, default_value = "azt-scan.json")]
+        out: std::path::PathBuf,
+    },
     /// Install as Windows service (Windows only).
     #[cfg(windows)]
     Install,
@@ -58,6 +66,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Run => run(cli.config).await,
+        Commands::Scan { out } => scan::run_scan(cli.config, out).await,
         Commands::ReinitAuth => reinit_auth(cli.config).await,
         #[cfg(windows)]
         Commands::Install | Commands::Uninstall | Commands::Start | Commands::Stop => {

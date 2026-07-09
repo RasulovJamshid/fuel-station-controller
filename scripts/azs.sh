@@ -79,6 +79,9 @@ Modes:
 
   service-real-fg   Foreground: dispenser-service with site.real.json only (no UI).
   service-real-bg   Background: same, logs in .azs-run/service.log.
+  scan              Read-only AZT bus scan (addresses 1–15) → .azs-run/azt-scan.json.
+                    Needs the port free (stop the service first). Honors AZS_SERVICE_CONFIG,
+                    AZS_SERIAL_PORT, AZS_SCAN_OUT, and AZS_SERIAL_LOG (raw frames).
 
   ── Simulator ──────────────────────────────────────────────────────────────
   service-mock-fg   Foreground: dispenser-service with in-process MOCK serial (site.mock.json).
@@ -297,6 +300,25 @@ case "$MODE" in
   service-real-fg)
     real_cfg="$(resolve_real_config)"
     exec cargo run -p dispenser-service -- run --config "$real_cfg"
+    ;;
+
+  scan)
+    # Read-only AZT bus scan (addresses 1–15) → JSON report.
+    real_cfg="$(resolve_real_config)"
+    scan_out="${AZS_SCAN_OUT:-$STATE_DIR/azt-scan.json}"
+    real_port="$(python3 -c "import json; print(json.load(open('$real_cfg'))['connection']['port'])" 2>/dev/null || echo "")"
+    if [[ -z "$real_port" || ! -e "$real_port" ]]; then
+      echo "  ⚠  Serial port '$real_port' not found. Set AZS_SERIAL_PORT=/dev/ttyUSB0 (see available below):"
+      ls /dev/ttyUSB* /dev/ttyS* /dev/ttyACM* 2>/dev/null | sed 's/^/    /' || echo "    (none)"
+      exit 1
+    fi
+    if command -v fuser >/dev/null 2>&1 && fuser "$real_port" >/dev/null 2>&1; then
+      echo "  ⚠  Port $real_port is in use — the service is probably running."
+      echo "     Stop it first:  $0 stop   (the scan needs exclusive access to the bus)."
+      exit 1
+    fi
+    echo "Scanning AZT bus on $real_port → $scan_out"
+    exec cargo run -p dispenser-service -- scan --config "$real_cfg" --out "$scan_out"
     ;;
 
   service-real-bg)

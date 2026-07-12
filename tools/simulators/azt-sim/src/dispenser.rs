@@ -14,7 +14,9 @@ use azt::{encode_data_response, encode_short_response, TrkRequest, ACK, CAN, NAK
 pub type SharedDispensers = Arc<Mutex<Vec<SimDispenser>>>;
 
 /// TRK identifier reported to the '7' type query: type 'A' → L=6, M=4, T=6.
-const TRK_IDENTIFIER: u8 = 0x3A;
+/// Real pumps report ASCII letters (a bench scan captured 0x48 'H'), matching
+/// `TrkType::from_identifier`'s 'A'..'H' table.
+const TRK_IDENTIFIER: u8 = b'A';
 /// Maximum dose in "full tank" mode, 0.01 L units (990.00 L per spec §7.13).
 const FULL_TANK_CAP_CL: u64 = 99_000;
 

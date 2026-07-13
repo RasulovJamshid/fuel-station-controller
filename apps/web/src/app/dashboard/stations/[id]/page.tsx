@@ -13,6 +13,7 @@ import { Header } from '@/components/layout/header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TxStatusBadge } from '@/components/ui/badge';
+import Link from 'next/link';
 
 function StatCard({ icon: Icon, label, value, sub, color = 'brand' }: {
   icon: any; label: string; value: string | number; sub?: string; color?: string;
@@ -284,6 +285,9 @@ export default function StationDetailPage() {
                 <div className="panel-header flex items-center gap-2">
                   <Clock size={15} className="text-brand-400" />
                   <h2 className="font-semibold text-slate-900">{t('activeShift')}</h2>
+                  <Link href={`/dashboard/shifts/${activeShift.id}`} className="ml-auto text-xs font-medium text-brand-600 hover:text-brand-700">
+                    {t('details')}
+                  </Link>
                 </div>
                 <div className="p-4 space-y-2 text-sm">
                   <div className="flex justify-between">

@@ -36,6 +36,12 @@ export class PricesController {
         return this.prices.getCurrentPrices(user.companyId, stationId, allowed);
     }
 
+    @Get('matrix')
+    async matrix(@CurrentUser() user: any, @Query('stationId') stationId?: string) {
+        const allowed = await resolveStationIds(this.prisma, user, stationId ? [stationId] : []);
+        return this.prices.getPriceMatrix(user.companyId, stationId, allowed);
+    }
+
     @Get('history')
     @ApiOperation({ summary: 'List paginated price change history' })
     @ApiOkResponse({ description: 'Paginated price change log entries, most recent first' })

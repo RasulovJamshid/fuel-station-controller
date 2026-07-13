@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, ArrowLeftRight, Gauge, BarChart3,
   Clock, Settings, LogOut, Fuel, Users,
-  Droplets, DollarSign, Bell, Building2, Zap,
+  Droplets, DollarSign, Bell, Building2, Zap, Package,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
@@ -22,6 +22,7 @@ export function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: (
     { href: '/dashboard/stations',     label: t('navStations'),      icon: Gauge },
     { href: '/dashboard/oil-bases',    label: t('navOilBases'),      icon: Building2 },
     { href: '/dashboard/tanks',        label: t('navTanks'),         icon: Droplets },
+    { href: '/dashboard/products',     label: t('navProducts'),      icon: Package },
     { href: '/dashboard/prices',       label: t('navPrices'),        icon: DollarSign },
     { href: '/dashboard/reports',      label: t('navReports'),       icon: BarChart3 },
     { href: '/dashboard/alerts',       label: t('navAlerts'),        icon: Bell },

@@ -28,7 +28,8 @@ describe('SyncService', () => {
         const prisma: any = makePrisma();
         const gateway: any = { broadcast: jest.fn() };
         const integrations: any = { dispatch: jest.fn().mockResolvedValue(undefined) };
-        const service = new SyncService(prisma, gateway, integrations);
+        const products: any = { resolve: jest.fn().mockResolvedValue({ productId: 'canonical-95' }) };
+        const service = new SyncService(prisma, gateway, integrations, products);
 
         const result = await service.processBatch('station-1', 'company-1', {
             records: [{
@@ -67,6 +68,7 @@ describe('SyncService', () => {
                 stationId: 'station-1',
                 amount: BigInt(150000),
                 productName: 'AI-95',
+                canonicalProductId: 'canonical-95',
             }),
         }));
         expect(gateway.broadcast).toHaveBeenCalledWith('transaction.synced', {
@@ -84,7 +86,7 @@ describe('SyncService', () => {
     it('treats duplicate sync records as accepted without reprocessing', async () => {
         const prisma: any = makePrisma();
         prisma.processedSyncRecord.findUnique.mockResolvedValue({ id: 'dup' });
-        const service = new SyncService(prisma, { broadcast: jest.fn() } as any, { dispatch: jest.fn() } as any);
+        const service = new SyncService(prisma, { broadcast: jest.fn() } as any, { dispatch: jest.fn() } as any, { resolve: jest.fn() } as any);
 
         await expect(service.processBatch('station-1', 'company-1', {
             records: [{

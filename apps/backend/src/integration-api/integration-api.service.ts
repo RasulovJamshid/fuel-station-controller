@@ -12,6 +12,7 @@ import {
     QueryIntegrationOilBasesDto,
     QueryIntegrationReadingsDto,
 } from './dto/integration-query.dto';
+import { PricesService } from '../prices/prices.service';
 
 /**
  * Read-only data access for external integrations. Every query is
@@ -21,7 +22,7 @@ import {
  */
 @Injectable()
 export class IntegrationApiService {
-    constructor(private prisma: PrismaService) {}
+    constructor(private prisma: PrismaService, private currentPrices: PricesService) {}
 
     /**
      * Resolve the concrete set of station IDs this token may read,
@@ -319,19 +320,19 @@ export class IntegrationApiService {
         const stationIds = await this.resolveStationScope(token, q);
         if (stationIds.length === 0) return PaginatedResponse.of([], 0, q);
 
-        const where: any = {
-            stationId: { in: stationIds },
-            ...(q.productId != null ? { productId: q.productId } : {}),
-            ...(q.fpId ? { fpId: q.fpId } : {}),
-        };
-
-        const [data, total] = await this.prisma.$transaction([
-            this.prisma.priceSetting.findMany({
-                where, orderBy: { [q.sort]: q.order }, skip: q.skip, take: q.limit,
-            }),
-            this.prisma.priceSetting.count({ where }),
-        ]);
-        return PaginatedResponse.of(data, total, q);
+        let rows = await this.currentPrices.getCurrentPrices(token.companyId, undefined, stationIds);
+        rows = rows.filter(row =>
+            (q.productId == null || row.productId === q.productId) &&
+            (!q.fpId || row.fpId === q.fpId),
+        );
+        rows.sort((a, b) => {
+            const av = a[q.sort] instanceof Date ? a[q.sort].getTime() : a[q.sort];
+            const bv = b[q.sort] instanceof Date ? b[q.sort].getTime() : b[q.sort];
+            const direction = q.order === 'asc' ? 1 : -1;
+            return av < bv ? -direction : av > bv ? direction : 0;
+        });
+        const limit = q.limit ?? 50;
+        return PaginatedResponse.of(rows.slice(q.skip, q.skip + limit), rows.length, q);
     }
 
     // ── Stations ────────────────────────────────────────────────

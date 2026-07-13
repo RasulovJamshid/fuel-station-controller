@@ -77,6 +77,7 @@ export const stationsApi = {
 
 export const shiftsApi = {
   list:   (params?: Record<string, unknown>) => api.get('/shifts', { params }),
+  get:    (id: string) => api.get(`/shifts/${id}`),
   active: (stationId?: string, oilBaseId?: string) => {
     const params: Record<string, string> = {};
     if (stationId) params.stationId = stationId;
@@ -118,12 +119,24 @@ export const reportsApi = {
 export const pricesApi = {
   current: (stationId?: string) =>
     api.get('/prices', { params: stationId ? { stationId } : {} }),
+  matrix: (stationId?: string) =>
+    api.get('/prices/matrix', { params: stationId ? { stationId } : {} }),
   history: (params?: Record<string, unknown>) =>
     api.get('/prices/history', { params }),
   set: (data: {
     stationId: string; fpId: string; nozzleIndex: number;
     productId: number; productName: string; price: number;
   }) => api.post('/prices', data),
+};
+
+export const productsApi = {
+  list:       () => api.get('/products'),
+  discovered: () => api.get('/products/discovered'),
+  create:     (data: unknown) => api.post('/products', data),
+  update:     (id: string, data: unknown) => api.put(`/products/${id}`, data),
+  remove:     (id: string) => api.delete(`/products/${id}`),
+  map:        (productId: string, data: unknown) => api.post(`/products/${productId}/mappings`, data),
+  unmap:      (mappingId: string) => api.delete(`/products/mappings/${mappingId}`),
 };
 
 export const usersApi2 = {

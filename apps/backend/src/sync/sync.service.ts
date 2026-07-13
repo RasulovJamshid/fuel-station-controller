@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DashboardGateway } from '../dashboard/dashboard.gateway';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { SyncBatchDto, SyncRecordDto } from './dto/sync-batch.dto';
+import { ProductsService } from '../products/products.service';
 
 @Injectable()
 export class SyncService {
@@ -12,6 +13,7 @@ export class SyncService {
         private prisma:        PrismaService,
         private gateway:       DashboardGateway,
         private integrations:  IntegrationsService,
+        private products:      ProductsService,
     ) {}
 
     async processBatch(stationId: string, companyId: string, dto: SyncBatchDto, ipAddress: string) {
@@ -66,6 +68,7 @@ export class SyncService {
 
         // CONTINUED_FROM is internal to station — skip, only final resolved records arrive
         if (p.status === 'CONTINUED_FROM') return;
+        const mapping = await this.products.resolve(companyId, stationId, p.product_id ?? null, p.product_name ?? '');
 
         await this.prisma.transaction.upsert({
             where: { id: p.id },
@@ -90,6 +93,7 @@ export class SyncService {
                 combinedAmount: p.combined_amount != null ? BigInt(p.combined_amount) : null,
                 shiftId:        p.shift_id ?? null,
                 operatorName:   p.operator_name ?? null,
+                canonicalProductId: mapping?.productId ?? null,
             },
             update: {
                 completedAt,
@@ -99,8 +103,9 @@ export class SyncService {
                 combinedVolume: p.combined_volume ?? null,
                 combinedAmount: p.combined_amount != null ? BigInt(p.combined_amount) : null,
                 operatorName:   p.operator_name ?? null,
+                canonicalProductId: mapping?.productId ?? null,
             },
-        });
+        } as any);
 
         await this.setTransactionPresetMetadata(p.id, p);
         if (p.shift_id) {
@@ -250,6 +255,10 @@ export class SyncService {
             reservoir = await this.autoCreateReservoir(stationId, p);
         }
 
+        const fillPercent = reservoir.capacity > 0
+            ? p.volume_litres / reservoir.capacity * 100
+            : p.fill_percent ?? null;
+
         await this.prisma.reservoirReading.create({
             data: {
                 reservoirId:  reservoir.id,
@@ -260,7 +269,7 @@ export class SyncService {
                 levelMm:      p.level_mm ?? null,
                 temperatureC: p.temperature_c ?? null,
                 waterMm:      p.water_mm ?? null,
-                fillPercent:  p.fill_percent ?? null,
+                fillPercent,
             },
         });
 
@@ -268,7 +277,7 @@ export class SyncService {
 
         this.integrations.dispatch(companyId, stationId, 'tank.reading', {
             tankId: p.tank_id, reservoirId: reservoir.id,
-            volumeLitres: p.volume_litres, fillPercent: p.fill_percent ?? null,
+            volumeLitres: p.volume_litres, fillPercent,
             levelMm: p.level_mm ?? null, readingAt: p.reading_at,
         }).catch(() => {});
     }
@@ -301,6 +310,7 @@ export class SyncService {
     }
 
     private async recordPriceChange(stationId: string, companyId: string, p: any) {
+        const mapping = await this.products.resolve(companyId, stationId, p.product_id ?? null, p.product_name ?? '');
         await this.prisma.priceChangeLog.create({
             data: {
                 companyId,
@@ -324,15 +334,20 @@ export class SyncService {
                 nozzleIndex: p.nozzle_index,
                 productId:   p.product_id ?? 0,
                 productName: p.product_name,
+                canonicalProductId: mapping?.productId ?? null,
                 price:       p.new_price,
+                updatedAt:   new Date(p.changed_at),
                 updatedBy:   p.changed_by ?? 'station',
             },
             update: {
-                price:     p.new_price,
+                price:       p.new_price,
+                productId:   p.product_id ?? 0,
+                productName: p.product_name,
+                canonicalProductId: mapping?.productId ?? null,
                 updatedBy: p.changed_by ?? 'station',
                 updatedAt: new Date(p.changed_at),
             },
-        });
+        } as any);
 
         this.integrations.dispatch(companyId, stationId, 'price.changed', {
             fpId: p.fp_id, nozzleIndex: p.nozzle_index,

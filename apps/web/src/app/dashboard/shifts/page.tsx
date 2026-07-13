@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useOilBases } from '@/hooks/use-oil-bases';
+import Link from 'next/link';
 
 export default function ShiftsPage() {
   const t = useT();
@@ -39,7 +40,7 @@ export default function ShiftsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [oilBaseId]);
 
   useEffect(() => { load(1); setPage(1); }, [oilBaseId]); // eslint-disable-line
   useEffect(() => { load(page); }, [page]); // eslint-disable-line
@@ -79,7 +80,7 @@ export default function ShiftsPage() {
             <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">{t('activeShiftsSection')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {active.map((s: any) => (
-                <div key={s.id} className="panel border-l-4 border-l-emerald-400 p-6 transition-all duration-200 hover:shadow-md group">
+                <Link href={`/dashboard/shifts/${s.id}`} key={s.id} className="panel border-l-4 border-l-emerald-400 p-6 transition-all duration-200 hover:shadow-md group">
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <p className="font-semibold text-slate-900">{s.operatorName}</p>
@@ -97,7 +98,12 @@ export default function ShiftsPage() {
                       <p className="font-medium text-slate-700">{fmtDuration(s.startedAt)}</p>
                     </div>
                   </div>
-                </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div><p className="text-slate-400">{t('shiftTx')}</p><p className="font-semibold text-slate-700">{s.totalTransactions}</p></div>
+                    <div><p className="text-slate-400">{t('shiftVolume')}</p><p className="font-semibold text-slate-700">{fmtVolume(s.totalVolume)}</p></div>
+                    <div><p className="text-slate-400">{t('shiftAmount')}</p><p className="font-semibold text-slate-700">{fmtMoney(s.totalAmount)}</p></div>
+                  </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -133,7 +139,7 @@ export default function ShiftsPage() {
                     </tr>
                   ) : (
                     history.map((s: any) => (
-                      <tr key={s.id} className="table-row-hover group">
+                      <tr key={s.id} className="table-row-hover group cursor-pointer" onClick={() => window.location.href = `/dashboard/shifts/${s.id}`}>
                         <td className="table-cell font-medium text-slate-800">{s.operatorName}</td>
                         <td className="table-cell text-slate-600">{s.stationId}</td>
                         <td className="table-cell text-xs text-slate-500 whitespace-nowrap">{fmtDate(s.startedAt)}</td>

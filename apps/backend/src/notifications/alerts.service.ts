@@ -103,7 +103,10 @@ export class AlertsService {
         const latestReadings: any[] = await this.prisma.$queryRaw`
             SELECT DISTINCT ON (r.id)
                 r.id, r."stationId", rr."companyId" AS "companyId", r.label, r."productName",
-                rr."fillPercent"
+                CASE
+                    WHEN r.capacity > 0 THEN rr."volumeLitres" / r.capacity * 100
+                    ELSE rr."fillPercent"
+                END AS "fillPercent"
             FROM "Reservoir" r
             JOIN "ReservoirReading" rr ON rr."reservoirId" = r.id
             WHERE r.active = true AND r."deletedAt" IS NULL

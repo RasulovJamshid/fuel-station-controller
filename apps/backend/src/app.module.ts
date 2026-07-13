@@ -27,6 +27,7 @@ import { OilBasesModule } from './oil-bases/oil-bases.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { IntegrationApiModule } from './integration-api/integration-api.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
+import { ProductsModule } from './products/products.module';
 
 @Module({
     imports: [
@@ -97,6 +98,7 @@ import { MaintenanceModule } from './maintenance/maintenance.module';
         IntegrationsModule,
         IntegrationApiModule,
         MaintenanceModule,
+        ProductsModule,
     ],
 })
 export class AppModule implements NestModule {

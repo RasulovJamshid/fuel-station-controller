@@ -17,8 +17,8 @@ export class CreateReservoirDto {
 export class ReservoirsService {
     constructor(private prisma: PrismaService) {}
 
-    create(dto: CreateReservoirDto) {
-        return this.prisma.reservoir.upsert({
+    async create(dto: CreateReservoirDto) {
+        const reservoir = await this.prisma.reservoir.upsert({
             where: { stationId_tankId: { stationId: dto.stationId, tankId: dto.tankId } },
             create: dto,
             update: {
@@ -28,6 +28,17 @@ export class ReservoirsService {
                 productName: dto.productName,
             },
         });
+        // fillPercent is denormalized in incoming readings. Recalculate it when
+        // capacity is corrected so every API consumer sees a consistent value.
+        await this.prisma.$executeRaw`
+            UPDATE "ReservoirReading"
+            SET "fillPercent" = CASE
+                WHEN ${reservoir.capacity} > 0 THEN "volumeLitres" / ${reservoir.capacity} * 100
+                ELSE NULL
+            END
+            WHERE "reservoirId" = ${reservoir.id}
+        `;
+        return reservoir;
     }
 
     findAll(companyId: string, stationId?: string, allowedStationIds?: string[]) {
@@ -61,7 +72,11 @@ export class ReservoirsService {
         const result: any[] = await this.prisma.$queryRaw`
             SELECT DISTINCT ON (r.id)
                 r.id, r."stationId", r."tankId", r.label, r."productId", r."productName",
-                r.capacity, rr."volumeLitres", rr."fillPercent",
+                r.capacity, rr."volumeLitres",
+                CASE
+                    WHEN rr."volumeLitres" IS NULL OR r.capacity <= 0 THEN NULL
+                    ELSE rr."volumeLitres" / r.capacity * 100
+                END AS "fillPercent",
                 rr."levelMm", rr."temperatureC", rr."readingAt"
             FROM "Reservoir" r
             LEFT JOIN "ReservoirReading" rr ON rr."reservoirId" = r.id

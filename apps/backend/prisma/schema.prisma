@@ -24,6 +24,7 @@ model Company {
   oilBases     OilBase[]
   integrations Integration[]
   apiTokens    ApiToken[]
+  products     Product[]
 }
 
 // ── Oil Bases (нефтебазы) ──────────────────────────────────────
@@ -132,17 +133,18 @@ model Station {
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  company       Company              @relation(fields: [companyId], references: [id])
-  oilBase       OilBase?             @relation(fields: [oilBaseId], references: [id])
-  positions     FuelingPosition[]
-  transactions  Transaction[]
-  shifts        Shift[]
-  reservoirs    Reservoir[]
-  priceSettings PriceSetting[]
-  healthEvents  StationHealthEvent[]
-  uptimeHistory StationUptimeEvent[]
-  userAccess    StationAccess[]
-  alertRules    AlertRule[]
+  company         Company                 @relation(fields: [companyId], references: [id])
+  oilBase         OilBase?                @relation(fields: [oilBaseId], references: [id])
+  positions       FuelingPosition[]
+  transactions    Transaction[]
+  shifts          Shift[]
+  reservoirs      Reservoir[]
+  priceSettings   PriceSetting[]
+  healthEvents    StationHealthEvent[]
+  uptimeHistory   StationUptimeEvent[]
+  userAccess      StationAccess[]
+  alertRules      AlertRule[]
+  productMappings StationProductMapping[]
 }
 
 model StationUptimeEvent {
@@ -181,38 +183,80 @@ model Nozzle {
 // ── Transactions ────────────────────────────────────────────────
 
 model Transaction {
-  id             String    @id
-  companyId      String
-  stationId      String
-  fpId           String
-  label          String
-  addressByte    Int
-  startedAt      DateTime
-  completedAt    DateTime?
-  volume         Float     @default(0)
-  amount         BigInt    @default(0)
-  price          Int       @default(0)
-  nozzleIndex    Int
-  productId      Int
-  productName    String
-  presetType     String?
-  presetValue    Float?
-  presetLabel    String?
-  status         TxStatus
-  parentTxId     String?
-  combinedVolume Float?
-  combinedAmount BigInt?
-  shiftId        String?
-  operatorName   String?
-  syncedAt       DateTime  @default(now())
-  deletedAt      DateTime?
+  id                 String    @id
+  companyId          String
+  stationId          String
+  fpId               String
+  label              String
+  addressByte        Int
+  startedAt          DateTime
+  completedAt        DateTime?
+  volume             Float     @default(0)
+  amount             BigInt    @default(0)
+  price              Int       @default(0)
+  nozzleIndex        Int
+  productId          Int
+  productName        String
+  canonicalProductId String?
+  presetType         String?
+  presetValue        Float?
+  presetLabel        String?
+  status             TxStatus
+  parentTxId         String?
+  combinedVolume     Float?
+  combinedAmount     BigInt?
+  shiftId            String?
+  operatorName       String?
+  syncedAt           DateTime  @default(now())
+  deletedAt          DateTime?
 
-  station Station @relation(fields: [stationId], references: [id])
+  station          Station  @relation(fields: [stationId], references: [id])
+  canonicalProduct Product? @relation(fields: [canonicalProductId], references: [id])
 
   @@index([stationId, startedAt])
   @@index([companyId, startedAt])
   @@index([stationId, productId, startedAt])
   @@index([shiftId])
+}
+
+// Company-wide product catalog. Station-specific names/codes are linked through
+// StationProductMapping while raw transaction values remain unchanged.
+model Product {
+  id        String    @id @default(uuid())
+  companyId String
+  code      String
+  name      String
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  company       Company                 @relation(fields: [companyId], references: [id])
+  mappings      StationProductMapping[]
+  transactions  Transaction[]
+  priceSettings PriceSetting[]
+
+  @@unique([companyId, code])
+  @@index([companyId, name])
+}
+
+model StationProductMapping {
+  id                 String   @id @default(uuid())
+  companyId          String
+  stationId          String
+  productId          String
+  stationProductId   Int?
+  stationProductName String
+  normalizedName     String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  station Station @relation(fields: [stationId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([stationId, normalizedName])
+  @@index([stationId, stationProductId])
+  @@index([companyId, productId])
 }
 
 enum TxStatus {
@@ -303,16 +347,18 @@ model ReservoirReading {
 // ── Prices ─────────────────────────────────────────────────────
 
 model PriceSetting {
-  stationId   String
-  fpId        String
-  nozzleIndex Int
-  productId   Int
-  productName String
-  price       Int
-  updatedAt   DateTime @default(now())
-  updatedBy   String
+  stationId          String
+  fpId               String
+  nozzleIndex        Int
+  productId          Int
+  productName        String
+  canonicalProductId String?
+  price              Int
+  updatedAt          DateTime @default(now())
+  updatedBy          String
 
-  station Station @relation(fields: [stationId], references: [id])
+  station          Station  @relation(fields: [stationId], references: [id])
+  canonicalProduct Product? @relation(fields: [canonicalProductId], references: [id])
 
   @@id([stationId, fpId, nozzleIndex])
 }

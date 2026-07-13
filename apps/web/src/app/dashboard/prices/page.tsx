@@ -102,12 +102,15 @@ export default function PricesPage() {
                   <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-400">{t('noPriceData')}</td></tr>
                 ) : current.map((p: any, i) => (
                   <tr key={i} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-4 py-3 font-medium text-slate-800">{p.stationId}</td>
+                    <td className="px-4 py-3 font-medium text-slate-800">{p.stationName ?? p.stationId}</td>
                     <td className="px-4 py-3 text-slate-600">{p.fpId} / {p.nozzleIndex}</td>
-                    <td className="px-4 py-3 text-slate-700">{p.productName}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      <p className="font-medium">{p.canonicalProductName ?? p.productName}</p>
+                      {p.canonicalProductName && <p className="text-xs text-slate-400">{p.productName}</p>}
+                    </td>
                     <td className="px-4 py-3 font-mono font-semibold text-slate-900">{fmtPrice(p.price)}</td>
                     <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(p.updatedAt)}</td>
-                    <td className="px-4 py-3 text-slate-500">{p.updatedBy}</td>
+                    <td className="px-4 py-3 text-slate-500">{p.source === 'transaction' ? t('observedTransaction') : p.updatedBy}</td>
                     <td className="px-4 py-3">
                       <button
                         onClick={() => openEdit(p)}

@@ -2,6 +2,7 @@ import { Injectable, ConflictException, NotFoundException } from '@nestjs/common
 import { IsString, IsOptional, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
+import { currentDayUtcRange } from '../common/utils/timezone';
 
 export class CreateOilBaseDto {
     @ApiProperty({ description: 'Oil base name (at least 2 characters)', example: 'Нефтебаза №1 Ташкент' })
@@ -108,13 +109,10 @@ export class OilBasesService {
             include: {
                 stations: {
                     where: { deletedAt: null },
-                    select: { id: true, name: true, lastSyncAt: true, active: true },
+                    select: { id: true, name: true, lastSyncAt: true, active: true, timezone: true },
                 },
             },
         });
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
 
         const results = await Promise.all(oilBases.map(async ob => {
             const stationIds = ob.stations.map(s => s.id);
@@ -122,11 +120,15 @@ export class OilBasesService {
                 return { ...ob, todayVolume: 0, todayTransactions: 0, activeShifts: 0 };
             }
 
+            const todayByStation = ob.stations.map(station => {
+                const { start, end } = currentDayUtcRange(station.timezone ?? 'UTC');
+                return { stationId: station.id, startedAt: { gte: start, lt: end } };
+            });
+
             const [txAgg, activeShifts] = await this.prisma.$transaction([
                 this.prisma.transaction.aggregate({
                     where: {
-                        stationId: { in: stationIds },
-                        startedAt: { gte: today },
+                        OR: todayByStation,
                         deletedAt: null,
                         status: { in: ['COMPLETED', 'STOPPED'] },
                     },

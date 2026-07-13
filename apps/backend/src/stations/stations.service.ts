@@ -4,6 +4,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateStationDto, UpdateStationDto } from './dto/create-station.dto';
 import { ConfigService } from '@nestjs/config';
+import { currentDayUtcRange } from '../common/utils/timezone';
+import { TxStatus } from '@prisma/client';
+import { PricesService } from '../prices/prices.service';
 
 @Injectable()
 export class StationsService {
@@ -13,6 +16,7 @@ export class StationsService {
         private prisma:  PrismaService,
         private config:  ConfigService,
         private notify:  NotificationsService,
+        private prices:  PricesService,
     ) {}
 
     async create(dto: CreateStationDto) {
@@ -74,7 +78,8 @@ export class StationsService {
     async getDetail(id: string, companyId: string) {
         const station = await this.findOne(id, companyId);
 
-        const [transactions, prices, shift, healthEvents, tanks] = await Promise.all([
+        const { start: todayStart, end: tomorrowStart } = currentDayUtcRange(station.timezone ?? 'UTC');
+        const [transactions, todayStats, prices, shift, healthEvents, tanks] = await Promise.all([
             this.prisma.transaction.findMany({
                 where: { stationId: id, deletedAt: null },
                 orderBy: { startedAt: 'desc' },
@@ -86,10 +91,17 @@ export class StationsService {
                     completedAt: true, operatorName: true,
                 },
             }),
-            this.prisma.priceSetting.findMany({
-                where: { stationId: id },
-                orderBy: [{ fpId: 'asc' }, { nozzleIndex: 'asc' }],
+            this.prisma.transaction.aggregate({
+                where: {
+                    stationId: id,
+                    deletedAt: null,
+                    status: { in: [TxStatus.COMPLETED, TxStatus.STOPPED] },
+                    startedAt: { gte: todayStart, lt: tomorrowStart },
+                },
+                _count: { id: true },
+                _sum: { volume: true, amount: true },
             }),
+            this.prices.getCurrentPrices(companyId, id, [id]),
             this.prisma.shift.findFirst({
                 where: { stationId: id, status: 'ACTIVE' },
                 select: {
@@ -105,7 +117,12 @@ export class StationsService {
             (this.prisma.$queryRaw`
                 SELECT DISTINCT ON (r.id)
                     r.id, r."tankId", r.label, r."productName", r.capacity,
-                    rr."volumeLitres", rr."fillPercent", rr."readingAt"
+                    rr."volumeLitres",
+                    CASE
+                        WHEN rr."volumeLitres" IS NULL OR r.capacity <= 0 THEN NULL
+                        ELSE rr."volumeLitres" / r.capacity * 100
+                    END AS "fillPercent",
+                    rr."readingAt"
                 FROM "Reservoir" r
                 LEFT JOIN "ReservoirReading" rr ON rr."reservoirId" = r.id
                 WHERE r."stationId" = ${id} AND r."deletedAt" IS NULL AND r.active = true
@@ -113,20 +130,12 @@ export class StationsService {
             ` as Promise<any[]>),
         ]);
 
-        // Today's totals
-        const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-        const todayTx = transactions.filter(t =>
-            new Date(t.startedAt) >= todayStart && t.status === 'COMPLETED',
-        );
-        const todayVolume = todayTx.reduce((s, t) => s + (t.volume ?? 0), 0);
-        const todayAmount = todayTx.reduce((s, t) => s + Number(t.amount ?? 0), 0);
-
         return {
             station,
             stats: {
-                todayTransactions: todayTx.length,
-                todayVolume,
-                todayAmount,
+                todayTransactions: todayStats._count.id,
+                todayVolume: todayStats._sum.volume ?? 0,
+                todayAmount: Number(todayStats._sum.amount ?? 0),
             },
             transactions,
             prices,

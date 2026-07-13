@@ -11,6 +11,7 @@ import { Header } from '@/components/layout/header';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { RevenueChart } from '@/components/dashboard/revenue-chart';
 import { TxStatusBadge, StatusDot } from '@/components/ui/badge';
+import Link from 'next/link';
 
 export default function OverviewPage() {
   const t = useT();
@@ -23,7 +24,7 @@ export default function OverviewPage() {
 
   const load = useCallback(async () => {
     try {
-      const [ov, tx, rev] = await Promise.all([
+      const [ov, tx, rev] = await Promise.allSettled([
         dashboardApi.overview(),
         transactionsApi.list({ limit: 10, status: ['COMPLETED', 'STOPPED'] }),
         reportsApi.revenue({
@@ -32,9 +33,9 @@ export default function OverviewPage() {
           groupBy: 'day',
         }),
       ]);
-      setOverview(ov);
-      setRecent((tx as any).data ?? []);
-      setChart(Array.isArray(rev) ? rev : []);
+      if (ov.status === 'fulfilled') setOverview(ov.value);
+      if (tx.status === 'fulfilled') setRecent((tx.value as any).data ?? []);
+      if (rev.status === 'fulfilled') setChart(Array.isArray(rev.value) ? rev.value : []);
     } finally {
       setLoading(false);
     }
@@ -96,6 +97,31 @@ export default function OverviewPage() {
             loading={loading}
           />
         </div>
+
+        {!loading && (overview?.activeShiftsList?.length ?? 0) > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">{t('activeShiftsSection')}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {overview.activeShiftsList.map((shift: any) => (
+                <Link key={shift.id} href={`/dashboard/shifts/${shift.id}`}
+                  className="panel border-l-4 border-l-emerald-400 p-5 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">{shift.operatorName}</p>
+                      <p className="text-xs text-slate-500">{shift.station?.name ?? shift.stationId}</p>
+                    </div>
+                    <Clock size={18} className="text-emerald-500" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-slate-100 text-xs">
+                    <div><p className="text-slate-400">{t('shiftTx')}</p><p className="font-semibold">{shift.totalTransactions}</p></div>
+                    <div><p className="text-slate-400">{t('shiftVolume')}</p><p className="font-semibold">{fmtVolume(shift.totalVolume)}</p></div>
+                    <div><p className="text-slate-400">{t('shiftAmount')}</p><p className="font-semibold">{fmtMoney(shift.totalAmount)}</p></div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Chart + Stations */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

@@ -10,6 +10,7 @@ export class DashboardService {
         if (stationIds && stationIds.length === 0) {
             return {
                 stations: 0,
+                stationsOnline: 0,
                 activeShifts: 0,
                 todayTransactions: 0,
                 todayVolume: 0,
@@ -31,6 +32,7 @@ export class DashboardService {
         if (stations.length === 0) {
             return {
                 stations: 0,
+                stationsOnline: 0,
                 activeShifts: 0,
                 todayTransactions: 0,
                 todayVolume: 0,
@@ -73,6 +75,9 @@ export class DashboardService {
 
         return {
             stations:    stations.length,
+            stationsOnline: stations.filter(station =>
+                station.lastSyncAt && Date.now() - station.lastSyncAt.getTime() < 10 * 60_000,
+            ).length,
             activeShifts: activeShifts.length,
             todayTransactions: todayTx._count.id,
             todayVolume:       todayTx._sum.volume ?? 0,

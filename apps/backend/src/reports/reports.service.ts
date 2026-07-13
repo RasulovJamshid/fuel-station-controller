@@ -7,9 +7,9 @@ import { PrismaService } from '../prisma/prisma.service';
 type GroupBy = 'day' | 'week' | 'month';
 
 const BUCKET: Record<GroupBy, string> = {
-    day:   '1 day',
-    week:  '1 week',
-    month: '1 month',
+    day:   'day',
+    week:  'week',
+    month: 'month',
 };
 
 @Injectable()
@@ -35,18 +35,20 @@ export class ReportsService {
             SELECT
                 date_trunc(${bucket}, "startedAt")   AS period,
                 "stationId",
-                "productName",
+                COALESCE(p.name, t."productName") AS "productName",
+                p.code AS "productCode",
                 COUNT(*)::int                         AS tx_count,
                 COALESCE(SUM(volume), 0)              AS total_volume,
                 COALESCE(SUM(amount::numeric), 0)     AS total_amount
-            FROM "Transaction"
+            FROM "Transaction" t
+            LEFT JOIN "Product" p ON p.id = t."canonicalProductId" AND p."deletedAt" IS NULL
             WHERE
-                "companyId" = ${companyId}
+                t."companyId" = ${companyId}
                 ${stationFilter}
-                AND "startedAt" BETWEEN ${from} AND ${to}
-                AND status IN ('COMPLETED', 'STOPPED')
-                AND "deletedAt" IS NULL
-            GROUP BY 1, 2, 3
+                AND t."startedAt" BETWEEN ${from} AND ${to}
+                AND t.status IN ('COMPLETED', 'STOPPED')
+                AND t."deletedAt" IS NULL
+            GROUP BY 1, 2, 3, 4
             ORDER BY 1 DESC
         `;
     }
@@ -82,19 +84,20 @@ export class ReportsService {
 
         return this.prisma.$queryRaw<any[]>`
             SELECT
-                "productName",
-                "productId",
+                COALESCE(p.name, t."productName") AS "productName",
+                COALESCE(p.code, t."productId"::text) AS "productCode",
                 COUNT(*)::int                     AS tx_count,
                 COALESCE(SUM(volume), 0)          AS total_volume,
                 COALESCE(SUM(amount::numeric), 0) AS total_amount
-            FROM "Transaction"
+            FROM "Transaction" t
+            LEFT JOIN "Product" p ON p.id = t."canonicalProductId" AND p."deletedAt" IS NULL
             WHERE
-                "companyId" = ${companyId}
+                t."companyId" = ${companyId}
                 ${stationFilter}
-                AND "startedAt" BETWEEN ${from} AND ${to}
-                AND status IN ('COMPLETED', 'STOPPED')
-                AND "deletedAt" IS NULL
-            GROUP BY "productName", "productId"
+                AND t."startedAt" BETWEEN ${from} AND ${to}
+                AND t.status IN ('COMPLETED', 'STOPPED')
+                AND t."deletedAt" IS NULL
+            GROUP BY 1, 2
             ORDER BY total_volume DESC
         `;
     }

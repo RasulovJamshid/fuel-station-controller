@@ -67,6 +67,7 @@ export const messages = {
     liters: 'Литры',
     transactions: 'Транзакции',
     noChartData: 'Нет данных',
+    reportLoadError: 'Не удалось загрузить часть отчёта. Проверьте серверные журналы.',
 
     // Tx status badges
     completed: 'Завершено',
@@ -153,6 +154,8 @@ export const messages = {
     healthEvents: 'События оборудования',
     noEvents: 'Нет событий',
     priceColLabel: 'Цена (сум/л)',
+    productPrices: 'Цены продуктов',
+    nozzlesShort: 'форс.',
     loadError: 'Ошибка загрузки',
     stationNotFound: 'Станция не найдена',
     syncAt: 'Синхр.',
@@ -411,6 +414,7 @@ export const messages = {
     liters: 'Litrlar',
     transactions: 'Tranzaksiyalar',
     noChartData: "Ma'lumot yo'q",
+    reportLoadError: 'Hisobotning bir qismini yuklab bo‘lmadi. Server jurnalini tekshiring.',
 
     // Tx status badges
     completed: 'Tugallandi',
@@ -497,6 +501,8 @@ export const messages = {
     healthEvents: 'Uskunalar hodisalari',
     noEvents: "Hodisalar yo'q",
     priceColLabel: "Narx (so'm/l)",
+    productPrices: 'Mahsulot narxlari',
+    nozzlesShort: 'fors.',
     loadError: 'Yuklash xatosi',
     stationNotFound: 'Stansiya topilmadi',
     syncAt: 'Sinxr.',
@@ -755,6 +761,7 @@ export const messages = {
     liters: 'Liters',
     transactions: 'Transactions',
     noChartData: 'No data',
+    reportLoadError: 'Part of the report could not be loaded. Check the server logs.',
 
     // Tx status badges
     completed: 'Completed',
@@ -841,6 +848,8 @@ export const messages = {
     healthEvents: 'Equipment Events',
     noEvents: 'No events',
     priceColLabel: 'Price (sum/l)',
+    productPrices: 'Product Prices',
+    nozzlesShort: 'nozzles',
     loadError: 'Load error',
     stationNotFound: 'Station not found',
     syncAt: 'Sync.',

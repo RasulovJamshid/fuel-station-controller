@@ -26,6 +26,7 @@ export default function ReportsPage() {
   const [operators, setOperators]   = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [exporting, setExporting]   = useState(false);
+  const [error, setError]           = useState('');
   const oilBases = useOilBases();
 
   async function doExport(type: 'transactions' | 'shifts', format: 'xlsx' | 'csv') {
@@ -33,7 +34,7 @@ export default function ReportsPage() {
     try {
       const from = new Date(Date.now() - preset * 86_400_000).toISOString();
       const to   = new Date().toISOString();
-      const blob = await reportsApi.export({ type, format, from, to }) as any;
+      const blob = await reportsApi.export({ type, format, from, to, ...(oilBaseId ? { oilBaseId } : {}) }) as any;
       const url  = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob]));
       const a    = document.createElement('a');
       a.href     = url;
@@ -47,23 +48,28 @@ export default function ReportsPage() {
 
   const load = useCallback(async (days: number) => {
     setLoading(true);
+    setError('');
     const from = new Date(Date.now() - days * 86_400_000).toISOString();
     const to   = new Date().toISOString();
     const base: Record<string, unknown> = { from, to };
     if (oilBaseId) base.oilBaseId = oilBaseId;
     try {
-      const [rev, prod, ops] = await Promise.all([
+      const [rev, prod, ops] = await Promise.allSettled([
         reportsApi.revenue({ ...base, groupBy: 'day' }),
         reportsApi.products(base),
         reportsApi.operators(base),
       ]);
-      setRevenue(Array.isArray(rev) ? rev : []);
-      setProducts(Array.isArray(prod) ? prod : []);
-      setOperators(Array.isArray(ops) ? ops : []);
+      if (rev.status === 'fulfilled') setRevenue(Array.isArray(rev.value) ? rev.value : []);
+      else setRevenue([]);
+      if (prod.status === 'fulfilled') setProducts(Array.isArray(prod.value) ? prod.value : []);
+      else setProducts([]);
+      if (ops.status === 'fulfilled') setOperators(Array.isArray(ops.value) ? ops.value : []);
+      else setOperators([]);
+      if ([rev, prod, ops].some(result => result.status === 'rejected')) setError(t('reportLoadError'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [oilBaseId]);
 
   useEffect(() => { load(preset); }, [preset, oilBaseId, load]);
 
@@ -84,6 +90,7 @@ export default function ReportsPage() {
       <Header title={t('navReports')} />
 
       <div className="p-2 sm:p-4 space-y-6">
+        {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
         {/* Period + oil-base selector + export */}
         <div className="flex flex-wrap items-center gap-3">
           {PRESETS.map(p => (

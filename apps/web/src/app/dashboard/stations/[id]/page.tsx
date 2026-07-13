@@ -5,6 +5,7 @@ import {
   ArrowLeft, Wifi, WifiOff, RefreshCw, Activity, Droplets,
   Receipt, Clock, AlertTriangle, CheckCircle, XCircle,
   TrendingUp, User,
+  DollarSign,
 } from 'lucide-react';
 import { stationsApi } from '@/lib/api';
 import { useFormats } from '@/hooks/use-formats';
@@ -126,6 +127,21 @@ export default function StationDetailPage() {
   }
 
   const { station, stats, transactions, prices, activeShift, healthEvents, tanks } = data;
+  const productPrices = Array.from(prices.reduce((groups: Map<string, any>, price: any) => {
+    const key = price.canonicalProductId ?? `${price.productId}:${price.productName}`;
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, { ...price, minPrice: price.price, maxPrice: price.price, nozzleCount: 1 });
+    } else {
+      existing.minPrice = Math.min(existing.minPrice, price.price);
+      existing.maxPrice = Math.max(existing.maxPrice, price.price);
+      existing.nozzleCount += 1;
+      if (new Date(price.updatedAt) > new Date(existing.updatedAt)) {
+        Object.assign(existing, { ...price, minPrice: existing.minPrice, maxPrice: existing.maxPrice, nozzleCount: existing.nozzleCount });
+      }
+    }
+    return groups;
+  }, new Map<string, any>()).values());
 
   return (
     <div className="animate-fade-in">
@@ -178,7 +194,7 @@ export default function StationDetailPage() {
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-          {/* Left column: transactions + prices */}
+          {/* Left column: transactions */}
           <div className="xl:col-span-2 space-y-6">
 
             {/* Recent transactions */}
@@ -220,49 +236,41 @@ export default function StationDetailPage() {
               </div>
             </div>
 
-            {/* Current prices */}
-            <div className="panel-subtle overflow-hidden">
-              <div className="panel-header">
-                <h2 className="font-semibold text-slate-900">{t('currentPrices')}</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="table-head-row">
-                      <th className="table-head-cell">{t('fp')}</th>
-                      <th className="table-head-cell">{t('nozzle')}</th>
-                      <th className="table-head-cell">{t('product')}</th>
-                      <th className="table-head-cell text-right">{t('priceColLabel')}</th>
-                      <th className="table-head-cell">{t('updatedAt')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {prices.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="table-cell py-8 text-center text-sm text-slate-400">
-                          {t('pricesNotSet')}
-                        </td>
-                      </tr>
-                    ) : prices.map((p: any, i: number) => (
-                      <tr key={i} className="table-row-hover">
-                        <td className="table-cell font-medium text-slate-700">{p.fpId}</td>
-                        <td className="table-cell text-slate-500">#{p.nozzleIndex}</td>
-                        <td className="table-cell text-slate-700">{p.productName}</td>
-                        <td className="table-cell text-right font-mono font-semibold text-slate-900">
-                          {new Intl.NumberFormat('ru-UZ').format(p.price)} {t('sumPerLiter')}
-                        </td>
-                        <td className="table-cell text-xs text-slate-400">{fmtDate(p.updatedAt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
           </div>
 
           {/* Right column: tanks + health events */}
           <div className="space-y-6">
+
+            {/* Product prices */}
+            <div className="panel-subtle overflow-hidden">
+              <div className="panel-header flex items-center gap-2">
+                <DollarSign size={15} className="text-emerald-500" />
+                <h2 className="font-semibold text-slate-900">{t('productPrices')}</h2>
+              </div>
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-3">
+                {productPrices.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-4">{t('pricesNotSet')}</p>
+                ) : productPrices.map((price: any) => (
+                  <div key={price.canonicalProductId ?? `${price.productId}:${price.productName}`} className="rounded-xl border border-slate-100 bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 truncate">{price.canonicalProductName ?? price.productName}</p>
+                        {price.canonicalProductName && <p className="text-xs text-slate-400 truncate">{price.productName}</p>}
+                      </div>
+                      <p className="font-mono font-bold text-emerald-700 whitespace-nowrap">
+                        {price.minPrice === price.maxPrice
+                          ? new Intl.NumberFormat('ru-UZ').format(price.price)
+                          : `${new Intl.NumberFormat('ru-UZ').format(price.minPrice)}–${new Intl.NumberFormat('ru-UZ').format(price.maxPrice)}`}
+                      </p>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+                      <span>{price.nozzleCount} {t('nozzlesShort')}</span>
+                      <span>{price.source === 'transaction' ? t('observedTransaction') : fmtRelative(price.updatedAt)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             {/* Tank levels */}
             <div className="panel-subtle overflow-hidden">

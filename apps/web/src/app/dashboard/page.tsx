@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Droplets, Receipt, Gauge, Clock } from 'lucide-react';
+import { Droplets, Receipt, Gauge } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { dashboardApi, transactionsApi, reportsApi } from '@/lib/api';
@@ -11,7 +11,6 @@ import { Header } from '@/components/layout/header';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { RevenueChart } from '@/components/dashboard/revenue-chart';
 import { TxStatusBadge, StatusDot } from '@/components/ui/badge';
-import Link from 'next/link';
 
 export default function OverviewPage() {
   const t = useT();
@@ -67,7 +66,7 @@ export default function OverviewPage() {
 
       <div className="p-2 space-y-6">
         {/* KPI cards */}
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
             label={t('todayVolume')}
             value={loading ? '—' : fmtVolume(overview?.todayVolume ?? 0)}
@@ -84,44 +83,12 @@ export default function OverviewPage() {
           />
           <StatCard
             label={t('stationsOnline')}
-            value={loading ? '—' : String(overview?.stations ?? 0)}
+            value={loading ? '—' : String(overview?.stationsOnline ?? overview?.stations ?? 0)}
             icon={Gauge}
             color="purple"
             loading={loading}
           />
-          <StatCard
-            label={t('activeShifts')}
-            value={loading ? '—' : String(overview?.activeShifts ?? 0)}
-            icon={Clock}
-            color="orange"
-            loading={loading}
-          />
         </div>
-
-        {!loading && (overview?.activeShiftsList?.length ?? 0) > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">{t('activeShiftsSection')}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {overview.activeShiftsList.map((shift: any) => (
-                <Link key={shift.id} href={`/dashboard/shifts/${shift.id}`}
-                  className="panel border-l-4 border-l-emerald-400 p-5 hover:shadow-md transition-shadow">
-                  <div className="flex justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900">{shift.operatorName}</p>
-                      <p className="text-xs text-slate-500">{shift.station?.name ?? shift.stationId}</p>
-                    </div>
-                    <Clock size={18} className="text-emerald-500" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-slate-100 text-xs">
-                    <div><p className="text-slate-400">{t('shiftTx')}</p><p className="font-semibold">{shift.totalTransactions}</p></div>
-                    <div><p className="text-slate-400">{t('shiftVolume')}</p><p className="font-semibold">{fmtVolume(shift.totalVolume)}</p></div>
-                    <div><p className="text-slate-400">{t('shiftAmount')}</p><p className="font-semibold">{fmtMoney(shift.totalAmount)}</p></div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Chart + Stations */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -130,7 +97,7 @@ export default function OverviewPage() {
           </div>
 
           {/* Station status */}
-          <div className="panel p-5">
+          <div className="panel p-5 flex flex-col min-h-0">
             <h2 className="font-semibold text-slate-900 mb-3">{t('stations')}</h2>
             {loading ? (
               <div className="space-y-2">
@@ -139,7 +106,7 @@ export default function OverviewPage() {
                 ))}
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 max-h-[330px] overflow-y-auto pr-1">
                 {(overview?.stationSummaries ?? []).map((s: any) => {
                   const lag = s.lastSyncAt
                     ? (Date.now() - new Date(s.lastSyncAt).getTime()) / 60_000

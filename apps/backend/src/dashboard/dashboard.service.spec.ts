@@ -36,6 +36,7 @@ describe('DashboardService', () => {
 
         await expect(new DashboardService(prisma).getOverview('company-1', [])).resolves.toEqual({
             stations: 0,
+            stationsOnline: 0,
             activeShifts: 0,
             todayTransactions: 0,
             todayVolume: 0,

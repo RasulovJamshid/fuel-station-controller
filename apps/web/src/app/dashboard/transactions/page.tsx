@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
-import { transactionsApi, reportsApi } from '@/lib/api';
+import { transactionsApi, reportsApi, stationsApi } from '@/lib/api';
 import { useFormats } from '@/hooks/use-formats';
 import { useT } from '@/hooks/use-t';
 import { Header } from '@/components/layout/header';
@@ -27,7 +27,18 @@ export default function TransactionsPage() {
   const [from, setFrom]         = useState('');
   const [to, setTo]             = useState('');
   const [oilBaseId, setOilBaseId] = useState('');
+  const [stationId, setStationId] = useState('');
+  const [stations, setStations] = useState<any[]>([]);
   const oilBases = useOilBases();
+  const visibleStations = oilBaseId
+    ? stations.filter(station => station.oilBaseId === oilBaseId)
+    : stations;
+
+  useEffect(() => {
+    stationsApi.list()
+      .then((response: any) => setStations(Array.isArray(response) ? response : []))
+      .catch(() => setStations([]));
+  }, []);
 
   const load = useCallback(async (p = page) => {
     setLoading(true);
@@ -37,6 +48,7 @@ export default function TransactionsPage() {
       if (from)      params.from      = new Date(from).toISOString();
       if (to)        params.to        = new Date(to).toISOString();
       if (oilBaseId) params.oilBaseId = oilBaseId;
+      if (stationId) params.stationId = stationId;
       const res: any = await transactionsApi.list(params);
       setData(res.data ?? []);
       setTotal(res.total ?? 0);
@@ -44,10 +56,9 @@ export default function TransactionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, status, from, to]);
+  }, [status, from, to, oilBaseId, stationId]);
 
-  useEffect(() => { load(1); setPage(1); }, [status, from, to, oilBaseId]); // eslint-disable-line
-  useEffect(() => { load(page); }, [page]); // eslint-disable-line
+  useEffect(() => { load(page); }, [load, page]);
 
   const { connected } = useWebSocket();
 
@@ -57,6 +68,9 @@ export default function TransactionsPage() {
       const params: any = { type: 'transactions', format };
       if (from)   params.from = new Date(from).toISOString();
       if (to)     params.to   = new Date(to).toISOString();
+      if (status) params.status = [status];
+      if (oilBaseId) params.oilBaseId = oilBaseId;
+      if (stationId) params.stationId = stationId;
       const blob = await reportsApi.export(params) as any;
       const url  = URL.createObjectURL(new Blob([blob]));
       const a    = document.createElement('a');
@@ -82,7 +96,15 @@ export default function TransactionsPage() {
               <label className="text-xs font-medium text-slate-500">{t('oilBase')}</label>
               <select
                 value={oilBaseId}
-                onChange={e => setOilBaseId(e.target.value)}
+                onChange={e => {
+                  const nextOilBaseId = e.target.value;
+                  setOilBaseId(nextOilBaseId);
+                  setStationId(current => {
+                    const selected = stations.find(station => station.id === current);
+                    return selected && (!nextOilBaseId || selected.oilBaseId === nextOilBaseId) ? current : '';
+                  });
+                  setPage(1);
+                }}
                 className="field-control appearance-none"
               >
                 <option value="">{t('all')}</option>
@@ -91,11 +113,24 @@ export default function TransactionsPage() {
             </div>
           )}
           <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500">{t('station')}</label>
+            <select
+              value={stationId}
+              onChange={e => { setStationId(e.target.value); setPage(1); }}
+              className="field-control appearance-none min-w-48"
+            >
+              <option value="">{t('all')}</option>
+              {visibleStations.map(station => (
+                <option key={station.id} value={station.id}>{station.name} ({station.id})</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-slate-500">{t('from')}</label>
             <input
               type="date"
               value={from}
-              onChange={e => setFrom(e.target.value)}
+              onChange={e => { setFrom(e.target.value); setPage(1); }}
               className="field-control"
             />
           </div>
@@ -104,7 +139,7 @@ export default function TransactionsPage() {
             <input
               type="date"
               value={to}
-              onChange={e => setTo(e.target.value)}
+              onChange={e => { setTo(e.target.value); setPage(1); }}
               className="field-control"
             />
           </div>
@@ -112,7 +147,7 @@ export default function TransactionsPage() {
             <label className="text-xs font-medium text-slate-500">{t('status')}</label>
             <select
               value={status}
-              onChange={e => setStatus(e.target.value)}
+              onChange={e => { setStatus(e.target.value); setPage(1); }}
               className="field-control appearance-none"
             >
               {STATUSES.map(s => (
@@ -121,7 +156,7 @@ export default function TransactionsPage() {
             </select>
           </div>
           <div className="ml-auto flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => { setFrom(''); setTo(''); setStatus(''); setOilBaseId(''); }}>
+            <Button variant="ghost" size="sm" onClick={() => { setFrom(''); setTo(''); setStatus(''); setOilBaseId(''); setStationId(''); setPage(1); }}>
               {t('reset')}
             </Button>
             <Button variant="outline" size="sm" loading={exporting} onClick={() => handleExport('csv')}>

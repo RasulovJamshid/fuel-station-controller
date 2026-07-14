@@ -39,7 +39,7 @@ export class ReportsService {
                 p.code AS "productCode",
                 COUNT(*)::int                         AS tx_count,
                 COALESCE(SUM(volume), 0)              AS total_volume,
-                COALESCE(SUM(amount::numeric), 0)     AS total_amount
+                COALESCE(SUM(amount), 0)::bigint      AS total_amount
             FROM "Transaction" t
             LEFT JOIN "Product" p ON p.id = t."canonicalProductId" AND p."deletedAt" IS NULL
             WHERE
@@ -64,7 +64,7 @@ export class ReportsService {
                 "stationId",
                 COUNT(*)::int                     AS tx_count,
                 COALESCE(SUM(volume), 0)          AS total_volume,
-                COALESCE(SUM(amount::numeric), 0) AS total_amount
+                COALESCE(SUM(amount), 0)::bigint  AS total_amount
             FROM "Transaction"
             WHERE
                 "companyId" = ${companyId}
@@ -88,7 +88,7 @@ export class ReportsService {
                 COALESCE(p.code, t."productId"::text) AS "productCode",
                 COUNT(*)::int                     AS tx_count,
                 COALESCE(SUM(volume), 0)          AS total_volume,
-                COALESCE(SUM(amount::numeric), 0) AS total_amount
+                COALESCE(SUM(amount), 0)::bigint  AS total_amount
             FROM "Transaction" t
             LEFT JOIN "Product" p ON p.id = t."canonicalProductId" AND p."deletedAt" IS NULL
             WHERE

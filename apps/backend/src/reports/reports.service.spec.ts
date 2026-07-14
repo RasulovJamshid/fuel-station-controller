@@ -16,5 +16,8 @@ describe('ReportsService', () => {
         const values = queryRaw.mock.calls[0].slice(1);
         expect(values).toContain('day');
         expect(values).not.toContain('1 day');
+        const sql = queryRaw.mock.calls[0][0].join(' ');
+        expect(sql).toContain('COALESCE(SUM(amount), 0)::bigint');
+        expect(sql).not.toContain('SUM(amount::numeric)');
     });
 });

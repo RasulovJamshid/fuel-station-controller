@@ -9,6 +9,8 @@ export interface ExportParams {
     format:    'xlsx' | 'csv';
     type:      'transactions' | 'shifts';
     stationId?: string;
+    oilBaseId?: string;
+    status?: string | string[];
     from?:     string;
     to?:       string;
 }
@@ -39,6 +41,9 @@ export class ExportService {
     private async fetchData(companyId: string, params: ExportParams, allowedStationIds?: string[]) {
         if (allowedStationIds && allowedStationIds.length === 0) return [];
         if (params.type === 'transactions') {
+            const statuses = params.status
+                ? (Array.isArray(params.status) ? params.status : [params.status])
+                : [];
             return this.prisma.transaction.findMany({
                 where: {
                     companyId,
@@ -51,6 +56,7 @@ export class ExportService {
                             ...(params.to   ? { lte: new Date(params.to)   } : {}),
                         },
                     } : {}),
+                    ...(statuses.length ? { status: { in: statuses as any } } : {}),
                 },
                 orderBy: { startedAt: 'asc' },
             });

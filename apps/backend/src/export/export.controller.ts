@@ -25,7 +25,17 @@ export class ExportController {
         @Query() params: ExportParams,
         @Res() res: Response,
     ) {
-        const allowed = await resolveStationIds(this.prisma, user, params.stationId ? [params.stationId] : []);
+        let requested = params.stationId ? [params.stationId] : [];
+        if (!params.stationId && params.oilBaseId) {
+            const stations = await this.prisma.station.findMany({
+                where: { companyId: user.companyId, oilBaseId: params.oilBaseId, deletedAt: null },
+                select: { id: true },
+            });
+            requested = stations.map(station => station.id);
+        }
+        const allowed = params.oilBaseId && requested.length === 0
+            ? []
+            : await resolveStationIds(this.prisma, user, requested);
         const result = await this.exportSvc.generate(user.companyId, params, allowed);
         res.download(result.path, result.filename, () => {
             fs.unlink(result.path, () => {});

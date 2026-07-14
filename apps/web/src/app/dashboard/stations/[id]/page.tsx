@@ -5,9 +5,9 @@ import {
   ArrowLeft, Wifi, WifiOff, RefreshCw, Activity, Droplets,
   Receipt, Clock, AlertTriangle, CheckCircle, XCircle,
   TrendingUp, User,
-  DollarSign,
+  DollarSign, ChevronLeft, ChevronRight,
 } from 'lucide-react';
-import { stationsApi } from '@/lib/api';
+import { stationsApi, transactionsApi } from '@/lib/api';
 import { useFormats } from '@/hooks/use-formats';
 import { useT } from '@/hooks/use-t';
 import { Header } from '@/components/layout/header';
@@ -79,6 +79,11 @@ export default function StationDetailPage() {
   const [data, setData]     = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState('');
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [txPage, setTxPage] = useState(1);
+  const [txPages, setTxPages] = useState(1);
+  const [txTotal, setTxTotal] = useState(0);
+  const [txLoading, setTxLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -93,6 +98,21 @@ export default function StationDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadTransactions = useCallback(async (page: number) => {
+    setTxLoading(true);
+    try {
+      const response: any = await transactionsApi.list({ stationId: id, page, limit: 20 });
+      setTransactions(response.data ?? []);
+      setTxTotal(response.total ?? 0);
+      setTxPages(Math.max(1, response.pages ?? 1));
+    } finally {
+      setTxLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => { setTxPage(1); }, [id]);
+  useEffect(() => { loadTransactions(txPage); }, [loadTransactions, txPage]);
 
   const isOnline = data?.station
     ? data.station.lastSyncAt && (Date.now() - new Date(data.station.lastSyncAt).getTime()) < 10 * 60_000
@@ -126,7 +146,7 @@ export default function StationDetailPage() {
     );
   }
 
-  const { station, stats, transactions, prices, activeShift, healthEvents, tanks } = data;
+  const { station, stats, prices, activeShift, healthEvents, tanks } = data;
   const productPrices = Array.from(prices.reduce((groups: Map<string, any>, price: any) => {
     const key = price.canonicalProductId ?? `${price.productId}:${price.productName}`;
     const existing = groups.get(key);
@@ -169,11 +189,11 @@ export default function StationDetailPage() {
               <span className="text-xs text-slate-400">{t('syncAt')} {fmtRelative(station.lastSyncAt)}</span>
             )}
             <button
-              onClick={load}
-              disabled={loading}
+              onClick={() => { load(); loadTransactions(txPage); }}
+              disabled={loading || txLoading}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
             >
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={15} className={loading || txLoading ? 'animate-spin' : ''} />
             </button>
           </div>
         </div>
@@ -197,10 +217,11 @@ export default function StationDetailPage() {
           {/* Left column: transactions */}
           <div className="xl:col-span-2 space-y-6">
 
-            {/* Recent transactions */}
+            {/* Paginated transactions */}
             <div className="panel-subtle overflow-hidden">
-              <div className="panel-header">
-                <h2 className="font-semibold text-slate-900">{t('recentTransactions')}</h2>
+              <div className="panel-header flex items-center justify-between">
+                <h2 className="font-semibold text-slate-900">{t('transactions')}</h2>
+                <span className="text-xs text-slate-400">{txTotal} {t('records')}</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -215,7 +236,15 @@ export default function StationDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {transactions.length === 0 ? (
+                    {txLoading ? (
+                      Array.from({ length: 6 }).map((_, i) => (
+                        <tr key={i}>
+                          {Array.from({ length: 6 }).map((__, j) => (
+                            <td key={j} className="table-cell"><div className="h-4 w-20 rounded bg-slate-100 animate-pulse" /></td>
+                          ))}
+                        </tr>
+                      ))
+                    ) : transactions.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="table-cell py-10 text-center text-sm text-slate-400">
                           {t('noTxFound')}
@@ -233,6 +262,18 @@ export default function StationDetailPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50">
+                <p className="text-xs text-slate-500">{t('showing')} {transactions.length} {t('of')} {txTotal}</p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={txPage <= 1 || txLoading} onClick={() => setTxPage(page => page - 1)}>
+                    <ChevronLeft size={14} />
+                  </Button>
+                  <span className="text-sm text-slate-700">{txPage} / {txPages}</span>
+                  <Button variant="outline" size="sm" disabled={txPage >= txPages || txLoading} onClick={() => setTxPage(page => page + 1)}>
+                    <ChevronRight size={14} />
+                  </Button>
+                </div>
               </div>
             </div>
 

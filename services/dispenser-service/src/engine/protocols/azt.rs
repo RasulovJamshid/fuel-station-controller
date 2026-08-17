@@ -12,7 +12,8 @@ use types::{
 };
 
 use super::shared::{
-    active_positions_by_byte, broadcast_status, exchange_serial, preset_metadata, SerialBackend,
+    active_positions_by_byte, broadcast_status, commit_sale, exchange_serial, mark_missed,
+    preset_metadata, SerialBackend,
 };
 use crate::engine::poll_loop::DispatchCommand;
 use crate::engine::state::{CurrentTx, PreAuthContext, RuntimeFp};
@@ -213,18 +214,14 @@ async fn azt_poll_card(
     let Some((net, active_nozzle, status)) =
         azt_resolve_active(byte, fp_cfg, &backend, &runtimes).await
     else {
-        let went_offline = {
-            let mut map = runtimes.write().await;
-            map.get_mut(&byte)
-                .map(|rt| rt.on_poll_missed(cfg.polling.offline_threshold_polls))
-                .unwrap_or(false)
-        };
-        if went_offline {
-            let _ = events.send(WsEvent::Offline {
-                fp_id: fp_cfg.id.clone(),
-                label: fp_cfg.label.clone(),
-            });
-        }
+        mark_missed(
+            byte,
+            fp_cfg,
+            cfg.polling.offline_threshold_polls,
+            runtimes,
+            events,
+        )
+        .await;
         broadcast_status(byte, runtimes, events).await;
         return;
     };
@@ -238,18 +235,14 @@ async fn azt_poll_card(
 
     match status {
         AztStatus::Unknown => {
-            let went_offline = {
-                let mut map = runtimes.write().await;
-                map.get_mut(&byte)
-                    .map(|rt| rt.on_poll_missed(cfg.polling.offline_threshold_polls))
-                    .unwrap_or(false)
-            };
-            if went_offline {
-                let _ = events.send(WsEvent::Offline {
-                    fp_id: fp_cfg.id.clone(),
-                    label: fp_cfg.label.clone(),
-                });
-            }
+            mark_missed(
+                byte,
+                fp_cfg,
+                cfg.polling.offline_threshold_polls,
+                runtimes,
+                events,
+            )
+            .await;
         }
 
         AztStatus::OffHolstered | AztStatus::OffLifted => {
@@ -1018,14 +1011,9 @@ async fn azt_close_transaction(
         combined_amount: amount,
     };
 
-    if let Err(e) = crate::db::queries::persist_closed_transaction(pool, &tx).await {
-        warn!(?e, byte, "AZT: DB persist failed for transaction");
+    if !commit_sale(pool, shifts, events, &tx).await {
         return false;
     }
-    if let Err(e) = shifts.on_transaction_recorded(&tx).await {
-        warn!(?e, byte, "AZT: shift totals update failed");
-    }
-    let _ = events.send(WsEvent::Done(tx));
     {
         let mut map = runtimes.write().await;
         if let Some(rt) = map.get_mut(&byte) {

@@ -15,7 +15,8 @@ use wayne_europump::{
 };
 
 use super::shared::{
-    active_positions_by_byte, broadcast_status, exchange_serial, write_serial, SerialBackend,
+    active_positions_by_byte, broadcast_status, commit_sale, exchange_serial, persist_and_record,
+    write_serial, SerialBackend,
 };
 use crate::engine::poll_loop::DispatchCommand;
 use crate::engine::state::{
@@ -843,12 +844,11 @@ async fn process_parsed_frame(
             broadcast_status(byte, runtimes, events).await;
         }
         FrameEffect::TransactionDone { tx, action } => {
-            let _ = events.send(WsEvent::Done(tx.clone()));
-            if let Err(e) = crate::db::queries::persist_closed_transaction(pool, &tx).await {
-                warn!(tx_id = %tx.id, ?e, "db persist transaction");
-            } else if let Err(e) = shifts.on_transaction_recorded(&tx).await {
-                warn!(?e, "shift totals update");
-            }
+            // `Done` is published only after the sale is durable, so a client can
+            // never see a completed sale that is missing from the database. The
+            // wire acknowledgement below is independent: the pump is released
+            // regardless, otherwise a DB fault would strand the lane.
+            commit_sale(pool, shifts, events, &tx).await;
             match action {
                 TxCompleteAction::AcknowledgeIdle => {
                     let done_f = done(byte);
@@ -944,11 +944,9 @@ async fn process_parsed_frame(
             stopped_tx_id,
             tx,
         } => {
-            if let Err(e) = crate::db::queries::persist_closed_transaction(pool, &tx).await {
-                warn!(?e, "db persist tx on nozzle removed");
-            } else if let Err(e) = shifts.on_transaction_recorded(&tx).await {
-                warn!(?e, "shift totals on nozzle removed");
-            }
+            // Same persist + shift pairing as a normal close, but this lane
+            // publishes `NozzleRemoved` rather than `Done`.
+            persist_and_record(pool, shifts, &tx).await;
             let _ = events.send(WsEvent::NozzleRemoved {
                 fp_id: fp_id.clone(),
                 stopped_tx_id,

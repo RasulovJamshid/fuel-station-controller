@@ -12,8 +12,8 @@ use types::{
 };
 
 use super::shared::{
-    active_positions_by_byte, broadcast_status, exchange_serial, preset_metadata, write_serial,
-    SerialBackend,
+    active_positions_by_byte, broadcast_status, commit_sale, exchange_serial, mark_missed,
+    preset_metadata, write_serial, SerialBackend,
 };
 use crate::engine::poll_loop::DispatchCommand;
 use crate::engine::state::{CurrentTx, PreAuthContext, RuntimeFp};
@@ -85,18 +85,14 @@ pub(in crate::engine) async fn run(
             let resp = match exchange_serial(&backend, &gilbarco::status(byte)) {
                 Ok(r) if r.len() >= 1 => r,
                 _ => {
-                    let went_offline = {
-                        let mut map = runtimes.write().await;
-                        map.get_mut(&byte)
-                            .map(|rt| rt.on_poll_missed(cfg.polling.offline_threshold_polls))
-                            .unwrap_or(false)
-                    };
-                    if went_offline {
-                        let _ = events.send(WsEvent::Offline {
-                            fp_id: fp_cfg.id.clone(),
-                            label: fp_cfg.label.clone(),
-                        });
-                    }
+                    mark_missed(
+                        byte,
+                        fp_cfg,
+                        cfg.polling.offline_threshold_polls,
+                        &runtimes,
+                        &events,
+                    )
+                    .await;
                     broadcast_status(byte, &runtimes, &events).await;
                     continue;
                 }
@@ -114,18 +110,14 @@ pub(in crate::engine) async fn run(
             match gbr_st {
                 GilbarcoStatus::Offline => {
                     // Short response already handled above; this is an unknown status byte.
-                    let went_offline = {
-                        let mut map = runtimes.write().await;
-                        map.get_mut(&byte)
-                            .map(|rt| rt.on_poll_missed(cfg.polling.offline_threshold_polls))
-                            .unwrap_or(false)
-                    };
-                    if went_offline {
-                        let _ = events.send(WsEvent::Offline {
-                            fp_id: fp_cfg.id.clone(),
-                            label: fp_cfg.label.clone(),
-                        });
-                    }
+                    mark_missed(
+                        byte,
+                        fp_cfg,
+                        cfg.polling.offline_threshold_polls,
+                        &runtimes,
+                        &events,
+                    )
+                    .await;
                 }
 
                 GilbarcoStatus::Idle => {
@@ -953,16 +945,9 @@ async fn gbr_close_transaction(
         combined_amount: amount,
     };
 
-    if let Err(e) = crate::db::queries::persist_closed_transaction(pool, &tx).await {
-        warn!(?e, byte, "Gilbarco: DB persist failed for transaction");
+    if !commit_sale(pool, shifts, events, &tx).await {
         return false;
     }
-    // Bump active-shift totals (Wayne does this in FrameEffect::TransactionDone;
-    // the Gilbarco close path must do the same or shift reports stay stale).
-    if let Err(e) = shifts.on_transaction_recorded(&tx).await {
-        warn!(?e, byte, "Gilbarco: shift totals update failed");
-    }
-    let _ = events.send(WsEvent::Done(tx));
     {
         let mut map = runtimes.write().await;
         if let Some(rt) = map.get_mut(&byte) {

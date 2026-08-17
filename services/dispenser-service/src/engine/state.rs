@@ -7,6 +7,8 @@ use types::{
 use uuid::Uuid;
 use wayne_europump::{decode_amount, decode_volume, Frame};
 
+use super::protocols::wayne_state::WayneRuntimeState;
+
 /// Idle polls required before accepting another reactive nozzle lift after ghost fill.
 const GHOST_RECOVERY_IDLE_POLLS: u8 = 4;
 
@@ -71,79 +73,19 @@ pub struct RuntimeFp {
     pub cap_amount: Option<u64>,
     /// In-memory E-stop state (lost on service restart).
     pub stopped_context: Option<StoppedContext>,
-    /// True when the lane was stopped while the nozzle was physically up. The pump may report
-    /// idle (`70 FA`) before the customer holsters; while this is set we keep showing the STOPPED
-    /// sale (nozzle still up) and finalize only on the real NozzleReturned/holster frame.
-    pub stopped_nozzle_up: bool,
     pub continuation: Option<ContinuationContext>,
     /// Last authorize preset (for E-stop continuation).
     pub last_preset: Preset,
     pub pre_auth: Option<PreAuthContext>,
     /// Wall-clock ms when pre-authorization was sent (for timeout).
     pub pre_auth_started_at: Option<i64>,
-    /// Set when a matching nozzle-up frame is seen during pre-authorization.
-    pub preauth_nozzle_confirmed: bool,
-    /// Set when a nozzle mismatch is detected — blocks Data-frame transition to Authorizing.
-    pub preauth_mismatch_active: bool,
-    /// Set when a pre-auth was just cancelled: the pump may still be armed, so any delivery that
-    /// arrives before the pump confirms idle is treated as unauthorized (STOP + alert), not a sale.
-    /// Cleared once the pump reports idle (`70 FA`) or the operator resets the lane.
-    pub preauth_cancel_pending: bool,
-    /// Dedup guard so an ongoing unauthorized delivery raises the operator alert once per episode
-    /// (the pump is still STOPed every poll). Cleared when the pump confirms idle / on reset.
-    pub unauthorized_alerted: bool,
-    /// Block stray NozzleUp re-AUTH until the dispenser has polled idle enough times.
-    pub ghost_recovery: bool,
-    pub consecutive_idle_polls: u8,
-    /// When set, send CONFIG×2 after the first zero-volume Data frame (Wayne expects AUTH first).
-    pub pending_authorize_config: bool,
-    /// After the first CONFIG, wait for another poll response before sending the repeat.
-    pub pending_authorize_config_repeat: bool,
-    /// Holstered pre-auth already sent AUTH+CONFIG on the wire; lift only needs BUSY + delivery.
-    pub preauth_config_on_wire: bool,
-    /// Wall-clock ms when CONFIG was last put on the wire; used to ignore the pump's post-CONFIG
-    /// zero-volume holster echo (see [`CONFIG_ECHO_GRACE_MS`]).
-    pub config_on_wire_at: Option<i64>,
     /// Wall-clock ms when the current authorize session started (not reset by poll touch).
     pub auth_session_started_at: Option<i64>,
-    /// Latest `03 04 … HH` hose byte from NozzleUp / Data / NozzleReturned.
-    pub last_wire_hose_code: Option<u8>,
-    pub last_wire_hose_at_ms: i64,
     /// Completed sale awaiting operator dismiss — blocks duplicate history on other nozzles.
     pub completed_sale: Option<CompletedSaleLatch>,
-
-    // ── Holster close deferral ───────────────────────────────────────────────
-    /// When true, the first NozzleReturned was seen but finalization is deferred by one
-    /// poll cycle so the pump can deliver its final Data frame (with the true pump-counter
-    /// reading) before the transaction is recorded.  Finalize on the next Data/idle frame.
-    pub pending_holster_close: bool,
-    /// The pump signalled `sale_complete` (hardware preset reached) while the nozzle was
-    /// still in the tank.  Cleared when the sale is finalized.  Used by
-    /// `holster_ends_sale_early()` to distinguish a BCD-rounding shortfall (not early)
-    /// from a genuine operator-initiated early holster.
-    pub pump_sale_complete: bool,
-
-    // ── Decel window (old-app BUSY-after-stop) ──────────────────────────────
-    /// Wall-clock ms when the STOP command was sent; `None` = no decel window active.
-    pub decel_stop_sent_at: Option<i64>,
-    /// Volume snapshot at STOP time — used to detect whether the counter advances.
-    pub decel_vol_snapshot: f64,
-    /// Consecutive Data frames with a frozen counter since STOP was sent.
-    pub decel_frozen_count: u8,
-    /// Preset captured at STOP time for forwarding to enter_stopped_state on expiry.
-    pub decel_pending_preset: Option<Preset>,
-    /// Stop source captured at STOP time (always App for this path).
-    pub decel_pending_stop_source: StopSource,
-
-    // -- Startup ghost-fill detection ---------------------------------------
-    /// Last tiny startup meter value seen while waiting for a real delivery to progress.
-    pub startup_ghost_last_meter: Option<(f64, u64)>,
-    /// Consecutive tiny startup Data frames with the same counter.
-    pub startup_ghost_frozen_count: u8,
-
-    /// One-shot guard: STOP was already re-sent after the counter kept advancing past
-    /// the stopped snapshot (lost stop frame). Reset when a new stop episode begins.
-    pub stop_reflow_resent: bool,
+    /// Protocol-owned state. Wayne wire mechanics are intentionally nested rather
+    /// than exposed as part of the common fueling-position runtime contract.
+    pub(in crate::engine) wayne: WayneRuntimeState,
 }
 
 /// Hose lift notifications older than this are ignored for "still up" guards.
@@ -179,35 +121,13 @@ impl RuntimeFp {
             cap_volume_liters: None,
             cap_amount: None,
             stopped_context: None,
-            stopped_nozzle_up: false,
             continuation: None,
             last_preset: Preset::Str("full".into()),
             pre_auth: None,
             pre_auth_started_at: None,
-            preauth_nozzle_confirmed: false,
-            preauth_mismatch_active: false,
-            preauth_cancel_pending: false,
-            unauthorized_alerted: false,
-            ghost_recovery: false,
-            consecutive_idle_polls: 0,
-            pending_authorize_config: false,
-            pending_authorize_config_repeat: false,
-            preauth_config_on_wire: false,
-            config_on_wire_at: None,
             auth_session_started_at: None,
-            last_wire_hose_code: None,
-            last_wire_hose_at_ms: 0,
             completed_sale: None,
-            pending_holster_close: false,
-            pump_sale_complete: false,
-            decel_stop_sent_at: None,
-            decel_vol_snapshot: 0.0,
-            decel_frozen_count: 0,
-            decel_pending_preset: None,
-            decel_pending_stop_source: StopSource::App,
-            startup_ghost_last_meter: None,
-            startup_ghost_frozen_count: 0,
-            stop_reflow_resent: false,
+            wayne: WayneRuntimeState::default(),
             state: FpState {
                 fp_id: fp.id.clone(),
                 label: fp.label.clone(),
@@ -261,7 +181,7 @@ impl RuntimeFp {
         // re-surface a stale preset from the previous (failed) authorization.
         if matches!(s.status, FpStatus::Authorizing | FpStatus::Delivering)
             && s.pre_auth_preset.is_none()
-            && (self.pre_auth.is_some() || self.preauth_config_on_wire)
+            && (self.pre_auth.is_some() || self.wayne.preauth_config_on_wire)
         {
             s.pre_auth_preset = Some(preset_label(&self.last_preset));
         }
@@ -274,14 +194,14 @@ impl RuntimeFp {
     }
 
     pub fn in_decel_window(&self) -> bool {
-        self.decel_stop_sent_at.is_some()
+        self.wayne.decel_stop_sent_at.is_some()
     }
 
     pub fn clear_decel_window(&mut self) {
-        self.decel_stop_sent_at = None;
-        self.decel_vol_snapshot = 0.0;
-        self.decel_frozen_count = 0;
-        self.decel_pending_preset = None;
+        self.wayne.decel_stop_sent_at = None;
+        self.wayne.decel_vol_snapshot = 0.0;
+        self.wayne.decel_frozen_count = 0;
+        self.wayne.decel_pending_preset = None;
     }
 
     pub fn set_deliver_caps_from_preset(&mut self, preset: &Preset) {
@@ -321,28 +241,29 @@ impl RuntimeFp {
     fn embedded_holster_is_customer_event(&self) -> bool {
         !matches!(
             self.state.status,
-            FpStatus::PreAuthorized if !self.preauth_nozzle_confirmed
+            FpStatus::PreAuthorized if !self.wayne.preauth_nozzle_confirmed
         )
     }
 
     fn note_wire_hose(&mut self, hose: u8) {
-        self.last_wire_hose_code = Some(hose);
-        self.last_wire_hose_at_ms = Utc::now().timestamp_millis();
+        self.wayne.last_wire_hose_code = Some(hose);
+        self.wayne.last_wire_hose_at_ms = Utc::now().timestamp_millis();
     }
 
     /// Recent lift code (`HH >= 0x10`) — do not ghost-abort or treat as holstered.
     pub fn nozzle_physically_up(&self) -> bool {
-        let age = Utc::now().timestamp_millis() - self.last_wire_hose_at_ms;
+        let age = Utc::now().timestamp_millis() - self.wayne.last_wire_hose_at_ms;
         if age > WIRE_LIFT_STALE_MS {
             return false;
         }
-        self.last_wire_hose_code
+        self.wayne
+            .last_wire_hose_code
             .is_some_and(Frame::is_nozzle_lift_code)
     }
 
     fn preauth_session_armed(&self) -> bool {
-        self.preauth_config_on_wire
-            || self.pending_authorize_config_repeat
+        self.wayne.preauth_config_on_wire
+            || self.wayne.pending_authorize_config_repeat
             || self.state.pre_auth_preset.is_some()
     }
 
@@ -402,8 +323,8 @@ impl RuntimeFp {
     }
 
     fn clear_startup_ghost_watch(&mut self) {
-        self.startup_ghost_last_meter = None;
-        self.startup_ghost_frozen_count = 0;
+        self.wayne.startup_ghost_last_meter = None;
+        self.wayne.startup_ghost_frozen_count = 0;
     }
 
     fn startup_ghost_frozen(&mut self, raw_vol: f64, raw_amt: u64) -> bool {
@@ -412,19 +333,20 @@ impl RuntimeFp {
             return false;
         }
 
-        match self.startup_ghost_last_meter {
+        match self.wayne.startup_ghost_last_meter {
             Some((last_vol, last_amt))
                 if (last_vol - raw_vol).abs() < 1e-6 && last_amt == raw_amt =>
             {
-                self.startup_ghost_frozen_count = self.startup_ghost_frozen_count.saturating_add(1);
+                self.wayne.startup_ghost_frozen_count =
+                    self.wayne.startup_ghost_frozen_count.saturating_add(1);
             }
             _ => {
-                self.startup_ghost_last_meter = Some((raw_vol, raw_amt));
-                self.startup_ghost_frozen_count = 1;
+                self.wayne.startup_ghost_last_meter = Some((raw_vol, raw_amt));
+                self.wayne.startup_ghost_frozen_count = 1;
             }
         }
 
-        self.startup_ghost_frozen_count >= STARTUP_GHOST_FROZEN_FRAME_THRESHOLD
+        self.wayne.startup_ghost_frozen_count >= STARTUP_GHOST_FROZEN_FRAME_THRESHOLD
     }
 
     fn startup_ghost_old_enough(&self) -> bool {
@@ -472,7 +394,7 @@ impl RuntimeFp {
         // If the pump hardware already signalled sale_complete, the preset was reached
         // (the shortfall vs cap_amount is only BCD rounding, ≤ price × 0.01 L).
         // Route to complete_sale_from_holster so pump-reported completion is preserved.
-        if self.pump_sale_complete {
+        if self.wayne.pump_sale_complete {
             return false;
         }
         let (vol, _) = self.combined_totals();
@@ -506,9 +428,9 @@ impl RuntimeFp {
         active_operator_name: Option<String>,
     ) -> FrameEffect {
         let (vol, _) = self.combined_totals();
-        self.pending_holster_close = false;
-        let hardware_complete = self.pump_sale_complete;
-        self.pump_sale_complete = false;
+        self.wayne.pending_holster_close = false;
+        let hardware_complete = self.wayne.pump_sale_complete;
+        self.wayne.pump_sale_complete = false;
         // Guard: if a PAUSE decel window was open but we reach holster-completion
         // (e.g. via an unhandled code path), disarm the timer so it cannot fire a
         // second save after this one.
@@ -564,11 +486,11 @@ impl RuntimeFp {
         stop_source: StopSource,
     ) -> FrameEffect {
         self.clear_deliver_caps();
-        self.stop_reflow_resent = false;
+        self.wayne.stop_reflow_resent = false;
         // Capture whether the nozzle is up *before* apply_stopped_display overwrites the status.
         // A stop that interrupts a fill always has the nozzle in the tank; the pump may then poll
         // idle before the customer holsters, so we must keep showing STOPPED until the real holster.
-        self.stopped_nozzle_up = matches!(
+        self.wayne.stopped_nozzle_up = matches!(
             self.state.status,
             FpStatus::Delivering | FpStatus::Authorizing | FpStatus::NozzleUp
         ) || self.nozzle_physically_up();
@@ -749,25 +671,25 @@ impl RuntimeFp {
 
     fn reset_to_idle(&mut self) {
         self.stopped_context = None;
-        self.stopped_nozzle_up = false;
+        self.wayne.stopped_nozzle_up = false;
         self.continuation = None;
         self.current_tx = None;
         self.pre_auth = None;
         self.pre_auth_started_at = None;
-        self.pending_authorize_config = false;
-        self.pending_authorize_config_repeat = false;
-        self.preauth_config_on_wire = false;
-        self.config_on_wire_at = None;
+        self.wayne.pending_authorize_config = false;
+        self.wayne.pending_authorize_config_repeat = false;
+        self.wayne.preauth_config_on_wire = false;
+        self.wayne.config_on_wire_at = None;
         self.auth_session_started_at = None;
-        self.last_wire_hose_code = None;
-        self.last_wire_hose_at_ms = 0;
+        self.wayne.last_wire_hose_code = None;
+        self.wayne.last_wire_hose_at_ms = 0;
         self.clear_deliver_caps();
         self.clear_decel_window();
         self.clear_continuation_fields();
         self.clear_unauthorized_state();
-        self.pending_holster_close = false;
-        self.pump_sale_complete = false;
-        self.stop_reflow_resent = false;
+        self.wayne.pending_holster_close = false;
+        self.wayne.pump_sale_complete = false;
+        self.wayne.stop_reflow_resent = false;
         self.state.status = FpStatus::Idle;
         self.state.stop_source = None;
         self.state.pre_auth_preset = None;
@@ -780,27 +702,27 @@ impl RuntimeFp {
     }
 
     pub fn ghost_recovery_active(&self) -> bool {
-        self.ghost_recovery && self.consecutive_idle_polls < GHOST_RECOVERY_IDLE_POLLS
+        self.wayne.ghost_recovery && self.wayne.consecutive_idle_polls < GHOST_RECOVERY_IDLE_POLLS
     }
 
     pub fn note_dispenser_poll(&mut self, saw_idle: bool) {
-        if !self.ghost_recovery {
+        if !self.wayne.ghost_recovery {
             return;
         }
         if saw_idle {
-            self.consecutive_idle_polls = self.consecutive_idle_polls.saturating_add(1);
-            if self.consecutive_idle_polls >= GHOST_RECOVERY_IDLE_POLLS {
-                self.ghost_recovery = false;
-                self.consecutive_idle_polls = 0;
+            self.wayne.consecutive_idle_polls = self.wayne.consecutive_idle_polls.saturating_add(1);
+            if self.wayne.consecutive_idle_polls >= GHOST_RECOVERY_IDLE_POLLS {
+                self.wayne.ghost_recovery = false;
+                self.wayne.consecutive_idle_polls = 0;
             }
         } else {
-            self.consecutive_idle_polls = 0;
+            self.wayne.consecutive_idle_polls = 0;
         }
     }
 
     pub fn clear_ghost_recovery(&mut self) {
-        self.ghost_recovery = false;
-        self.consecutive_idle_polls = 0;
+        self.wayne.ghost_recovery = false;
+        self.wayne.consecutive_idle_polls = 0;
     }
 
     /// In preauth mode, wire AUTH is always operator-initiated (never fired by a bare nozzle lift).
@@ -819,31 +741,32 @@ impl RuntimeFp {
     }
 
     pub fn mark_preauth_config_on_wire(&mut self) {
-        self.preauth_config_on_wire = true;
-        self.config_on_wire_at = Some(Utc::now().timestamp_millis());
-        self.pending_authorize_config = false;
-        self.pending_authorize_config_repeat = false;
+        self.wayne.preauth_config_on_wire = true;
+        self.wayne.config_on_wire_at = Some(Utc::now().timestamp_millis());
+        self.wayne.pending_authorize_config = false;
+        self.wayne.pending_authorize_config_repeat = false;
     }
 
     /// True while we are still inside the post-CONFIG window where the pump emits its zero-volume
     /// holster echo. A holster frame here is that echo, not a real customer holster.
     fn within_config_echo_grace(&self) -> bool {
-        self.config_on_wire_at
+        self.wayne
+            .config_on_wire_at
             .is_some_and(|t| Utc::now().timestamp_millis() - t < CONFIG_ECHO_GRACE_MS)
     }
 
     /// Mark that a pre-auth was just cancelled. Until the pump confirms idle, any delivery is
     /// treated as unauthorized (the pump may have stayed armed). Set by the CancelPreauth handler.
     pub fn mark_preauth_cancel_pending(&mut self) {
-        self.preauth_cancel_pending = true;
-        self.unauthorized_alerted = false;
+        self.wayne.preauth_cancel_pending = true;
+        self.wayne.unauthorized_alerted = false;
     }
 
     /// Clear the post-cancel / unauthorized-delivery guards once the pump is confirmed idle or the
     /// lane is reset by the operator.
     pub fn clear_unauthorized_state(&mut self) {
-        self.preauth_cancel_pending = false;
-        self.unauthorized_alerted = false;
+        self.wayne.preauth_cancel_pending = false;
+        self.wayne.unauthorized_alerted = false;
     }
 
     /// Called when CONFIG is sent immediately on nozzle-up (reactive mode).
@@ -857,9 +780,9 @@ impl RuntimeFp {
             self.zero_delivery_meters();
         }
         self.auth_session_started_at = Some(Utc::now().timestamp_millis());
-        self.pending_authorize_config = false;
-        self.pending_authorize_config_repeat = false;
-        self.preauth_config_on_wire = true;
+        self.wayne.pending_authorize_config = false;
+        self.wayne.pending_authorize_config_repeat = false;
+        self.wayne.preauth_config_on_wire = true;
         self.state.status = FpStatus::Authorizing;
         self.touch();
     }
@@ -872,9 +795,9 @@ impl RuntimeFp {
     pub fn apply_nozzle_lift_deferred_config(&mut self) {
         self.zero_delivery_meters();
         self.auth_session_started_at = Some(Utc::now().timestamp_millis());
-        self.pending_authorize_config = false;
-        self.pending_authorize_config_repeat = true;
-        self.preauth_config_on_wire = false;
+        self.wayne.pending_authorize_config = false;
+        self.wayne.pending_authorize_config_repeat = true;
+        self.wayne.preauth_config_on_wire = false;
         self.state.status = FpStatus::Authorizing;
         self.touch();
     }
@@ -885,8 +808,8 @@ impl RuntimeFp {
         self.clear_deliver_caps();
         self.current_tx = None;
         self.reset_to_idle();
-        self.ghost_recovery = true;
-        self.consecutive_idle_polls = 0;
+        self.wayne.ghost_recovery = true;
+        self.wayne.consecutive_idle_polls = 0;
     }
 
     /// Abort a frozen tiny startup pulse without pretending the lifted hose is idle.
@@ -898,26 +821,26 @@ impl RuntimeFp {
         self.current_tx = None;
         self.pre_auth = None;
         self.pre_auth_started_at = None;
-        self.pending_authorize_config = false;
-        self.pending_authorize_config_repeat = false;
-        self.preauth_config_on_wire = false;
+        self.wayne.pending_authorize_config = false;
+        self.wayne.pending_authorize_config_repeat = false;
+        self.wayne.preauth_config_on_wire = false;
         self.auth_session_started_at = None;
-        self.pending_holster_close = false;
-        self.pump_sale_complete = false;
+        self.wayne.pending_holster_close = false;
+        self.wayne.pump_sale_complete = false;
         self.state.status = FpStatus::NozzleUp;
         self.state.stop_source = None;
         self.state.pre_auth_preset = None;
         self.state.volume = 0.0;
         self.state.amount = 0;
         self.clear_startup_ghost_watch();
-        self.ghost_recovery = true;
-        self.consecutive_idle_polls = 0;
+        self.wayne.ghost_recovery = true;
+        self.wayne.consecutive_idle_polls = 0;
     }
 
     fn begin_auth_session(&mut self) {
         self.auth_session_started_at = Some(Utc::now().timestamp_millis());
-        self.pending_authorize_config = true;
-        self.pending_authorize_config_repeat = false;
+        self.wayne.pending_authorize_config = true;
+        self.wayne.pending_authorize_config_repeat = false;
     }
 
     /// `03 04 01 PP 00 HH` with holster code (`HH < 0x10`), standalone or inside composite fill.
@@ -947,10 +870,11 @@ impl RuntimeFp {
                 return FrameEffect::CompleteGhostFill;
             }
             let preset = self
+                .wayne
                 .decel_pending_preset
                 .take()
                 .unwrap_or_else(|| self.last_preset.clone());
-            let ss = self.decel_pending_stop_source;
+            let ss = self.wayne.decel_pending_stop_source;
             self.clear_decel_window();
             return self.enter_stopped_state(
                 fp_cfg,
@@ -979,16 +903,16 @@ impl RuntimeFp {
                     FrameEffect::CompleteGhostFill
                 } else if self.holster_ends_sale_early() {
                     // Early abort (operator pulled nozzle before preset) — finalize immediately.
-                    self.pending_holster_close = false;
+                    self.wayne.pending_holster_close = false;
                     self.end_sale_from_holster_early(
                         fp_cfg,
                         site,
                         active_shift_id,
                         active_operator_name,
                     )
-                } else if self.pending_holster_close {
+                } else if self.wayne.pending_holster_close {
                     // Second holster event (or fallback after deferral) — finalize now.
-                    self.pending_holster_close = false;
+                    self.wayne.pending_holster_close = false;
                     self.complete_sale_from_holster(
                         fp_cfg,
                         site,
@@ -998,7 +922,7 @@ impl RuntimeFp {
                 } else {
                     // First holster event: defer one poll cycle so the pump can send its final
                     // Data frame carrying the true pump-counter reading before we record.
-                    self.pending_holster_close = true;
+                    self.wayne.pending_holster_close = true;
                     self.touch();
                     FrameEffect::StatusChanged
                 }
@@ -1006,17 +930,17 @@ impl RuntimeFp {
             FpStatus::PreAuthorized => {
                 // Customer confirmed the lift (set by NozzleUp handler) — they have now
                 // holstered.  Cancel the pre-auth completely; do not keep it alive.
-                if self.preauth_nozzle_confirmed {
+                if self.wayne.preauth_nozzle_confirmed {
                     self.cancel_pre_auth();
                     self.touch();
                     return FrameEffect::NozzleHolstered;
                 }
-                if self.preauth_config_on_wire {
+                if self.wayne.preauth_config_on_wire {
                     // Pump confirming nozzle-holstered state after receiving CONFIG,
                     // before the customer has touched the nozzle.  Keep pre-auth alive.
                     self.touch();
                     FrameEffect::None
-                } else if self.preauth_mismatch_active {
+                } else if self.wayne.preauth_mismatch_active {
                     self.touch();
                     FrameEffect::None
                 } else {
@@ -1138,7 +1062,7 @@ impl RuntimeFp {
                 ..
             } => {
                 let tx_id = stopped_tx_id.clone();
-                if self.stopped_nozzle_up {
+                if self.wayne.stopped_nozzle_up {
                     // Stopped while filling: nozzle is still in the tank and the pump is just
                     // polling idle. Keep showing the paused sale; finalize on the real holster.
                     self.touch();
@@ -1161,7 +1085,7 @@ impl RuntimeFp {
                 stop_source: StopSource::AppFinal,
                 ..
             } => {
-                if self.stopped_nozzle_up {
+                if self.wayne.stopped_nozzle_up {
                     // Stopped while filling (terminal): nozzle still up, pump polling idle.
                     // Keep showing STOPPED until the customer holsters (NozzleReturned finalizes).
                     self.touch();
@@ -1204,7 +1128,7 @@ impl RuntimeFp {
             NozzleUp => {
                 // Holstered preauth or lift-first arming: idle polls are BUSY only (see poll_loop).
                 self.touch();
-                if self.preauth_config_on_wire
+                if self.wayne.preauth_config_on_wire
                     || self.pre_auth.is_some()
                     || self.preauth_session_armed()
                     || self.current_tx.is_some()
@@ -1227,10 +1151,11 @@ impl RuntimeFp {
                         return FrameEffect::CompleteGhostFill;
                     }
                     let preset = self
+                        .wayne
                         .decel_pending_preset
                         .take()
                         .unwrap_or_else(|| self.last_preset.clone());
-                    let ss = self.decel_pending_stop_source;
+                    let ss = self.wayne.decel_pending_stop_source;
                     self.clear_decel_window();
                     return self.enter_stopped_state(
                         fp_cfg,
@@ -1241,9 +1166,9 @@ impl RuntimeFp {
                         ss,
                     );
                 }
-                if self.pending_authorize_config_repeat {
-                    self.pending_authorize_config_repeat = false;
-                    self.preauth_config_on_wire = true;
+                if self.wayne.pending_authorize_config_repeat {
+                    self.wayne.pending_authorize_config_repeat = false;
+                    self.wayne.preauth_config_on_wire = true;
                     self.touch();
                     return FrameEffect::SendAuthorizeConfig;
                 }
@@ -1316,10 +1241,11 @@ impl RuntimeFp {
                         return FrameEffect::CompleteGhostFill;
                     }
                     let preset = self
+                        .wayne
                         .decel_pending_preset
                         .take()
                         .unwrap_or_else(|| self.last_preset.clone());
-                    let ss = self.decel_pending_stop_source;
+                    let ss = self.wayne.decel_pending_stop_source;
                     self.clear_decel_window();
                     return self.enter_stopped_state(
                         fp_cfg,
@@ -1346,13 +1272,13 @@ impl RuntimeFp {
                     self.touch();
                     return FrameEffect::None;
                 }
-                if !self.pending_holster_close {
+                if !self.wayne.pending_holster_close {
                     // Nozzle physically-up expired by staleness only — no explicit holster
                     // frame received.  Keep waiting to avoid showing Done prematurely.
                     self.touch();
                     return FrameEffect::None;
                 }
-                self.pending_holster_close = false;
+                self.wayne.pending_holster_close = false;
                 if self.holster_ends_sale_early() {
                     return self.end_sale_from_holster_early(
                         fp_cfg,
@@ -1464,10 +1390,11 @@ impl RuntimeFp {
             )
         {
             let preset = self
+                .wayne
                 .decel_pending_preset
                 .take()
                 .unwrap_or_else(|| self.last_preset.clone());
-            let ss = self.decel_pending_stop_source;
+            let ss = self.wayne.decel_pending_stop_source;
             self.clear_decel_window();
             return self.enter_stopped_state(
                 fp_cfg,
@@ -1500,7 +1427,7 @@ impl RuntimeFp {
                 return FrameEffect::CompleteGhostFill;
             }
             if self.nozzle_physically_up() {
-                self.pump_sale_complete = true;
+                self.wayne.pump_sale_complete = true;
                 self.touch();
                 return FrameEffect::SendDoneAwaitHolster;
             }
@@ -1572,13 +1499,13 @@ impl RuntimeFp {
                 self.touch();
                 return FrameEffect::SendDoneAwaitHolster;
             }
-            if !self.pending_holster_close {
+            if !self.wayne.pending_holster_close {
                 // nozzle_physically_up() is false only due to the staleness timer —
                 // no explicit NozzleReturned received yet.  Keep waiting.
                 self.touch();
                 return FrameEffect::SendDoneAwaitHolster;
             }
-            self.pending_holster_close = false;
+            self.wayne.pending_holster_close = false;
             if self.holster_ends_sale_early() {
                 return self.end_sale_from_holster_early(
                     fp_cfg,
@@ -1613,7 +1540,7 @@ impl RuntimeFp {
     /// Lane has an operator-visible pre-auth that can be cancelled from the UI.
     pub fn has_cancellable_preauth(&self) -> bool {
         self.pre_auth.is_some()
-            || self.preauth_config_on_wire
+            || self.wayne.preauth_config_on_wire
             || self.state.pre_auth_preset.is_some()
             || matches!(self.state.status, FpStatus::PreAuthorized)
             || (matches!(
@@ -1625,14 +1552,14 @@ impl RuntimeFp {
     pub fn cancel_pre_auth(&mut self) {
         self.pre_auth = None;
         self.pre_auth_started_at = None;
-        self.preauth_nozzle_confirmed = false;
-        self.preauth_mismatch_active = false;
+        self.wayne.preauth_nozzle_confirmed = false;
+        self.wayne.preauth_mismatch_active = false;
         self.clear_ghost_recovery();
         self.clear_deliver_caps();
-        self.preauth_config_on_wire = false;
-        self.config_on_wire_at = None;
-        self.pending_authorize_config = false;
-        self.pending_authorize_config_repeat = false;
+        self.wayne.preauth_config_on_wire = false;
+        self.wayne.config_on_wire_at = None;
+        self.wayne.pending_authorize_config = false;
+        self.wayne.pending_authorize_config_repeat = false;
         self.auth_session_started_at = None;
         self.current_tx = None;
         self.state.pre_auth_preset = None;
@@ -1642,15 +1569,15 @@ impl RuntimeFp {
         self.state.product_id = None;
         self.state.product_name = None;
         self.state.product_color = None;
-        self.last_wire_hose_code = None;
-        self.last_wire_hose_at_ms = 0;
+        self.wayne.last_wire_hose_code = None;
+        self.wayne.last_wire_hose_at_ms = 0;
         self.touch();
     }
 
     fn cancel_pre_auth_after_nozzle_mismatch(&mut self) {
         self.cancel_pre_auth();
-        self.ghost_recovery = true;
-        self.consecutive_idle_polls = 0;
+        self.wayne.ghost_recovery = true;
+        self.wayne.consecutive_idle_polls = 0;
     }
 
     pub fn apply_preauthorize_sent(
@@ -1672,8 +1599,8 @@ impl RuntimeFp {
                 if up != nozzle_index {
                     let (expected_name, _, _) = lookup_nozzle(site, fp_cfg, nozzle_index);
                     let (lifted_name, _, _) = lookup_nozzle(site, fp_cfg, up);
-                    self.preauth_nozzle_confirmed = false;
-                    self.preauth_mismatch_active = false;
+                    self.wayne.preauth_nozzle_confirmed = false;
+                    self.wayne.preauth_mismatch_active = false;
                     self.touch();
                     return PreauthOutcome::NozzleMismatch {
                         expected_nozzle_index: nozzle_index,
@@ -1697,8 +1624,8 @@ impl RuntimeFp {
             product_id: pid,
         });
         self.pre_auth_started_at = Some(Utc::now().timestamp_millis());
-        self.preauth_nozzle_confirmed = false;
-        self.preauth_mismatch_active = false;
+        self.wayne.preauth_nozzle_confirmed = false;
+        self.wayne.preauth_mismatch_active = false;
         self.clear_ghost_recovery();
         let nozzle_already_up = self.state.status == FpStatus::NozzleUp
             && self.state.nozzle_index == Some(nozzle_index);
@@ -1713,11 +1640,11 @@ impl RuntimeFp {
         self.state.seq = 0;
         // Lift-first: CONFIG is sent in poll_loop after this; delivery starts there too.
         if nozzle_already_up {
-            self.preauth_nozzle_confirmed = true;
+            self.wayne.preauth_nozzle_confirmed = true;
         }
         let _ = b;
         self.touch();
-        if self.preauth_nozzle_confirmed {
+        if self.wayne.preauth_nozzle_confirmed {
             PreauthOutcome::LiftConfirmed
         } else {
             PreauthOutcome::Holstered
@@ -1768,7 +1695,7 @@ impl RuntimeFp {
         self.state.product_name = Some(pname.clone());
         self.state.product_color = Some(color);
         self.pre_auth = None;
-        self.preauth_nozzle_confirmed = false;
+        self.wayne.preauth_nozzle_confirmed = false;
         if self.state.pre_auth_preset.is_none() {
             self.state.pre_auth_preset = Some(preset_label(&self.last_preset));
         }
@@ -1776,12 +1703,12 @@ impl RuntimeFp {
         // If CONFIG is not yet on the wire, schedule it for the first Data frame.
         // If it was already sent (holstered preauth or reactive lift), preserve that
         // state so the Data-frame handler skips SendAuthorizeConfig.
-        if !self.preauth_config_on_wire {
+        if !self.wayne.preauth_config_on_wire {
             self.begin_auth_session();
         } else {
             self.auth_session_started_at = Some(Utc::now().timestamp_millis());
-            self.pending_authorize_config = false;
-            self.pending_authorize_config_repeat = false;
+            self.wayne.pending_authorize_config = false;
+            self.wayne.pending_authorize_config_repeat = false;
         }
         self.state.status = FpStatus::Authorizing;
         self.current_tx = Some(CurrentTx {
@@ -1906,7 +1833,7 @@ impl RuntimeFp {
                 // A holster frame means the nozzle is back in the boot — clear the
                 // stopped-with-nozzle-up guard so a STOPPED sale can finalize on this event
                 // (NozzleHolstered for a stopped lane delegates to apply_idle_response below).
-                self.stopped_nozzle_up = false;
+                self.wayne.stopped_nozzle_up = false;
                 match self.state.status {
                     FpStatus::Authorizing | FpStatus::Delivering => {
                         let (vol, amt) = self.combined_totals();
@@ -1942,17 +1869,17 @@ impl RuntimeFp {
                     }
                     FpStatus::PreAuthorized => {
                         // Customer confirmed the lift and has now holstered — cancel.
-                        if self.preauth_nozzle_confirmed {
+                        if self.wayne.preauth_nozzle_confirmed {
                             self.cancel_pre_auth();
                             self.touch();
                             return FrameEffect::NozzleHolstered;
                         }
-                        if self.preauth_config_on_wire {
+                        if self.wayne.preauth_config_on_wire {
                             // Pump confirming nozzle-holstered state after receiving CONFIG,
                             // before the customer has touched the nozzle.  Keep pre-auth alive.
                             self.touch();
                             FrameEffect::None
-                        } else if self.preauth_mismatch_active {
+                        } else if self.wayne.preauth_mismatch_active {
                             // Mismatch recovery: customer holstering wrong nozzle before
                             // lifting the correct one — keep pre-auth alive.
                             self.touch();
@@ -2035,12 +1962,12 @@ impl RuntimeFp {
                     self.state.seq = *seq;
                     if let Some(effect) = self.check_preauth_nozzle(*product, *nozzle, fp_cfg, site)
                     {
-                        self.preauth_mismatch_active = true;
+                        self.wayne.preauth_mismatch_active = true;
                         self.touch();
                         return effect;
                     }
-                    self.preauth_mismatch_active = false;
-                    self.preauth_nozzle_confirmed = true;
+                    self.wayne.preauth_mismatch_active = false;
+                    self.wayne.preauth_nozzle_confirmed = true;
                     self.zero_delivery_meters();
                     self.state.status = FpStatus::NozzleUp;
                     // Wire AUTH + start_delivery run in poll_loop after this frame.
@@ -2171,8 +2098,8 @@ impl RuntimeFp {
                         {
                             self.note_wire_hose(*hh);
                             self.apply_metering(raw_vol, self.metered_amount(raw_vol, raw_amt));
-                            self.pump_sale_complete = true;
-                            self.pending_holster_close = false;
+                            self.wayne.pump_sale_complete = true;
+                            self.wayne.pending_holster_close = false;
                             if self.holster_ends_sale_early() {
                                 return self.end_sale_from_holster_early(
                                     fp_cfg,
@@ -2200,9 +2127,9 @@ impl RuntimeFp {
                                 self.state.status,
                                 FpStatus::Authorizing | FpStatus::Delivering
                             )
-                            && !self.pump_sale_complete
+                            && !self.wayne.pump_sale_complete
                         {
-                            self.last_wire_hose_at_ms = Utc::now().timestamp_millis();
+                            self.wayne.last_wire_hose_at_ms = Utc::now().timestamp_millis();
                             self.touch();
                             return FrameEffect::StatusChanged;
                         }
@@ -2218,7 +2145,8 @@ impl RuntimeFp {
                             // after CONFIG, before the customer has done anything.  Inside the
                             // post-CONFIG grace window treat it as that echo and keep the lane
                             // armed; outside it (or after fuel) the same shape is a real holster.
-                            if (self.preauth_config_on_wire || self.pending_authorize_config_repeat)
+                            if (self.wayne.preauth_config_on_wire
+                                || self.wayne.pending_authorize_config_repeat)
                                 && self.state.status == FpStatus::Authorizing
                                 && self.within_config_echo_grace()
                             {
@@ -2270,10 +2198,10 @@ impl RuntimeFp {
                 }
 
                 if self.state.status == FpStatus::Authorizing
-                    && self.pending_authorize_config
-                    && !self.preauth_config_on_wire
+                    && self.wayne.pending_authorize_config
+                    && !self.wayne.preauth_config_on_wire
                 {
-                    self.pending_authorize_config = false;
+                    self.wayne.pending_authorize_config = false;
                     self.touch();
                     // Lift-first: CONFIG+AUTHORISE after first zero-volume Data (sniffer arming).
                     return FrameEffect::SendAuthorizeConfig;
@@ -2285,26 +2213,26 @@ impl RuntimeFp {
                         if Frame::is_nozzle_lift_code(*hh) {
                             if let Some(effect) = self.check_preauth_nozzle(*_pp, *hh, fp_cfg, site)
                             {
-                                self.preauth_mismatch_active = true;
+                                self.wayne.preauth_mismatch_active = true;
                                 self.touch();
                                 return effect;
                             }
-                            self.preauth_mismatch_active = false;
-                            self.preauth_nozzle_confirmed = true;
+                            self.wayne.preauth_mismatch_active = false;
+                            self.wayne.preauth_nozzle_confirmed = true;
                             self.zero_delivery_meters();
                             self.start_delivery_from_pre_auth(fp_cfg, site);
                             self.touch();
                             return FrameEffect::StatusChanged;
                         }
                     }
-                    if !self.preauth_nozzle_confirmed {
+                    if !self.wayne.preauth_nozzle_confirmed {
                         // Holstered pre-auth: ignore meter frames until the customer lifts.
                         self.touch();
                         return FrameEffect::StatusChanged;
                     }
                     if raw_vol > 1e-6 {
                         self.start_delivery_from_pre_auth(fp_cfg, site);
-                    } else if self.preauth_mismatch_active {
+                    } else if self.wayne.preauth_mismatch_active {
                         // Wrong nozzle detected — stay PreAuthorized so the customer
                         // can holster and lift the correct hose.
                         self.touch();
@@ -2340,7 +2268,7 @@ impl RuntimeFp {
                                 && !self.ghost_recovery_active()
                                 && !*sale_complete
                                 && wire_nozzle.is_some()
-                                && !self.preauth_cancel_pending
+                                && !self.wayne.preauth_cancel_pending
                             {
                                 let nozzle_index = wire_nozzle.unwrap_or(1);
                                 let (pname, pid, color) = lookup_nozzle(site, fp_cfg, nozzle_index);
@@ -2405,10 +2333,10 @@ impl RuntimeFp {
                             // the stopped snapshot means the stop frame was likely lost on the
                             // wire.  Ask the poll loop to re-send it, once per stop episode.
                             if *crc_ok
-                                && !self.stop_reflow_resent
+                                && !self.wayne.stop_reflow_resent
                                 && raw_vol > self.state.volume + STOP_REFLOW_RESEND_DELTA_L
                             {
-                                self.stop_reflow_resent = true;
+                                self.wayne.stop_reflow_resent = true;
                                 self.touch();
                                 return FrameEffect::ResendStop;
                             }
@@ -2470,10 +2398,11 @@ impl RuntimeFp {
                     if *sale_complete {
                         // Device closed the transaction — commit to STOPPED now.
                         let preset = self
+                            .wayne
                             .decel_pending_preset
                             .take()
                             .unwrap_or_else(|| self.last_preset.clone());
-                        let ss = self.decel_pending_stop_source;
+                        let ss = self.wayne.decel_pending_stop_source;
                         self.clear_decel_window();
                         return self.enter_stopped_state(
                             fp_cfg,
@@ -2484,24 +2413,26 @@ impl RuntimeFp {
                             ss,
                         );
                     }
-                    if raw_vol > self.decel_vol_snapshot + 0.005 {
+                    if raw_vol > self.wayne.decel_vol_snapshot + 0.005 {
                         // Counter advanced — pump accepted our BUSY and is delivering again.
                         // Restore caps and fall through to normal metering.
                         self.set_deliver_caps_from_preset(&self.last_preset.clone());
                         self.clear_decel_window();
                     } else {
                         // Counter frozen — pump still decelerating.
-                        self.decel_frozen_count = self.decel_frozen_count.saturating_add(1);
-                        let elapsed =
-                            Utc::now().timestamp_millis() - self.decel_stop_sent_at.unwrap_or(0);
-                        if self.decel_frozen_count >= DECEL_FROZEN_FRAME_THRESHOLD
+                        self.wayne.decel_frozen_count =
+                            self.wayne.decel_frozen_count.saturating_add(1);
+                        let elapsed = Utc::now().timestamp_millis()
+                            - self.wayne.decel_stop_sent_at.unwrap_or(0);
+                        if self.wayne.decel_frozen_count >= DECEL_FROZEN_FRAME_THRESHOLD
                             || elapsed >= DECEL_WINDOW_TIMEOUT_MS
                         {
                             let preset = self
+                                .wayne
                                 .decel_pending_preset
                                 .take()
                                 .unwrap_or_else(|| self.last_preset.clone());
-                            let ss = self.decel_pending_stop_source;
+                            let ss = self.wayne.decel_pending_stop_source;
                             self.clear_decel_window();
                             return self.enter_stopped_state(
                                 fp_cfg,
@@ -2578,21 +2509,21 @@ impl RuntimeFp {
                             // Pump signalled end-of-sale but the nozzle is still in the tank.
                             // Wait for the physical holster event — it gives us the true final
                             // volume and prevents recording a premature or stale total.
-                            self.pump_sale_complete = true;
+                            self.wayne.pump_sale_complete = true;
                             self.touch();
                             return FrameEffect::StatusChanged;
                         }
-                        if !self.pending_holster_close {
+                        if !self.wayne.pending_holster_close {
                             // nozzle_physically_up() is false only due to the staleness timer,
                             // not because an explicit NozzleReturned was received.  Keep waiting.
                             self.touch();
                             return FrameEffect::StatusChanged;
                         }
                         // Nozzle confirmed holstered — close.
-                        self.pending_holster_close = false;
+                        self.wayne.pending_holster_close = false;
                         // Hardware preset was reached (we are inside `sale_complete=true`),
                         // regardless of whether NozzleReturned arrived before or after this frame.
-                        self.pump_sale_complete = true;
+                        self.wayne.pump_sale_complete = true;
                         if self.holster_ends_sale_early() {
                             return self.end_sale_from_holster_early(
                                 fp_cfg,
@@ -2633,10 +2564,11 @@ impl RuntimeFp {
                     )
                 {
                     let preset = self
+                        .wayne
                         .decel_pending_preset
                         .take()
                         .unwrap_or_else(|| self.last_preset.clone());
-                    let ss = self.decel_pending_stop_source;
+                    let ss = self.wayne.decel_pending_stop_source;
                     self.clear_decel_window();
                     return self.enter_stopped_state(
                         fp_cfg,
@@ -2654,7 +2586,9 @@ impl RuntimeFp {
                     // If CONFIG was just sent and no fuel has flowed, this Stopped frame
                     // is the pump completing its previous transaction state, not aborting
                     // the current authorization. Ignore it so delivery can start normally.
-                    if self.state.status == FpStatus::Authorizing && self.preauth_config_on_wire {
+                    if self.state.status == FpStatus::Authorizing
+                        && self.wayne.preauth_config_on_wire
+                    {
                         let (vol, amt) = self.combined_totals();
                         if vol < 0.01 && amt == 0 {
                             self.touch();
@@ -2864,11 +2798,11 @@ impl RuntimeFp {
                 // Enter decel window: keep FpStatus::Delivering so BUSY frames keep
                 // flowing, defer the DB write until we see whether the pump accepts.
                 let (snapshot_vol, _) = self.combined_totals();
-                self.decel_stop_sent_at = Some(Utc::now().timestamp_millis());
-                self.decel_vol_snapshot = snapshot_vol;
-                self.decel_frozen_count = 0;
-                self.decel_pending_preset = Some(self.last_preset.clone());
-                self.decel_pending_stop_source = stop_source;
+                self.wayne.decel_stop_sent_at = Some(Utc::now().timestamp_millis());
+                self.wayne.decel_vol_snapshot = snapshot_vol;
+                self.wayne.decel_frozen_count = 0;
+                self.wayne.decel_pending_preset = Some(self.last_preset.clone());
+                self.wayne.decel_pending_stop_source = stop_source;
                 self.clear_deliver_caps();
                 self.touch();
                 return None;
@@ -3241,7 +3175,7 @@ mod tests {
         rt.state.product_id = Some(3);
         rt.state.product_name = Some("AI-92".into());
         rt.state.price = 11000;
-        rt.preauth_config_on_wire = true;
+        rt.wayne.preauth_config_on_wire = true;
         rt.current_tx = Some(CurrentTx {
             id: "tx".into(),
             started_at: Utc::now().timestamp_millis(),
@@ -3271,8 +3205,8 @@ mod tests {
         assert!(matches!(effect, FrameEffect::CompleteGhostFill));
         assert_eq!(rt.state.status, FpStatus::Idle);
         assert!(rt.current_tx.is_none());
-        assert_eq!(rt.last_wire_hose_code, None);
-        assert!(rt.ghost_recovery);
+        assert_eq!(rt.wayne.last_wire_hose_code, None);
+        assert!(rt.wayne.ghost_recovery);
     }
 
     #[test]
@@ -3324,8 +3258,8 @@ mod tests {
         assert_eq!(rt.state.status, FpStatus::NozzleUp);
         assert!(rt.current_tx.is_none());
         assert_eq!(rt.state.volume, 0.0);
-        assert_eq!(rt.last_wire_hose_code, Some(0x12));
-        assert!(rt.ghost_recovery);
+        assert_eq!(rt.wayne.last_wire_hose_code, Some(0x12));
+        assert!(rt.wayne.ghost_recovery);
     }
 
     #[test]
@@ -3412,7 +3346,7 @@ mod tests {
         assert!(rt.pre_auth.is_none());
         assert!(rt.current_tx.is_none());
         assert!(rt.state.pre_auth_preset.is_none());
-        assert!(rt.ghost_recovery);
+        assert!(rt.wayne.ghost_recovery);
 
         let stale_wrong_nozzle_data = Frame::Data {
             addr: 0x53,
@@ -3528,7 +3462,7 @@ mod tests {
         assert!(matches!(effect, FrameEffect::StatusChanged));
         assert_eq!(rt.state.status, FpStatus::Idle);
         assert!(rt.current_tx.is_none());
-        assert!(!rt.unauthorized_alerted);
+        assert!(!rt.wayne.unauthorized_alerted);
     }
 
     fn stopped_lane_meter_frame(volume_l: u8, volume_h: u8, crc_ok: bool) -> Frame {
@@ -3568,7 +3502,7 @@ mod tests {
             rt.apply_frame(&dribble, &fp_cfg, &site, None, None),
             FrameEffect::StatusChanged
         ));
-        assert!(!rt.stop_reflow_resent);
+        assert!(!rt.wayne.stop_reflow_resent);
 
         // An unverified frame showing a big jump must not trigger the resend either.
         let corrupt = stopped_lane_meter_frame(0x07, 0x50, false);
@@ -3576,7 +3510,7 @@ mod tests {
             rt.apply_frame(&corrupt, &fp_cfg, &site, None, None),
             FrameEffect::StatusChanged
         ));
-        assert!(!rt.stop_reflow_resent);
+        assert!(!rt.wayne.stop_reflow_resent);
 
         // Verified counter well past the stopped snapshot (5.20 L) → re-send STOP once.
         let reflow = stopped_lane_meter_frame(0x05, 0x20, true);
@@ -3584,7 +3518,7 @@ mod tests {
             rt.apply_frame(&reflow, &fp_cfg, &site, None, None),
             FrameEffect::ResendStop
         ));
-        assert!(rt.stop_reflow_resent);
+        assert!(rt.wayne.stop_reflow_resent);
 
         // Further advancing frames stay quiet — one resend per stop episode.
         let reflow2 = stopped_lane_meter_frame(0x05, 0x40, true);
@@ -3604,12 +3538,12 @@ mod tests {
         let mut rt = RuntimeFp::new(&fp_cfg, &site);
 
         rt.mark_preauth_cancel_pending();
-        assert!(rt.preauth_cancel_pending);
+        assert!(rt.wayne.preauth_cancel_pending);
 
         // Pump confirmed idle (70 FA) → the post-cancel guard is cleared (de-auth verified).
         let _ = rt.apply_idle_response(&fp_cfg, &site, None, None);
-        assert!(!rt.preauth_cancel_pending);
-        assert!(!rt.unauthorized_alerted);
+        assert!(!rt.wayne.preauth_cancel_pending);
+        assert!(!rt.wayne.unauthorized_alerted);
     }
 
     #[test]
@@ -3623,7 +3557,7 @@ mod tests {
             PreauthOutcome::Holstered
         ));
         // Layer 3: a holstered pre-auth must NOT pre-arm the pump.
-        assert!(!rt.preauth_config_on_wire);
+        assert!(!rt.wayne.preauth_config_on_wire);
 
         // Matching lift confirms the pre-auth — still no CONFIG assumed on the wire.
         let lift = Frame::NozzleUp {
@@ -3633,12 +3567,12 @@ mod tests {
             nozzle: 0x12,
         };
         let _ = rt.apply_frame(&lift, &fp_cfg, &site, None, None);
-        assert!(rt.preauth_nozzle_confirmed);
+        assert!(rt.wayne.preauth_nozzle_confirmed);
 
         // Poll loop starts delivery → CONFIG is scheduled for the wire (deferred), not assumed sent.
         rt.start_delivery_from_pre_auth(&fp_cfg, &site);
-        assert!(rt.pending_authorize_config);
-        assert!(!rt.preauth_config_on_wire);
+        assert!(rt.wayne.pending_authorize_config);
+        assert!(!rt.wayne.preauth_config_on_wire);
         assert_eq!(rt.state.status, FpStatus::Authorizing);
     }
 
@@ -3669,7 +3603,7 @@ mod tests {
         let effect = rt.apply_stop(&fp_cfg, &site, None, None, false, true);
         assert!(matches!(effect, Some(FrameEffect::Paused { .. })));
         assert!(matches!(rt.state.status, FpStatus::Stopped { .. }));
-        assert!(rt.stopped_nozzle_up);
+        assert!(rt.wayne.stopped_nozzle_up);
 
         // Pump polls idle (70 FA) while the nozzle is STILL up → must stay STOPPED, not reset to Idle.
         let idle = Frame::Idle { addr: 0x53 };
@@ -3688,7 +3622,7 @@ mod tests {
         let effect = rt.apply_frame(&holster, &fp_cfg, &site, None, None);
         assert!(matches!(effect, FrameEffect::TransactionDone { .. }));
         assert_eq!(rt.state.status, FpStatus::Idle);
-        assert!(!rt.stopped_nozzle_up);
+        assert!(!rt.wayne.stopped_nozzle_up);
     }
 
     #[test]
@@ -3717,7 +3651,7 @@ mod tests {
         );
 
         // Customer holds the nozzle up but hasn't squeezed yet; >4s pass so the lift code goes stale.
-        rt.last_wire_hose_at_ms = 0;
+        rt.wayne.last_wire_hose_at_ms = 0;
         assert!(!rt.nozzle_physically_up());
 
         // Pump polls idle (70 FA): must NOT ghost-cancel — the nozzle is still up.
@@ -3758,7 +3692,7 @@ mod tests {
             product_name: "AI-92".into(),
             nozzle_index: 2,
         });
-        rt.last_wire_hose_at_ms = 0; // stale → nozzle_physically_up() == false
+        rt.wayne.last_wire_hose_at_ms = 0; // stale → nozzle_physically_up() == false
         rt
     }
 
@@ -3835,8 +3769,8 @@ mod tests {
         let fp_cfg = site.fueling_positions[0].clone();
         let mut rt = armed_authorizing_lane(&site, &fp_cfg);
         // CONFIG went on the wire >3 s ago → grace window has expired.
-        rt.config_on_wire_at = Some(Utc::now().timestamp_millis() - 5_000);
-        rt.preauth_config_on_wire = true;
+        rt.wayne.config_on_wire_at = Some(Utc::now().timestamp_millis() - 5_000);
+        rt.wayne.preauth_config_on_wire = true;
         assert!(!rt.within_config_echo_grace());
 
         let holster = Frame::NozzleHolstered {
@@ -3859,7 +3793,7 @@ mod tests {
         assert!(matches!(outcome, PreauthOutcome::Holstered));
         assert_eq!(rt.pre_auth.as_ref().map(|p| p.nozzle_index), Some(2));
         assert_eq!(rt.state.status, FpStatus::PreAuthorized);
-        assert!(!rt.preauth_nozzle_confirmed);
+        assert!(!rt.wayne.preauth_nozzle_confirmed);
     }
 
     #[test]
@@ -3875,7 +3809,7 @@ mod tests {
         let outcome = rt.apply_preauthorize_sent(&fp_cfg, &site, 2, 11000, Preset::Amount(10_000));
 
         assert!(matches!(outcome, PreauthOutcome::LiftConfirmed));
-        assert!(rt.preauth_nozzle_confirmed);
+        assert!(rt.wayne.preauth_nozzle_confirmed);
         assert_eq!(rt.state.status, FpStatus::PreAuthorized);
         assert_eq!(rt.state.nozzle_index, Some(2));
     }
@@ -3915,8 +3849,8 @@ mod tests {
         assert!(rt.pre_auth.is_none());
         assert_eq!(rt.state.status, FpStatus::NozzleUp);
         assert_eq!(rt.state.nozzle_index, Some(3));
-        assert!(!rt.ghost_recovery);
-        assert!(!rt.preauth_config_on_wire);
+        assert!(!rt.wayne.ghost_recovery);
+        assert!(!rt.wayne.preauth_config_on_wire);
     }
 
     #[test]
@@ -3970,12 +3904,12 @@ mod tests {
         rt.set_last_preset(Preset::Amount(10_000));
         rt.apply_nozzle_lift_deferred_config();
 
-        rt.last_wire_hose_at_ms = 0;
+        rt.wayne.last_wire_hose_at_ms = 0;
         let effect = rt.apply_idle_response(&fp_cfg, &site, None, None);
         assert!(matches!(effect, FrameEffect::SendAuthorizeConfig));
 
         rt.mark_preauth_config_on_wire();
-        rt.last_wire_hose_at_ms = 0;
+        rt.wayne.last_wire_hose_at_ms = 0;
         let effect = rt.apply_idle_response(&fp_cfg, &site, None, None);
         assert!(matches!(effect, FrameEffect::None));
         assert_eq!(rt.state.status, FpStatus::Authorizing);
@@ -4189,7 +4123,7 @@ mod tests {
         assert_eq!(rt.state.amount, 10_000);
         assert!(rt.sale_target_met());
 
-        rt.pump_sale_complete = true;
+        rt.wayne.pump_sale_complete = true;
         let effect = rt.complete_sale_from_holster(&fp_cfg, &site, None, None);
         let FrameEffect::TransactionDone { tx, .. } = effect else {
             panic!("expected completed transaction");
@@ -4223,7 +4157,7 @@ mod tests {
         assert_eq!(rt.state.amount, 9_900);
         assert!(!rt.sale_target_met());
 
-        rt.pump_sale_complete = true;
+        rt.wayne.pump_sale_complete = true;
         let effect = rt.complete_sale_from_holster(&fp_cfg, &site, None, None);
         let FrameEffect::TransactionDone { tx, .. } = effect else {
             panic!("expected completed transaction");

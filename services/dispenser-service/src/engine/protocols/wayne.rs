@@ -343,7 +343,9 @@ async fn dispatch_poll_frames(
 
         let mut map = runtimes.write().await;
         if let Some(rt) = map.get_mut(&byte) {
-            if rt.preauth_nozzle_confirmed && (rt.pre_auth.is_some() || rt.preauth_config_on_wire) {
+            if rt.wayne.preauth_nozzle_confirmed
+                && (rt.pre_auth.is_some() || rt.wayne.preauth_config_on_wire)
+            {
                 rt.start_delivery_from_pre_auth(&fp_cfg, cfg);
             }
         }
@@ -609,7 +611,7 @@ pub(in crate::engine) async fn run(
                 let expired = {
                     let map = runtimes.read().await;
                     map.get(&byte).map_or(false, |rt| {
-                        rt.decel_stop_sent_at.map_or(false, |sent_at| {
+                        rt.wayne.decel_stop_sent_at.map_or(false, |sent_at| {
                             Utc::now().timestamp_millis() - sent_at >= DECEL_WINDOW_TIMEOUT_MS
                         })
                     })
@@ -622,10 +624,11 @@ pub(in crate::engine) async fn run(
                             let mut map = runtimes.write().await;
                             map.get_mut(&byte).map(|rt| {
                                 let preset = rt
+                                    .wayne
                                     .decel_pending_preset
                                     .take()
                                     .unwrap_or_else(|| rt.last_preset.clone());
-                                let ss = rt.decel_pending_stop_source;
+                                let ss = rt.wayne.decel_pending_stop_source;
                                 rt.clear_decel_window();
                                 rt.enter_stopped_state(
                                     &fp_cfg,
@@ -689,7 +692,7 @@ pub(in crate::engine) async fn run(
                         && rt.nozzle_physically_up()
                         && rt.state.volume < 0.01
                         && rt.state.amount == 0
-                        && !rt.preauth_config_on_wire
+                        && !rt.wayne.preauth_config_on_wire
                     {
                         return false;
                     }
@@ -897,8 +900,8 @@ async fn process_parsed_frame(
             let alert = {
                 let mut map = runtimes.write().await;
                 match map.get_mut(&byte) {
-                    Some(rt) if !rt.unauthorized_alerted => {
-                        rt.unauthorized_alerted = true;
+                    Some(rt) if !rt.wayne.unauthorized_alerted => {
+                        rt.wayne.unauthorized_alerted = true;
                         true
                     }
                     _ => false,

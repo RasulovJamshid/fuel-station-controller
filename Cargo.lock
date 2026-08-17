@@ -940,6 +940,7 @@ dependencies = [
  "serialport",
  "site_config",
  "sqlx",
+ "texnouz-bluesky",
  "tokio",
  "tower 0.4.13",
  "tower-http 0.5.2",
@@ -4580,6 +4581,10 @@ dependencies = [
  "new_debug_unreachable",
  "utf-8",
 ]
+
+[[package]]
+name = "texnouz-bluesky"
+version = "0.1.0"
 
 [[package]]
 name = "thiserror"

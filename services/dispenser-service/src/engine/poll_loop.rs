@@ -96,6 +96,19 @@ pub async fn run_poll_loop(
             )
             .await
         }
+        Protocol::TexnoUzBlueSky => {
+            super::protocols::texnouz_bluesky::run(
+                cfg,
+                backend,
+                runtimes,
+                disp_by_byte,
+                events,
+                commands,
+                pool,
+                shifts,
+            )
+            .await
+        }
         Protocol::WayneEuropump
         | Protocol::WayneDartV1
         | Protocol::WayneDartV2

@@ -119,8 +119,27 @@ pub enum Protocol {
     /// AZT 2.0 (ОАО АЗТ) RS-485 protocol — 4800 baud, complementary-byte framing.
     #[serde(rename = "azt2_0")]
     Azt20,
+    /// TexnoUz "Дополненный протокол BlueSky" (controller TU_WB_KEY) — RS-485
+    /// half-duplex, 9600 8E1, BCD payloads. Each hose has its own bus address
+    /// (`base + hose number`), like AZT.
+    #[serde(rename = "texnouz_bluesky")]
+    TexnoUzBlueSky,
     #[serde(rename = "mock")]
     Mock,
+}
+
+impl Protocol {
+    /// True when each nozzle occupies its own RS-485 address rather than sharing
+    /// the fueling position's address byte.
+    pub fn per_nozzle_addresses(self) -> bool {
+        matches!(self, Protocol::Azt20 | Protocol::TexnoUzBlueSky)
+    }
+
+    /// True when the pump can be armed while the nozzle is still holstered, so a
+    /// pre-authorization does not require a lift first.
+    pub fn arms_while_holstered(self) -> bool {
+        matches!(self, Protocol::Azt20)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]

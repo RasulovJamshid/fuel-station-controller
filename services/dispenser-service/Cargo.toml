@@ -10,6 +10,7 @@ wayne-europump = { path = "../../crates/wayne-europump" }
 atg = { path = "../../crates/atg" }
 gilbarco = { path = "../../crates/gilbarco" }
 azt = { path = "../../crates/azt" }
+texnouz-bluesky = { path = "../../crates/texnouz-bluesky" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

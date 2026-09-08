@@ -1161,6 +1161,27 @@ mod tests {
         assert_eq!(cfg.connection.data_bits, 8);
         assert_eq!(cfg.connection.stop_bits, 1);
 
+        let sides: Vec<(&str, &str)> = cfg
+            .active_positions()
+            .into_iter()
+            .map(|fp| (fp.id.as_str(), fp.label.as_str()))
+            .collect();
+        assert_eq!(
+            sides,
+            vec![
+                ("FP1", "Side 1"),
+                ("FP2", "Side 2"),
+                ("FP11", "Side 11"),
+                ("FP12", "Side 12"),
+                ("FP21", "Side 21"),
+                ("FP22", "Side 22"),
+            ]
+        );
+        for fp in cfg.active_positions() {
+            let product_ids: Vec<u8> = fp.nozzles.iter().map(|n| n.product_id).collect();
+            assert_eq!(product_ids, vec![3, 6, 5, 4]);
+        }
+
         let addresses: Vec<u8> = cfg
             .active_positions()
             .into_iter()

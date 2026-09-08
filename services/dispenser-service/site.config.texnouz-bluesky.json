@@ -35,38 +35,31 @@
       "unit": "litre"
     },
     {
-      "id": 4,
-      "uuid": "88be5618-6198-4759-a943-fd08d52ba4dc",
-      "name": "AI-95",
-      "color": "#FF9800",
-      "unit": "litre"
-    },
-    {
-      "id": 5,
-      "uuid": "12d897b6-aa78-414a-a03f-dc49d7ef3820",
-      "name": "AI-98",
-      "color": "#E91E63",
-      "unit": "litre"
-    },
-    {
       "id": 6,
       "uuid": "64e0532a-5a09-4caf-a214-6e9a38043f6d",
-      "name": "Diesel",
+      "name": "DT",
       "color": "#795548",
       "unit": "litre"
     },
     {
-      "id": 7,
-      "uuid": "20893eba-fe29-42e9-a8a2-927ccdedd101",
-      "name": "LPG",
-      "color": "#9C27B0",
+      "id": 5,
+      "uuid": "c29d265c-41cb-4bb3-bcbf-135836c55b91",
+      "name": "AI-91",
+      "color": "#4CAF50",
+      "unit": "litre"
+    },
+    {
+      "id": 4,
+      "uuid": "88be5618-6198-4759-a943-fd08d52ba4dc",
+      "name": "AI-95",
+      "color": "#FF9800",
       "unit": "litre"
     }
   ],
   "fueling_positions": [
     {
       "id": "FP1",
-      "label": "Lane 1 Side A",
+      "label": "Side 1",
       "address_byte": 0,
       "active": true,
       "nozzles": [
@@ -78,6 +71,18 @@
         },
         {
           "index": 2,
+          "product_id": 6,
+          "price": 16000,
+          "active": true
+        },
+        {
+          "index": 3,
+          "product_id": 5,
+          "price": 11000,
+          "active": true
+        },
+        {
+          "index": 4,
           "product_id": 4,
           "price": 17500,
           "active": true
@@ -86,7 +91,7 @@
     },
     {
       "id": "FP2",
-      "label": "Lane 1 Side B",
+      "label": "Side 2",
       "address_byte": 16,
       "active": true,
       "nozzles": [
@@ -98,6 +103,18 @@
         },
         {
           "index": 2,
+          "product_id": 6,
+          "price": 16000,
+          "active": true
+        },
+        {
+          "index": 3,
+          "product_id": 5,
+          "price": 11000,
+          "active": true
+        },
+        {
+          "index": 4,
           "product_id": 4,
           "price": 17500,
           "active": true
@@ -105,8 +122,8 @@
       ]
     },
     {
-      "id": "FP3",
-      "label": "Lane 2 Side A",
+      "id": "FP11",
+      "label": "Side 11",
       "address_byte": 32,
       "active": true,
       "nozzles": [
@@ -118,6 +135,18 @@
         },
         {
           "index": 2,
+          "product_id": 6,
+          "price": 16000,
+          "active": true
+        },
+        {
+          "index": 3,
+          "product_id": 5,
+          "price": 11000,
+          "active": true
+        },
+        {
+          "index": 4,
           "product_id": 4,
           "price": 17500,
           "active": true
@@ -125,8 +154,8 @@
       ]
     },
     {
-      "id": "FP4",
-      "label": "Lane 2 Side B",
+      "id": "FP12",
+      "label": "Side 12",
       "address_byte": 48,
       "active": true,
       "nozzles": [
@@ -141,12 +170,24 @@
           "product_id": 6,
           "price": 16000,
           "active": true
+        },
+        {
+          "index": 3,
+          "product_id": 5,
+          "price": 11000,
+          "active": true
+        },
+        {
+          "index": 4,
+          "product_id": 4,
+          "price": 17500,
+          "active": true
         }
       ]
     },
     {
-      "id": "FP5",
-      "label": "Lane 3 Side A",
+      "id": "FP21",
+      "label": "Side 21",
       "address_byte": 64,
       "active": true,
       "nozzles": [
@@ -158,27 +199,27 @@
         },
         {
           "index": 2,
-          "product_id": 4,
-          "price": 17500,
-          "active": true
-        },
-        {
-          "index": 3,
           "product_id": 6,
           "price": 16000,
           "active": true
         },
         {
-          "index": 4,
+          "index": 3,
           "product_id": 5,
-          "price": 13500,
+          "price": 11000,
+          "active": true
+        },
+        {
+          "index": 4,
+          "product_id": 4,
+          "price": 17500,
           "active": true
         }
       ]
     },
     {
-      "id": "FP6",
-      "label": "Lane 3 Side B",
+      "id": "FP22",
+      "label": "Side 22",
       "address_byte": 80,
       "active": true,
       "nozzles": [
@@ -190,20 +231,20 @@
         },
         {
           "index": 2,
-          "product_id": 4,
-          "price": 17500,
-          "active": true
-        },
-        {
-          "index": 3,
           "product_id": 6,
           "price": 16000,
           "active": true
         },
         {
+          "index": 3,
+          "product_id": 5,
+          "price": 11000,
+          "active": true
+        },
+        {
           "index": 4,
-          "product_id": 7,
-          "price": 6500,
+          "product_id": 4,
+          "price": 17500,
           "active": true
         }
       ]

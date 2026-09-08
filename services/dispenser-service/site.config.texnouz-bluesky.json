@@ -59,7 +59,7 @@
   "fueling_positions": [
     {
       "id": "FP1",
-      "label": "Dispenser 1 Side A",
+      "label": "Side 1",
       "address_byte": 0,
       "active": true,
       "nozzles": [
@@ -91,7 +91,7 @@
     },
     {
       "id": "FP2",
-      "label": "Dispenser 1 Side B",
+      "label": "Side 2",
       "address_byte": 16,
       "active": true,
       "nozzles": [
@@ -122,8 +122,8 @@
       ]
     },
     {
-      "id": "FP3",
-      "label": "Dispenser 2 Side A",
+      "id": "FP11",
+      "label": "Side 11",
       "address_byte": 32,
       "active": true,
       "nozzles": [
@@ -154,8 +154,8 @@
       ]
     },
     {
-      "id": "FP4",
-      "label": "Dispenser 2 Side B",
+      "id": "FP12",
+      "label": "Side 12",
       "address_byte": 48,
       "active": true,
       "nozzles": [
@@ -186,8 +186,8 @@
       ]
     },
     {
-      "id": "FP5",
-      "label": "Dispenser 3 Side A",
+      "id": "FP21",
+      "label": "Side 21",
       "address_byte": 64,
       "active": true,
       "nozzles": [
@@ -218,8 +218,8 @@
       ]
     },
     {
-      "id": "FP6",
-      "label": "Dispenser 3 Side B",
+      "id": "FP22",
+      "label": "Side 22",
       "address_byte": 80,
       "active": true,
       "nozzles": [

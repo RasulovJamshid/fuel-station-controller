@@ -1,13 +1,14 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Wifi, WifiOff, RefreshCw, Activity, Droplets,
   Receipt, Clock, AlertTriangle, CheckCircle, XCircle,
   TrendingUp, User,
-  DollarSign, ChevronLeft, ChevronRight,
+  DollarSign, ChevronLeft, ChevronRight, Download, Upload, ServerCog,
 } from 'lucide-react';
 import { stationsApi, transactionsApi } from '@/lib/api';
+import { useAuthStore } from '@/store/auth';
 import { useFormats } from '@/hooks/use-formats';
 import { useT } from '@/hooks/use-t';
 import { Header } from '@/components/layout/header';
@@ -84,6 +85,12 @@ export default function StationDetailPage() {
   const [txPages, setTxPages] = useState(1);
   const [txTotal, setTxTotal] = useState(0);
   const [txLoading, setTxLoading] = useState(true);
+  const [configBusy, setConfigBusy] = useState(false);
+  const [configMessage, setConfigMessage] = useState('');
+  const [configError, setConfigError] = useState('');
+  const configInputRef = useRef<HTMLInputElement>(null);
+  const user = useAuthStore(state => state.user);
+  const canManageServiceConfig = user?.role === 'SUPER_ADMIN' || user?.role === 'COMPANY_ADMIN';
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -113,6 +120,54 @@ export default function StationDetailPage() {
 
   useEffect(() => { setTxPage(1); }, [id]);
   useEffect(() => { loadTransactions(txPage); }, [loadTransactions, txPage]);
+
+  const downloadServiceConfig = async () => {
+    setConfigBusy(true);
+    setConfigMessage('');
+    setConfigError('');
+    try {
+      const result: any = await stationsApi.serviceConfig(id);
+      const url = URL.createObjectURL(new Blob(
+        [JSON.stringify(result.config, null, 2)],
+        { type: 'application/json' },
+      ));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `site.${id}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setConfigMessage(t('serviceConfigDownloaded'));
+    } catch (e: any) {
+      setConfigError(e?.response?.data?.message ?? t('loadError'));
+    } finally {
+      setConfigBusy(false);
+    }
+  };
+
+  const uploadServiceConfig = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setConfigBusy(true);
+    setConfigMessage('');
+    setConfigError('');
+    try {
+      const config = JSON.parse(await file.text());
+      await stationsApi.saveServiceConfig(id, config);
+      setConfigMessage(t('serviceConfigUploaded'));
+      await load();
+    } catch (e: any) {
+      setConfigError(
+        e instanceof SyntaxError
+          ? t('serviceConfigInvalid')
+          : e?.response?.data?.message ?? t('saveError'),
+      );
+    } finally {
+      event.target.value = '';
+      setConfigBusy(false);
+    }
+  };
 
   const isOnline = data?.station
     ? data.station.lastSyncAt && (Date.now() - new Date(data.station.lastSyncAt).getTime()) < 10 * 60_000
@@ -197,6 +252,49 @@ export default function StationDetailPage() {
             </button>
           </div>
         </div>
+
+        {canManageServiceConfig && (
+          <div className="panel-subtle flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand-100 bg-brand-50 text-brand-600">
+                <ServerCog size={19} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="font-semibold text-slate-900">{t('serviceConfigTitle')}</h2>
+                <p className="mt-0.5 text-sm text-slate-500">{t('serviceConfigDescription')}</p>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+                  <span>{t('serviceConfigVersion')}: {station.serviceConfigVersion || 0}</span>
+                  <span>
+                    {t('serviceConfigBackup')}: {station.serviceConfigBackupUpdatedAt
+                      ? fmtRelative(station.serviceConfigBackupUpdatedAt)
+                      : t('serviceConfigNever')}
+                  </span>
+                </div>
+                {configMessage && <p className="mt-2 text-xs font-medium text-emerald-600">{configMessage}</p>}
+                {configError && <p className="mt-2 text-xs font-medium text-red-600">{configError}</p>}
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <input
+                ref={configInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={uploadServiceConfig}
+              />
+              <Button
+                variant="outline"
+                disabled={configBusy}
+                onClick={() => configInputRef.current?.click()}
+              >
+                <Upload size={15} /> {t('uploadServiceConfig')}
+              </Button>
+              <Button loading={configBusy} onClick={downloadServiceConfig}>
+                <Download size={15} /> {t('downloadServiceConfig')}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Stat cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">

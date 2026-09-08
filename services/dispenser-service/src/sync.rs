@@ -35,6 +35,8 @@ pub struct SyncStatus {
     pub prices_updated: u64,
     pub price_pull_interval_hours: u64,
     pub price_pull_enabled: bool,
+    pub last_config_push_at: Option<i64>,
+    pub config_push_error: Option<String>,
 }
 
 pub type SharedSyncStatus = Arc<Mutex<SyncStatus>>;
@@ -52,6 +54,8 @@ pub fn new_status(cfg: &site_config::SyncConfig) -> SharedSyncStatus {
         prices_updated: 0,
         price_pull_interval_hours: cfg.price_pull_interval_hours,
         price_pull_enabled: cfg.price_pull_enabled,
+        last_config_push_at: None,
+        config_push_error: None,
     }))
 }
 
@@ -120,7 +124,7 @@ fn deterministic_id(entity_type: &str, entity_id: &str, payload_json: &str) -> S
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_sync_response, deterministic_id};
+    use super::{backend_api_base, decode_remote_prices, decode_sync_response, deterministic_id};
 
     #[test]
     fn sync_id_changes_when_payload_changes() {
@@ -149,6 +153,37 @@ mod tests {
         assert_eq!(resp.accepted, vec!["a"]);
         assert_eq!(resp.rejected, vec!["b"]);
     }
+
+    #[test]
+    fn remote_prices_accept_backend_envelope() {
+        let prices = decode_remote_prices(serde_json::json!({
+            "data": [{
+                "fp_id": "FP1",
+                "nozzle_index": 1,
+                "product_id": 2,
+                "product_name": "AI-95",
+                "price": 12000
+            }],
+            "meta": { "requestId": "r1" }
+        }))
+        .expect("wrapped prices should decode");
+
+        assert_eq!(prices.len(), 1);
+        assert_eq!(prices[0].fp_id, "FP1");
+        assert_eq!(prices[0].price, 12000);
+    }
+
+    #[test]
+    fn backend_url_accepts_server_root_or_api_prefix() {
+        assert_eq!(
+            backend_api_base("https://dashboard.example"),
+            "https://dashboard.example/api/v1"
+        );
+        assert_eq!(
+            backend_api_base("https://dashboard.example/api/v1/"),
+            "https://dashboard.example/api/v1"
+        );
+    }
 }
 
 // ── Worker loop ───────────────────────────────────────────────────────────────
@@ -167,6 +202,7 @@ pub async fn run(
         .expect("sync reqwest client");
 
     let mut last_price_pull: Option<std::time::Instant> = None;
+    let mut last_config_snapshot: Option<String> = None;
     if let Err(e) = revive_no_verdict_records(&pool).await {
         tracing::warn!(?e, "sync: failed to revive no-verdict queue records");
     }
@@ -208,6 +244,53 @@ pub async fn run(
 
         let skip = !enabled || backend_url.is_empty() || api_key.is_empty();
         if !skip {
+            let config_snapshot = {
+                let current = cfg.read().await;
+                serde_json::to_value(&*current)
+                    .map_err(|e| e.to_string())
+                    .and_then(|mut value| {
+                        if let Some(sync) = value.get_mut("sync").and_then(|v| v.as_object_mut()) {
+                            sync.insert("api_key".into(), serde_json::Value::String(String::new()));
+                        }
+                        let fingerprint =
+                            serde_json::to_string(&value).map_err(|e| e.to_string())?;
+                        Ok((value, fingerprint))
+                    })
+            };
+
+            match config_snapshot {
+                Ok((snapshot, fingerprint))
+                    if last_config_snapshot.as_deref() != Some(fingerprint.as_str()) =>
+                {
+                    match push_config_snapshot(
+                        &client,
+                        &backend_url,
+                        &api_key,
+                        &station_id,
+                        &snapshot,
+                    )
+                    .await
+                    {
+                        Ok(()) => {
+                            last_config_snapshot = Some(fingerprint);
+                            let mut s = status.lock().await;
+                            s.last_config_push_at = Some(chrono::Utc::now().timestamp_millis());
+                            s.config_push_error = None;
+                            tracing::info!("sync: station configuration backed up");
+                        }
+                        Err(err) => {
+                            status.lock().await.config_push_error = Some(err.clone());
+                            tracing::warn!(%err, "sync: configuration backup failed — will retry");
+                        }
+                    }
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    status.lock().await.config_push_error = Some(err.clone());
+                    tracing::warn!(%err, "sync: configuration serialization failed");
+                }
+            }
+
             // Push pending local records to the backend
             match do_batch(
                 &pool,
@@ -292,6 +375,34 @@ pub async fn run(
     }
 }
 
+async fn push_config_snapshot(
+    client: &Client,
+    backend_url: &str,
+    api_key: &str,
+    station_id: &str,
+    config: &serde_json::Value,
+) -> Result<(), String> {
+    let url = format!(
+        "{}/sync/{}/config",
+        backend_api_base(backend_url),
+        station_id
+    );
+    let response = client
+        .put(&url)
+        .header("X-Api-Key", api_key)
+        .json(&serde_json::json!({ "config": config }))
+        .send()
+        .await
+        .map_err(|e| format!("config backup network: {e}"))?;
+
+    if response.status().is_success() {
+        return Ok(());
+    }
+    let code = response.status();
+    let body = response.text().await.unwrap_or_default();
+    Err(format!("config backup HTTP {code}: {body}"))
+}
+
 async fn do_batch(
     pool: &SqlitePool,
     client: &Client,
@@ -333,11 +444,7 @@ async fn do_batch(
         })
         .collect();
 
-    let url = format!(
-        "{}/api/v1/sync/{}",
-        backend_url.trim_end_matches('/'),
-        station_id
-    );
+    let url = format!("{}/sync/{}", backend_api_base(backend_url), station_id);
 
     let http_resp = client
         .post(&url)
@@ -399,6 +506,15 @@ fn decode_sync_response(value: serde_json::Value) -> SyncResponse {
     serde_json::from_value(payload).unwrap_or_default()
 }
 
+fn backend_api_base(backend_url: &str) -> String {
+    let trimmed = backend_url.trim_end_matches('/');
+    if trimmed.ends_with("/api/v1") {
+        trimmed.to_owned()
+    } else {
+        format!("{trimmed}/api/v1")
+    }
+}
+
 async fn revive_no_verdict_records(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
     let r = sqlx::query(
         r#"UPDATE sync_queue
@@ -410,13 +526,18 @@ async fn revive_no_verdict_records(pool: &SqlitePool) -> Result<u64, sqlx::Error
     Ok(r.rows_affected())
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct RemotePrice {
     fp_id: String,
     nozzle_index: u8,
     product_id: u8,
     product_name: String,
     price: u32,
+}
+
+fn decode_remote_prices(value: serde_json::Value) -> Result<Vec<RemotePrice>, String> {
+    let payload = value.get("data").cloned().unwrap_or(value);
+    serde_json::from_value(payload).map_err(|e| format!("price pull parse: {e}"))
 }
 
 /// Fetch current prices from the backend and apply any that differ from the local config.
@@ -432,8 +553,8 @@ async fn pull_prices(
     commands: &mpsc::Sender<DispatchCommand>,
 ) -> Result<usize, String> {
     let url = format!(
-        "{}/api/v1/sync/{}/prices",
-        backend_url.trim_end_matches('/'),
+        "{}/sync/{}/prices",
+        backend_api_base(backend_url),
         station_id
     );
 
@@ -454,10 +575,11 @@ async fn pull_prices(
         return Err(format!("price pull HTTP {code}: {body}"));
     }
 
-    let remote: Vec<RemotePrice> = resp
+    let response_value: serde_json::Value = resp
         .json()
         .await
         .map_err(|e| format!("price pull parse: {e}"))?;
+    let remote = decode_remote_prices(response_value)?;
     if remote.is_empty() {
         return Ok(0);
     }

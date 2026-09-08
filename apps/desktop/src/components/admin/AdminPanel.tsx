@@ -59,6 +59,8 @@ interface SyncStatus {
   prices_updated: number;
   price_pull_interval_hours?: number;
   price_pull_enabled?: boolean;
+  last_config_push_at: number | null;
+  config_push_error: string | null;
 }
 
 interface DiscoveredTankSlot {
@@ -1044,8 +1046,16 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                   ? t("admin.sync.lastSync", { time: new Date(syncStatus.last_sync_at).toLocaleString() })
                   : t("admin.sync.lastSyncNever")}
               </p>
+              <p className="text-text-muted">
+                {syncStatus.last_config_push_at
+                  ? t("admin.sync.configBackup", { time: new Date(syncStatus.last_config_push_at).toLocaleString() })
+                  : t("admin.sync.configBackupNever")}
+              </p>
               {syncStatus.last_error && (
                 <p className="text-accent-amber truncate">{t("admin.sync.lastError", { msg: syncStatus.last_error })}</p>
+              )}
+              {syncStatus.config_push_error && (
+                <p className="text-accent-amber truncate">{t("admin.sync.configBackupError", { msg: syncStatus.config_push_error })}</p>
               )}
             </div>
           )}

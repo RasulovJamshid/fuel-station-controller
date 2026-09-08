@@ -71,6 +71,9 @@ export const stationsApi = {
   update:    (id: string, data: unknown) => api.put(`/stations/${id}`, data),
   delete:    (id: string) => api.delete(`/stations/${id}`),
   rotateKey: (id: string) => api.post(`/stations/${id}/rotate-key`),
+  serviceConfig: (id: string) => api.get(`/stations/${id}/service-config`),
+  saveServiceConfig: (id: string, config: unknown) =>
+    api.put(`/stations/${id}/service-config`, { config }),
 };
 
 // ── Shifts ────────────────────────────────────────────────────────────────────

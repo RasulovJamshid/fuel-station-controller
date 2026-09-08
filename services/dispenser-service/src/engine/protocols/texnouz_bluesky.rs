@@ -906,7 +906,6 @@ async fn apply_command(
 
         // Stops are terminal on this site — the protocol's pause/resume
         // (0xBA/0xB3) is deliberately not exposed. Same policy as Gilbarco/AZT.
-
         DispatchCommand::Stop { byte } => {
             let Some(fp_cfg) = cfg.position_by_address(byte).cloned() else {
                 return;
@@ -1113,7 +1112,7 @@ async fn apply_command(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use site_config::NozzleConfig;
+    use site_config::{NozzleConfig, Parity, Protocol};
 
     fn fp(address_byte: u8, nozzles: &[(u8, bool)]) -> FuelingPositionConfig {
         FuelingPositionConfig {
@@ -1147,6 +1146,32 @@ mod tests {
     fn inactive_nozzles_are_not_polled() {
         let cfg = fp(0x00, &[(1, true), (2, false)]);
         assert_eq!(hose_addresses(&cfg), vec![(1, 0x01)]);
+    }
+
+    #[test]
+    fn shipped_real_config_uses_bluesky_serial_format_and_unique_hose_addresses() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("site.config.texnouz-bluesky.json");
+        let cfg = SiteConfig::load(path.to_str().expect("UTF-8 config path"))
+            .expect("valid TexnoUz BlueSky config");
+
+        assert_eq!(cfg.connection.protocol, Protocol::TexnoUzBlueSky);
+        assert_eq!(cfg.connection.baud_rate, 9_600);
+        assert_eq!(cfg.connection.parity, Parity::Even);
+        assert_eq!(cfg.connection.data_bits, 8);
+        assert_eq!(cfg.connection.stop_bits, 1);
+
+        let addresses: Vec<u8> = cfg
+            .active_positions()
+            .into_iter()
+            .flat_map(|fp| hose_addresses(fp).into_iter().map(|(_, address)| address))
+            .collect();
+        let unique: std::collections::HashSet<u8> = addresses.iter().copied().collect();
+        assert_eq!(
+            addresses.len(),
+            unique.len(),
+            "hose addresses must not overlap"
+        );
     }
 
     #[test]

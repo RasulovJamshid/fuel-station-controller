@@ -19,11 +19,11 @@
     "parity": "even",
     "data_bits": 8,
     "stop_bits": 1,
-    "response_timeout_ms": 500
+    "response_timeout_ms": 200
   },
   "polling": {
     "interval_ms": 200,
-    "offline_threshold_polls": 5,
+    "offline_threshold_polls": 2,
     "reconnect_settle_rounds": 3
   },
   "products": [
@@ -60,29 +60,33 @@
     {
       "id": "FP1",
       "label": "Side 1",
-      "address_byte": 0,
+      "address_byte": 1,
       "active": true,
       "nozzles": [
         {
           "index": 1,
+          "bluesky_hose_number": 1,
           "product_id": 3,
           "price": 11500,
           "active": true
         },
         {
           "index": 2,
+          "bluesky_hose_number": 3,
           "product_id": 6,
           "price": 16000,
           "active": true
         },
         {
           "index": 3,
+          "bluesky_hose_number": 5,
           "product_id": 5,
           "price": 11000,
           "active": true
         },
         {
           "index": 4,
+          "bluesky_hose_number": 7,
           "product_id": 4,
           "price": 17500,
           "active": true
@@ -92,29 +96,33 @@
     {
       "id": "FP2",
       "label": "Side 2",
-      "address_byte": 16,
+      "address_byte": 2,
       "active": true,
       "nozzles": [
         {
           "index": 1,
+          "bluesky_hose_number": 2,
           "product_id": 3,
           "price": 11500,
           "active": true
         },
         {
           "index": 2,
+          "bluesky_hose_number": 4,
           "product_id": 6,
           "price": 16000,
           "active": true
         },
         {
           "index": 3,
+          "bluesky_hose_number": 6,
           "product_id": 5,
           "price": 11000,
           "active": true
         },
         {
           "index": 4,
+          "bluesky_hose_number": 8,
           "product_id": 4,
           "price": 17500,
           "active": true
@@ -124,29 +132,33 @@
     {
       "id": "FP11",
       "label": "Side 11",
-      "address_byte": 32,
+      "address_byte": 11,
       "active": true,
       "nozzles": [
         {
           "index": 1,
+          "bluesky_hose_number": 11,
           "product_id": 3,
           "price": 11500,
           "active": true
         },
         {
           "index": 2,
+          "bluesky_hose_number": 13,
           "product_id": 6,
           "price": 16000,
           "active": true
         },
         {
           "index": 3,
+          "bluesky_hose_number": 15,
           "product_id": 5,
           "price": 11000,
           "active": true
         },
         {
           "index": 4,
+          "bluesky_hose_number": 17,
           "product_id": 4,
           "price": 17500,
           "active": true
@@ -156,29 +168,33 @@
     {
       "id": "FP12",
       "label": "Side 12",
-      "address_byte": 48,
+      "address_byte": 12,
       "active": true,
       "nozzles": [
         {
           "index": 1,
+          "bluesky_hose_number": 12,
           "product_id": 3,
           "price": 11500,
           "active": true
         },
         {
           "index": 2,
+          "bluesky_hose_number": 14,
           "product_id": 6,
           "price": 16000,
           "active": true
         },
         {
           "index": 3,
+          "bluesky_hose_number": 16,
           "product_id": 5,
           "price": 11000,
           "active": true
         },
         {
           "index": 4,
+          "bluesky_hose_number": 18,
           "product_id": 4,
           "price": 17500,
           "active": true
@@ -188,29 +204,33 @@
     {
       "id": "FP21",
       "label": "Side 21",
-      "address_byte": 64,
+      "address_byte": 21,
       "active": true,
       "nozzles": [
         {
           "index": 1,
+          "bluesky_hose_number": 21,
           "product_id": 3,
           "price": 11500,
           "active": true
         },
         {
           "index": 2,
+          "bluesky_hose_number": 23,
           "product_id": 6,
           "price": 16000,
           "active": true
         },
         {
           "index": 3,
+          "bluesky_hose_number": 25,
           "product_id": 5,
           "price": 11000,
           "active": true
         },
         {
           "index": 4,
+          "bluesky_hose_number": 27,
           "product_id": 4,
           "price": 17500,
           "active": true
@@ -220,29 +240,33 @@
     {
       "id": "FP22",
       "label": "Side 22",
-      "address_byte": 80,
+      "address_byte": 22,
       "active": true,
       "nozzles": [
         {
           "index": 1,
+          "bluesky_hose_number": 22,
           "product_id": 3,
           "price": 11500,
           "active": true
         },
         {
           "index": 2,
+          "bluesky_hose_number": 24,
           "product_id": 6,
           "price": 16000,
           "active": true
         },
         {
           "index": 3,
+          "bluesky_hose_number": 26,
           "product_id": 5,
           "price": 11000,
           "active": true
         },
         {
           "index": 4,
+          "bluesky_hose_number": 28,
           "product_id": 4,
           "price": 17500,
           "active": true

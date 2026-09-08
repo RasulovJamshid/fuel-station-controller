@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Shift, Transaction } from "../../types/api";
+import { printHtmlDocument } from "../../lib/printDocument";
 
 const fmtL = new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 1 });
 const fmtSum = new Intl.NumberFormat("uz-UZ");
@@ -10,13 +11,18 @@ const SHIFT_PRINT_STYLE_ID = "azs-shift-print-style";
 const SHIFT_PRINT_CSS = `
   #${SHIFT_PRINT_ROOT_ID} { display: none; }
   @media print {
+    html, body {
+      height: auto !important;
+      overflow: visible !important;
+      background: #fff !important;
+    }
     body > *:not(#${SHIFT_PRINT_ROOT_ID}) { display: none !important; }
     #${SHIFT_PRINT_ROOT_ID} {
       display: block !important;
-      position: fixed;
-      inset: 0;
+      position: static;
+      width: 100%;
+      min-height: 0;
       background: #fff;
-      z-index: 999999;
       padding: 12mm 10mm;
       font-family: Arial, sans-serif;
       font-size: 11px;
@@ -93,7 +99,7 @@ function buildShiftPrintHtml(
       </table>
     </div>` : "";
 
-  const byFuelHtml = shift.status === "ACTIVE" && productTotals && productTotals.length > 0 ? `
+  const byFuelHtml = productTotals && productTotals.length > 0 ? `
     <div class="section">
       <h2>${t("shiftReport.byFuelType")}</h2>
       <table>
@@ -144,7 +150,17 @@ function buildShiftPrintHtml(
   `;
 }
 
-export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; onViewTransactions?: (shiftId: string) => void }) {
+export function ShiftReportPanel({
+  shift,
+  onViewTransactions,
+  compact = false,
+  onToggleDetails,
+}: {
+  shift: Shift;
+  onViewTransactions?: (shiftId: string) => void;
+  compact?: boolean;
+  onToggleDetails?: () => void;
+}) {
   const { t } = useTranslation();
   const durationMs = (shift.ended_at ?? Date.now()) - shift.started_at;
   const durationHrs = (durationMs / 3_600_000).toFixed(1);
@@ -154,6 +170,20 @@ export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; 
   const [productTotals, setProductTotals] = useState<{name: string; volume: number; amount: number; count: number}[] | null>(null);
 
   useEffect(() => {
+    // The service now computes the grade breakdown for every shift, open or
+    // closed. Only fall back to aggregating transactions client-side when
+    // talking to a service that predates `product_totals`.
+    if (shift.product_totals && shift.product_totals.length > 0) {
+      setProductTotals(
+        shift.product_totals.map((pt) => ({
+          name: pt.product_name,
+          volume: pt.total_volume,
+          amount: pt.total_amount,
+          count: pt.transactions_count,
+        })),
+      );
+      return;
+    }
     if (shift.status !== "ACTIVE") {
       setProductTotals([]);
       return;
@@ -191,115 +221,98 @@ export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; 
       }
     }
     load();
-  }, [shift.id, shift.status]);
+  }, [shift.id, shift.status, shift.product_totals]);
 
-  const handlePrint = useCallback(() => {
-    const existing = document.getElementById(SHIFT_PRINT_ROOT_ID);
-    existing?.remove();
-
-    const root = document.createElement("div");
-    root.id = SHIFT_PRINT_ROOT_ID;
-    root.innerHTML = buildShiftPrintHtml(shift, productTotals, t);
-    document.body.appendChild(root);
-
-    const existingStyle = document.getElementById(SHIFT_PRINT_STYLE_ID);
-    existingStyle?.remove();
-
-    const styleEl = document.createElement("style");
-    styleEl.id = SHIFT_PRINT_STYLE_ID;
-    styleEl.textContent = SHIFT_PRINT_CSS;
-    document.head.appendChild(styleEl);
-
-    let cleaned = false;
-    const cleanup = () => {
-      if (cleaned) return;
-      cleaned = true;
-      document.getElementById(SHIFT_PRINT_ROOT_ID)?.remove();
-      document.getElementById(SHIFT_PRINT_STYLE_ID)?.remove();
-      window.removeEventListener("afterprint", cleanup);
-      window.removeEventListener("focus", onFocus);
-    };
-    const onFocus = () => window.setTimeout(cleanup, 0);
-
-    window.addEventListener("afterprint", cleanup, { once: true });
-    window.addEventListener("focus", onFocus, { once: true });
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        window.print();
-        window.setTimeout(cleanup, 400);
-      });
+  const handlePrint = useCallback(async () => {
+    await printHtmlDocument({
+      rootId: SHIFT_PRINT_ROOT_ID,
+      styleId: SHIFT_PRINT_STYLE_ID,
+      html: buildShiftPrintHtml(shift, productTotals, t),
+      css: SHIFT_PRINT_CSS,
     });
   }, [shift, productTotals, t]);
 
   return (
-    <div className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-5 shadow-card backdrop-blur-sm">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-lg font-bold text-text-primary">{shift.operator_name}</div>
-          <div className="text-sm font-medium text-text-secondary">
+    <div className={`overflow-hidden bg-bg-card ${onToggleDetails ? "" : "rounded-lg border border-border-primary/70"}`}>
+      <div className={`flex flex-wrap items-start justify-between gap-3 px-3 ${compact ? "py-2.5" : "border-b border-border-primary/60 py-3"}`}>
+        <div className="min-w-0">
+          <div className={`${compact ? "text-sm" : "text-base"} truncate font-semibold text-text-primary`}>{shift.operator_name}</div>
+          <div className="mt-0.5 text-xs text-text-secondary">
             {shift.shift_name ?? t("shiftReport.shiftFallback")}
             {shift.scheduled_start && shift.scheduled_end
               ? ` · ${shift.scheduled_start}–${shift.scheduled_end}`
               : ""}{" "}
             · {durationHrs} {t("shiftReport.hours")}
           </div>
-          <div className="mt-1 text-sm text-text-muted">
+          <div className="mt-0.5 text-xs text-text-muted">
             {startStr} — {endStr}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            onClick={() => handlePrint()}
-            className="rounded-lg border border-border-primary bg-bg-secondary px-3 py-1.5 text-sm font-semibold text-text-primary hover:bg-bg-tertiary"
+            onClick={() => void handlePrint()}
+            className="rounded border border-border-primary/60 bg-bg-primary px-2.5 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
           >
             {t("shiftReport.print")}
           </button>
           <span
-            className={`rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
+            className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-medium ${
               shift.status === "ACTIVE"
-                ? "border-accent-emerald/40 bg-accent-emerald/15 text-accent-emerald"
-                : "border-border-secondary bg-bg-secondary text-text-secondary"
+                ? "border-accent-emerald/45 text-accent-emerald"
+                : "border-border-primary text-text-secondary"
             }`}
           >
+            <span className={`h-1.5 w-1.5 rounded-full ${shift.status === "ACTIVE" ? "bg-accent-emerald" : "bg-text-muted"}`} />
             {t(`shiftStatus.${shift.status}`)}
           </span>
+          {onToggleDetails ? (
+            <button
+              type="button"
+              onClick={onToggleDetails}
+              aria-expanded={!compact}
+              className="rounded border border-border-primary/60 bg-bg-primary px-2.5 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
+            >
+              {compact ? t("shiftReport.showDetails") : t("shiftReport.hideDetails")}
+              <span className="ml-1.5" aria-hidden="true">{compact ? "▾" : "▴"}</span>
+            </button>
+          ) : null}
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-border-primary/60 bg-bg-secondary/60 p-4 transition-colors hover:bg-bg-tertiary/60">
-          <div className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">{t("shiftReport.transactions")}</div>
-          <div className="mt-1 font-mono text-2xl font-bold text-text-primary">
+      <div className={`grid grid-cols-3 divide-x divide-border-primary/50 bg-bg-secondary/25 ${compact ? "border-t border-border-primary/40" : "border-b border-border-primary/60"}`}>
+        <div className="min-w-0 px-3 py-2">
+          <div className="truncate text-[10px] font-medium text-text-muted">{t("shiftReport.transactions")}</div>
+          <div className="mt-0.5 truncate font-mono text-sm font-semibold text-text-primary">
             {shift.total_transactions}
           </div>
         </div>
-        <div className="rounded-xl border border-border-primary/60 bg-bg-secondary/60 p-4 transition-colors hover:bg-bg-tertiary/60">
-          <div className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">{t("shiftReport.volume")}</div>
-          <div className="mt-1 font-mono text-2xl font-bold text-text-primary">
+        <div className="min-w-0 px-3 py-2">
+          <div className="truncate text-[10px] font-medium text-text-muted">{t("shiftReport.volume")}</div>
+          <div className="mt-0.5 truncate font-mono text-sm font-semibold text-accent-blue">
             {fmtL.format(shift.total_volume)} L
           </div>
         </div>
-        <div className="rounded-xl border border-border-primary/60 bg-bg-secondary/60 p-4 transition-colors hover:bg-bg-tertiary/60">
-          <div className="text-sm font-semibold uppercase tracking-wide text-text-tertiary">{t("shiftReport.revenue")}</div>
-          <div className="mt-1 font-mono text-2xl font-bold text-text-primary">
+        <div className="min-w-0 px-3 py-2">
+          <div className="truncate text-[10px] font-medium text-text-muted">{t("shiftReport.revenue")}</div>
+          <div className="mt-0.5 truncate font-mono text-sm font-semibold text-accent-amber">
             {fmtSum.format(shift.total_amount)} {t("shiftReport.currency")}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {!compact ? <div className="space-y-4 p-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {shift.position_totals.length > 0 ? (
           <div>
-            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-text-muted">
+            <div className="mb-2 text-xs font-semibold text-text-muted">
               {t("shiftReport.byDispenser")}
             </div>
-            <div className="space-y-1.5">
+            <div className="overflow-hidden rounded border border-border-primary/50">
               {shift.position_totals.map((pt) => (
                 <div
                   key={pt.fp_id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border-primary/30 bg-bg-tertiary/40 px-3 py-2.5 transition-colors hover:bg-bg-tertiary/70"
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-border-primary/40 px-3 py-2 last:border-b-0"
                 >
                   <span className="text-sm font-semibold text-text-primary">{pt.label}</span>
                   <div className="flex flex-wrap gap-4 font-mono text-sm font-medium text-text-tertiary">
@@ -313,16 +326,16 @@ export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; 
           </div>
         ) : null}
 
-        {shift.status === "ACTIVE" && productTotals && productTotals.length > 0 ? (
+        {productTotals && productTotals.length > 0 ? (
           <div>
-            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-text-muted">
+            <div className="mb-2 text-xs font-semibold text-text-muted">
               {t("shiftReport.byFuelType")}
             </div>
-            <div className="space-y-1.5">
+            <div className="overflow-hidden rounded border border-border-primary/50">
               {productTotals.map((pt) => (
                 <div
                   key={pt.name}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border-primary/30 bg-bg-tertiary/40 px-3 py-2.5 transition-colors hover:bg-bg-tertiary/70"
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-border-primary/40 px-3 py-2 last:border-b-0"
                 >
                   <span className="text-sm font-semibold text-text-primary">{pt.name}</span>
                   <div className="flex flex-wrap gap-4 font-mono text-sm font-medium text-text-tertiary">
@@ -337,9 +350,69 @@ export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; 
         ) : null}
       </div>
 
+      {(shift.nozzle_totalizers?.length ?? 0) > 0 ? (
+        <div>
+          <div className="mb-2 text-xs font-semibold text-text-muted">
+            {t("shiftReport.meterReadings")}
+          </div>
+          <div className="overflow-x-auto rounded border border-border-primary/50">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="bg-bg-secondary text-xs text-text-muted">
+                  <th className="px-3 py-2 text-left font-semibold">{t("shiftReport.nozzle")}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{t("shiftReport.meterOpen")}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{t("shiftReport.meterClose")}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{t("shiftReport.metered")}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{t("shiftReport.recorded")}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{t("shiftReport.variance")}</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono tabular-nums">
+                {shift.nozzle_totalizers!.map((nt) => {
+                  // Rounding in the meter and in the sale figures makes sub-litre
+                  // differences meaningless; only flag a real discrepancy.
+                  const off = nt.variance_volume != null && Math.abs(nt.variance_volume) >= 0.5;
+                  return (
+                    <tr
+                      key={`${nt.fp_id}-${nt.nozzle_index}`}
+                      className="border-t border-border-primary/20"
+                    >
+                      <td className="px-3 py-2 font-sans font-semibold text-text-primary">
+                        {nt.label || nt.fp_id} · {t("shiftReport.nozzleShort")}{nt.nozzle_index}
+                        {nt.product_name ? (
+                          <span className="ml-2 font-normal text-text-muted">{nt.product_name}</span>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2 text-right text-text-tertiary">
+                        {nt.open_volume != null ? fmtL.format(nt.open_volume) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right text-text-tertiary">
+                        {nt.close_volume != null ? fmtL.format(nt.close_volume) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right text-accent-blue">
+                        {nt.dispensed_volume != null ? fmtL.format(nt.dispensed_volume) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right text-accent-emerald">
+                        {fmtL.format(nt.recorded_volume)}
+                      </td>
+                      <td
+                        className={`px-3 py-2 text-right font-bold ${off ? "text-accent-red" : "text-text-muted"}`}
+                      >
+                        {nt.variance_volume != null ? fmtL.format(nt.variance_volume) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-1.5 text-xs text-text-muted">{t("shiftReport.meterHint")}</p>
+        </div>
+      ) : null}
+
       {shift.notes ? (
-        <div className="rounded-xl border border-border-primary/40 bg-bg-secondary/50 px-4 py-3">
-          <div className="text-xs font-bold uppercase tracking-wider text-text-muted">
+        <div className="border-l-2 border-border-primary bg-bg-secondary/25 px-3 py-2">
+          <div className="text-xs font-semibold text-text-muted">
             {t("shiftReport.notes")}
           </div>
           <p className="mt-1 text-sm text-text-secondary">{shift.notes}</p>
@@ -347,7 +420,7 @@ export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; 
       ) : null}
 
       {onViewTransactions && (
-        <div className="flex justify-end">
+        <div className="flex justify-end border-t border-border-primary/50 pt-3">
           <button
             type="button"
             onClick={() => onViewTransactions(shift.id)}
@@ -357,6 +430,7 @@ export function ShiftReportPanel({ shift, onViewTransactions }: { shift: Shift; 
           </button>
         </div>
       )}
+      </div> : null}
     </div>
   );
 }

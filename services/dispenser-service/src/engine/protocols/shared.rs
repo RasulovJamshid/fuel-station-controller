@@ -311,6 +311,8 @@ mod tests {
                 status: ShiftStatus::Active,
                 notes: None,
                 position_totals: Vec::new(),
+                product_totals: Vec::new(),
+                nozzle_totalizers: Vec::new(),
             },
         )
         .await

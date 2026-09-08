@@ -103,20 +103,20 @@ export function Header({ shift, onOpenWorkspace }: HeaderProps) {
   const stationName = siteName && siteName !== "AZS" ? siteName : "Bo'stonliq AYOQSH";
 
   const brandBlock = (
-    <div className="flex min-w-0 items-center gap-3 pr-3 md:pr-5 md:border-r border-border-primary/50">
-      <div className={`flex shrink-0 items-center justify-center ${smallScreen ? "h-10" : "h-10"}`} aria-hidden>
+    <div className="flex min-w-0 items-center gap-2 border-border-primary/50 pr-2 md:border-r md:pr-3">
+      <div className="flex h-9 w-7 shrink-0 items-center justify-center overflow-visible" aria-hidden>
         <img
           src={logoIcon}
           alt="Uzbekneftgaz"
-          className="h-full w-auto object-contain drop-shadow-sm animate-logo-spin-y"
+          className="block max-h-full max-w-full object-contain animate-logo-spin-y"
           draggable={false}
         />
       </div>
-      <div className="min-w-0 flex flex-col justify-center leading-tight gap-px">
-        <p className={`truncate font-black uppercase tracking-[0.35em] text-[#F47F1F] drop-shadow-sm ${smallScreen ? "text-[16px]" : "text-[17px]"}`}>
+      <div className="flex min-w-0 flex-col justify-center leading-tight">
+        <p className={`truncate font-bold uppercase tracking-[0.16em] text-[#F47F1F] ${smallScreen ? "text-sm" : "text-[15px]"}`}>
           UZBEKNEFTEGAZ
         </p>
-        <p className={`truncate font-semibold text-[#3C82B8] ${smallScreen ? "text-[12px]" : "text-[13px]"}`}>
+        <p className={`truncate font-medium text-[#3C82B8] ${smallScreen ? "text-[11px]" : "text-xs"}`}>
           {stationName}
         </p>
       </div>
@@ -137,8 +137,8 @@ export function Header({ shift, onOpenWorkspace }: HeaderProps) {
     />
   );
 
-const shiftInfo = shiftEnabled ? (
-    <div className="flex items-center gap-2 rounded bg-bg-secondary/30 border border-border-primary/30 px-2.5 py-1.5 text-xs">
+  const shiftInfo = shiftEnabled ? (
+    <div className="flex items-center gap-2 rounded-md border border-border-primary/50 bg-bg-primary px-2.5 py-1.5 text-xs">
       <div className="flex items-center gap-1.5 text-text-secondary">
         <User className="h-4 w-4 opacity-70" />
         {shift.currentShift ? (
@@ -155,7 +155,7 @@ const shiftInfo = shiftEnabled ? (
       </span>
       <button
         type="button"
-        className="ml-1 rounded bg-bg-tertiary/50 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
+        className="ml-1 rounded border border-border-primary/60 bg-bg-secondary px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/40"
         onClick={() => shift.onHandover()}
       >
         {t("header.swap")}
@@ -167,7 +167,11 @@ const shiftInfo = shiftEnabled ? (
     <button
       type="button"
       title={t("header.emergencyTitle")}
-      className="inline-flex items-center justify-center gap-1.5 rounded-md bg-accent-red px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-text-inverse shadow-sm transition hover:bg-accent-red-light"
+      className={`inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-red/40 ${
+        eStopSummary.active > 0
+          ? "border-accent-red bg-accent-red text-white hover:bg-accent-red-light"
+          : "border-accent-red/45 bg-bg-primary text-accent-red-light hover:border-accent-red/70 hover:bg-accent-red/10"
+      }`}
       onClick={() => setEStopConfirmOpen(true)}
     >
       <AlertTriangle className="h-4 w-4" aria-hidden />
@@ -177,7 +181,7 @@ const shiftInfo = shiftEnabled ? (
 
   return (
     <>
-    <header className="sticky top-0 z-30 shrink-0 border-b border-border-primary bg-bg-header/98 backdrop-blur-md">
+    <header className="sticky top-0 z-30 shrink-0 border-b border-border-primary bg-bg-header">
       {shiftEnabled ? (
         <ShiftWarningBanner
           minutesRemaining={shift.warningMinutes}

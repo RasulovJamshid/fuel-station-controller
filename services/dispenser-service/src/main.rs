@@ -4,6 +4,7 @@ mod config;
 mod db;
 mod engine;
 mod scan;
+mod price_scheduler;
 mod shifts;
 mod sync;
 
@@ -190,7 +191,10 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
     let tank_levels: atg::TankLevels =
         Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 
-    let shifts = Arc::new(ShiftCoordinator::new(pool.clone(), cfg_for_shifts.clone()));
+    let shifts = Arc::new(
+        ShiftCoordinator::new(pool.clone(), cfg_for_shifts.clone())
+            .with_runtimes(runtimes.clone()),
+    );
     shifts.restore().await?;
     // Recover shifts closed locally whose CLOSED state never reached the backend (so they are
     // stuck ACTIVE on the server admin). Idempotent + self-limiting; drains via the sync worker.
@@ -320,6 +324,10 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
         sync_status,
         tank_levels,
     };
+
+    // Applies future-dated price changes; shares AppState so a scheduled change
+    // goes through the same validate/persist/dispatch path as a manual one.
+    price_scheduler::spawn(state.clone());
 
     let app = router(state);
     let addr = format!("127.0.0.1:{}", port);

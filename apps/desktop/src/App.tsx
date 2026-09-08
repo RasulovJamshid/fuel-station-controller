@@ -25,8 +25,9 @@ import {
   useStatusPoll,
 } from "./hooks/useServiceEvents";
 import { useShift } from "./hooks/useShift";
-import { refreshFpStatus, waitForPreAuthorized } from "./simStatusRefresh";
+import { refreshFpStatus, waitForFpStopResult, waitForPreAuthorized } from "./simStatusRefresh";
 import { useAppStore } from "./store";
+import { pausedInfo } from "./types/api";
 import type { FpState, NozzleSnapshot } from "./types/api";
 
 function statusTag(raw: FpState["status"]): string {
@@ -36,7 +37,7 @@ function statusTag(raw: FpState["status"]): string {
 
 const WORKSPACE_TAB_IDS: WorkspaceTabId[] = ["dispensers", "shift", "reservoirs", "totalizer", "history", "admin"];
 const SELECTED_DISPENSER_FRAME_CLASS =
-  "bg-accent-blue/10 ring-[3px] ring-accent-blue ring-offset-2 ring-offset-bg-primary shadow-[0_0_0_1px_rgb(var(--color-accent-blue)/0.2),0_10px_24px_-18px_rgb(var(--color-accent-blue)/0.7)]";
+  "ring-2 ring-accent-blue/90 ring-offset-2 ring-offset-bg-primary shadow-[0_2px_8px_rgb(var(--color-accent-blue)/0.18)]";
 
 export default function App() {
   const { t } = useTranslation();
@@ -141,7 +142,6 @@ export default function App() {
   }, [siteSnapshot]);
 
   const defaultAuthMode = siteSnapshot?.default_auth_mode ?? "preauth";
-  const useStopMode = siteSnapshot?.use_stop_mode ?? false;
   const useCancelMode = siteSnapshot?.use_cancel_mode ?? false;
   // Terminal-stop protocols: every stop ends the sale (no pause/continue), and
   // stopped sales are closed by the service poll loop via dismiss/ResetLane —
@@ -277,12 +277,18 @@ export default function App() {
       try {
         setInvokeError(null);
         await invoke("stop_dispenser", { fpId });
-        const rows = await invoke<import("./types/api").FpState[]>("get_all_status");
+        await waitForFpStopResult(fpId, fetchAllStatus, { timeoutMs: 4000 });
+        const rows = await fetchAllStatus();
         setStates(rows);
-        const stoppedTxId = rows.find((r) => r.fp_id === fpId)?.stopped_tx_id;
+        const lane = rows.find((row) => row.fp_id === fpId);
+        const stoppedTxId = lane ? pausedInfo(lane)?.stopped_tx_id : null;
         if (stoppedTxId) {
           await invoke("close_stopped_transaction", { fpId, stoppedTxId });
-          const updated = await invoke<import("./types/api").FpState[]>("get_all_status");
+          const updated = await fetchAllStatus();
+          setStates(updated);
+        } else if (lane && statusTag(lane.status) === "DONE") {
+          await invoke("dismiss_sale", { fpId });
+          const updated = await fetchAllStatus();
           setStates(updated);
         }
       } catch (e) {
@@ -291,71 +297,7 @@ export default function App() {
         console.error("cancel_fill failed", e);
       }
     },
-    [setInvokeError, setStates],
-  );
-
-  const onResumeFill = useCallback(
-    async (fpId: string, stoppedTxId: string) => {
-      const { invoke } = await import("@tauri-apps/api/core");
-      try {
-        setInvokeError(null);
-        await invoke("resume_fill", { fpId, stoppedTxId });
-        if (useAppStore.getState().simOnline) {
-          const nozzles = nozzlesByFp.get(fpId) ?? [];
-          const active = nozzles.filter((n) => n.active);
-          const n = active.length === 1 ? active[0] : undefined;
-          try {
-            const payload: Record<string, unknown> = { fpId };
-            if (n) {
-              payload.nozzle = n.index;
-              payload.product = n.product_id;
-            }
-            await invoke("sim_nozzle_up", payload);
-          } catch (simErr) {
-            console.warn("sim_nozzle_up after resume (hose-in-tank sim kick)", simErr);
-          }
-        }
-        const rows = await invoke<import("./types/api").FpState[]>("get_all_status");
-        setStates(rows);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setInvokeError(msg);
-        console.error("resume_fill failed", e);
-      }
-    },
-    [setInvokeError, setStates, nozzlesByFp],
-  );
-
-  const onContinueFill = useCallback(
-    async (fpId: string, stoppedTxId: string) => {
-      const { invoke } = await import("@tauri-apps/api/core");
-      try {
-        setInvokeError(null);
-        await invoke("continue_fill", { fpId, stoppedTxId });
-        if (useAppStore.getState().simOnline) {
-          const nozzles = nozzlesByFp.get(fpId) ?? [];
-          const active = nozzles.filter((n) => n.active);
-          const n = active.length === 1 ? active[0] : undefined;
-          try {
-            const payload: Record<string, unknown> = { fpId };
-            if (n) {
-              payload.nozzle = n.index;
-              payload.product = n.product_id;
-            }
-            await invoke("sim_nozzle_up", payload);
-          } catch (simErr) {
-            console.warn("sim_nozzle_up after continue (lift manually if needed)", simErr);
-          }
-        }
-        const rows = await invoke<import("./types/api").FpState[]>("get_all_status");
-        setStates(rows);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setInvokeError(msg);
-        console.error("continue_fill failed", e);
-      }
-    },
-    [setInvokeError, setStates, nozzlesByFp],
+    [fetchAllStatus, setInvokeError, setStates],
   );
 
   const onCloseStopped = useCallback(
@@ -656,12 +598,9 @@ export default function App() {
                   onCancelPreAuth={onCancelPreAuth}
                   onStop={onStop}
                   onCancel={onCancel}
-                  onResumeFill={onResumeFill}
-                  onContinueFill={onContinueFill}
                   onCloseStopped={onCloseStopped}
                   shiftRequired={shiftRequired}
                   onStartShift={openStartShift}
-                  useStopMode={useStopMode}
                   useCancelMode={useCancelMode}
                   gilbarcoMode={gilbarcoMode}
                 />
@@ -698,7 +637,7 @@ export default function App() {
                       ref={(el) => setDispenserRef(s.fp_id, el)}
                       tabIndex={activeDispenserFpId === s.fp_id ? 0 : -1}
                       data-dispenser-focusable="true"
-                      className={`relative rounded-xl outline-none transition-[box-shadow] duration-150 ${
+                      className={`relative rounded-lg outline-none transition-[box-shadow] duration-150 ${
                         activeDispenserFpId === s.fp_id
                           ? SELECTED_DISPENSER_FRAME_CLASS
                           : ""
@@ -707,9 +646,6 @@ export default function App() {
                       onClick={() => setActiveDispenserFpId(s.fp_id)}
                       onKeyDown={(e) => onDispenserKeyDown(s.fp_id, e)}
                     >
-                      {activeDispenserFpId === s.fp_id ? (
-                        <div className="pointer-events-none absolute inset-x-4 top-0 z-20 h-1 rounded-b-full bg-accent-blue shadow-[0_1px_4px_rgb(var(--color-accent-blue)/0.45)]" aria-hidden />
-                      ) : null}
                       <DispenserRow
                         state={s}
                         fpNozzles={nozzlesByFp.get(s.fp_id) ?? []}
@@ -721,13 +657,10 @@ export default function App() {
                         onCancelPreAuth={onCancelPreAuth}
                         onStop={onStop}
                         onCancel={onCancel}
-                        onResumeFill={onResumeFill}
-                        onContinueFill={onContinueFill}
                         onCloseStopped={onCloseStopped}
                         onDismissSale={onDismissSale}
                         shiftRequired={shiftRequired}
                         onStartShift={openStartShift}
-                        useStopMode={useStopMode}
                         useCancelMode={useCancelMode}
                         gilbarcoMode={gilbarcoMode}
                       />
@@ -772,7 +705,7 @@ export default function App() {
                             ref={(el) => setDispenserRef(s.fp_id, el)}
                             tabIndex={activeDispenserFpId === s.fp_id ? 0 : -1}
                             data-dispenser-focusable="true"
-                            className={`relative min-h-0 rounded-xl outline-none transition-[box-shadow] duration-150 ${
+                            className={`relative min-h-0 rounded-lg outline-none transition-[box-shadow] duration-150 ${
                               activeDispenserFpId === s.fp_id
                                 ? SELECTED_DISPENSER_FRAME_CLASS
                                 : ""
@@ -781,9 +714,6 @@ export default function App() {
                             onClick={() => setActiveDispenserFpId(s.fp_id)}
                             onKeyDown={(e) => onDispenserKeyDown(s.fp_id, e)}
                           >
-                            {activeDispenserFpId === s.fp_id ? (
-                              <div className="pointer-events-none absolute inset-x-4 top-0 z-20 h-1 rounded-b-full bg-accent-blue shadow-[0_1px_4px_rgb(var(--color-accent-blue)/0.45)]" aria-hidden />
-                            ) : null}
                             <DispenserCard
                               state={s}
                               fpNozzles={nozzlesByFp.get(s.fp_id) ?? []}
@@ -796,13 +726,10 @@ export default function App() {
                               onCancelPreAuth={onCancelPreAuth}
                               onStop={onStop}
                               onCancel={onCancel}
-                              onResumeFill={onResumeFill}
-                              onContinueFill={onContinueFill}
                               onCloseStopped={onCloseStopped}
                               onDismissSale={onDismissSale}
                               shiftRequired={shiftRequired}
                               onStartShift={openStartShift}
-                              useStopMode={useStopMode}
                               useCancelMode={useCancelMode}
                               gilbarcoMode={gilbarcoMode}
                             />

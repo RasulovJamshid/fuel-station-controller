@@ -59,6 +59,7 @@
 pub(super) mod azt;
 pub(super) mod gilbarco;
 pub(super) mod shared;
+pub(super) mod shelf;
 pub(super) mod texnouz_bluesky;
 pub(super) mod wayne;
 pub(super) mod wayne_state;

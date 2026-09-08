@@ -43,7 +43,7 @@ export function AdminPinModal({ open, forceChange, onSuccess, onCancel }: Props)
     >
       <form
         onSubmit={submit}
-        className="w-full max-w-sm rounded-xl border border-border-primary bg-bg-card p-6 shadow-xl"
+        className="w-full max-w-sm rounded-lg border border-border-primary bg-bg-card p-5 shadow-[0_16px_40px_rgba(0,0,0,0.35)]"
       >
         <h2 id="admin-pin-title" className="text-lg font-semibold text-text-primary">
           {t("adminPin.title")}
@@ -55,7 +55,7 @@ export function AdminPinModal({ open, forceChange, onSuccess, onCancel }: Props)
           type="password"
           inputMode="numeric"
           autoComplete="off"
-          className="mt-4 w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none"
+          className="mt-4 w-full rounded border border-border-primary bg-bg-secondary px-3 py-2 text-text-primary focus:border-border-focus focus:outline-none"
           placeholder={t("adminPin.placeholder")}
           value={pin}
           onChange={(e) => setPin(e.target.value)}
@@ -66,14 +66,14 @@ export function AdminPinModal({ open, forceChange, onSuccess, onCancel }: Props)
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary"
+            className="rounded border border-transparent px-4 py-2 text-sm text-text-secondary hover:bg-bg-secondary"
           >
             {t("adminPin.cancel")}
           </button>
           <button
             type="submit"
             disabled={loading || pin.length < 4}
-            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+            className="rounded border border-amber-500 bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
           >
             {loading ? t("adminPin.checking") : t("adminPin.unlock")}
           </button>

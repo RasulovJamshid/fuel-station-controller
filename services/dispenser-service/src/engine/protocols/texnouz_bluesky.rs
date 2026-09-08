@@ -14,9 +14,9 @@
 //!   (bit 7 clears) → start `0xC3` → poll live data `0xD9` while bit 5 is set
 //!   → bit 5 clears → read final `0xD9` → persist + shift + Done.
 //!
-//! Stops are terminal (site policy, as for Gilbarco and AZT): Stop sends `0xCA`
+//! Stops are terminal (site policy, all protocols): Stop sends `0xCA`
 //! and the close path records the partial sale. The protocol's pause/resume
-//! (`0xBA`/`0xB3`) is deliberately not wired to ContinueFill/ResumeFill.
+//! (`0xBA`/`0xB3`) is deliberately left unwired.
 //!
 //! The pump drops the link after 5 s without a request (разд. 2), so every
 //! configured hose must be visited more often than that.
@@ -906,7 +906,6 @@ async fn apply_command(
 
         // Stops are terminal on this site — the protocol's pause/resume
         // (0xBA/0xB3) is deliberately not exposed. Same policy as Gilbarco/AZT.
-        DispatchCommand::ContinueFill { .. } | DispatchCommand::ResumeFill { .. } => {}
 
         DispatchCommand::Stop { byte } => {
             let Some(fp_cfg) = cfg.position_by_address(byte).cloned() else {

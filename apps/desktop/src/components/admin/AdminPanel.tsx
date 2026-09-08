@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Eye, EyeOff } from "lucide-react";
 import type {
   AdminPriceEntry,
   AdminSettingsSnapshot,
@@ -31,14 +32,14 @@ function ToggleSwitch({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-blue ${
         checked
-          ? "border-sky-600 bg-sky-600"
-          : "border-slate-600 bg-slate-700"
+          ? "border-accent-blue bg-accent-blue"
+          : "border-border-primary bg-bg-tertiary"
       }`}
     >
       <span
-        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
           checked ? "translate-x-5" : "translate-x-0.5"
         }`}
       />
@@ -109,7 +110,7 @@ function formatPrice(n: number): string {
 
 // Shared input/select class — adapts to both light and dark themes via CSS vars.
 const inputCls =
-  "rounded-lg border border-border-primary/80 bg-bg-secondary/60 px-3 py-2 text-sm font-medium text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 transition-all shadow-inner placeholder:text-text-muted";
+  "rounded border border-border-primary/80 bg-bg-secondary px-3 py-2 text-sm font-medium text-text-primary placeholder:text-text-muted transition-colors focus:border-accent-blue focus:outline-none";
 
 function is401(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
@@ -172,6 +173,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
   const [pinNew, setPinNew] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [activeAdminSection, setActiveAdminSection] = useState("admin-prices");
   const uiScalePercent = Math.round(uiScale * 100);
 
   // ATG config state
@@ -537,36 +539,70 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
     [expireSession, setInvokeError],
   );
 
+  const adminSections = [
+    ["admin-prices", t("admin.prices.title")],
+    ["admin-products", t("admin.products.title")],
+    ["admin-operators", t("admin.operators.title")],
+    ["admin-shifts", t("admin.shiftSchedule.title")],
+    ...(settings ? [["admin-system", t("admin.settings.title")]] as const : []),
+    ["admin-display", t("admin.display.title")],
+    ["admin-sync", t("admin.sync.title")],
+    ...(atgConfig ? [["admin-atg", t("admin.atg.title")]] as const : []),
+    ["admin-security", t("admin.changePin.title")],
+  ] as const;
+
+  const goToAdminSection = (id: string) => {
+    setActiveAdminSection(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-5 text-text-primary gap-6 bg-bg-primary">
+    <div className="admin-panel flex min-h-0 flex-1 flex-col gap-4 overflow-auto bg-bg-primary p-4 text-text-primary">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-text-primary">{t("admin.title")}</h1>
+        <h1 className="text-lg font-semibold text-text-primary">{t("admin.title")}</h1>
         <button
           type="button"
           onClick={() => {
             setAdminToken(null);
             onLogout();
           }}
-          className="rounded-xl border border-border-primary/80 bg-bg-secondary/80 px-4 py-2 text-sm font-bold text-text-primary shadow-sm transition-all hover:bg-bg-tertiary hover:shadow-button"
+          className="rounded border border-border-primary/80 bg-bg-secondary px-3 py-1.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary"
         >
           {t("admin.lockAdmin")}
         </button>
       </div>
 
       {mustChangePin && (
-        <div className="rounded-xl border border-accent-amber/40 bg-accent-amber/10 px-4 py-3 text-sm font-semibold text-accent-amber-dark dark:text-accent-amber-light shadow-sm">
+        <div className="rounded border border-accent-amber/40 bg-accent-amber/10 px-4 py-2.5 text-sm font-medium text-accent-amber-dark dark:text-accent-amber-light">
           {t("admin.mustChangePinWarning")}
         </div>
       )}
       {msg && (
-        <div className="rounded-xl border border-accent-emerald/40 bg-accent-emerald/10 px-4 py-3 text-sm font-semibold text-accent-emerald-dark dark:text-accent-emerald-light shadow-sm">
+        <div className="rounded border border-accent-emerald/40 bg-accent-emerald/10 px-4 py-2.5 text-sm font-medium text-accent-emerald-dark dark:text-accent-emerald-light">
           {msg}
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-        <div className="xl:col-span-8 flex flex-col gap-6">
-          <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+      <nav className="sticky top-0 z-10 flex shrink-0 gap-1 overflow-x-auto rounded-lg border border-border-primary/70 bg-bg-secondary p-1" aria-label={t("admin.title")}>
+        {adminSections.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => goToAdminSection(id)}
+            className={`shrink-0 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeAdminSection === id
+                ? "bg-accent-blue text-white"
+                : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
+        <div className="flex flex-col gap-4 xl:col-span-8">
+          <section id="admin-prices" className="scroll-mt-14 rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
             <h2 className="text-lg font-bold text-text-primary">{t("admin.prices.title")}</h2>
             <p className="mt-1 mb-4 text-sm font-medium text-text-secondary">
               {t("admin.prices.description")}
@@ -608,7 +644,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
               type="button"
               disabled={busy}
               onClick={savePrices}
-              className="mt-4 rounded-xl border border-accent-amber/40 bg-accent-amber/15 px-5 py-2.5 text-sm font-bold tracking-wide text-accent-amber shadow-button transition-all hover:bg-accent-amber/25 hover:shadow-button-hover disabled:opacity-50"
+              className="mt-4 rounded border border-accent-blue/60 bg-accent-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:brightness-110 disabled:opacity-50"
             >
               {t("admin.prices.save")}
             </button>
@@ -625,19 +661,21 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
               ))}
             </ul>
           </section>
-          <AdminProductsSection
-            token={token}
-            onMessage={setMsg}
-            onError={handleProductsError}
-            onCatalogChanged={loadAll}
-            liftedNozzles={liftedNozzles}
-            productPriceMap={productPriceMap}
-          />
+          <div id="admin-products" className="scroll-mt-14">
+            <AdminProductsSection
+              token={token}
+              onMessage={setMsg}
+              onError={handleProductsError}
+              onCatalogChanged={loadAll}
+              liftedNozzles={liftedNozzles}
+              productPriceMap={productPriceMap}
+            />
+          </div>
         </div>
 
-      <div className="xl:col-span-4 flex flex-col gap-6">
+      <div className="flex flex-col gap-4 xl:col-span-4">
 
-        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+        <section id="admin-operators" className="scroll-mt-14 rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
           <h2 className="mb-4 text-lg font-bold text-text-primary">{t("admin.operators.title")}</h2>
           <ul className="mb-4 grid gap-3 grid-cols-1">
             {operators.map((op) => (
@@ -647,7 +685,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
               >
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-text-primary">{op.name}</span>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${op.active ? "border-accent-emerald/40 bg-accent-emerald/15 text-accent-emerald" : "border-border-secondary bg-bg-secondary text-text-secondary"}`}>
+                  <span className={`rounded border px-2 py-0.5 text-[10px] font-medium ${op.active ? "border-accent-emerald/45 text-accent-emerald" : "border-border-secondary text-text-secondary"}`}>
                     {op.active ? t("admin.operators.active") : t("admin.operators.inactive")}
                   </span>
                 </div>
@@ -721,7 +759,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
         </section>
 
 
-        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+        <section id="admin-shifts" className="scroll-mt-14 rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
           <h2 className="mb-4 text-lg font-bold text-text-primary">{t("admin.shiftSchedule.title")}</h2>
           <select
             value={shiftMode}
@@ -790,7 +828,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
         </section>
 
         {settings && (
-          <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+          <section id="admin-system" className="scroll-mt-14 rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
             <h2 className="mb-4 text-lg font-bold text-text-primary">{t("admin.settings.title")}</h2>
             <div className="grid gap-4 text-sm font-medium">
               <label className="flex flex-col gap-1.5 text-text-secondary">
@@ -861,7 +899,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
           </section>
         )}
 
-        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+        <section id="admin-display" className="scroll-mt-14 rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
           <h2 className="mb-1 text-lg font-bold text-text-primary">{t("admin.display.title")}</h2>
           <p className="mb-5 text-sm font-medium text-text-muted">
             {t("admin.display.description")}
@@ -901,7 +939,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                     {t("admin.display.uiScaleDesc")}
                   </p>
                 </div>
-                <span className="shrink-0 rounded-lg border border-accent-blue/35 bg-accent-blue/10 px-3 py-1 font-mono text-sm font-black tabular-nums text-accent-blue">
+                <span className="shrink-0 rounded border border-accent-blue/45 px-3 py-1 font-mono text-sm font-semibold tabular-nums text-accent-blue">
                   {uiScalePercent}%
                 </span>
               </div>
@@ -927,7 +965,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                     onClick={() => setUiScale(value / 100)}
                     className={`rounded-lg border px-2 py-2 font-mono text-xs font-black tabular-nums transition-all ${
                       uiScalePercent === value
-                        ? "border-accent-blue bg-accent-blue/15 text-accent-blue ring-1 ring-accent-blue/30"
+                        ? "border-accent-blue text-accent-blue"
                         : "border-border-primary bg-bg-card/50 text-text-secondary hover:bg-bg-tertiary/40 hover:text-text-primary"
                     }`}
                   >
@@ -949,7 +987,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                   onClick={() => setDispenserLayout("modern")}
                   className={`rounded-lg border px-3 py-2 text-left transition-all ${
                     dispenserLayout === "modern"
-                      ? "border-accent-blue bg-accent-blue/12 text-text-primary ring-1 ring-accent-blue/25"
+                      ? "border-accent-blue text-text-primary"
                       : "border-border-primary bg-bg-card/50 text-text-secondary hover:bg-bg-tertiary/40"
                   }`}
                 >
@@ -961,7 +999,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                   onClick={() => setDispenserLayout("classic")}
                   className={`rounded-lg border px-3 py-2 text-left transition-all ${
                     dispenserLayout === "classic"
-                      ? "border-accent-blue bg-accent-blue/12 text-text-primary ring-1 ring-accent-blue/25"
+                      ? "border-accent-blue text-text-primary"
                       : "border-border-primary bg-bg-card/50 text-text-secondary hover:bg-bg-tertiary/40"
                   }`}
                 >
@@ -973,14 +1011,14 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
           </div>
         </section>
 
-        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+        <section id="admin-sync" className="scroll-mt-14 rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
           <div className="flex items-start justify-between mb-1">
             <h2 className="text-lg font-bold text-text-primary">{t("admin.sync.title")}</h2>
             {syncStatus && (
-              <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+              <span className={`flex items-center gap-1.5 rounded border px-2.5 py-0.5 text-[10px] font-medium ${
                 syncStatus.connected
-                  ? "border-accent-emerald/40 bg-accent-emerald/15 text-accent-emerald"
-                  : "border-border-secondary bg-bg-secondary text-text-secondary"
+                  ? "border-accent-emerald/45 text-accent-emerald"
+                  : "border-border-secondary text-text-secondary"
               }`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${syncStatus.connected ? "bg-accent-emerald" : "bg-text-secondary"}`} />
                 {syncStatus.connected ? t("admin.sync.connected") : t("admin.sync.disconnected")}
@@ -1013,14 +1051,13 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
           )}
 
           {syncStatus && (
-            <div className={`mb-4 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-semibold ${
+            <div className={`mb-4 flex items-center gap-2 rounded border border-l-2 px-4 py-2.5 text-xs font-medium ${
               syncStatus.enabled
-                ? "border-accent-emerald/30 bg-accent-emerald/10 text-accent-emerald"
-                : "border-border-secondary bg-bg-secondary/40 text-text-muted"
-            }`}>
+                ? "border-border-primary border-l-accent-emerald text-text-secondary"
+                : "border-border-secondary text-text-muted"
+              }`}>
               <span className={`h-2 w-2 shrink-0 rounded-full ${syncStatus.enabled ? "bg-accent-emerald" : "bg-text-muted"}`} />
               <span>{syncStatus.enabled ? t("admin.sync.enableSync") : t("admin.sync.enableSyncDesc")}</span>
-              <span className="ml-auto font-mono text-[10px] opacity-50">enabled={syncStatus.enabled ? "true" : "false"} · site.config.json</span>
             </div>
           )}
 
@@ -1052,7 +1089,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
                   tabIndex={-1}
                 >
-                  {showApiKey ? "🙈" : "👁"}
+                  {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </label>
@@ -1118,22 +1155,22 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
             type="button"
             disabled={busy}
             onClick={saveSyncConfig}
-            className="mt-5 rounded-xl border border-accent-blue/40 bg-accent-blue/10 px-5 py-2.5 text-sm font-bold text-accent-blue shadow-sm hover:bg-accent-blue/20 transition-all disabled:opacity-50"
+            className="mt-5 rounded border border-accent-blue/60 bg-accent-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:brightness-110 disabled:opacity-50"
           >
             {t("admin.sync.save")}
           </button>
         </section>
 
         {atgConfig && (
-          <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+          <section id="admin-atg" className="scroll-mt-14 rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
             <div className="flex items-start justify-between mb-1">
               <h2 className="text-lg font-bold text-text-primary">{t("admin.atg.title")}</h2>
-              <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+              <span className={`flex items-center gap-1.5 rounded border px-2.5 py-0.5 text-[10px] font-medium ${
                 atgConfig.enabled
-                  ? "border-accent-emerald/40 bg-accent-emerald/15 text-accent-emerald"
-                  : "border-border-secondary bg-bg-secondary text-text-secondary"
+                  ? "border-accent-emerald/45 text-accent-emerald"
+                  : "border-border-secondary text-text-secondary"
               }`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${atgConfig.enabled ? "bg-accent-emerald animate-pulse" : "bg-text-secondary"}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${atgConfig.enabled ? "bg-accent-emerald" : "bg-text-secondary"}`} />
                 {atgConfig.enabled ? t("admin.atg.enabled") : t("admin.atg.disabled")}
               </span>
             </div>
@@ -1273,21 +1310,20 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
               </label>
             </div>
 
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-4 flex items-center">
               <button
                 type="button"
                 disabled={busy || !atgConfig.enabled}
                 onClick={saveAtgConfig}
-                className="rounded-xl border border-accent-blue/40 bg-accent-blue/10 px-5 py-2.5 text-sm font-bold text-accent-blue shadow-sm hover:bg-accent-blue/20 transition-all disabled:opacity-50"
+                className="rounded border border-accent-blue/60 bg-accent-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:brightness-110 disabled:opacity-50"
               >
                 {t("admin.atg.save")}
               </button>
-              <span className="font-mono text-[10px] opacity-40 text-text-muted">site.config.json</span>
             </div>
           </section>
         )}
 
-        <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
+        <section id="admin-security" className="scroll-mt-14 rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
           <h2 className="mb-4 text-lg font-bold text-text-primary">{t("admin.changePin.title")}</h2>
           <div className="flex flex-col gap-3">
             <input
@@ -1308,7 +1344,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
               type="button"
               disabled={busy}
               onClick={changePin}
-              className="mt-2 rounded-xl bg-accent-amber px-5 py-2.5 text-sm font-bold text-text-inverse shadow-button transition-all hover:brightness-110 hover:shadow-button-hover"
+              className="mt-2 rounded border border-accent-blue/60 bg-accent-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:brightness-110"
             >
               {t("admin.changePin.update")}
             </button>

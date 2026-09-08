@@ -1129,52 +1129,6 @@ async fn apply_command(
                 }
             }
         }
-        DispatchCommand::ContinueFill {
-            byte,
-            price,
-            preset,
-        } => {
-            debug!(byte, price, ?preset, "continue fill authorize");
-            let fp_cfg = match cfg.position_by_address(byte) {
-                Some(p) => p.clone(),
-                None => return,
-            };
-            let auth = authorize_initial(byte);
-            if exchange_serial(backend, &auth).is_ok() {
-                let active_nozzle = {
-                    let map = runtimes.read().await;
-                    let rt = map.get(&byte);
-                    rt.and_then(|rt| rt.state.nozzle_index).unwrap_or(1)
-                };
-                let nozzle_prices =
-                    refresh_nozzle_prices_from_db(pool, &fp_cfg, byte, runtimes).await;
-                // Send CONFIG with the remaining limit immediately after AUTH so the pump
-                // uses the correct hardware limit when the customer lifts the nozzle.
-                let _ = send_auth_pair(
-                    backend,
-                    byte,
-                    &fp_cfg,
-                    &preset,
-                    active_nozzle,
-                    price,
-                    &nozzle_prices,
-                    &cfg.connection.protocol,
-                );
-                {
-                    let mut map = runtimes.write().await;
-                    if let Some(rt) = map.get_mut(&byte) {
-                        rt.state.price = price;
-                        rt.last_preset = preset; // caps already set correctly by prepare_continue
-                        rt.mark_preauth_config_on_wire();
-                        rt.apply_authorize_sent();
-                        rt.begin_continuation_segment(&fp_cfg, cfg);
-                    }
-                }
-                broadcast_status(byte, runtimes, events).await;
-            } else {
-                warn!(byte, "continue fill: authorize frame failed");
-            }
-        }
         DispatchCommand::Stop { byte } => {
             // §8.2: mid-delivery stop requires the 0x31 pre-command first.
             let (is_delivering, has_active_session) = {
@@ -1219,7 +1173,6 @@ async fn apply_command(
                         active_shift_id,
                         active_operator_name,
                         cfg.ui.use_decel_window_on_stop,
-                        cfg.ui.use_stop_mode,
                     )
                 })
             };
@@ -1250,71 +1203,6 @@ async fn apply_command(
                 broadcast_status(byte, runtimes, events).await;
             }
         }
-        DispatchCommand::ResumeFill {
-            byte,
-            price,
-            preset,
-        } => {
-            debug!(byte, price, ?preset, "resume fill (app pause)");
-            let fp_cfg = match cfg.position_by_address(byte) {
-                Some(p) => p.clone(),
-                None => return,
-            };
-            let auth = authorize_initial(byte);
-            if exchange_serial(backend, &auth).is_ok() {
-                // Read nozzle index while we still hold no locks.
-                let active_nozzle = {
-                    let map = runtimes.read().await;
-                    let rt = map.get(&byte);
-                    rt.and_then(|rt| rt.state.nozzle_index).unwrap_or(1)
-                };
-                let nozzle_prices =
-                    refresh_nozzle_prices_from_db(pool, &fp_cfg, byte, runtimes).await;
-                // Send CONFIG with the *remaining* limit immediately after AUTH, before the
-                // first BUSY frame starts the pump counting.  The pump resets its internal
-                // counter on AUTH, so without this it would count against the old 2 L CONFIG.
-                let _ = send_auth_pair(
-                    backend,
-                    byte,
-                    &fp_cfg,
-                    &preset,
-                    active_nozzle,
-                    price,
-                    &nozzle_prices,
-                    &cfg.connection.protocol,
-                );
-                {
-                    let mut map = runtimes.write().await;
-                    if let Some(rt) = map.get_mut(&byte) {
-                        rt.state.price = price;
-                        rt.last_preset = preset; // remaining — caps already set by prepare_continue
-                        rt.mark_preauth_config_on_wire(); // config already on wire; skip deferred path
-                        rt.apply_authorize_sent();
-                        rt.begin_continuation_segment(&fp_cfg, cfg);
-                        rt.promote_continuation_delivering();
-                    }
-                }
-                let disp_by_byte: HashMap<u8, FuelingPositionConfig> = cfg
-                    .active_positions()
-                    .into_iter()
-                    .map(|fp| (fp.address_byte, fp.clone()))
-                    .collect();
-                kick_delivery_polls(
-                    byte,
-                    backend,
-                    &disp_by_byte,
-                    cfg,
-                    runtimes,
-                    events,
-                    pool,
-                    shifts,
-                    6,
-                )
-                .await;
-            } else {
-                warn!(byte, "resume fill: authorize frame failed");
-            }
-        }
         DispatchCommand::EStop => {
             // §8.2: per-address: PRE (31) → read C1 FA → ACK → STOP (30) → read C0 FA.
             for &addr in &cfg.active_addresses() {
@@ -1333,7 +1221,6 @@ async fn apply_command(
                             cfg,
                             active_shift_id.clone(),
                             active_operator_name.clone(),
-                            false,
                             false,
                         ) {
                             stopped_effects.push((fp.address_byte, fp.id.clone(), effect));

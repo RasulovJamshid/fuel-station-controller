@@ -8,12 +8,14 @@ members = [
     "crates/gilbarco",
     "crates/azt",
     "crates/texnouz-bluesky",
+    "crates/shelf-v22",
     "services/dispenser-service",
     "apps/desktop/src-tauri",
     "apps/sim-desktop/src-tauri",
     "tools/simulators/wayne-sim",
     "tools/simulators/gilbarco-sim",
     "tools/simulators/azt-sim",
+    "tools/simulators/shelf-sim",
 ]
 resolver = "2"
 

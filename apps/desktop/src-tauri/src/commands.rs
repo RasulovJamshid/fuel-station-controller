@@ -185,24 +185,6 @@ pub async fn refresh_totals(client: tauri::State<'_, ServiceClient>) -> Result<(
 }
 
 #[tauri::command]
-pub async fn continue_fill(
-    client: tauri::State<'_, ServiceClient>,
-    fp_id: String,
-    stopped_tx_id: String,
-) -> Result<(), String> {
-    client.continue_fill(fp_id, stopped_tx_id).await
-}
-
-#[tauri::command]
-pub async fn resume_fill(
-    client: tauri::State<'_, ServiceClient>,
-    fp_id: String,
-    stopped_tx_id: String,
-) -> Result<(), String> {
-    client.resume_fill(fp_id, stopped_tx_id).await
-}
-
-#[tauri::command]
 pub async fn close_stopped_transaction(
     client: tauri::State<'_, ServiceClient>,
     fp_id: String,
@@ -591,6 +573,75 @@ pub async fn admin_get_atg_config(
     client: tauri::State<'_, ServiceClient>,
 ) -> Result<serde_json::Value, String> {
     client.admin_get_atg_config().await
+}
+
+#[tauri::command]
+pub async fn list_deliveries(
+    client: tauri::State<'_, ServiceClient>,
+    product_id: Option<u8>,
+    limit: Option<i64>,
+) -> Result<Vec<types::FuelDelivery>, String> {
+    client.list_deliveries(product_id, limit).await
+}
+
+#[tauri::command]
+pub async fn create_delivery(
+    client: tauri::State<'_, ServiceClient>,
+    cmd: types::CreateDeliveryCmd,
+) -> Result<types::FuelDelivery, String> {
+    client.create_delivery(cmd).await
+}
+
+#[tauri::command]
+pub async fn wetstock_preview(
+    client: tauri::State<'_, ServiceClient>,
+    product_id: Option<u8>,
+) -> Result<Vec<types::WetstockReconciliation>, String> {
+    client.wetstock_preview(product_id).await
+}
+
+#[tauri::command]
+pub async fn wetstock_reconcile(
+    client: tauri::State<'_, ServiceClient>,
+    cmd: types::ReconcileCmd,
+) -> Result<Vec<types::WetstockReconciliation>, String> {
+    client.wetstock_reconcile(cmd).await
+}
+
+#[tauri::command]
+pub async fn list_reconciliations(
+    client: tauri::State<'_, ServiceClient>,
+    product_id: Option<u8>,
+    limit: Option<i64>,
+) -> Result<Vec<types::WetstockReconciliation>, String> {
+    client.list_reconciliations(product_id, limit).await
+}
+
+#[tauri::command]
+pub async fn admin_list_scheduled_prices(
+    client: tauri::State<'_, ServiceClient>,
+    token: String,
+    status: Option<String>,
+) -> Result<Vec<types::ScheduledPrice>, String> {
+    client.admin_list_scheduled_prices(token, status).await
+}
+
+#[tauri::command]
+pub async fn admin_schedule_price(
+    client: tauri::State<'_, ServiceClient>,
+    token: String,
+    cmd: types::CreateScheduledPriceCmd,
+) -> Result<types::ScheduledPrice, String> {
+    client.admin_schedule_price(token, cmd).await
+}
+
+#[tauri::command]
+pub async fn admin_cancel_scheduled_price(
+    client: tauri::State<'_, ServiceClient>,
+    token: String,
+    id: String,
+) -> Result<(), String> {
+    client.admin_cancel_scheduled_price(token, id).await
 }
 
 #[tauri::command]

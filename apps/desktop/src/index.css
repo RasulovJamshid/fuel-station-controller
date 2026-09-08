@@ -290,144 +290,75 @@ html.light .bg-amber-950\/50 {
   background-color: rgb(var(--color-bg-tertiary) / 0.9);
 }
 .progress-fill {
-  background: linear-gradient(
-    90deg,
-    rgb(var(--color-accent-emerald-dark)),
-    rgb(var(--color-accent-emerald-light))
-  );
-  box-shadow: 0 0 12px rgb(var(--color-accent-emerald) / 0.45);
+  background: rgb(var(--color-accent-emerald));
 }
 
 /* Single-pump card (style-ref/single-pump.png) */
 .pump-card {
   position: relative;
   isolation: isolate;
-  background: linear-gradient(
-    165deg,
-    rgb(var(--color-bg-card)) 0%,
-    rgb(var(--color-bg-secondary) / 0.85) 100%
-  );
-  border-color: rgb(var(--color-border-primary) / 0.9);
-  box-shadow:
-    0 0 0 1px rgb(var(--color-border-secondary) / 0.5),
-    0 8px 24px rgb(0 0 0 / 0.35);
+  container-name: pump-card;
+  container-type: inline-size;
+  border-radius: 0.5rem !important;
+  background: rgb(var(--color-bg-card));
+  border-color: rgb(var(--color-border-primary) / 0.72);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+}
+
+.pump-card .font-black {
+  font-weight: 700;
 }
 
 .pump-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  border-radius: inherit;
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  background: linear-gradient(
-    90deg,
-    rgb(var(--color-accent-emerald)),
-    rgb(var(--color-accent-blue)),
-    rgb(var(--color-accent-emerald-light) / 0.6)
-  );
-  opacity: 0.85;
+  content: none;
 }
 
 .pump-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: radial-gradient(
-    120% 55% at 50% -10%,
-    rgb(var(--color-accent-blue) / 0.16),
-    transparent 55%
-  );
-  opacity: 0.45;
+  content: none;
 }
 
 .pump-card--delivering::before {
-  background: linear-gradient(
-    90deg,
-    rgb(var(--color-accent-emerald-light)),
-    rgb(var(--color-accent-emerald)),
-    rgb(var(--color-accent-blue))
-  );
+  background: rgb(var(--color-accent-emerald));
 }
 
 .pump-card--preauth::before {
-  background: linear-gradient(
-    90deg,
-    rgb(var(--color-accent-amber-light)),
-    rgb(var(--color-accent-amber)),
-    rgb(var(--color-accent-blue))
-  );
+  background: rgb(var(--color-accent-amber));
 }
 
 .pump-card--paused::before {
-  background: linear-gradient(
-    90deg,
-    rgb(var(--color-accent-amber-dark)),
-    rgb(var(--color-accent-amber)),
-    rgb(var(--color-accent-amber-light) / 0.7)
-  );
+  background: rgb(var(--color-accent-red));
 }
 
 .pump-card--offline::before {
-  background: linear-gradient(
-    90deg,
-    rgb(var(--color-status-offline)),
-    rgb(var(--color-text-muted)),
-    rgb(var(--color-border-secondary))
-  );
+  background: rgb(var(--color-status-offline));
   opacity: 0.7;
 }
 
 .pump-card--done::before {
-  background: linear-gradient(
-    90deg,
-    rgb(var(--color-accent-blue)),
-    rgb(var(--color-accent-emerald)),
-    rgb(var(--color-accent-emerald-light) / 0.75)
-  );
+  background: rgb(var(--color-accent-blue));
 }
 
 .pump-card--nozzle_up::before {
-  background: linear-gradient(
-    90deg,
-    rgb(var(--color-accent-emerald-light)),
-    rgb(var(--color-accent-emerald)),
-    rgb(var(--color-accent-blue) / 0.7)
-  );
+  background: rgb(var(--color-accent-amber));
   opacity: 1;
 }
 
 .pump-nozzle-lifted-badge {
   color: white;
-  background: linear-gradient(
-    135deg,
-    rgb(var(--color-accent-amber)),
-    rgb(var(--color-accent-red))
-  );
-  box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.16),
-    0 8px 20px -12px rgb(var(--color-accent-red));
-  text-shadow: 0 1px 1px rgb(0 0 0 / 0.35);
+  background: rgb(var(--color-accent-red));
+  box-shadow: none;
+  text-shadow: none;
 }
 
 .pump-status-chip {
   border-color: rgb(var(--color-border-primary) / 0.7);
-  background: linear-gradient(
-    140deg,
-    rgb(var(--color-bg-input) / 0.72),
-    rgb(var(--color-bg-secondary) / 0.72)
-  );
+  background: rgb(var(--color-bg-input) / 0.65);
 }
 
 .pump-status-icon-frame {
   color: rgb(var(--color-text-primary));
-  background: rgb(var(--color-bg-input) / 0.72);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  background: rgb(var(--color-bg-secondary) / 0.72);
+  box-shadow: none;
 }
 
 .pump-status-chip--idle {
@@ -436,49 +367,37 @@ html.light .bg-amber-950\/50 {
 
 .pump-status-chip--nozzle_up {
   border-color: rgb(var(--color-accent-amber) / 0.85);
-  background:
-    linear-gradient(135deg, rgb(var(--color-accent-amber) / 0.24), rgb(var(--color-accent-red) / 0.12)),
-    rgb(var(--color-bg-input) / 0.68);
+  background: rgb(var(--color-accent-amber) / 0.1);
   box-shadow: inset 4px 0 0 rgb(var(--color-accent-amber));
 }
 
 .pump-status-chip--delivering {
   border-color: rgb(var(--color-accent-emerald) / 0.85);
-  background:
-    linear-gradient(135deg, rgb(var(--color-accent-emerald) / 0.22), rgb(var(--color-accent-blue) / 0.12)),
-    rgb(var(--color-bg-input) / 0.68);
+  background: rgb(var(--color-accent-emerald) / 0.1);
   box-shadow: inset 4px 0 0 rgb(var(--color-accent-emerald));
 }
 
 .pump-status-chip--preauth {
   border-color: rgb(var(--color-accent-amber) / 0.8);
-  background:
-    linear-gradient(135deg, rgb(var(--color-accent-amber) / 0.22), rgb(var(--color-bg-input) / 0.72)),
-    rgb(var(--color-bg-input) / 0.68);
+  background: rgb(var(--color-accent-amber) / 0.1);
   box-shadow: inset 4px 0 0 rgb(var(--color-accent-amber));
 }
 
 .pump-status-chip--paused {
   border-color: rgb(var(--color-accent-red) / 0.68);
-  background:
-    linear-gradient(135deg, rgb(var(--color-accent-red) / 0.18), rgb(var(--color-accent-amber) / 0.16)),
-    rgb(var(--color-bg-input) / 0.68);
+  background: rgb(var(--color-accent-red) / 0.1);
   box-shadow: inset 4px 0 0 rgb(var(--color-accent-red));
 }
 
 .pump-status-chip--done {
   border-color: rgb(var(--color-accent-blue) / 0.72);
-  background:
-    linear-gradient(135deg, rgb(var(--color-accent-blue) / 0.16), rgb(var(--color-accent-emerald) / 0.14)),
-    rgb(var(--color-bg-input) / 0.68);
+  background: rgb(var(--color-accent-blue) / 0.1);
   box-shadow: inset 4px 0 0 rgb(var(--color-accent-blue));
 }
 
 .pump-status-chip--offline {
   border-color: rgb(var(--color-status-offline) / 0.75);
-  background:
-    linear-gradient(135deg, rgb(var(--color-status-offline) / 0.22), rgb(var(--color-bg-input) / 0.6)),
-    rgb(var(--color-bg-input) / 0.68);
+  background: rgb(var(--color-status-offline) / 0.1);
   box-shadow: inset 4px 0 0 rgb(var(--color-status-offline));
 }
 
@@ -498,30 +417,24 @@ html.light .bg-amber-950\/50 {
 
 .pump-selected-product {
   border-color: rgb(var(--color-accent-emerald) / 0.68);
-  border-left-width: 6px;
-  background:
-    linear-gradient(135deg, rgb(var(--color-accent-emerald) / 0.20), rgb(var(--color-accent-blue) / 0.10)),
-    rgb(var(--color-bg-input) / 0.78);
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.05),
-    0 8px 24px -18px rgb(var(--color-accent-emerald));
+  border-left-width: 4px;
+  background: rgb(var(--color-bg-input) / 0.78);
+  box-shadow: none;
 }
 
 .pump-live-panel {
   border-color: rgb(var(--color-accent-emerald) / 0.54);
-  background:
-    linear-gradient(135deg, rgb(var(--color-accent-emerald) / 0.15), rgb(var(--color-bg-input) / 0.74)),
-    rgb(var(--color-bg-input) / 0.72);
+  background: rgb(var(--color-bg-input) / 0.72);
   box-shadow: inset 4px 0 0 rgb(var(--color-accent-emerald));
 }
 
 .pump-auth-badge {
   border: 1px solid rgb(var(--color-border-primary) / 0.9);
-  border-radius: 999px;
+  border-radius: 0.25rem;
   padding: 0.1rem 0.45rem;
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   line-height: 1.2;
 }
 
@@ -545,76 +458,45 @@ html.light .bg-amber-950\/50 {
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  border-radius: 0.6rem;
+  border-radius: 0.375rem;
   border: 1px solid rgb(var(--color-border-primary) / 0.75);
   color: rgb(var(--color-text-tertiary));
   background: rgb(var(--color-bg-input) / 0.72);
-  font-weight: 700;
-  transition: all 140ms ease;
-}
-
-.pump-mode-pill[data-mode="full"] {
-  border-color: rgb(var(--color-accent-emerald) / 0.30);
-  color: rgb(var(--color-accent-emerald));
-  background: rgb(var(--color-accent-emerald) / 0.08);
-}
-
-.pump-mode-pill[data-mode="volume"] {
-  border-color: rgb(var(--color-accent-blue) / 0.30);
-  color: rgb(var(--color-accent-blue));
-  background: rgb(var(--color-accent-blue) / 0.08);
-}
-
-.pump-mode-pill[data-mode="amount"] {
-  border-color: rgb(var(--color-accent-amber) / 0.30);
-  color: rgb(var(--color-accent-amber));
-  background: rgb(var(--color-accent-amber) / 0.08);
+  font-weight: 600;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 .pump-mode-pill:hover {
   border-color: rgb(var(--color-accent-blue) / 0.5);
   color: rgb(var(--color-text-primary));
+  background: rgb(var(--color-bg-secondary));
 }
 
 .pump-mode-pill[data-mode="full"][data-active="true"] {
-  color: white;
+  color: rgb(var(--color-accent-emerald-light));
   border-color: rgb(var(--color-accent-emerald));
-  background: rgb(var(--color-accent-emerald));
-  box-shadow:
-    inset 0 0 0 2px rgb(255 255 255 / 0.32),
-    0 0 0 2px rgb(var(--color-accent-emerald) / 0.42),
-    0 10px 22px -12px rgb(var(--color-accent-emerald));
-  filter: brightness(1.08);
+  background: rgb(var(--color-accent-emerald) / 0.14);
+  box-shadow: none;
 }
 
 .pump-mode-pill[data-mode="volume"][data-active="true"] {
-  color: white;
+  color: rgb(var(--color-accent-blue));
   border-color: rgb(var(--color-accent-blue));
-  background: rgb(var(--color-accent-blue));
-  box-shadow:
-    inset 0 0 0 2px rgb(255 255 255 / 0.32),
-    0 0 0 2px rgb(var(--color-accent-blue) / 0.42),
-    0 10px 22px -12px rgb(var(--color-accent-blue));
-  filter: brightness(1.08);
+  background: rgb(var(--color-accent-blue) / 0.14);
+  box-shadow: none;
 }
 
 .pump-mode-pill[data-mode="amount"][data-active="true"] {
-  color: white;
+  color: rgb(var(--color-accent-amber-light));
   border-color: rgb(var(--color-accent-amber));
-  background: rgb(var(--color-accent-amber));
-  box-shadow:
-    inset 0 0 0 2px rgb(255 255 255 / 0.32),
-    0 0 0 2px rgb(var(--color-accent-amber) / 0.42),
-    0 10px 22px -12px rgb(var(--color-accent-amber));
-  filter: brightness(1.08);
+  background: rgb(var(--color-accent-amber) / 0.14);
+  box-shadow: none;
 }
 
 .pump-mode-pill:focus-visible {
   outline: none;
   border-color: rgb(var(--color-accent-blue) / 0.8);
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--color-accent-blue) / 0.4),
-    0 0 0 3px rgb(var(--color-accent-blue) / 0.22);
+  box-shadow: 0 0 0 2px rgb(var(--color-accent-blue) / 0.22);
 }
 
 .pump-mode-pill:disabled {
@@ -623,32 +505,12 @@ html.light .bg-amber-950\/50 {
 }
 
 .pump-quick-chip {
-  border: 1px solid rgb(var(--color-border-primary) / 0.65);
-  background: rgb(var(--color-bg-input) / 0.62);
-  color: rgb(var(--color-text-secondary));
-  font-weight: 900;
-  transition: all 120ms ease;
-}
-
-.pump-quick-chip:hover {
-  border-color: rgb(var(--color-accent-blue) / 0.45);
-  background: rgb(var(--color-accent-blue) / 0.10);
-  color: rgb(var(--color-text-primary));
-}
-
-.pump-quick-chip:focus-visible {
-  outline: none;
-  border-color: rgb(var(--color-accent-blue) / 0.85);
-  box-shadow: 0 0 0 3px rgb(var(--color-accent-blue) / 0.22);
-}
-
-.pump-quick-chip {
-  border-radius: 999px;
+  border-radius: 0.375rem;
   border: 1px solid rgb(var(--color-border-primary) / 0.72);
   background: rgb(var(--color-bg-input) / 0.68);
   color: rgb(var(--color-text-secondary));
   font-weight: 600;
-  transition: all 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 .pump-quick-chip:hover {
@@ -657,49 +519,128 @@ html.light .bg-amber-950\/50 {
   background: rgb(var(--color-bg-input) / 0.88);
 }
 
+.pump-quick-chip:focus-visible {
+  outline: none;
+  border-color: rgb(var(--color-accent-blue) / 0.85);
+  box-shadow: 0 0 0 2px rgb(var(--color-accent-blue) / 0.22);
+}
+
 .pump-quick-chip:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
 .btn-start-glow {
-  box-shadow:
-    0 0 0 1px rgb(var(--color-accent-emerald-dark)),
-    0 0 16px rgb(var(--color-accent-emerald) / 0.55);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
 }
 
 .pump-start-button {
-  background-image: linear-gradient(120deg, #15803d, #1f9d51, #22c55e);
+  background: rgb(var(--color-accent-emerald-dark));
+  border: 1px solid rgb(var(--color-accent-emerald));
   color: #fff;
-  text-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
-  box-shadow:
-    0 4px 18px rgb(21 128 61 / 0.45),
-    inset 0 1px 0 rgb(255 255 255 / 0.18);
-  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+  text-shadow: none;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  transition: background-color 140ms ease, border-color 140ms ease;
 }
 
 .pump-start-button:hover:not(:disabled) {
-  filter: brightness(1.05);
-  box-shadow:
-    0 6px 22px rgb(34 197 94 / 0.55),
-    inset 0 1px 0 rgb(255 255 255 / 0.25);
+  background: rgb(var(--color-accent-emerald));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
 }
 
 .pump-start-button:active:not(:disabled) {
-  transform: translateY(1px) scale(0.99);
+  background: rgb(var(--color-accent-emerald-dark));
 }
 
 .pump-start-button:disabled {
-  background-image: linear-gradient(120deg, #14532d, #166534);
+  background: rgb(var(--color-bg-tertiary));
+  border-color: rgb(var(--color-border-primary));
   color: rgb(var(--color-text-muted));
   text-shadow: none;
-  box-shadow:
-    0 0 0 1px rgb(var(--color-accent-emerald-dark) / 0.5),
-    inset 0 1px 0 rgb(255 255 255 / 0.08);
+  box-shadow: none;
 }
 
 .online-dot-glow {
-  box-shadow: 0 0 8px rgb(var(--color-accent-emerald) / 0.9);
+  box-shadow: none;
+}
+
+/* Six-card desktop grids produce narrow cards. Keep every live value inside
+   the card instead of clipping the amount or preset at the right edge. */
+@container pump-card (max-width: 18rem) {
+  .pump-card-title {
+    font-size: 0.875rem;
+    letter-spacing: 0.025em;
+  }
+
+  .pump-auth-badge--idle {
+    display: none;
+  }
+
+  .pump-status-icon-frame {
+    display: none;
+  }
+
+  .pump-status-chip {
+    gap: 0.375rem;
+  }
+
+  .pump-status-content > p:last-child,
+  .pump-status-meta,
+  .pump-info-tile > p:last-child {
+    font-size: 0.875rem;
+  }
+
+  .pump-status-meta {
+    max-width: 42%;
+    overflow-wrap: anywhere;
+    padding-inline: 0.375rem;
+    text-align: right;
+  }
+
+  .pump-info-tile {
+    min-width: 0;
+    padding-inline: 0.375rem;
+  }
+
+  .pump-live-panel {
+    padding-inline: 0.5rem;
+  }
+
+  .pump-live-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .pump-live-volume {
+    max-width: 100%;
+    font-size: 1.75rem;
+  }
+
+  .pump-live-amount {
+    width: 100%;
+    margin-left: 0;
+    overflow-wrap: anywhere;
+    font-size: 0.875rem;
+    text-align: left;
+  }
+
+  .pump-progress-labels > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .pump-progress-labels > span:last-child {
+    text-align: right;
+  }
+
+  .pump-last-sale-values {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  }
+
+  .pump-last-sale-values > span {
+    overflow-wrap: anywhere;
+  }
 }
 
 /* ── Light-mode: dark-class overrides ────────────────────────────────────────
@@ -784,17 +725,10 @@ html.light header .text-amber-300 { color: rgb(var(--color-accent-amber)) !impor
 
 /* ── Pump card depth on the now-grey page ── */
 html.light .pump-card {
-  box-shadow:
-    0 0 0 1px rgb(var(--color-border-primary) / 0.65),
-    0 4px 16px -2px rgb(0 0 0 / 0.11);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
 }
 html.light .pump-card:hover {
-  box-shadow:
-    0 0 0 1px rgb(var(--color-border-primary) / 0.80),
-    0 8px 24px -4px rgb(0 0 0 / 0.14);
-}
-html.light .pump-card::after {
-  opacity: 0.15;
+  box-shadow: 0 2px 5px rgb(0 0 0 / 0.14);
 }
 
 /* ── Pump chrome — glass effects need opaque bg on light surface ── */
@@ -808,27 +742,27 @@ html.light .pump-status-chip {
 }
 html.light .pump-status-chip--nozzle_up {
   border-color: rgb(var(--color-accent-amber) / 0.75) !important;
-  background: linear-gradient(135deg, rgb(255 237 213), rgb(254 226 226)) !important;
+  background: rgb(var(--color-accent-amber) / 0.1) !important;
 }
 html.light .pump-status-chip--delivering {
   border-color: rgb(var(--color-accent-emerald) / 0.72) !important;
-  background: linear-gradient(135deg, rgb(209 250 229), rgb(219 234 254)) !important;
+  background: rgb(var(--color-accent-emerald) / 0.1) !important;
 }
 html.light .pump-status-chip--preauth {
   border-color: rgb(var(--color-accent-amber) / 0.7) !important;
-  background: linear-gradient(135deg, rgb(254 243 199), rgb(var(--color-bg-input))) !important;
+  background: rgb(var(--color-accent-amber) / 0.1) !important;
 }
 html.light .pump-status-chip--paused {
   border-color: rgb(var(--color-accent-red) / 0.62) !important;
-  background: linear-gradient(135deg, rgb(254 226 226), rgb(254 243 199)) !important;
+  background: rgb(var(--color-accent-red) / 0.1) !important;
 }
 html.light .pump-status-chip--done {
   border-color: rgb(var(--color-accent-blue) / 0.65) !important;
-  background: linear-gradient(135deg, rgb(219 234 254), rgb(209 250 229)) !important;
+  background: rgb(var(--color-accent-blue) / 0.1) !important;
 }
 html.light .pump-status-chip--offline {
   border-color: rgb(var(--color-status-offline) / 0.72) !important;
-  background: linear-gradient(135deg, rgb(226 232 240), rgb(var(--color-bg-input))) !important;
+  background: rgb(var(--color-status-offline) / 0.1) !important;
 }
 html.light .pump-mode-pill {
   background: rgb(var(--color-bg-secondary));
@@ -846,34 +780,106 @@ html.light .pump-status-icon-frame {
 }
 html.light .pump-selected-product {
   border-color: rgb(var(--color-accent-emerald) / 0.65) !important;
-  background: linear-gradient(135deg, rgb(209 250 229), rgb(219 234 254)) !important;
+  background: rgb(var(--color-bg-input)) !important;
 }
 html.light .pump-live-panel {
-  background: linear-gradient(135deg, rgb(209 250 229), rgb(var(--color-bg-input))) !important;
+  background: rgb(var(--color-bg-input)) !important;
 }
 
 /* Disabled start button — dark green is unreadable on light bg */
 html.light .pump-start-button:disabled {
-  background-image: linear-gradient(120deg, #d1fae5, #a7f3d0) !important;
+  background: rgb(var(--color-bg-tertiary)) !important;
+  border-color: rgb(var(--color-border-primary)) !important;
   color: rgb(var(--color-text-muted)) !important;
   text-shadow: none !important;
-  box-shadow:
-    0 0 0 1px #6ee7b7,
-    inset 0 1px 0 rgb(255 255 255 / 0.5) !important;
+  box-shadow: none !important;
 }
 
-/* Progress bar glow — tone down on light surface */
 html.light .progress-fill {
-  box-shadow: 0 0 8px rgb(var(--color-accent-emerald) / 0.30);
+  box-shadow: none;
 }
 
-/* ── Brand logo Y-axis spin (rotates around vertical symmetry line) ── */
+/* Admin settings share the same flat surface and control language as the
+   operational workspaces. Keep these rules scoped so legacy pump layouts are
+   unaffected. */
+.admin-panel {
+  scroll-behavior: smooth;
+}
+
+.admin-panel section {
+  margin-bottom: 0 !important;
+  border-radius: 0.5rem !important;
+  background: rgb(var(--color-bg-card)) !important;
+  padding: 1rem !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.admin-panel section h2 {
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+}
+
+.admin-panel section h3 {
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.admin-panel .rounded-2xl,
+.admin-panel .rounded-xl,
+.admin-panel .rounded-lg {
+  border-radius: 0.375rem;
+}
+
+.admin-panel .shadow-card,
+.admin-panel .shadow-button,
+.admin-panel .shadow-button-hover,
+.admin-panel .shadow-sm,
+.admin-panel .shadow-inner {
+  box-shadow: none !important;
+}
+
+.admin-panel table thead {
+  background: rgb(var(--color-bg-secondary)) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.admin-panel table th {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.admin-panel table td {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+}
+
+.admin-panel .animate-ping,
+.admin-panel .animate-pulse {
+  animation: none;
+}
+
+/* Brand logo Y-axis spin. */
 @keyframes logo-spin-y {
-  0%   { transform: perspective(200px) rotateY(0deg); animation-timing-function: ease-in-out; }
-  30%  { transform: perspective(200px) rotateY(360deg); }
+  0% { transform: perspective(200px) rotateY(0deg); animation-timing-function: ease-in-out; }
+  30% { transform: perspective(200px) rotateY(360deg); }
   100% { transform: perspective(200px) rotateY(360deg); }
 }
 
 .animate-logo-spin-y {
+  transform-origin: center;
   animation: logo-spin-y 10s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-logo-spin-y {
+    animation: none;
+  }
 }

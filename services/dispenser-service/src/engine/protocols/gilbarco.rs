@@ -1269,7 +1269,6 @@ async fn gbr_apply_command(
         }
 
         // Gilbarco does not support E-stop continuation in MVP.
-        DispatchCommand::ContinueFill { .. } | DispatchCommand::ResumeFill { .. } => {}
 
         DispatchCommand::CancelPreauth { byte } => {
             let fp_cfg = match cfg.position_by_address(byte) {

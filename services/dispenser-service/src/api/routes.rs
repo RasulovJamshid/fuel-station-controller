@@ -17,9 +17,9 @@ use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tower_http::trace::TraceLayer;
 use types::{
-    AuthorizeCmd, CloseStoppedTxCmd, ContinueFillCmd, CreateOperatorCmd, EndShiftCmd, FpSnapshot,
+    AuthorizeCmd, CloseStoppedTxCmd, CreateOperatorCmd, EndShiftCmd, FpSnapshot,
     FpState, FpStatus, HandoverCmd, NozzleSnapshot, Operator, Preset, ProductSnapshot,
-    ResumeFillCmd, Shift, ShiftSlot, SiteSnapshot, StartShiftCmd, StopCmd, StopSource,
+    Shift, ShiftSlot, SiteSnapshot, StartShiftCmd, StopCmd, StopSource,
     TankSnapshot, Transaction, TxStatus, TxSummary, UpdateAllPricesCmd, WsEvent,
 };
 
@@ -56,8 +56,6 @@ pub fn router(state: AppState) -> Router {
         .route("/authorize", post(authorize))
         .route("/dispenser/:fp_id/preauthorize", post(preauthorize))
         .route("/dispenser/:fp_id/cancel-preauth", post(cancel_preauth))
-        .route("/dispenser/:fp_id/continue", post(continue_fill))
-        .route("/dispenser/:fp_id/resume", post(resume_fill))
         .route("/dispenser/:fp_id/close", post(close_stopped_tx))
         .route("/dispenser/:fp_id/dismiss", post(dismiss_lane))
         .route("/stop", post(stop))
@@ -87,6 +85,7 @@ pub fn router(state: AppState) -> Router {
         .route("/admin/atg-discover", get(atg_discover))
         .route("/ws", get(ws_handler))
         .merge(admin::router())
+        .merge(crate::api::forecourt::router())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -220,40 +219,23 @@ fn site_snapshot(
         require_operator_pin: cfg.shifts.require_operator_pin,
         default_auth_mode: cfg.ui.default_auth_mode.clone(),
         preauth_timeout_seconds: cfg.ui.preauth_timeout_seconds,
-        use_stop_mode: cfg.ui.use_stop_mode,
         use_cancel_mode: cfg.ui.use_cancel_mode,
     }
 }
 
 /// Ensure `stopped_context` exists, loading from DB after restart if needed.
+///
+/// Closing is the only operation left on a stopped lane, so the stop source no
+/// longer gates anything — a rehydrated row is treated as a terminal app stop.
 async fn ensure_stopped_context(
     rt: &mut RuntimeFp,
     fp_id: &str,
     stopped_tx_id: &str,
     pool: &SqlitePool,
-    require_source: Option<StopSource>,
 ) -> Result<(), String> {
     if let Some(sc) = rt.stopped_context.as_ref() {
         if sc.stopped_tx_id != stopped_tx_id {
             return Err("stopped_tx_id does not match this lane".into());
-        }
-        if let Some(req) = require_source {
-            if sc.stop_source != req {
-                return Err(match req {
-                    StopSource::App => {
-                        "this pause was not caused by the app; use continue after lifting the nozzle"
-                            .into()
-                    }
-                    StopSource::AppFinal => {
-                        "this stop is final and cannot be resumed"
-                            .into()
-                    }
-                    StopSource::External => {
-                        "this pause was caused by the app; use resume while the hose is still in the tank"
-                            .into()
-                    }
-                });
-            }
         }
         return Ok(());
     }
@@ -265,95 +247,11 @@ async fn ensure_stopped_context(
         return Err("transaction belongs to another fueling position".into());
     }
     if !matches!(tx.status, TxStatus::Stopped) {
-        return Err(format!(
-            "transaction is not STOPPED (already finalized or continued)"
-        ));
+        return Err("transaction is not STOPPED (already finalized)".to_string());
     }
     let preset = rt.last_preset.clone();
-    let source = require_source.unwrap_or(StopSource::App);
-    rt.rehydrate_stopped_context(&tx, preset, source);
-    if let Some(req) = require_source {
-        if let Some(sc) = rt.stopped_context.as_ref() {
-            if sc.stop_source != req {
-                return Err("stop source mismatch for this transaction".into());
-            }
-        }
-    }
+    rt.rehydrate_stopped_context(&tx, preset, StopSource::AppFinal);
     Ok(())
-}
-
-async fn dispatch_resume_or_continue(
-    st: &AppState,
-    fp_id: &str,
-    stopped_tx_id: &str,
-    require_source: StopSource,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let fp = fp_config(st, fp_id).await?;
-    let byte = fp.address_byte;
-    let preset = {
-        let mut map = st.runtimes.write().await;
-        let Some(rt) = map.get_mut(&byte) else {
-            return Err((StatusCode::BAD_REQUEST, "lane offline".into()));
-        };
-        ensure_stopped_context(rt, fp_id, stopped_tx_id, &st.pool, Some(require_source))
-            .await
-            .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-        rt.prepare_continue(stopped_tx_id)
-            .map_err(|e| (StatusCode::BAD_REQUEST, e))?
-    };
-    let (_nozzle_index, price) = {
-        let map = st.runtimes.read().await;
-        let Some(rt) = map.get(&byte) else {
-            return Err((StatusCode::BAD_REQUEST, "lane offline".into()));
-        };
-        let nozzle_index = rt
-            .state
-            .nozzle_index
-            .or_else(|| rt.stopped_context.as_ref().map(|s| s.nozzle_index))
-            .or_else(|| fp.active_nozzles().first().map(|n| n.index))
-            .unwrap_or(1);
-        let price = if rt.stopped_context.is_some() || rt.state.price > 0 {
-            rt.state.price
-        } else {
-            rt.nozzle_prices
-                .get(&nozzle_index)
-                .copied()
-                .or_else(|| price_from_cfg(&st, byte, nozzle_index))
-                .ok_or_else(|| {
-                    (
-                        StatusCode::BAD_REQUEST,
-                        "could not resolve price for nozzle".into(),
-                    )
-                })?
-        };
-        (nozzle_index, price)
-    };
-    let cmd = match require_source {
-        StopSource::App => DispatchCommand::ResumeFill {
-            byte,
-            price,
-            preset,
-        },
-        StopSource::AppFinal => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "stop-mode fills cannot be resumed".into(),
-            ));
-        }
-        StopSource::External => DispatchCommand::ContinueFill {
-            byte,
-            price,
-            preset,
-        },
-    };
-    st.commands
-        .send(cmd)
-        .await
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
-    if let Some(s) = st.runtimes.read().await.get(&byte).map(|r| r.state.clone()) {
-        let _ = st.events.send(WsEvent::Status(s));
-    }
-    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 fn validate_preset(preset: &Preset) -> Result<(), (StatusCode, String)> {
@@ -383,6 +281,29 @@ fn validate_preset(preset: &Preset) -> Result<(), (StatusCode, String)> {
                 Ok(())
             }
         }
+    }
+}
+
+fn validate_shelf_preset(preset: &Preset) -> Result<(), (StatusCode, String)> {
+    match preset {
+        Preset::Str(value) if value.eq_ignore_ascii_case("full") => Ok(()),
+        Preset::Volume(volume) if *volume >= 3.0 && *volume <= 9_999.99 => Ok(()),
+        Preset::Amount(amount) if *amount > 0 && *amount <= shelf_v22::MAX_DOSE as u64 => Ok(()),
+        Preset::Volume(_) => Err((
+            StatusCode::BAD_REQUEST,
+            "SHELF V2.2 volume preset must be between 3.00 and 9999.99 m³".into(),
+        )),
+        Preset::Amount(_) => Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "SHELF V2.2 amount preset must be between 1 and {}",
+                shelf_v22::MAX_DOSE
+            ),
+        )),
+        Preset::Str(_) => Err((
+            StatusCode::BAD_REQUEST,
+            "unsupported SHELF preset".into(),
+        )),
     }
 }
 
@@ -426,8 +347,8 @@ async fn handover_shift(
         .await
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let _ = st.events.send(WsEvent::ShiftHandover {
-        outgoing: outgoing.clone(),
-        incoming: incoming.clone(),
+        outgoing: Box::new(outgoing.clone()),
+        incoming: Box::new(incoming.clone()),
     });
     Ok(Json(serde_json::json!({
         "outgoing": outgoing,
@@ -560,11 +481,21 @@ pub async fn authorize(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let fp = fp_config(&st, &cmd.fp_id).await?;
     validate_preset(&cmd.preset)?;
+    let is_shelf = st.cfg.read().await.connection.protocol == Protocol::ShelfV22;
+    if is_shelf {
+        validate_shelf_preset(&cmd.preset)?;
+    }
     if let Some(p) = cmd.price_override {
         if p == 0 {
             return Err((
                 StatusCode::BAD_REQUEST,
                 "price_override must be greater than zero".into(),
+            ));
+        }
+        if is_shelf && p > shelf_v22::MAX_PRICE {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("SHELF V2.2 price must not exceed {}", shelf_v22::MAX_PRICE),
             ));
         }
     }
@@ -645,11 +576,21 @@ pub async fn preauthorize(
     }
     let fp = fp_config(&st, &fp_id).await?;
     validate_preset(&cmd.preset)?;
+    let is_shelf = st.cfg.read().await.connection.protocol == Protocol::ShelfV22;
+    if is_shelf {
+        validate_shelf_preset(&cmd.preset)?;
+    }
     if let Some(p) = cmd.price_override {
         if p == 0 {
             return Err((
                 StatusCode::BAD_REQUEST,
                 "price_override must be greater than zero".into(),
+            ));
+        }
+        if is_shelf && p > shelf_v22::MAX_PRICE {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("SHELF V2.2 price must not exceed {}", shelf_v22::MAX_PRICE),
             ));
         }
     }
@@ -786,22 +727,6 @@ pub async fn cancel_preauth(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
-pub async fn continue_fill(
-    State(st): State<AppState>,
-    Path(fp_id): Path<String>,
-    Json(cmd): Json<ContinueFillCmd>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    dispatch_resume_or_continue(&st, &fp_id, &cmd.stopped_tx_id, StopSource::External).await
-}
-
-pub async fn resume_fill(
-    State(st): State<AppState>,
-    Path(fp_id): Path<String>,
-    Json(cmd): Json<ResumeFillCmd>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    dispatch_resume_or_continue(&st, &fp_id, &cmd.stopped_tx_id, StopSource::App).await
-}
-
 pub async fn close_stopped_tx(
     State(st): State<AppState>,
     Path(fp_id): Path<String>,
@@ -814,7 +739,7 @@ pub async fn close_stopped_tx(
         let Some(rt) = map.get_mut(&byte) else {
             return Err((StatusCode::BAD_REQUEST, "lane offline".into()));
         };
-        ensure_stopped_context(rt, &fp_id, &cmd.stopped_tx_id, &st.pool, None)
+        ensure_stopped_context(rt, &fp_id, &cmd.stopped_tx_id, &st.pool)
             .await
             .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
         rt.close_stopped(&cmd.stopped_tx_id)

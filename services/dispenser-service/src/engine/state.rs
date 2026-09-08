@@ -37,6 +37,9 @@ pub struct StoppedContext {
     pub stopped_tx_id: String,
     pub stopped_volume: f64,
     pub stopped_amount: u64,
+    /// Preset active when the fill was stopped. Only recorded for diagnostics
+    /// now that stops are terminal (resume, its one consumer, was removed).
+    #[allow(dead_code)]
     pub preset: Preset,
     pub stop_source: StopSource,
     pub price: u32,
@@ -50,6 +53,13 @@ pub struct PreAuthContext {
     pub product_id: u8,
 }
 
+/// Split accounting for a fill resumed after a stop.
+///
+/// Inert: pausing was removed, so nothing constructs this any more and
+/// `RuntimeFp::continuation` stays `None` for the life of a lane. The read
+/// paths below all fall through to plain single-segment totals. The struct and
+/// its database counterparts (`TxStatus::ContinuedFrom`, `parent_tx_id`) are
+/// kept so historical transactions still load and sync.
 #[derive(Debug, Clone)]
 pub struct ContinuationContext {
     pub parent_tx_id: String,
@@ -73,8 +83,9 @@ pub struct RuntimeFp {
     pub cap_amount: Option<u64>,
     /// In-memory E-stop state (lost on service restart).
     pub stopped_context: Option<StoppedContext>,
+    /// Always `None` — see [`ContinuationContext`].
     pub continuation: Option<ContinuationContext>,
-    /// Last authorize preset (for E-stop continuation).
+    /// Last authorize preset, used for display and stop bookkeeping.
     pub last_preset: Preset,
     pub pre_auth: Option<PreAuthContext>,
     /// Wall-clock ms when pre-authorization was sent (for timeout).
@@ -568,63 +579,6 @@ impl RuntimeFp {
         self.state.product_id = Some(tx.product_id);
         self.state.product_name = Some(tx.product_name.clone());
         self.touch();
-    }
-
-    pub fn prepare_continue(&mut self, stopped_tx_id: &str) -> Result<Preset, String> {
-        let sc = self
-            .stopped_context
-            .take()
-            .ok_or_else(|| "lane is not in a continuable stopped state".to_string())?;
-        if sc.stopped_tx_id != stopped_tx_id {
-            self.stopped_context = Some(sc);
-            return Err("stopped_tx_id does not match this lane".into());
-        }
-        let preset = sc.preset.clone();
-
-        // Hardware CONFIG must use the *remaining* amount so the pump doesn't
-        // re-authorize for the full original limit again.  The software combined-
-        // volume cap (set below) still uses the original preset so it fires at
-        // the correct total (base + segment >= original limit).
-        let hardware_preset = match &preset {
-            Preset::Volume(v) => {
-                let rem = (v - sc.stopped_volume).max(0.0);
-                if rem > 0.01 {
-                    Preset::Volume(rem)
-                } else {
-                    Preset::Str("full".into())
-                }
-            }
-            Preset::Amount(a) => {
-                let rem = a.saturating_sub(sc.stopped_amount);
-                if rem > 0 {
-                    Preset::Amount(rem)
-                } else {
-                    Preset::Str("full".into())
-                }
-            }
-            Preset::Str(_) => preset.clone(),
-        };
-
-        self.continuation = Some(ContinuationContext {
-            parent_tx_id: sc.stopped_tx_id.clone(),
-            base_volume: sc.stopped_volume,
-            base_amount: sc.stopped_amount,
-            segment_volume: 0.0,
-            segment_amount: 0,
-        });
-        self.state.stopped_tx_id = None;
-        self.state.stop_source = None;
-        self.state.status = FpStatus::Authorizing;
-        self.state.base_volume = Some(sc.stopped_volume);
-        self.state.base_amount = Some(sc.stopped_amount);
-        self.state.segment_volume = Some(0.0);
-        self.state.segment_amount = Some(0);
-        self.state.volume = sc.stopped_volume;
-        self.state.amount = sc.stopped_amount;
-        self.set_deliver_caps_from_preset(&preset); // original — guards combined total
-        self.last_preset = preset.clone(); // original — used for display & re-pause
-        self.touch();
-        Ok(hardware_preset)
     }
 
     pub fn close_stopped(&mut self, stopped_tx_id: &str) -> Result<(), String> {
@@ -2707,38 +2661,6 @@ impl RuntimeFp {
         }
     }
 
-    /// Open the child segment transaction after continue-fill authorize.
-    pub fn begin_continuation_segment(
-        &mut self,
-        fp_cfg: &FuelingPositionConfig,
-        site: &SiteConfig,
-    ) {
-        if self.continuation.is_none() || self.current_tx.is_some() {
-            return;
-        }
-        let nozzle_index = self.state.nozzle_index.unwrap_or(1);
-        let (pname, pid, _) = lookup_nozzle(site, fp_cfg, nozzle_index);
-        self.current_tx = Some(CurrentTx {
-            id: Uuid::new_v4().to_string(),
-            started_at: Utc::now().timestamp_millis(),
-            product_id: pid,
-            product_name: pname,
-            nozzle_index,
-        });
-        if self.state.status != FpStatus::Delivering {
-            self.state.status = FpStatus::Authorizing;
-        }
-        self.touch();
-    }
-
-    /// App resume: hose still in tank — service is re-authorized; expect meter data immediately.
-    pub fn promote_continuation_delivering(&mut self) {
-        if self.continuation.is_some() {
-            self.state.status = FpStatus::Delivering;
-            self.touch();
-        }
-    }
-
     pub fn apply_authorize_sent(&mut self) {
         let may_authorize = matches!(
             self.state.status,
@@ -2771,7 +2693,6 @@ impl RuntimeFp {
         active_shift_id: Option<String>,
         active_operator_name: Option<String>,
         use_decel_window: bool,
-        stop_mode: bool,
     ) -> Option<FrameEffect> {
         if self.state.status == FpStatus::PreAuthorized {
             self.cancel_pre_auth();
@@ -2785,11 +2706,9 @@ impl RuntimeFp {
             FpStatus::Delivering | FpStatus::Authorizing
         ) || self.current_tx.is_some()
         {
-            let stop_source = if stop_mode {
-                StopSource::AppFinal
-            } else {
-                StopSource::App
-            };
+            // Pausing is unsupported: every app stop is final and cannot be
+            // resumed.
+            let stop_source = StopSource::AppFinal;
             if use_decel_window {
                 if self.in_decel_window() {
                     // Second Stop while decel window is already open — ignore.
@@ -3263,58 +3182,6 @@ mod tests {
     }
 
     #[test]
-    fn continuation_tiny_startup_meter_is_not_aborted_as_ghost() {
-        let site = sample_site();
-        let fp_cfg = site.fueling_positions[0].clone();
-        let mut rt = RuntimeFp::new(&fp_cfg, &site);
-
-        rt.state.status = FpStatus::Delivering;
-        rt.state.nozzle_index = Some(2);
-        rt.state.product_id = Some(3);
-        rt.state.product_name = Some("AI-92".into());
-        rt.state.price = 11000;
-        rt.set_last_preset(Preset::Amount(200_000));
-        rt.mark_preauth_config_on_wire();
-        rt.auth_session_started_at = Some(Utc::now().timestamp_millis() - STARTUP_GHOST_MIN_AGE_MS);
-        rt.current_tx = Some(CurrentTx {
-            id: "tx".into(),
-            started_at: Utc::now().timestamp_millis(),
-            product_id: 3,
-            product_name: "AI-92".into(),
-            nozzle_index: 2,
-        });
-        rt.continuation = Some(ContinuationContext {
-            parent_tx_id: "parent".into(),
-            base_volume: 10.0,
-            base_amount: 110_000,
-            segment_volume: 0.0,
-            segment_amount: 0,
-        });
-
-        let frame = Frame::Data {
-            addr: 0x53,
-            seq: 0x31,
-            volume_x1: 0x00,
-            volume_x2: 0x00,
-            volume_l: 0x00,
-            volume_h: 0x05,
-            amount: [0x00, 0x00, 0x05, 0x50],
-            sale_complete: false,
-            hose_product: Some(0x10),
-            hose_code: Some(0x12),
-            crc_ok: true,
-        };
-
-        for _ in 0..STARTUP_GHOST_FROZEN_FRAME_THRESHOLD {
-            let effect = rt.apply_frame(&frame, &fp_cfg, &site, None, None);
-            assert!(matches!(effect, FrameEffect::StatusChanged));
-            assert_eq!(rt.state.status, FpStatus::Delivering);
-            assert!(rt.current_tx.is_some());
-            assert!(rt.continuation.is_some());
-        }
-    }
-
-    #[test]
     fn wrong_nozzle_lift_cancels_preauth_and_ignores_stale_meter_data() {
         let site = sample_site_two_nozzles();
         let fp_cfg = site.fueling_positions[0].clone();
@@ -3599,8 +3466,8 @@ mod tests {
         });
         rt.note_wire_hose(0x12);
 
-        // Operator stops from the app (terminal stop mode, no decel window).
-        let effect = rt.apply_stop(&fp_cfg, &site, None, None, false, true);
+        // Operator stops from the app (always terminal, no decel window).
+        let effect = rt.apply_stop(&fp_cfg, &site, None, None, false);
         assert!(matches!(effect, Some(FrameEffect::Paused { .. })));
         assert!(matches!(rt.state.status, FpStatus::Stopped { .. }));
         assert!(rt.wayne.stopped_nozzle_up);

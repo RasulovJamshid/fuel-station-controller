@@ -47,42 +47,10 @@ function InlineIcon({
   );
 }
 
-function ContinuationMeterColumn({
-  label,
-  volume,
-  amount,
-  volumeClass = "text-text-secondary",
-  amountClass = "text-text-muted",
-}: {
-  label: string;
-  volume: number;
-  amount: number;
-  volumeClass?: string;
-  amountClass?: string;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col items-center gap-0.5 px-0.5">
-      <span className="w-full truncate text-center text-xs font-bold uppercase tracking-wide text-text-muted">
-        {label}
-      </span>
-      <span
-        className={`w-full truncate text-center font-mono text-lg font-black tabular-nums leading-none sm:text-xl ${volumeClass}`}
-      >
-        {volume.toFixed(2)} L
-      </span>
-      <span
-        className={`w-full truncate text-center font-mono text-base font-black tabular-nums leading-tight ${amountClass}`}
-      >
-        {fmtSum.format(amount)}
-      </span>
-    </div>
-  );
-}
-
 /** Parse a volume target from pre_auth_preset for progress display. */
 function parseVolumeTargetLiters(preset: string | null | undefined): number | null {
   if (!preset) return null;
-  const m = preset.match(/([\d.,]+)\s*L/i);
+  const m = preset.match(/([\d.,]+)\s*(?:L|m(?:3|³))/i);
   if (!m) return null;
   const v = Number.parseFloat(m[1].replace(",", "."));
   return Number.isFinite(v) && v > 0 ? v : null;
@@ -108,7 +76,7 @@ function preAuthLimitDisplay(
   if (lower === "full" || lower === "full tank") {
     return { kindLabel: t("dispenser.limitFillMode"), value: t("pumpForm.fullTank") };
   }
-  if (/\d/.test(raw) && (raw.includes(" L") || raw.endsWith("L") || lower.endsWith(" l"))) {
+  if (/\d/.test(raw) && /\s(?:l|m3|m³)$/i.test(raw)) {
     return { kindLabel: t("dispenser.limitVolumeLimit"), value: raw };
   }
   if (lower.includes("sum")) {
@@ -165,15 +133,12 @@ export interface DispenserCardProps {
   onPreAuthorize?: (req: AuthorizeRequest) => void;
   onCancelPreAuth?: (fpId: string) => void;
   onStop: (fpId: string) => void;
-  onResumeFill: (fpId: string, stoppedTxId: string) => void;
-  onContinueFill: (fpId: string, stoppedTxId: string) => void;
   onCloseStopped: (fpId: string, stoppedTxId: string) => void;
   onDismissSale?: (fpId: string) => void;
   /** When true and pump is idle/waiting, block authorization and prompt to start a shift. */
   shiftRequired?: boolean;
   onStartShift?: () => void;
   /** When true, the Stop/Pause button acts as a final stop (no resume). */
-  useStopMode?: boolean;
   /** When true, show a Cancel button that stops + immediately closes the transaction. */
   useCancelMode?: boolean;
   onCancel?: (fpId: string) => void;
@@ -191,13 +156,10 @@ export function DispenserCard({
   onPreAuthorize,
   onCancelPreAuth,
   onStop,
-  onResumeFill,
-  onContinueFill,
   onCloseStopped,
   onDismissSale,
   shiftRequired = false,
   onStartShift,
-  useStopMode = false,
   useCancelMode = false,
   onCancel,
   gilbarcoMode = false,
@@ -263,14 +225,24 @@ export function DispenserCard({
     return null;
   }, [configuredNozzles, effectiveNozzle, state.product_id]);
 
+  const tag = statusTag(state.status as FpStatus);
   const displayPrice = useMemo(() => {
+    const hasActiveTransaction =
+      tag === "AUTHORIZING" ||
+      tag === "DELIVERING" ||
+      tag === "STOPPED" ||
+      tag === "DONE";
+    if (hasActiveTransaction && state.price > 0) return state.price;
+    if (activeNozzle?.price != null) return activeNozzle.price;
     if (state.price > 0) return state.price;
-    if (activeNozzle?.price) return activeNozzle.price;
     return 0;
-  }, [state.price, activeNozzle]);
+  }, [tag, state.price, activeNozzle]);
 
   const productLabel = state.product_name ?? activeNozzle?.product_name ?? null;
   const productColor = state.product_color ?? activeNozzle?.product_color ?? "#888";
+  const productId = state.product_id ?? activeNozzle?.product_id ?? null;
+  const volumeUnit =
+    siteSnapshot?.products.find((product) => product.id === productId)?.unit?.trim() || "L";
 
   const liftedNozzleCaption = useMemo(() => {
     const idx = state.nozzle_index ?? effectiveNozzle;
@@ -279,7 +251,6 @@ export function DispenserCard({
     return t("dispenser.nozzleNGrade", { n: idx, grade });
   }, [state.nozzle_index, effectiveNozzle, productLabel, t]);
 
-  const tag = statusTag(state.status as FpStatus);
   const paused = pausedInfo(state);
   const isDelivering = tag === "DELIVERING";
   const isPreAuthorized = tag === "PRE_AUTHORIZED";
@@ -332,23 +303,13 @@ export function DispenserCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldAutoDismiss, state.fp_id]);
   const isPaused = paused != null;
-  const isAppPause = paused?.stop_source === "APP";
-  const isAppStop = paused?.stop_source === "APP_FINAL";
   const isExternalPause = paused?.stop_source === "EXTERNAL";
-  const hasContinuationBase =
-    (state.base_volume ?? 0) > 0 &&
-    tag !== "IDLE" &&
-    tag !== "STOPPED" &&
-    tag !== "DONE";
-  const isContinuing =
-    hasContinuationBase &&
-    (tag === "DELIVERING" || tag === "AUTHORIZING");
   const usePreAuth = defaultAuthMode === "preauth";
   // Preauth can start from idle OR from a lift-first state (nozzle already up).
   const canOpenPreAuthSetup =
-    (isIdle || isNozzleUp) && usePreAuth && !isPaused && !isContinuing && !hasActivePreAuth;
+    (isIdle || isNozzleUp) && usePreAuth && !isPaused && !hasActivePreAuth;
   const canOpenReactiveSetup =
-    isNozzleUp && !usePreAuth && !isPaused && !isContinuing && !hasActivePreAuth;
+    isNozzleUp && !usePreAuth && !isPaused && !hasActivePreAuth;
   // No longer shown: the form is now available instead of blocking the operator.
   const showUnplannedLift = false;
   const isOffline = tag === "OFFLINE";
@@ -407,15 +368,15 @@ export function DispenserCard({
       rightMeta = deliveryLimit.value;
     } else if (isDone && holsterEndedSale) {
       subtitle = t("dispenser.statusDoneHolstered");
-      rightMeta = `${state.volume.toFixed(2)} L · ${fmtSum.format(state.amount)} SUM`;
+      rightMeta = `${state.volume.toFixed(2)} ${volumeUnit} · ${fmtSum.format(state.amount)} SUM`;
     } else if (isDone && abortedSale) {
       subtitle = t("dispenser.statusDoneAborted");
     } else if (isDone) {
       subtitle = t("dispenser.statusDone");
-    } else if (isExternalPause) {
-      subtitle = t("dispenser.statusExternalPause");
-    } else if (isAppPause) {
-      subtitle = t("dispenser.statusAppPause");
+    } else if (isPaused) {
+      subtitle = isExternalPause
+        ? t("dispenser.statusExternalPause")
+        : t("dispenser.statusAppPause");
     } else if (hasActivePreAuth) {
       subtitle = isNozzleUp
         ? (liftedNozzleCaption ?? t("dispenser.preAuthAwaitingLift"))
@@ -447,7 +408,6 @@ export function DispenserCard({
     holsterEndedSale,
     abortedSale,
     isExternalPause,
-    isAppPause,
     isPaused,
     hasActivePreAuth,
     isNozzleUp,
@@ -526,7 +486,8 @@ export function DispenserCard({
               />
             </div>
             <h2
-              className={`truncate font-black uppercase tracking-widest text-text-primary ${compact ? "text-base" : "text-lg"}`}
+              className={`pump-card-title line-clamp-2 break-words font-semibold leading-tight tracking-wide text-text-primary ${compact ? "text-sm" : "text-lg"}`}
+              title={kolonkaTitle}
             >
               {kolonkaTitle}
             </h2>
@@ -583,14 +544,14 @@ export function DispenserCard({
               <div className={`pump-status-icon-frame flex shrink-0 items-center justify-center rounded-md ${compact ? "h-7 w-7" : "h-9 w-9"}`}>
                 <StatusIcon tag={tag} className={`${compact ? "h-4 w-4" : "h-5 w-5"} shrink-0`} />
               </div>
-              <div className="min-w-0 flex-1">
+              <div className="pump-status-content min-w-0 flex-1">
                 <p className="truncate text-xs font-black uppercase tracking-wide text-text-muted">
                   {statusHeader.statusLabel}
                 </p>
                 <p className={`line-clamp-2 font-black leading-snug ${compact ? "text-lg" : "text-xl"} text-text-primary`}>{statusHeader.subtitle}</p>
               </div>
               {statusHeader.rightMeta ? (
-                <span className={`shrink-0 rounded-md bg-bg-input/70 px-2 py-1 font-mono font-black tabular-nums text-text-primary ${compact ? "text-base" : "text-xl"}`}>{statusHeader.rightMeta}</span>
+                <span className={`pump-status-meta shrink-0 rounded-md bg-bg-input/70 px-2 py-1 font-mono font-black tabular-nums text-text-primary ${compact ? "text-base" : "text-xl"}`}>{statusHeader.rightMeta}</span>
               ) : null}
             </div>
           )}
@@ -637,19 +598,53 @@ export function DispenserCard({
 
           {(!showPumpForm || useSetupModal) && (
             isIdle ? (
-              lastSale && (lastSale.volume > 0 || lastSale.amount > 0) ? (
-                <div className={`flex items-center justify-between rounded-lg border border-border-primary/60 bg-bg-input/45 ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`}>
-                  <p className="text-[10px] uppercase tracking-wide text-text-muted">{t("dispenser.lastFill")}</p>
-                  <div className="flex items-baseline gap-2">
-                    <span className={`font-mono font-black tabular-nums text-text-primary ${compact ? "text-base" : "text-lg"}`}>
-                      {lastSale.volume.toFixed(2)} L
-                    </span>
-                    <span className={`font-mono font-black tabular-nums text-text-secondary ${compact ? "text-base" : "text-lg"}`}>
-                      {fmtSum.format(lastSale.amount)}
-                    </span>
+              <div className="flex min-h-0 flex-col gap-2">
+                {activeNozzles.length > 0 && (
+                  <div className="pump-idle-products max-h-44 overflow-y-auto rounded-lg border border-border-primary/50 bg-bg-input/25">
+                    <div className="sticky top-0 grid grid-cols-[minmax(0,1fr)_2.75rem_4.75rem] gap-1 border-b border-border-primary/40 bg-bg-secondary/90 px-2 py-1.5 text-[9px] uppercase tracking-wide text-text-muted">
+                      <span>{t("dispenser.grade")}</span>
+                      <span className="text-center">{t("dispenser.nozzle")}</span>
+                      <span className="text-right">{t("dispenser.price")}</span>
+                    </div>
+                    {activeNozzles.map((nozzle) => (
+                      <div
+                        key={nozzle.index}
+                        className="grid grid-cols-[minmax(0,1fr)_2.75rem_4.75rem] items-center gap-1 border-b border-border-primary/25 px-2 py-2 last:border-b-0"
+                      >
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className="h-2 w-1 shrink-0 rounded-sm"
+                            style={{ backgroundColor: nozzle.product_color }}
+                            aria-hidden
+                          />
+                          <span className="truncate text-xs font-semibold text-text-primary" title={nozzle.product_name}>
+                            {nozzle.product_name}
+                          </span>
+                        </span>
+                        <span className="text-center font-mono text-xs font-semibold tabular-nums text-text-secondary">
+                          {nozzle.index}
+                        </span>
+                        <span className="text-right font-mono text-xs font-semibold tabular-nums text-accent-blue">
+                          {fmtSum.format(nozzle.price)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              ) : null
+                )}
+                {lastSale && (lastSale.volume > 0 || lastSale.amount > 0) ? (
+                  <div className={`pump-last-sale rounded-lg border border-border-primary/50 bg-bg-input/35 ${compact ? "px-2 py-2" : "px-2.5 py-2.5"}`}>
+                    <p className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">{t("dispenser.lastFill")}</p>
+                    <div className="pump-last-sale-values grid grid-cols-2 items-baseline gap-2">
+                      <span className={`min-w-0 font-mono font-black tabular-nums text-text-primary ${compact ? "text-sm" : "text-lg"}`}>
+                        {lastSale.volume.toFixed(2)} {volumeUnit}
+                      </span>
+                      <span className={`min-w-0 text-right font-mono font-black leading-tight tabular-nums text-text-secondary ${compact ? "text-sm" : "text-lg"}`}>
+                        {fmtSum.format(lastSale.amount)} {t("pumpForm.amountUnit")}
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             ) : isDone ? (
               <div className={`rounded-lg border border-accent-emerald/35 bg-accent-emerald/10 ${compact ? "px-2.5 py-2" : "px-3 py-3"}`}>
                 <p className={`font-bold uppercase tracking-wide text-accent-emerald ${compact ? "text-[10px] mb-1" : "text-xs mb-2"}`}>
@@ -695,35 +690,13 @@ export function DispenserCard({
                 activeNozzles={activeNozzles}
                 initialNozzle={effectiveNozzle}
                 compact={compact}
+                volumeUnit={volumeUnit}
                 disabled={!positionActive}
                 onStart={handleFormStart}
                 onReadyChange={setFormStart}
               />
             </div>
           ) : null}
-
-          {isContinuing && !showPumpForm && (
-            <div className="grid grid-cols-3 gap-1 rounded-lg border border-border-primary bg-bg-input/50 p-2">
-              <ContinuationMeterColumn
-                label={t("dispenser.base")}
-                volume={state.base_volume ?? 0}
-                amount={state.base_amount ?? 0}
-              />
-              <ContinuationMeterColumn
-                label={t("dispenser.now")}
-                volume={state.segment_volume ?? 0}
-                amount={state.segment_amount ?? 0}
-                volumeClass="text-accent-emerald"
-              />
-              <ContinuationMeterColumn
-                label={t("dispenser.total")}
-                volume={state.volume}
-                amount={state.amount}
-                volumeClass="text-text-primary"
-                amountClass="text-accent-blue"
-              />
-            </div>
-          )}
 
           {(isDelivering || isPaused || (hasActivePreAuth && displayVolume > 0)) && !showPumpForm && (
             <PumpCardProgress
@@ -732,6 +705,7 @@ export function DispenserCard({
               targetLiters={progressTarget}
               targetAmount={amountTarget}
               compact={compact}
+              volumeUnit={volumeUnit}
             />
           )}
 
@@ -744,13 +718,13 @@ export function DispenserCard({
                 </p>
                 {pumpTotalizer.price != null && pumpTotalizer.price > 0 ? (
                   <p className="truncate text-xs text-text-tertiary">
-                    {fmtSum.format(pumpTotalizer.price)} SUM/L
+                    {fmtSum.format(pumpTotalizer.price)} SUM/{volumeUnit}
                   </p>
                 ) : null}
               </div>
               <div className="shrink-0 text-right">
                 <p className={`font-mono font-black tabular-nums text-text-secondary ${compact ? "text-xs" : "text-sm"}`}>
-                  {pumpTotalizer.volume != null ? `${pumpTotalizer.volume.toFixed(2)} L` : "—"}
+                  {pumpTotalizer.volume != null ? `${pumpTotalizer.volume.toFixed(2)} ${volumeUnit}` : "—"}
                 </p>
                 <p className={`font-mono tabular-nums text-text-muted ${compact ? "text-xs" : "text-sm"}`}>
                   {pumpTotalizer.amount != null ? fmtSum.format(pumpTotalizer.amount) : "—"}
@@ -805,98 +779,19 @@ export function DispenserCard({
               onClick={() => useCancelMode ? onCancel?.(state.fp_id) : onStop(state.fp_id)}
             >
               <InlineIcon src={useCancelMode ? xCircleIcon : pauseIcon} className={compact ? "h-5 w-5 shrink-0" : "h-6 w-6 shrink-0"} />
-              {useCancelMode ? t("dispenser.cancel") : useStopMode ? t("dispenser.stop") : t("dispenser.pause")}
+              {useCancelMode ? t("dispenser.cancel") : t("dispenser.stop")}
             </button>
           ) : showNozzleRemovedBanner ? (
             <p className={`text-center font-semibold text-accent-amber-light ${compact ? "text-sm" : "text-sm"}`}>
               {t("dispenser.nozzleRemoved")}
             </p>
-          ) : gilbarcoMode && isPaused && paused ? (
-            <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
-              {!compact && (
-                <p className="text-center text-sm font-medium text-text-secondary">
-                  {t("dispenser.fillPaused")}
-                </p>
-              )}
-              <button
-                type="button"
-                className={`w-full rounded-xl bg-bg-secondary font-black uppercase tracking-wide leading-tight text-text-secondary ring-1 ring-border-primary hover:bg-bg-tertiary ${compact ? "py-2.5 text-base" : "px-4 py-4 text-base"}`}
-                onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
-              >
-                <span className="flex items-center justify-center gap-1.5">
-                  <InlineIcon src={xCircleIcon} className={`shrink-0 ${compact ? "h-4 w-4" : "h-5 w-5"}`} />
-                  {t("dispenser.closeTransaction")}
-                </span>
-              </button>
-            </div>
-          ) : isAppStop && paused ? (
+          ) : isPaused && paused ? (
             <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
               {!compact && (
                 <p className="text-center text-sm font-medium text-text-secondary">
                   {t("dispenser.holsterToFinish")}
                 </p>
               )}
-              <button
-                type="button"
-                className={`w-full rounded-lg py-2 text-center font-black uppercase leading-tight text-text-tertiary underline-offset-2 hover:bg-bg-secondary hover:text-text-secondary hover:underline ${compact ? "text-base" : "text-base"}`}
-                onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
-              >
-                <span className="flex items-center justify-center gap-1">
-                  <InlineIcon src={xCircleIcon} className={`shrink-0 ${compact ? "h-4 w-4" : "h-5 w-5"}`} />
-                  {t("dispenser.closeTransaction")}
-                </span>
-              </button>
-            </div>
-          ) : isAppPause && paused ? (
-            <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
-              {!compact && (
-                <>
-                  <p className="text-center text-sm font-medium text-text-secondary">
-                    {t("dispenser.hoseInTank")}
-                  </p>
-                  <p className="text-center text-xs text-text-tertiary">
-                    {t("dispenser.partialSaved")}
-                  </p>
-                </>
-              )}
-              <button
-                type="button"
-                className={`btn-start-glow pump-start-button w-full rounded-lg font-black uppercase tracking-wide leading-tight text-white ${compact ? "py-3 text-base" : "py-4 text-lg"}`}
-                onClick={() => onResumeFill(state.fp_id, paused.stopped_tx_id)}
-              >
-                <span className="flex items-center justify-center gap-1.5">
-                  <InlineIcon src={playIcon} className={`shrink-0 ${compact ? "h-5 w-5" : "h-6 w-6"}`} />
-                  {t("dispenser.resumeFill")}
-                </span>
-              </button>
-              <button
-                type="button"
-                className={`w-full rounded-lg py-2 text-center font-black uppercase leading-tight text-text-tertiary underline-offset-2 hover:bg-bg-secondary hover:text-text-secondary hover:underline ${compact ? "text-base" : "text-base"}`}
-                onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
-              >
-                <span className="flex items-center justify-center gap-1">
-                  <InlineIcon src={xCircleIcon} className={`shrink-0 ${compact ? "h-4 w-4" : "h-5 w-5"}`} />
-                  {t("dispenser.closeTransaction")}
-                </span>
-              </button>
-            </div>
-          ) : isExternalPause && paused ? (
-            <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
-              {!compact && (
-                <p className="text-center text-xs font-medium text-accent-amber-light/90">
-                  {t("dispenser.fillPaused")}
-                </p>
-              )}
-              <button
-                type="button"
-                className={`w-full rounded-xl bg-accent-emerald font-black uppercase leading-tight text-text-inverse shadow-lg hover:bg-accent-emerald-light active:scale-95 ${compact ? "py-3 text-base tracking-wide" : "px-4 py-5 text-xl tracking-wider"}`}
-                onClick={() => onContinueFill(state.fp_id, paused.stopped_tx_id)}
-              >
-                <span className="flex items-center justify-center gap-1.5">
-                  <InlineIcon src={playIcon} className={`shrink-0 ${compact ? "h-5 w-5" : "h-7 w-7"}`} />
-                  {t("dispenser.continueFill")}
-                </span>
-              </button>
               <button
                 type="button"
                 className={`w-full rounded-xl bg-bg-secondary font-black uppercase tracking-wide leading-tight text-text-secondary ring-1 ring-border-primary hover:bg-bg-tertiary ${compact ? "py-2.5 text-base" : "px-4 py-4 text-base"}`}
@@ -931,8 +826,6 @@ export function DispenserCard({
             <p className="text-center text-xs font-semibold text-accent-red/80">
               {t("dispenser.replaceNozzle")}
             </p>
-          ) : isContinuing && !isDelivering ? (
-            <p className="text-center text-xs text-accent-blue/90">{t("dispenser.resumingFill")}</p>
           ) : isDone && !shouldAutoDismiss ? (
             <button
               type="button"
@@ -952,6 +845,7 @@ export function DispenserCard({
           fpNozzles={fpNozzles}
           mode={usePreAuth && !isNozzleUp ? "preauth" : "reactive"}
           initialNozzle={effectiveNozzle}
+          volumeUnit={volumeUnit}
           onClose={() => setSetupOpen(false)}
           onConfirm={(req) => {
             setSetupOpen(false);

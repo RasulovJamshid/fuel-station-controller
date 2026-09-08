@@ -1,0 +1,7 @@
+{
+  "virtual_port": "/tmp/shelf-sim",
+  "api_port": 3007,
+  "site_config_path": "../../../services/dispenser-service/site.config.shelf.json",
+  "fill_rate_m3_per_second": 0.5,
+  "log_frames": true
+}

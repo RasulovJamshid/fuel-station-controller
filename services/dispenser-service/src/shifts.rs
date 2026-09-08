@@ -14,12 +14,31 @@ use types::{
 use uuid::Uuid;
 
 use crate::db::shift_queries;
+use crate::engine::RuntimeFp;
+
+/// Lane runtimes, read at shift boundaries to snapshot pump totalizers.
+pub type RuntimeMap = Arc<RwLock<std::collections::HashMap<u8, RuntimeFp>>>;
+
+/// One nozzle's meter reading at a shift boundary. `volume`/`amount` are `None`
+/// when the protocol has no totalizer or the lane was unreachable.
+struct TotalizerSnapshot {
+    fp_id: String,
+    label: String,
+    nozzle_index: u8,
+    product_id: u8,
+    product_name: String,
+    volume: Option<f64>,
+    amount: Option<u64>,
+}
 
 #[derive(Clone)]
 pub struct ShiftCoordinator {
     pool: SqlitePool,
     cfg: Arc<SiteConfig>,
     active: Arc<RwLock<Option<Shift>>>,
+    /// Absent in tests that exercise shift bookkeeping without a poll loop; the
+    /// totalizer capture is then simply skipped.
+    runtimes: Option<RuntimeMap>,
 }
 
 impl ShiftCoordinator {
@@ -28,6 +47,82 @@ impl ShiftCoordinator {
             pool,
             cfg,
             active: Arc::new(RwLock::new(None)),
+            runtimes: None,
+        }
+    }
+
+    /// Attach lane runtimes so shift open/close can snapshot pump totalizers.
+    pub fn with_runtimes(mut self, runtimes: RuntimeMap) -> Self {
+        self.runtimes = Some(runtimes);
+        self
+    }
+
+    /// Snapshot every configured nozzle's electronic totalizer into the shift record.
+    ///
+    /// Best effort by design: protocols without a totalizer (Wayne Europump) and
+    /// lanes that are offline at the boundary contribute a row with a NULL reading,
+    /// which is more useful than no row at all — it shows the reading was attempted.
+    async fn capture_totalizers(&self, shift_id: &str, closing: bool) {
+        let Some(runtimes) = self.runtimes.as_ref() else {
+            return;
+        };
+        let now = chrono::Utc::now().timestamp_millis();
+        let snapshot: Vec<TotalizerSnapshot> = {
+            let map = runtimes.read().await;
+            self.cfg
+                .active_positions()
+                .into_iter()
+                .flat_map(|fp| {
+                    let rt = map.get(&fp.address_byte);
+                    fp.nozzles
+                        .iter()
+                        .filter(|n| n.active)
+                        .map(|n| {
+                            let totals = rt
+                                .and_then(|rt| {
+                                    rt.state
+                                        .pump_totals
+                                        .iter()
+                                        .find(|t| t.nozzle_index == n.index)
+                                })
+                                .map(|t| (t.volume, t.amount));
+                            TotalizerSnapshot {
+                                fp_id: fp.id.clone(),
+                                label: fp.label.clone(),
+                                nozzle_index: n.index,
+                                product_id: n.product_id,
+                                product_name: self
+                                    .cfg
+                                    .product(n.product_id)
+                                    .map(|p| p.name.clone())
+                                    .unwrap_or_default(),
+                                volume: totals.map(|(v, _)| v),
+                                amount: totals.map(|(_, a)| a),
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        };
+        for s in snapshot {
+            if let Err(e) = shift_queries::upsert_nozzle_totalizer(
+                &self.pool,
+                shift_id,
+                &s.fp_id,
+                &s.label,
+                s.nozzle_index,
+                s.product_id,
+                &s.product_name,
+                s.volume,
+                s.amount,
+                now,
+                closing,
+            )
+            .await
+            {
+                let (fp_id, nozzle_index) = (&s.fp_id, s.nozzle_index);
+                tracing::warn!(%fp_id, nozzle_index, ?e, "shift totalizer capture failed");
+            }
         }
     }
 
@@ -113,8 +208,12 @@ impl ShiftCoordinator {
             status: ShiftStatus::Active,
             notes: cmd.notes.clone(),
             position_totals: vec![],
+            product_totals: vec![],
+            nozzle_totalizers: vec![],
         };
         shift_queries::persist_new_shift(&self.pool, &shift).await?;
+        // Opening meter readings must be taken before any fuel moves on this shift.
+        self.capture_totalizers(&shift.id, false).await;
 
         // When a backdated start time is provided, pull in any completed/stopped
         // transactions that happened after that time but have no shift yet.
@@ -136,6 +235,8 @@ impl ShiftCoordinator {
         }
         shift_queries::validate_end(&cmd)?;
         let ended_at = chrono::Utc::now().timestamp_millis();
+        // Closing meter readings first, so the persisted shift already carries them.
+        self.capture_totalizers(&cmd.shift_id, true).await;
         shift_queries::close_shift(&self.pool, &cmd.shift_id, ended_at, cmd.notes.as_deref())
             .await?;
         let shift = shift_queries::get_shift(&self.pool, &cmd.shift_id)

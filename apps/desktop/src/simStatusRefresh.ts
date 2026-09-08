@@ -36,6 +36,30 @@ export async function waitForFpStatusChange(
   return latest;
 }
 
+/** After STOP, wait through intermediate states until the lane can be finalized. */
+export async function waitForFpStopResult(
+  fpId: string,
+  invokeGetStatus: () => Promise<FpState[]>,
+  options?: { pollMs?: number; timeoutMs?: number },
+): Promise<FpState | undefined> {
+  const pollMs = options?.pollMs ?? DEFAULT_POLL_MS;
+  const deadline = Date.now() + (options?.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+
+  let latest: FpState | undefined;
+  while (Date.now() < deadline) {
+    const rows = await invokeGetStatus();
+    latest = rows.find((state) => state.fp_id === fpId);
+    if (latest) {
+      const tag = statusTag(latest.status);
+      if (tag === "STOPPED" || tag === "DONE" || tag === "IDLE" || tag === "OFFLINE") {
+        return latest;
+      }
+    }
+    await sleep(pollMs);
+  }
+  return latest;
+}
+
 /** After POST preauthorize, wait until dispenser-service reports PRE_AUTHORIZED. */
 export async function waitForPreAuthorized(
   fpId: string,

@@ -21,16 +21,6 @@ pub enum DispatchCommand {
         price: u32,
         preset: Preset,
     },
-    ContinueFill {
-        byte: u8,
-        price: u32,
-        preset: Preset,
-    },
-    ResumeFill {
-        byte: u8,
-        price: u32,
-        preset: Preset,
-    },
     Stop {
         byte: u8,
     },
@@ -98,6 +88,19 @@ pub async fn run_poll_loop(
         }
         Protocol::TexnoUzBlueSky => {
             super::protocols::texnouz_bluesky::run(
+                cfg,
+                backend,
+                runtimes,
+                disp_by_byte,
+                events,
+                commands,
+                pool,
+                shifts,
+            )
+            .await
+        }
+        Protocol::ShelfV22 => {
+            super::protocols::shelf::run(
                 cfg,
                 backend,
                 runtimes,

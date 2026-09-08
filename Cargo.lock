@@ -938,6 +938,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serialport",
+ "shelf-v22",
  "site_config",
  "sqlx",
  "texnouz-bluesky",
@@ -3823,6 +3824,26 @@ checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
 ]
+
+[[package]]
+name = "shelf-sim"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "serde",
+ "serde_json",
+ "serialport",
+ "shelf-v22",
+ "site_config",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "shelf-v22"
+version = "0.1.0"
 
 [[package]]
 name = "shlex"

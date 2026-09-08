@@ -1324,7 +1324,6 @@ async fn azt_apply_command(
         }
 
         // Stops are terminal on this site (no resume) — same policy as Gilbarco.
-        DispatchCommand::ContinueFill { .. } | DispatchCommand::ResumeFill { .. } => {}
 
         DispatchCommand::RefreshTotals => {
             for fp in cfg.active_positions() {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { pausedInfo, statusTag } from "../types/api";
 import type { AuthMode, FpState, FpStatus, NozzleSnapshot } from "../types/api";
@@ -12,7 +12,7 @@ const MAX_VOLUME_LITERS = 999;
 
 function parseVolumeTarget(preset: string | null | undefined): number | null {
   if (!preset) return null;
-  const m = preset.match(/([\d.,]+)\s*L/i);
+  const m = preset.match(/([\d.,]+)\s*(?:L|m(?:3|³))/i);
   if (!m) return null;
   const v = Number.parseFloat(m[1].replace(",", "."));
   return Number.isFinite(v) && v > 0 ? v : null;
@@ -170,7 +170,6 @@ type PumpMeta = {
   isAuthorizing: boolean;
   isPaused: boolean;
   hasActivePreAuth: boolean;
-  isContinuing: boolean;
   canAuthorize: boolean;
 };
 
@@ -188,12 +187,9 @@ type Props = {
   onCancelPreAuth?: (fpId: string) => void;
   onStop: (fpId: string) => void;
   onCancel?: (fpId: string) => void;
-  onResumeFill: (fpId: string, stoppedTxId: string) => void;
-  onContinueFill: (fpId: string, stoppedTxId: string) => void;
   onCloseStopped: (fpId: string, stoppedTxId: string) => void;
   shiftRequired?: boolean;
   onStartShift?: () => void;
-  useStopMode?: boolean;
   useCancelMode?: boolean;
   gilbarcoMode?: boolean;
 };
@@ -218,18 +214,15 @@ function getMeta(
       tag !== "DELIVERING" &&
       tag !== "AUTHORIZING" &&
       tag !== "OFFLINE");
-  const isContinuing = (state.base_volume ?? 0) > 0 && (isDelivering || isAuthorizing);
   const canOpenPreAuth =
     (isIdle || isNozzleUp) &&
     defaultAuthMode === "preauth" &&
     !isPaused &&
-    !isContinuing &&
     !hasActivePreAuth;
   const canOpenReactive =
     isNozzleUp &&
     defaultAuthMode !== "preauth" &&
     !isPaused &&
-    !isContinuing &&
     !hasActivePreAuth;
   return {
     tag,
@@ -241,25 +234,24 @@ function getMeta(
     isAuthorizing,
     isPaused,
     hasActivePreAuth,
-    isContinuing,
     canAuthorize: positionActive && !isOffline && (canOpenPreAuth || canOpenReactive),
   };
 }
 
 function statusTintClass(meta: PumpMeta): string {
-  if (meta.isOffline) return "border-accent-red/40 bg-accent-red/10 text-accent-red shadow-[inset_0_0_20px_rgba(var(--color-accent-red),0.05)]";
-  if (meta.isDelivering || meta.isAuthorizing) return "border-accent-emerald/40 bg-accent-emerald/10 text-accent-emerald shadow-[inset_0_0_20px_rgba(var(--color-accent-emerald),0.05)]";
-  if (meta.hasActivePreAuth || meta.isPaused) return "border-accent-amber/40 bg-accent-amber/10 text-accent-amber shadow-[inset_0_0_20px_rgba(var(--color-accent-amber),0.05)]";
-  if (meta.isNozzleUp) return "border-accent-blue/40 bg-accent-blue/10 text-accent-blue shadow-[inset_0_0_20px_rgba(var(--color-accent-blue),0.05)]";
-  return "border-border-primary/50 bg-bg-secondary/40 text-text-secondary backdrop-blur-sm";
+  if (meta.isOffline) return "border-l-2 border-l-accent-red bg-bg-secondary/30 text-accent-red";
+  if (meta.isDelivering || meta.isAuthorizing) return "border-l-2 border-l-accent-emerald bg-bg-secondary/30 text-accent-emerald";
+  if (meta.hasActivePreAuth || meta.isPaused) return "border-l-2 border-l-accent-amber bg-bg-secondary/30 text-accent-amber";
+  if (meta.isNozzleUp) return "border-l-2 border-l-accent-blue bg-bg-secondary/30 text-accent-blue";
+  return "border-l-2 border-l-border-primary bg-bg-secondary/30 text-text-secondary";
 }
 
 function statusSolidClass(meta: PumpMeta): string {
-  if (meta.isOffline) return "border-accent-red bg-accent-red text-white";
-  if (meta.isDelivering || meta.isAuthorizing) return "border-accent-emerald bg-accent-emerald text-white";
-  if (meta.hasActivePreAuth || meta.isPaused) return "border-accent-amber bg-accent-amber text-white";
-  if (meta.isNozzleUp) return "border-accent-blue bg-accent-blue text-white";
-  return "border-border-primary/50 bg-bg-secondary/80 text-text-secondary";
+  if (meta.isOffline) return "border-accent-red/65 bg-bg-secondary text-accent-red";
+  if (meta.isDelivering || meta.isAuthorizing) return "border-accent-emerald/65 bg-bg-secondary text-accent-emerald";
+  if (meta.hasActivePreAuth || meta.isPaused) return "border-accent-amber/65 bg-bg-secondary text-accent-amber";
+  if (meta.isNozzleUp) return "border-accent-blue/65 bg-bg-secondary text-accent-blue";
+  return "border-border-primary/60 bg-bg-secondary text-text-secondary";
 }
 
 function classicStatusLabel(meta: PumpMeta, t: (key: string) => string): string {
@@ -284,16 +276,14 @@ export function ClassicDispenserConsole({
   onCancelPreAuth,
   onStop,
   onCancel,
-  onResumeFill,
-  onContinueFill,
   onCloseStopped,
   shiftRequired = false,
   onStartShift,
-  useStopMode = false,
   useCancelMode = false,
   gilbarcoMode = false,
 }: Props) {
   const { t } = useTranslation();
+  const siteSnapshot = useAppStore((s) => s.siteSnapshot);
   // Wrong-nozzle-during-preauth alert (backend already cancels the preauth and
   // emits fp.pre_auth_nozzle_mismatch; surface it here so the operator sees it).
   const preAuthNozzleMismatch = useAppStore((s) => s.preAuthNozzleMismatch);
@@ -306,7 +296,6 @@ export function ClassicDispenserConsole({
     return () => window.clearTimeout(tmr);
   }, [preAuthNozzleMismatch, clearPreAuthNozzleMismatch]);
   const [drafts, setDrafts] = useState<Record<string, PumpDraft>>({});
-  const [activeOrderField, setActiveOrderField] = useState<{ fpId: string; field: OrderField } | null>(null);
   const consoleRef = useRef<HTMLDivElement>(null);
   const pumpButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const bottomPanelRef = useRef<HTMLDivElement>(null);
@@ -344,50 +333,55 @@ export function ClassicDispenserConsole({
     };
   }, [states.length]);
 
-  // Use the premium, highly readable style tokens. The scaling engine handles small screens!
+  const dense = states.length >= 6;
+
+  // Six-pump layouts use genuinely smaller controls so the console remains
+  // readable without relying on aggressive whole-page scaling.
   const ui = {
     topGridGap: "gap-2",
-    topCardPad: "p-3",
-    topCardText: "text-xl",
-    topCardLabel: "text-sm",
-    bottomLiveText: "text-5xl",
-    tableLiveText: "text-3xl",
-    priceText: "text-3xl",
-    productPriceText: "text-lg",
+    topCardPad: dense ? "p-2" : "p-3",
+    topCardText: dense ? "text-lg" : "text-xl",
+    topCardLabel: dense ? "text-xs" : "text-sm",
+    bottomLiveText: dense ? "text-4xl" : "text-5xl",
+    tableLiveText: dense ? "text-2xl" : "text-3xl",
+    priceText: dense ? "text-2xl" : "text-3xl",
+    productPriceText: dense ? "text-sm" : "text-lg",
     
-    thPad: "px-4 py-3",
-    tdPad: "px-3 py-2",
-    thText: "text-xs",
+    thPad: dense ? "px-3 py-2" : "px-4 py-3",
+    tdPad: dense ? "px-2 py-1.5" : "px-3 py-2",
+    thText: dense ? "text-[11px]" : "text-xs",
     
-    inputHeight: "h-12",
-    inputText: "text-2xl",
-    inputPad: "px-4",
+    inputHeight: dense ? "h-10" : "h-12",
+    inputText: dense ? "text-lg" : "text-2xl",
+    inputPad: dense ? "px-2" : "px-4",
     
-    modeBtnPad: "px-3 py-2",
-    modeBtnText: "text-base",
+    modeBtnPad: dense ? "px-2 py-1.5" : "px-3 py-2",
+    modeBtnText: dense ? "text-xs" : "text-base",
     
-    btnHeight: "h-10",
-    btnPad: "px-4",
-    btnText: "text-base",
+    btnHeight: dense ? "h-9" : "h-10",
+    btnPad: dense ? "px-3" : "px-4",
+    btnText: dense ? "text-sm" : "text-base",
   };
 
   const focusControlClass =
-    "transition-[border-color,background-color,box-shadow] duration-75 focus:border-accent-blue focus:bg-bg-primary focus:ring-[4px] focus:ring-accent-blue/30 focus:ring-offset-0 focus:outline-none shadow-sm focus:shadow-md";
+    "transition-[border-color,background-color] duration-75 focus:border-accent-blue focus:bg-bg-primary focus:ring-2 focus:ring-inset focus:ring-accent-blue/35 focus:outline-none";
   const invalidInputClass =
     "border-accent-red/70 bg-accent-red/10 text-text-primary focus:border-accent-red focus:ring-accent-red/30";
   const lockedInputClass =
     "cursor-not-allowed border-border-primary/30 bg-bg-secondary/40 text-text-muted opacity-70";
-  const mirroredOrderInputClass =
-    "!border-accent-blue !bg-accent-blue !text-white caret-white placeholder:text-white/70 ring-[8px] ring-accent-blue/55 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.30),inset_0_0_22px_rgba(255,255,255,0.18),0_0_0_2px_rgba(var(--color-accent-blue),0.85),0_14px_32px_-10px_rgba(var(--color-accent-blue),0.95)]";
+  const selectedOrderInputClass =
+    "!border-2 !border-accent-blue !bg-accent-blue/25 !text-text-primary caret-text-primary";
   const centerOrderFocusClass =
-    "focus:bg-accent-blue/45 focus:text-white focus:caret-white focus:ring-[8px] focus:ring-accent-blue/55 focus:shadow-[inset_0_0_0_2px_rgba(255,255,255,0.24),inset_0_0_18px_rgba(255,255,255,0.14),0_0_0_2px_rgba(var(--color-accent-blue),0.82),0_14px_32px_-10px_rgba(var(--color-accent-blue),0.95)]";
+    "focus:bg-accent-blue/15 focus:text-text-primary focus:caret-text-primary focus:ring-2 focus:ring-inset focus:ring-accent-blue/40";
   const bottomControlWrapClass =
-    "group flex flex-col gap-1 rounded-none border border-border-primary/50 bg-bg-secondary/20 p-3 transition-colors duration-100 hover:bg-bg-secondary/40 hover:shadow-md focus-within:border-accent-blue focus-within:bg-accent-blue/5 focus-within:shadow-[0_8px_24px_-8px_rgba(var(--color-accent-blue),0.4)]";
+    `group flex flex-col gap-1 rounded border border-border-primary/50 bg-bg-secondary/20 shadow-none ${dense ? "p-2" : "p-3"} transition-colors duration-100 focus-within:border-accent-blue focus-within:bg-accent-blue/5 focus-within:shadow-none`;
   const bottomLabelClass =
-    "mb-1 block text-sm font-black uppercase tracking-wider text-text-secondary transition-colors duration-75 group-focus-within:text-accent-blue group-hover:text-text-primary";
-  const tableUnitSlotClass = "w-14 shrink-0";
-  const centerUnitClass = "text-xs font-black uppercase tracking-widest text-text-primary";
-  const centerValueUnitClass = "text-base font-black uppercase tracking-widest text-text-primary/85";
+    `mb-1 block ${dense ? "text-xs" : "text-sm"} font-semibold uppercase tracking-wide text-text-secondary transition-colors duration-75 group-focus-within:text-accent-blue`;
+  const tableUnitSlotClass = `${dense ? "w-10" : "w-14"} shrink-0`;
+  const centerUnitClass = `${dense ? "text-[9px]" : "text-xs"} font-semibold uppercase text-text-secondary`;
+  const centerValueUnitClass = `${dense ? "text-xs" : "text-sm"} font-semibold uppercase text-text-secondary`;
+  const tableRowHeaderClass =
+    `sticky left-0 z-10 border-r border-border-primary/50 bg-bg-secondary ${ui.thPad} text-left ${ui.thText} font-semibold uppercase tracking-wide text-text-secondary`;
 
   useEffect(() => {
     const prevTags = prevTagsRef.current;
@@ -418,6 +412,11 @@ export function ClassicDispenserConsole({
               : null;
         const prevTag = prevTags[state.fp_id];
         const wasActive = prevTag === "DELIVERING" || prevTag === "AUTHORIZING";
+        const enteredStopped = tag === "STOPPED" && prevTag !== "STOPPED";
+        const stoppedClosed = prevTag === "STOPPED" && tag === "IDLE";
+        const stopped = pausedInfo(state);
+        const completedVolume = stopped?.stopped_volume ?? state.volume;
+        const completedAmount = stopped?.stopped_amount ?? state.amount;
         // An armed setup (pre-auth) or a bare nozzle-up that drops back to IDLE without
         // fueling — e.g. a wrong-nozzle pre-auth mismatch that cancels and returns to
         // idle once the wrong nozzle is holstered. The old volume/amount from that
@@ -426,9 +425,12 @@ export function ClassicDispenserConsole({
           (prevTag === "PRE_AUTHORIZED" || prevTag === "NOZZLE_UP") && tag === "IDLE";
         // Clear inputs after a successful fill (status hits DONE, or DONE was skipped and
         // we jump straight from an active state to IDLE) OR when a setup was abandoned.
-        const clearValues = tag === "DONE" || (wasActive && tag === "IDLE") || setupAbandoned;
+        const clearValues =
+          tag === "DONE" || enteredStopped || stoppedClosed || (wasActive && tag === "IDLE") || setupAbandoned;
         // Capture last-fill snapshot when the fill just ended.
-        const captureLastFill = clearValues && state.volume > 0;
+        const captureLastFill =
+          (tag === "DONE" || enteredStopped || stoppedClosed || (wasActive && tag === "IDLE")) &&
+          completedVolume > 0;
         // Reset last-fill snapshot when a new transaction begins.
         const clearLastFill = tag === "NOZZLE_UP" || tag === "AUTHORIZING" || tag === "DELIVERING";
         const presetDraft =
@@ -437,11 +439,11 @@ export function ClassicDispenserConsole({
             : {};
         next[state.fp_id] = {
           nozzleIndex,
-          mode: prevDraft?.mode ?? presetDraft.mode ?? "volume",
-          volume: clearValues ? "" : (prevDraft?.volume ?? presetDraft.volume ?? ""),
-          amount: clearValues ? "" : (prevDraft?.amount ?? presetDraft.amount ?? ""),
-          lastFillVolume: clearLastFill ? null : captureLastFill ? state.volume : (prevDraft?.lastFillVolume ?? null),
-          lastFillAmount: clearLastFill ? null : captureLastFill ? state.amount : (prevDraft?.lastFillAmount ?? null),
+          mode: presetDraft.mode ?? prevDraft?.mode ?? "volume",
+          volume: clearValues ? "" : (presetDraft.volume ?? prevDraft?.volume ?? ""),
+          amount: clearValues ? "" : (presetDraft.amount ?? prevDraft?.amount ?? ""),
+          lastFillVolume: clearLastFill ? null : captureLastFill ? completedVolume : (prevDraft?.lastFillVolume ?? null),
+          lastFillAmount: clearLastFill ? null : captureLastFill ? completedAmount : (prevDraft?.lastFillAmount ?? null),
           lastFillPreset: clearLastFill ? null : captureLastFill ? (state.pre_auth_preset ?? null) : (prevDraft?.lastFillPreset ?? null),
         };
       }
@@ -486,6 +488,14 @@ export function ClassicDispenserConsole({
     const idx = draft?.nozzleIndex ?? (nozzles.length === 1 ? nozzles[0]!.index : null);
     return nozzles.find((n) => n.index === idx) ?? null;
   }, [drafts, nozzlesByFp]);
+
+  const volumeUnitFor = useCallback(
+    (state: FpState, nozzle: NozzleSnapshot | null = selectedNozzle(state)) => {
+      const productId = nozzle?.product_id ?? state.product_id ?? null;
+      return siteSnapshot?.products.find((product) => product.id === productId)?.unit?.trim() || "L";
+    },
+    [selectedNozzle, siteSnapshot],
+  );
 
   useEffect(() => {
     setDrafts((prev) => {
@@ -594,7 +604,6 @@ export function ClassicDispenserConsole({
 
   const focusTableOrderField = useCallback((fpId: string, field: OrderField) => {
     onSelectFp(fpId);
-    setActiveOrderField({ fpId, field });
     window.requestAnimationFrame(() => {
       const root = consoleRef.current;
       const container = root?.querySelector<HTMLElement>(`[data-table-row='${field}'][data-fp-id='${fpId}']`);
@@ -606,7 +615,6 @@ export function ClassicDispenserConsole({
 
   const focusBottomOrderField = useCallback((fpId: string, field: OrderField) => {
     onSelectFp(fpId);
-    setActiveOrderField({ fpId, field });
     focusBottomControl(field);
   }, [focusBottomControl, onSelectFp]);
 
@@ -887,12 +895,6 @@ export function ClassicDispenserConsole({
 
     const target = e.target as HTMLElement | null;
 
-    // Prevent hijacking ArrowLeft/ArrowRight when editing text inputs
-    const isInput = target?.tagName === "INPUT" && (target as HTMLInputElement).type === "text";
-    if (isInput && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
-      return;
-    }
-
     const currentControl = target?.closest<HTMLElement>("[data-classic-control]")?.dataset.classicControl ?? null;
     const tableRowName = target?.closest<HTMLElement>("[data-table-row]")?.dataset.tableRow ?? null;
     const keepBottomFocus = currentControl != null && bottomPanelRef.current?.contains(target);
@@ -994,7 +996,7 @@ export function ClassicDispenserConsole({
     const meta = getMeta(state, defaultAuthMode, positionActive);
     const paused = meta.paused;
     const baseClass = `${ui.btnHeight} ${ui.btnPad} ${ui.btnText} rounded-none`;
-    const cls = `${baseClass} w-full flex-1 font-black [text-shadow:0_1px_0_rgba(0,0,0,0.25)] uppercase tracking-wider outline-none transition-colors duration-75 active:brightness-95 focus-visible:ring-[3px] focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none`;
+    const cls = `${baseClass} w-full flex-1 font-semibold uppercase tracking-wide outline-none shadow-none transition-colors duration-75 active:brightness-95 focus-visible:brightness-95 disabled:cursor-not-allowed disabled:opacity-50`;
 
     if (meta.canAuthorize) {
       return (
@@ -1002,32 +1004,26 @@ export function ClassicDispenserConsole({
           type="button"
           disabled={!shiftRequired && !buildRequest(state)}
           onClick={() => startPump(state)}
-          className={`${cls} border border-accent-emerald/80 bg-accent-emerald text-white hover:bg-accent-emerald-light shadow-[0_4px_12px_rgba(var(--color-accent-emerald),0.2)] focus-visible:ring-accent-emerald/30`}
+          className={`${cls} border border-accent-emerald/80 bg-accent-emerald text-white hover:bg-accent-emerald-light`}
         >
           {shiftRequired ? t("classic.startShift") : t("classic.start")}
         </button>
       );
     }
     if (meta.isDelivering || meta.isAuthorizing) {
+      const cancel = useCancelMode && onCancel != null;
       return (
-        <div className="flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => onStop(state.fp_id)}
-            className={`${cls} border border-accent-amber/80 bg-accent-amber text-white hover:bg-accent-amber-light shadow-[0_4px_12px_rgba(var(--color-accent-amber),0.2)] focus-visible:ring-accent-amber/30`}
-          >
-            {useStopMode || gilbarcoMode ? t("classic.stop") : t("classic.pause")}
-          </button>
-          {useCancelMode && onCancel && !gilbarcoMode ? (
-            <button
-              type="button"
-              onClick={() => onCancel(state.fp_id)}
-              className={`${cls} border border-accent-red/80 bg-accent-red text-white hover:bg-accent-red-light shadow-[0_4px_12px_rgba(var(--color-accent-red),0.2)] focus-visible:ring-accent-red/30`}
-            >
-              {t("classic.cancel")}
-            </button>
-          ) : null}
-        </div>
+        <button
+          type="button"
+          onClick={() => cancel ? onCancel(state.fp_id) : onStop(state.fp_id)}
+          className={`${cls} border ${
+            cancel
+              ? "border-accent-red/80 bg-accent-red text-white hover:bg-accent-red-light"
+              : "border-accent-amber/80 bg-accent-amber text-white hover:bg-accent-amber-light"
+          }`}
+        >
+          {cancel ? t("classic.cancel") : t("classic.stop")}
+        </button>
       );
     }
     if (meta.hasActivePreAuth && !meta.isDelivering && !meta.isPaused) {
@@ -1035,61 +1031,21 @@ export function ClassicDispenserConsole({
         <button
           type="button"
           onClick={() => onCancelPreAuth?.(state.fp_id)}
-          className={`${cls} border border-border-primary bg-bg-secondary text-text-secondary hover:bg-bg-tertiary hover:text-text-primary hover:border-text-primary/20 focus-visible:ring-text-primary/20`}
+          className={`${cls} border border-border-primary bg-bg-secondary text-text-secondary hover:bg-bg-tertiary hover:text-text-primary hover:border-text-primary/20 focus-visible:border-accent-blue`}
         >
           {t("classic.cancelPreAuth")}
         </button>
       );
     }
     if (paused) {
-      if (gilbarcoMode || paused.stop_source === "APP_FINAL") {
-        return (
-          <button
-            type="button"
-            onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
-            className={`${cls} border border-border-primary bg-bg-tertiary text-text-primary hover:bg-bg-secondary hover:border-text-primary/20 focus-visible:ring-text-primary/20`}
-          >
-            {t("classic.close")}
-          </button>
-        );
-      }
-      if (paused.stop_source === "APP") {
-        return (
-          <div className="flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => onResumeFill(state.fp_id, paused.stopped_tx_id)}
-              className={`${cls} border border-accent-emerald/80 bg-accent-emerald text-white hover:bg-accent-emerald-light shadow-[0_4px_12px_rgba(var(--color-accent-emerald),0.2)] focus-visible:ring-accent-emerald/30`}
-            >
-              {t("classic.resume")}
-            </button>
-            <button
-              type="button"
-              onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
-              className={`${cls} border border-border-primary bg-bg-tertiary text-text-primary hover:bg-bg-secondary hover:border-text-primary/20 focus-visible:ring-text-primary/20`}
-            >
-              {t("classic.close")}
-            </button>
-          </div>
-        );
-      }
       return (
-        <div className="flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => onContinueFill(state.fp_id, paused.stopped_tx_id)}
-            className={`${cls} border border-accent-emerald/80 bg-accent-emerald text-white hover:bg-accent-emerald-light shadow-[0_4px_12px_rgba(var(--color-accent-emerald),0.2)] focus-visible:ring-accent-emerald/30`}
-          >
-            {t("classic.continue")}
-          </button>
-          <button
-            type="button"
-            onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
-            className={`${cls} border border-border-primary bg-bg-tertiary text-text-primary hover:bg-bg-secondary hover:border-text-primary/20 focus-visible:ring-text-primary/20`}
-          >
-            {t("classic.close")}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => onCloseStopped(state.fp_id, paused.stopped_tx_id)}
+          className={`${cls} border border-border-primary bg-bg-tertiary text-text-primary hover:bg-bg-secondary hover:border-text-primary/20 focus-visible:border-accent-blue`}
+        >
+          {t("classic.close")}
+        </button>
       );
     }
     return <div className={`${ui.btnHeight} flex items-center justify-center`}><span className="text-[11px] font-bold tracking-wider text-text-muted/60 uppercase">--</span></div>;
@@ -1100,23 +1056,12 @@ export function ClassicDispenserConsole({
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
     const setupLocked = meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused;
     const modes: FillMode[] = ["full", "volume", "amount"];
-    const modeColorClass = (mode: FillMode, active: boolean) => {
-      if (mode === "full") {
-        return active
-          ? "border-2 border-white/70 bg-accent-emerald text-white shadow-[inset_0_0_0_2px_rgba(255,255,255,0.22),0_0_0_2px_rgba(var(--color-accent-emerald),0.45),0_10px_20px_-12px_rgba(var(--color-accent-emerald),0.95)] hover:bg-accent-emerald active:bg-accent-emerald focus:bg-accent-emerald focus:text-white focus-visible:ring-accent-emerald/35"
-          : "border border-accent-emerald/25 bg-accent-emerald/10 text-accent-emerald hover:bg-accent-emerald/18 hover:text-accent-emerald active:bg-accent-emerald/22 focus:bg-accent-emerald/18 focus:text-accent-emerald focus-visible:ring-accent-emerald/30";
-      }
-      if (mode === "volume") {
-        return active
-          ? "border-2 border-white/70 bg-accent-blue text-white shadow-[inset_0_0_0_2px_rgba(255,255,255,0.22),0_0_0_2px_rgba(var(--color-accent-blue),0.45),0_10px_20px_-12px_rgba(var(--color-accent-blue),0.95)] hover:bg-accent-blue active:bg-accent-blue focus:bg-accent-blue focus:text-white focus-visible:ring-accent-blue/35"
-          : "border border-accent-blue/25 bg-accent-blue/10 text-accent-blue hover:bg-accent-blue/18 hover:text-accent-blue active:bg-accent-blue/22 focus:bg-accent-blue/18 focus:text-accent-blue focus-visible:ring-accent-blue/30";
-      }
-      return active
-        ? "border-2 border-white/70 bg-accent-amber text-white shadow-[inset_0_0_0_2px_rgba(255,255,255,0.22),0_0_0_2px_rgba(var(--color-accent-amber),0.45),0_10px_20px_-12px_rgba(var(--color-accent-amber),0.95)] hover:bg-accent-amber active:bg-accent-amber focus:bg-accent-amber focus:text-white focus-visible:ring-accent-amber/35"
-        : "border border-accent-amber/25 bg-accent-amber/10 text-accent-amber hover:bg-accent-amber/18 hover:text-accent-amber active:bg-accent-amber/22 focus:bg-accent-amber/18 focus:text-accent-amber focus-visible:ring-accent-amber/30";
-    };
+    const modeColorClass = (_mode: FillMode, active: boolean) =>
+      active
+        ? "border border-accent-blue bg-accent-blue text-white"
+        : "border border-border-primary/60 bg-bg-secondary text-text-secondary hover:bg-bg-tertiary hover:text-text-primary focus-visible:border-accent-blue";
     return (
-      <div className="flex items-center justify-center gap-1.5 rounded-none border border-border-primary/40 bg-bg-input/50 p-1 backdrop-blur-sm">
+      <div className="flex items-center justify-center gap-1 rounded border border-border-primary/40 bg-bg-input/50 p-1 shadow-none">
         {modes.map((mode) => {
           const isActive = draft?.mode === mode;
           return (
@@ -1130,7 +1075,7 @@ export function ClassicDispenserConsole({
                 setDraft(state.fp_id, mode === "full" ? { mode, volume: "", amount: "" } : { mode });
               }}
               onKeyDown={keyboardControls ? (e) => handleControlNavKeyDown(state, e) : undefined}
-              className={`flex-1 rounded-none transition-colors duration-100 outline-none disabled:cursor-not-allowed disabled:opacity-60 ${ui.modeBtnPad} ${ui.modeBtnText} font-black uppercase focus-visible:ring-[3px] focus-visible:ring-offset-0 ${modeColorClass(mode, isActive)}`}
+              className={`flex-1 rounded shadow-none transition-colors duration-100 outline-none disabled:cursor-not-allowed disabled:opacity-60 ${ui.modeBtnPad} ${ui.modeBtnText} font-semibold uppercase ${modeColorClass(mode, isActive)}`}
             >
               {mode === "full"
                 ? t("classic.full")
@@ -1156,6 +1101,7 @@ export function ClassicDispenserConsole({
   const selectedNozzles = (nozzlesByFp.get(selected.fp_id) ?? []).filter((n) => n.active);
   const selectedDraft = drafts[selected.fp_id];
   const selectedProduct = selectedNozzle(selected);
+  const selectedVolumeUnit = volumeUnitFor(selected, selectedProduct);
   const selectedProductColor = productColorFor(selected, selectedProduct);
   const selectedMaxAmount = maxAmountForNozzle(selectedProduct);
   const selectedVolumeInvalid = selectedDraft?.mode === "volume" && !isValidVolume(selectedDraft.volume);
@@ -1163,6 +1109,20 @@ export function ClassicDispenserConsole({
   const selectedPositionActive = positionActiveByFp.get(selected.fp_id) ?? true;
   const selectedMeta = getMeta(selected, defaultAuthMode, selectedPositionActive);
   const selectedSetupLocked = selectedMeta.hasActivePreAuth || selectedMeta.isDelivering || selectedMeta.isAuthorizing || selectedMeta.isPaused;
+  const selectedActiveReading = selectedMeta.isDelivering || selectedMeta.isAuthorizing || selectedMeta.isPaused;
+  const selectedHasLastSale = !selectedActiveReading && selectedDraft?.lastFillVolume != null;
+  const selectedDisplayVolume = selectedActiveReading
+    ? (selectedMeta.paused?.stopped_volume ?? selected.volume)
+    : (selectedDraft?.lastFillVolume ?? selected.volume);
+  const selectedDisplayAmount = selectedActiveReading
+    ? (selectedMeta.paused?.stopped_amount ?? selected.amount)
+    : (selectedDraft?.lastFillAmount ?? selected.amount);
+  const selectedMode = selectedDraft?.mode ?? "volume";
+  const selectedModeLabel = selectedMode === "full"
+    ? t("classic.full")
+    : selectedMode === "amount"
+      ? t("classic.amount")
+      : t("classic.volume");
   const selectedColumnIndex = Math.max(0, states.findIndex((s) => s.fp_id === selected.fp_id));
   const selectedColumnRatio = selectedColumnIndex / states.length;
   const selectedColumnWidth = `calc(${100 / states.length}% - ${8 / states.length}rem)`;
@@ -1178,7 +1138,9 @@ export function ClassicDispenserConsole({
 
   const renderPumpTile = (state: FpState) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
+    const draft = drafts[state.fp_id];
     const nozzle = selectedNozzle(state);
+    const volumeUnit = volumeUnitFor(state, nozzle);
     const productColor = productColorFor(state, nozzle);
     const selectedCard = state.fp_id === selected.fp_id;
     const cardMismatch =
@@ -1191,13 +1153,21 @@ export function ClassicDispenserConsole({
     const pumpTotalizer = pickPumpTotalizer(state, nozzle?.index ?? null);
     const showPumpTotalizer =
       pumpTotalizer != null && (meta.isIdle || meta.tag === "DONE" || meta.isPaused);
+    const activeReading = meta.isDelivering || meta.isAuthorizing || meta.isPaused;
+    const hasLastSale = !activeReading && draft?.lastFillVolume != null;
+    const displayVolume = activeReading
+      ? (meta.paused?.stopped_volume ?? state.volume)
+      : (draft?.lastFillVolume ?? state.volume);
+    const displayAmount = activeReading
+      ? (meta.paused?.stopped_amount ?? state.amount)
+      : (draft?.lastFillAmount ?? state.amount);
     return (
       <div
         key={state.fp_id}
         onMouseDown={(e) => handlePassivePumpMouseDown(state.fp_id, e)}
         className={`relative min-w-0 overflow-hidden rounded-none border text-left transition-[background-color,border-color,box-shadow] duration-75 ${
           selectedCard
-            ? "z-20 border-accent-blue bg-accent-blue/10 shadow-[inset_0_0_0_2px_rgb(var(--color-accent-blue)/0.32),0_12px_28px_-20px_rgba(0,0,0,0.65)]"
+            ? "z-20 border-accent-blue bg-bg-card ring-1 ring-inset ring-accent-blue"
             : "border-border-primary/40 bg-bg-secondary/30 hover:bg-bg-secondary/60 cursor-pointer"
         }`}
       >
@@ -1221,7 +1191,6 @@ export function ClassicDispenserConsole({
             </span>
           </div>
         )}
-        {selectedCard ? <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1.5 bg-accent-blue" aria-hidden /> : null}
         <button
           type="button"
           onClick={() => onSelectFp(state.fp_id)}
@@ -1233,28 +1202,41 @@ export function ClassicDispenserConsole({
           onKeyDown={(e) => handlePumpKeyDown(state, e)}
           className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-inset"
         >
-          <div className={`flex items-center justify-between border-b border-border-primary/25 ${ui.topCardPad} ${statusSolidClass(meta)}`}>
-            <span className={`${ui.topCardText} font-black`}>{pumpNumber(state)}</span>
-            <span className="min-w-0 truncate text-base font-black uppercase tracking-wider">{classicStatusLabel(meta, t)}</span>
+          <div className={`flex items-center justify-between gap-2 border-b border-border-primary/25 ${ui.topCardPad} ${statusSolidClass(meta)}`}>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className={`${ui.topCardText} shrink-0 font-semibold`}>{pumpNumber(state)}</span>
+              <span className="line-clamp-2 min-w-0 break-words text-[11px] font-medium leading-tight text-text-secondary" title={pumpTitle(state)}>
+                {pumpTitle(state)}
+              </span>
+            </span>
+            <span className={`${dense ? "text-xs" : "text-sm"} min-w-0 truncate font-semibold uppercase`}>{classicStatusLabel(meta, t)}</span>
           </div>
           <div className={`grid grid-cols-2 bg-bg-primary/20 ${ui.topGridGap} ${ui.topCardPad} font-mono tabular-nums`}>
+            {hasLastSale ? (
+              <div className="col-span-2 -mb-1 text-[10px] font-medium text-text-muted">
+                {t("dispenser.lastFill")}
+              </div>
+            ) : null}
             <div>
-              <p className={`${ui.topCardLabel} font-extrabold uppercase tracking-wider text-text-muted`}>{t("classic.currentLiters")}</p>
-              <p className={`truncate ${ui.topCardText} font-black text-text-primary`}>{(meta.paused?.stopped_volume ?? state.volume).toFixed(2)}</p>
+              <p className={`${ui.topCardLabel} font-medium text-text-muted`}>{t("classic.currentLiters")}</p>
+              <p className={`truncate ${ui.topCardText} font-semibold text-text-primary`}>{displayVolume.toFixed(2)}</p>
             </div>
             <div className="text-right">
-              <p className={`${ui.topCardLabel} font-extrabold uppercase tracking-wider text-text-muted`}>{t("classic.currentAmount")}</p>
-              <p className={`truncate ${ui.topCardText} font-black text-accent-blue`}>{fmtSum.format(meta.paused?.stopped_amount ?? state.amount)}</p>
+              <p className={`${ui.topCardLabel} font-medium text-text-muted`}>{t("classic.currentAmount")}</p>
+              <p className={`truncate ${ui.topCardText} font-semibold text-accent-blue`}>{fmtSum.format(displayAmount)}</p>
             </div>
           </div>
         </button>
         <div
-          className={`flex items-center justify-between border-t border-border-primary/20 bg-bg-secondary/20 ${ui.topGridGap} ${ui.topCardPad} ${ui.topCardLabel}`}
-          style={{ boxShadow: `inset 0 3px 0 ${productColor}` }}
+          className={`flex items-center justify-between border-l-2 border-t border-border-primary/20 bg-bg-secondary/20 ${ui.topGridGap} ${ui.topCardPad} ${ui.topCardLabel}`}
+          style={{ borderLeftColor: productColor }}
         >
           <span className="flex min-w-0 items-center gap-1.5 truncate font-black text-text-secondary">
             <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-border-primary/40" style={{ backgroundColor: productColor }} />
             <span className="min-w-0 truncate">{nozzle?.product_name ?? state.product_name ?? "--"}</span>
+            <span className="shrink-0 border-l border-border-primary pl-1.5 text-[10px] font-medium text-text-muted">
+              {t("dispenser.nozzle")} {nozzle?.index ?? state.nozzle_index ?? "—"}
+            </span>
           </span>
           <span className={`shrink-0 font-mono font-black ${ui.productPriceText}`} style={{ color: productColor }}>
             {fmtSum.format(nozzle?.price ?? state.price ?? 0)}
@@ -1268,7 +1250,7 @@ export function ClassicDispenserConsole({
             </span>
             <span className="flex shrink-0 items-baseline gap-2">
               <span className="font-bold text-text-secondary">
-                {pumpTotalizer.volume != null ? `${pumpTotalizer.volume.toFixed(2)} L` : "—"}
+                {pumpTotalizer.volume != null ? `${pumpTotalizer.volume.toFixed(2)} ${volumeUnit}` : "—"}
               </span>
               <span className="text-text-muted">
                 {pumpTotalizer.amount != null ? fmtSum.format(pumpTotalizer.amount) : "—"}
@@ -1291,7 +1273,7 @@ export function ClassicDispenserConsole({
     >
       <div
         ref={contentRef}
-        className="flex flex-col gap-3 origin-top-left absolute top-0 left-0"
+        className={`absolute left-0 top-0 flex origin-top-left flex-col ${dense ? "gap-2" : "gap-3"}`}
         style={{
           transform: `scale(${scale})`,
           width: scale < 1 ? `${100 / scale}%` : "100%",
@@ -1308,9 +1290,9 @@ export function ClassicDispenserConsole({
         {states.map(renderPumpTile)}
       </div>
 
-      <div className="relative overflow-hidden rounded-none border border-border-primary/50 bg-bg-card/40 backdrop-blur-md shadow-inner">
+      <div className="relative overflow-hidden rounded border border-border-primary/50 bg-bg-card">
         <div
-          className="pointer-events-none absolute bottom-0 top-0 z-20 border-2 border-accent-blue shadow-[inset_0_0_0_1px_rgb(var(--color-accent-blue)/0.18)]"
+          className="pointer-events-none absolute bottom-0 top-0 z-20 border-2 border-accent-blue"
           style={{ left: selectedColumnLeft, width: selectedColumnWidth }}
           aria-hidden
         />
@@ -1320,12 +1302,12 @@ export function ClassicDispenserConsole({
           </colgroup>
           <tbody className="divide-y divide-border-primary/30">
             <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
-              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.status")}</th>
+              <th className={tableRowHeaderClass}>{t("classic.status")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 return (
                   <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
-                    <span className={`inline-flex w-full min-w-0 justify-center rounded-none border ${ui.modeBtnPad} text-lg font-black uppercase tracking-wider truncate ${statusSolidClass(meta)}`}>
+                    <span className={`inline-flex w-full min-w-0 justify-center truncate rounded border ${ui.modeBtnPad} ${dense ? "text-xs" : "text-sm"} font-semibold uppercase ${statusSolidClass(meta)}`}>
                       {classicStatusLabel(meta, t)}
                     </span>
                   </td>
@@ -1333,7 +1315,7 @@ export function ClassicDispenserConsole({
               })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
-              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.fuel")}</th>
+              <th className={tableRowHeaderClass}>{t("classic.fuel")}</th>
 	              {states.map((state) => {
 	                const nozzles = (nozzlesByFp.get(state.fp_id) ?? []).filter((n) => n.active);
 	                const draft = drafts[state.fp_id];
@@ -1364,7 +1346,7 @@ export function ClassicDispenserConsole({
                             ...relatedDraftValues(draft, nozzle ?? null),
                           });
                         }}
-	                        className={`${ui.inputHeight} w-full rounded-none border ${ui.inputPad} pl-7 ${ui.inputText} font-black transition-[border-color,background-color,box-shadow] duration-75 outline-none disabled:cursor-not-allowed disabled:opacity-70 ${
+	                        className={`${ui.inputHeight} w-full rounded border ${ui.inputPad} pl-7 ${ui.inputText} font-semibold transition-[border-color,background-color] duration-75 outline-none disabled:cursor-not-allowed disabled:opacity-70 ${
 	                          setupLocked
 	                            ? lockedInputClass
 	                            : "border-border-primary/40 bg-bg-input text-text-primary focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/30 focus:ring-offset-0"
@@ -1382,7 +1364,7 @@ export function ClassicDispenserConsole({
               })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
-              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.price")}</th>
+              <th className={tableRowHeaderClass}>{t("classic.price")}</th>
               {states.map((state) => {
                 const nozzle = selectedNozzle(state);
                 const productColor = productColorFor(state, nozzle);
@@ -1394,9 +1376,10 @@ export function ClassicDispenserConsole({
               })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
-              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.orderLiters")}</th>
+              <th className={tableRowHeaderClass}>{t("classic.orderLiters")}</th>
 	              {states.map((state) => {
 	                const draft = drafts[state.fp_id];
+	                const volumeUnit = volumeUnitFor(state);
 	                const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
 	                const setupLocked = meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused;
 	                const invalid = draft?.mode === "volume" && !isValidVolume(draft.volume);
@@ -1407,31 +1390,30 @@ export function ClassicDispenserConsole({
                         type="text"
                         inputMode="decimal"
                         aria-invalid={invalid}
-	                        title={`1-${MAX_VOLUME_LITERS} L`}
+	                        title={`1-${MAX_VOLUME_LITERS} ${volumeUnit}`}
 	                        placeholder="—"
 	                        value={draft?.volume ?? ""}
 	                        disabled={setupLocked}
 	                        onFocus={(e) => {
 	                          onSelectFp(state.fp_id);
-	                          setActiveOrderField({ fpId: state.fp_id, field: "volume" });
 	                          setDraft(state.fp_id, { mode: "volume" });
 	                          selectInputValue(e.currentTarget);
 	                        }}
                         onMouseUp={(e) => e.preventDefault()}
                         onChange={(e) => updateVolume(state, e.target.value)}
                         onKeyDown={(e) => handleEditKeyDown(state, e)}
-	                        className={`${ui.inputHeight} min-w-0 flex-1 rounded-none border pl-16 pr-4 text-center ${ui.inputText} font-mono font-black tabular-nums transition-[border-color,background-color,box-shadow] duration-75 outline-none disabled:cursor-not-allowed ${centerOrderFocusClass} ${
+	                        className={`${ui.inputHeight} min-w-0 flex-1 rounded border ${dense ? "px-2" : "px-4"} text-center ${ui.inputText} font-mono font-semibold tabular-nums transition-[border-color,background-color] duration-75 outline-none disabled:cursor-not-allowed ${centerOrderFocusClass} ${
 	                          setupLocked
 	                            ? lockedInputClass
 	                            : invalid
 	                            ? invalidInputClass
 	                            : draft?.mode === "volume"
-                              ? "border-accent-emerald/50 bg-accent-emerald/10 text-text-primary focus:ring-accent-emerald/30 focus:border-accent-emerald shadow-inner"
+                              ? selectedOrderInputClass
                               : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
-                        } ${activeOrderField?.fpId === state.fp_id && activeOrderField.field === "volume" ? mirroredOrderInputClass : ""}`}
+                        }`}
                       />
 	                      <span aria-hidden className={`${ui.inputHeight} -ml-px flex ${tableUnitSlotClass} ${centerUnitClass} items-center justify-center border border-border-primary/40 bg-bg-secondary/80`}>
-	                        L
+	                        {volumeUnit}
 	                      </span>
                     </div>
                   </td>
@@ -1439,7 +1421,7 @@ export function ClassicDispenserConsole({
               })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
-              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.orderAmount")}</th>
+              <th className={tableRowHeaderClass}>{t("classic.orderAmount")}</th>
               {states.map((state) => {
 	                const draft = drafts[state.fp_id];
 	                const nozzle = selectedNozzle(state);
@@ -1460,22 +1442,21 @@ export function ClassicDispenserConsole({
 	                        disabled={setupLocked}
 	                        onFocus={(e) => {
 	                          onSelectFp(state.fp_id);
-	                          setActiveOrderField({ fpId: state.fp_id, field: "amount" });
 	                          setDraft(state.fp_id, { mode: "amount" });
 	                          selectInputValue(e.currentTarget);
 	                        }}
                         onMouseUp={(e) => e.preventDefault()}
                         onChange={(e) => updateAmount(state, e.target.value)}
                         onKeyDown={(e) => handleEditKeyDown(state, e)}
-	                        className={`${ui.inputHeight} min-w-0 flex-1 rounded-none border pl-16 pr-4 text-center ${ui.inputText} font-mono font-black tabular-nums transition-[border-color,background-color,box-shadow] duration-75 outline-none disabled:cursor-not-allowed ${centerOrderFocusClass} ${
+	                        className={`${ui.inputHeight} min-w-0 flex-1 rounded border ${dense ? "px-2" : "px-4"} text-center ${ui.inputText} font-mono font-semibold tabular-nums transition-[border-color,background-color] duration-75 outline-none disabled:cursor-not-allowed ${centerOrderFocusClass} ${
 	                          setupLocked
 	                            ? lockedInputClass
 	                            : invalid
 	                            ? invalidInputClass
 	                            : draft?.mode === "amount"
-                              ? "border-accent-emerald/50 bg-accent-emerald/10 text-text-primary focus:ring-accent-emerald/30 focus:border-accent-emerald shadow-inner"
+                              ? selectedOrderInputClass
                               : "border-border-primary/40 bg-bg-input text-text-primary focus:ring-accent-blue/30 focus:border-accent-blue"
-                        } ${activeOrderField?.fpId === state.fp_id && activeOrderField.field === "amount" ? mirroredOrderInputClass : ""}`}
+                        }`}
                       />
 	                      <span aria-hidden className={`${ui.inputHeight} -ml-px flex ${tableUnitSlotClass} ${centerUnitClass} items-center justify-center border border-border-primary/40 bg-bg-secondary/80`}>
 	                        SO'M
@@ -1486,15 +1467,16 @@ export function ClassicDispenserConsole({
               })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
-              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.mode")}</th>
+              <th className={tableRowHeaderClass}>{t("classic.mode")}</th>
               {states.map((state) => (
                 <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="mode" data-fp-id={state.fp_id}>{renderModeButtons(state, true)}</td>
               ))}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
-              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.currentLiters")}</th>
+              <th className={tableRowHeaderClass}>{t("classic.currentLiters")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
+                const volumeUnit = volumeUnitFor(state);
                 const draft = drafts[state.fp_id];
                 const isActive = meta.isDelivering || meta.isAuthorizing;
                 const displayVol = isActive
@@ -1504,14 +1486,14 @@ export function ClassicDispenserConsole({
 	                  <td key={state.fp_id} className={`${ui.tdPad} font-mono font-black tabular-nums ${ui.tableLiveText} ${centerCellClass(state.fp_id)}`} data-fp-id={state.fp_id}>
 	                    <span className="inline-flex items-baseline justify-center gap-2">
 	                      <span>{displayVol.toFixed(2)}</span>
-	                      <span className={centerValueUnitClass}>L</span>
+	                      <span className={centerValueUnitClass}>{volumeUnit}</span>
 	                    </span>
 	                  </td>
                 );
               })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
-              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.currentAmount")}</th>
+              <th className={tableRowHeaderClass}>{t("classic.currentAmount")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 const draft = drafts[state.fp_id];
@@ -1530,10 +1512,11 @@ export function ClassicDispenserConsole({
               })}
             </tr>
             <tr className="hover:bg-bg-primary/20 transition-colors duration-75">
-              <th className={`sticky left-0 z-10 border-r border-border-primary/40 bg-bg-secondary/90 ${ui.thPad} text-left shadow-[4px_0_12px_rgba(0,0,0,0.05)] ${ui.thText} uppercase font-bold tracking-wider`}>{t("classic.remaining")}</th>
+              <th className={tableRowHeaderClass}>{t("classic.remaining")}</th>
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 const draft = drafts[state.fp_id];
+                const volumeUnit = volumeUnitFor(state);
                 const isActive = meta.isDelivering || meta.isAuthorizing;
                 let cell = <span className="text-text-muted/50">—</span>;
                 if (isActive) {
@@ -1541,7 +1524,7 @@ export function ClassicDispenserConsole({
                   const amtTarget = parseAmountTarget(state.pre_auth_preset);
                   if (volTarget != null) {
                     const rem = Math.max(0, volTarget - state.volume);
-                    cell = <span className="inline-flex items-baseline gap-2 text-accent-amber"><span>{rem.toFixed(2)}</span><span className={centerValueUnitClass}>L</span></span>;
+                    cell = <span className="inline-flex items-baseline gap-2 text-accent-amber"><span>{rem.toFixed(2)}</span><span className={centerValueUnitClass}>{volumeUnit}</span></span>;
                   } else if (amtTarget != null) {
                     const rem = Math.max(0, amtTarget - state.amount);
                     cell = <span className="inline-flex items-baseline gap-2 text-accent-amber"><span>{fmtSum.format(rem)}</span><span className={centerValueUnitClass}>SO'M</span></span>;
@@ -1551,7 +1534,7 @@ export function ClassicDispenserConsole({
                   const amtTarget = parseAmountTarget(draft.lastFillPreset);
                   if (volTarget != null && draft.lastFillVolume != null) {
                     const rem = Math.max(0, volTarget - draft.lastFillVolume);
-                    cell = <span className="inline-flex items-baseline gap-2 text-text-muted/70"><span>{rem.toFixed(2)}</span><span className={centerValueUnitClass}>L</span></span>;
+                    cell = <span className="inline-flex items-baseline gap-2 text-text-muted/70"><span>{rem.toFixed(2)}</span><span className={centerValueUnitClass}>{volumeUnit}</span></span>;
                   } else if (amtTarget != null && draft.lastFillAmount != null) {
                     const rem = Math.max(0, amtTarget - draft.lastFillAmount);
                     cell = <span className="inline-flex items-baseline gap-2 text-text-muted/70"><span>{fmtSum.format(rem)}</span><span className={centerValueUnitClass}>SO'M</span></span>;
@@ -1570,15 +1553,21 @@ export function ClassicDispenserConsole({
 
       <div
         ref={bottomPanelRef}
-        className="shrink-0 overflow-hidden rounded-none border border-border-primary/50 bg-bg-card/80 backdrop-blur-xl shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] transition-[background-color,border-color,box-shadow] duration-75"
+        className="shrink-0 overflow-hidden rounded border border-border-primary/60 bg-bg-card transition-[background-color,border-color] duration-75"
       >
         <div className={`flex flex-col border-b border-border-primary/30 ${ui.topCardPad} ${statusTintClass(selectedMeta)} bg-opacity-40`}>
           <div className="flex flex-wrap items-center justify-between">
             <div className="min-w-0">
-              <p className={`truncate ${ui.inputText} font-black uppercase tracking-wider text-text-primary`}>
-                {t("classic.selectedPump")}: <span className="text-accent-blue">{pumpTitle(selected)}</span>
-              </p>
-              <p className="flex items-center gap-2 text-lg font-black uppercase tracking-wide opacity-90">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <p className={`min-w-0 truncate ${ui.inputText} font-black uppercase tracking-wider text-text-primary`}>
+                  {t("classic.selectedPump")}: <span className="text-accent-blue">{pumpTitle(selected)}</span>
+                </p>
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded border border-accent-blue bg-accent-blue px-2 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                  <Check className="h-3.5 w-3.5" aria-hidden />
+                  {t("classic.mode")}: {selectedModeLabel}
+                </span>
+              </div>
+              <p className={`flex items-center gap-2 ${dense ? "text-sm" : "text-base"} font-semibold opacity-90`}>
                 <span>{t("classic.liveStatus")}: {classicStatusLabel(selectedMeta, t)}</span>
                 <span className="h-1 w-1 rounded-full bg-current opacity-50" aria-hidden />
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -1587,14 +1576,18 @@ export function ClassicDispenserConsole({
                 </span>
               </p>
             </div>
-            <div className="flex gap-8 text-right font-mono tabular-nums">
+            <div className={`flex ${dense ? "gap-5" : "gap-8"} text-right font-mono tabular-nums`}>
               <div>
-                <p className={`${ui.thText} font-extrabold uppercase tracking-wider opacity-70`}>{t("classic.currentLiters")}</p>
-                <p className={`font-mono ${ui.bottomLiveText} font-black tabular-nums`}>{(selectedMeta.paused?.stopped_volume ?? selected.volume).toFixed(2)}</p>
+                <p className={`${ui.thText} font-semibold uppercase tracking-wide opacity-70`}>
+                  {selectedHasLastSale ? `${t("dispenser.lastFill")} · ` : ""}{t("classic.currentLiters")}
+                </p>
+                <p className={`font-mono ${ui.bottomLiveText} font-semibold tabular-nums`}>{selectedDisplayVolume.toFixed(2)}</p>
               </div>
               <div>
-                <p className={`${ui.thText} font-extrabold uppercase tracking-wider opacity-70`}>{t("classic.currentAmount")}</p>
-                <p className={`font-mono ${ui.bottomLiveText} font-black tabular-nums text-accent-blue`}>{fmtSum.format(selectedMeta.paused?.stopped_amount ?? selected.amount)}</p>
+                <p className={`${ui.thText} font-semibold uppercase tracking-wide opacity-70`}>
+                  {selectedHasLastSale ? `${t("dispenser.lastFill")} · ` : ""}{t("classic.currentAmount")}
+                </p>
+                <p className={`font-mono ${ui.bottomLiveText} font-semibold tabular-nums text-accent-blue`}>{fmtSum.format(selectedDisplayAmount)}</p>
               </div>
             </div>
           </div>
@@ -1617,9 +1610,9 @@ export function ClassicDispenserConsole({
                 ? Math.min(100, (estimatedAmount / at) * 100)
                 : 0;
             return (
-              <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-bg-secondary/40">
+              <div className="mt-2 h-1.5 w-full overflow-hidden bg-bg-secondary/60">
                 <div
-                  className="h-full rounded-full bg-accent-amber transition-all duration-500"
+                  className="h-full bg-accent-amber transition-all duration-500"
                   style={{ width: `${pct}%` }}
                 />
               </div>
@@ -1648,7 +1641,7 @@ export function ClassicDispenserConsole({
                   handleEditKeyDown(selected, e);
                 }
               }}
-	              className={`flex-1 min-h-0 w-full flex gap-1 rounded-none border border-border-primary/40 p-1 outline-none backdrop-blur-sm transition-[border-color,background-color,box-shadow,opacity] duration-75 ${
+	              className={`flex min-h-0 w-full flex-1 gap-1 rounded border border-border-primary/40 p-1 outline-none transition-[border-color,background-color,opacity] duration-75 ${
 	                selectedSetupLocked
 	                  ? "cursor-not-allowed bg-bg-secondary/40 opacity-70"
 	                  : `bg-bg-input/60 ${focusControlClass} ${selectedNozzles.length <= 1 ? "opacity-80" : "cursor-pointer"}`
@@ -1678,7 +1671,7 @@ export function ClassicDispenserConsole({
                       }}
 	                      className={`flex-1 flex flex-col justify-center items-center min-h-0 min-w-0 rounded-none transition-[background-color,border-color,box-shadow,color] duration-75 outline-none disabled:cursor-not-allowed ${
 	                        isActive
-	                          ? "border text-white shadow-[0_4px_12px_rgb(0_0_0/0.22)]"
+	                          ? "border text-white"
 	                          : "border border-transparent bg-transparent text-text-primary hover:bg-bg-secondary"
                       }`}
                       style={isActive ? { backgroundColor: n.product_color, borderColor: n.product_color } : undefined}
@@ -1703,41 +1696,56 @@ export function ClassicDispenserConsole({
               )}
             </div>
           </div>
-          <div className={bottomControlWrapClass}>
-            <label className={bottomLabelClass}>{t("classic.orderLiters")}</label>
+          <div className={`${bottomControlWrapClass} ${selectedMode === "volume" ? "!border-2 !border-accent-blue bg-accent-blue/15 opacity-100" : "opacity-50"}`}>
+            {selectedMode === "volume" ? (
+              <label className="mb-1 flex items-center justify-between rounded bg-accent-blue px-2 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                <span>{t("classic.orderLiters")}</span>
+                <Check className="h-4 w-4" aria-hidden />
+              </label>
+            ) : (
+              <label className={bottomLabelClass}>{t("classic.orderLiters")}</label>
+            )}
             <div className="flex-1 min-h-0">
               <input
                 data-classic-control="volume"
                 type="text"
                 inputMode="decimal"
                 aria-invalid={selectedVolumeInvalid}
-	                title={`1-${MAX_VOLUME_LITERS} L`}
+	                title={`1-${MAX_VOLUME_LITERS} ${selectedVolumeUnit}`}
 	                placeholder="—"
 	                value={selectedDraft?.volume ?? ""}
 	                disabled={selectedSetupLocked}
 	                onChange={(e) => updateVolume(selected, e.target.value)}
                 onFocus={(e) => {
-                  setActiveOrderField({ fpId: selected.fp_id, field: "volume" });
                   setDraft(selected.fp_id, { mode: "volume" });
                   selectInputValue(e.currentTarget);
                 }}
                 onMouseUp={(e) => e.preventDefault()}
                 onKeyDown={(e) => handleEditKeyDown(selected, e)}
-	                className={`h-full min-h-0 w-full rounded-none border ${ui.inputPad} text-center font-mono text-3xl font-black outline-none backdrop-blur-sm disabled:cursor-not-allowed ${
+	                className={`h-full min-h-0 w-full rounded border ${ui.inputPad} text-center font-mono ${dense ? "text-2xl" : "text-3xl"} font-semibold outline-none disabled:cursor-not-allowed ${
 	                  selectedSetupLocked
 	                    ? lockedInputClass
 	                    : selectedVolumeInvalid
 	                    ? invalidInputClass
-	                    : `border-border-primary/40 bg-bg-input/60 text-text-primary ${focusControlClass}`
-	                } ${activeOrderField?.fpId === selected.fp_id && activeOrderField.field === "volume" ? mirroredOrderInputClass : ""}`}
+	                    : selectedMode === "volume"
+	                      ? `${selectedOrderInputClass} ${focusControlClass}`
+	                      : `border-border-primary/40 bg-bg-input/60 text-text-primary ${focusControlClass}`
+	                }`}
               />
             </div>
             <span className={`text-[10px] font-bold ${selectedVolumeInvalid ? "text-accent-red" : "text-text-muted"}`}>
-              1-{MAX_VOLUME_LITERS} L
+              1-{MAX_VOLUME_LITERS} {selectedVolumeUnit}
             </span>
           </div>
-          <div className={bottomControlWrapClass}>
-            <label className={bottomLabelClass}>{t("classic.orderAmount")}</label>
+          <div className={`${bottomControlWrapClass} ${selectedMode === "amount" ? "!border-2 !border-accent-blue bg-accent-blue/15 opacity-100" : "opacity-50"}`}>
+            {selectedMode === "amount" ? (
+              <label className="mb-1 flex items-center justify-between rounded bg-accent-blue px-2 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                <span>{t("classic.orderAmount")}</span>
+                <Check className="h-4 w-4" aria-hidden />
+              </label>
+            ) : (
+              <label className={bottomLabelClass}>{t("classic.orderAmount")}</label>
+            )}
             <div className="flex-1 min-h-0">
               <input
                 data-classic-control="amount"
@@ -1750,19 +1758,20 @@ export function ClassicDispenserConsole({
 	                disabled={selectedSetupLocked}
 	                onChange={(e) => updateAmount(selected, e.target.value)}
                 onFocus={(e) => {
-                  setActiveOrderField({ fpId: selected.fp_id, field: "amount" });
                   setDraft(selected.fp_id, { mode: "amount" });
                   selectInputValue(e.currentTarget);
                 }}
                 onMouseUp={(e) => e.preventDefault()}
                 onKeyDown={(e) => handleEditKeyDown(selected, e)}
-	                className={`h-full min-h-0 w-full rounded-none border ${ui.inputPad} text-center font-mono text-3xl font-black outline-none backdrop-blur-sm disabled:cursor-not-allowed ${
+	                className={`h-full min-h-0 w-full rounded border ${ui.inputPad} text-center font-mono ${dense ? "text-2xl" : "text-3xl"} font-semibold outline-none disabled:cursor-not-allowed ${
 	                  selectedSetupLocked
 	                    ? lockedInputClass
 	                    : selectedAmountInvalid
 	                    ? invalidInputClass
-	                    : `border-border-primary/40 bg-bg-input/60 text-text-primary ${focusControlClass}`
-	                } ${activeOrderField?.fpId === selected.fp_id && activeOrderField.field === "amount" ? mirroredOrderInputClass : ""}`}
+	                    : selectedMode === "amount"
+	                      ? `${selectedOrderInputClass} ${focusControlClass}`
+	                      : `border-border-primary/40 bg-bg-input/60 text-text-primary ${focusControlClass}`
+	                }`}
               />
             </div>
             <span className={`text-[10px] font-bold ${selectedAmountInvalid ? "text-accent-red" : "text-text-muted"}`}>

@@ -1,6 +1,7 @@
 import {
-    Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, UseGuards, ForbiddenException,
+    Controller, Get, Post, Put, Delete, Patch, Body, Param, Query, Req, UseGuards, ForbiddenException,
 } from '@nestjs/common';
+import { Request } from 'express';
 import {
     ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse, ApiCreatedResponse,
     ApiBadRequestResponse, ApiUnauthorizedResponse, ApiForbiddenResponse,
@@ -9,6 +10,7 @@ import {
 import { UserRole } from '@prisma/client';
 import { StationsService } from './stations.service';
 import { CreateStationDto, UpdateStationDto } from './dto/create-station.dto';
+import { SaveServiceConfigDto } from './dto/service-config.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -41,6 +43,36 @@ export class StationsController {
     @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
     async findAll(@CurrentUser() user: any) {
         return this.stations.findAll(user.companyId, await resolveStationIds(this.prisma, user));
+    }
+
+    @Get(':id/service-config')
+    @ApiOperation({ summary: 'Download a dispenser-service configuration for this station' })
+    @ApiOkResponse({ description: 'Configuration with current station identity and API credentials' })
+    @ApiForbiddenResponse({ description: 'Insufficient role or station is not accessible' })
+    @Roles(UserRole.SUPER_ADMIN, UserRole.COMPANY_ADMIN)
+    async serviceConfig(
+        @Param('id') id: string,
+        @CurrentUser() user: any,
+        @Req() req: Request,
+    ) {
+        const allowed = await resolveStationIds(this.prisma, user, [id]);
+        if (allowed.length === 0) throw new ForbiddenException('Station is not accessible');
+        return this.stations.getServiceConfig(id, user.companyId, requestOrigin(req));
+    }
+
+    @Put(':id/service-config')
+    @ApiOperation({ summary: 'Upload and version a dispenser-service configuration' })
+    @ApiOkResponse({ description: 'Configuration saved; returns its new version' })
+    @ApiBadRequestResponse({ description: 'Invalid configuration structure or station ID' })
+    @Roles(UserRole.SUPER_ADMIN, UserRole.COMPANY_ADMIN)
+    async saveServiceConfig(
+        @Param('id') id: string,
+        @Body() dto: SaveServiceConfigDto,
+        @CurrentUser() user: any,
+    ) {
+        const allowed = await resolveStationIds(this.prisma, user, [id]);
+        if (allowed.length === 0) throw new ForbiddenException('Station is not accessible');
+        return this.stations.saveServiceConfig(id, user.companyId, dto.config);
     }
 
     @Get(':id')
@@ -116,4 +148,12 @@ export class StationsController {
         if (allowed.length === 0) throw new ForbiddenException('Station is not accessible');
         return this.stations.getUptimeHistory(id, user.companyId, days ?? 7);
     }
+}
+
+function requestOrigin(req: Request): string {
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const forwardedHost = req.headers['x-forwarded-host'];
+    const protocol = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)?.split(',')[0]?.trim() || req.protocol;
+    const host = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost)?.split(',')[0]?.trim() || req.get('host') || 'localhost:4000';
+    return `${protocol}://${host}`;
 }

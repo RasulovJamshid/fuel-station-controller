@@ -27,12 +27,13 @@ type Props = {
   fpNozzles: NozzleSnapshot[];
   mode?: "preauth" | "reactive";
   initialNozzle?: number | null;
+  volumeUnit?: string;
   onClose: () => void;
   onConfirm: (req: AuthorizeRequest) => void;
 };
 
 export function FillSetupModal({
-  open, state, fpNozzles, mode = "reactive", initialNozzle, onClose, onConfirm,
+  open, state, fpNozzles, mode = "reactive", initialNozzle, volumeUnit = "L", onClose, onConfirm,
 }: Props) {
   const { t } = useTranslation();
 
@@ -464,11 +465,11 @@ export function FillSetupModal({
                     }}
                     className="w-full bg-transparent text-center font-mono text-4xl font-black tabular-nums text-text-primary outline-none"
                   />
-                  <span className="shrink-0 text-base font-bold text-text-muted">L</span>
+                  <span className="shrink-0 text-base font-bold text-text-muted">{volumeUnit}</span>
                 </div>
                 <StepBtn label="+" onClick={() => setVol((v) => String(Math.min(MAX_VOL, parseNum(v) + 1)))} />
               </div>
-              <QuickPresetRow values={VOLUME_PRESETS} format={(value) => `${value} L`} onSelect={applyVolume} />
+              <QuickPresetRow values={VOLUME_PRESETS} format={(value) => `${value} ${volumeUnit}`} onSelect={applyVolume} />
               {projectedAmt != null && (
                 <p className={`rounded-xl border py-2.5 text-center font-mono text-base font-semibold tabular-nums ${atVolLimit ? "border-accent-amber/40 bg-accent-amber/10 text-accent-amber" : "border-accent-blue/30 bg-accent-blue/10 text-accent-blue"}`}>
                   {atVolLimit ? "⚠ MAX " : "≈ "}{fmtSum.format(projectedAmt)} {t("pumpForm.amountUnit")}
@@ -511,7 +512,7 @@ export function FillSetupModal({
               <QuickPresetRow values={amountPresets} format={(value) => fmtSum.format(value)} onSelect={applyAmount} />
               {projectedVol != null && (
                 <p className={`rounded-xl border py-2.5 text-center font-mono text-base font-semibold tabular-nums ${atAmtLimit ? "border-accent-amber/40 bg-accent-amber/10 text-accent-amber" : "border-accent-emerald/30 bg-accent-emerald/10 text-text-secondary"}`}>
-                  {atAmtLimit ? "⚠ MAX " : "≈ "}{projectedVol} L
+                  {atAmtLimit ? "⚠ MAX " : "≈ "}{projectedVol} {volumeUnit}
                 </p>
               )}
             </div>

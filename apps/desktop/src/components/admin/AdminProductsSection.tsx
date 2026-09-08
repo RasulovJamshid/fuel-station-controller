@@ -242,7 +242,7 @@ export function AdminProductsSection({
     });
   };
 
-  const inputCls = "rounded-lg border border-border-primary/80 bg-bg-secondary/60 px-3 py-2 text-sm font-medium text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 transition-all shadow-inner placeholder:text-text-muted";
+  const inputCls = "rounded border border-border-primary/80 bg-bg-secondary px-3 py-2 text-sm font-medium text-text-primary placeholder:text-text-muted transition-colors focus:border-accent-blue focus:outline-none";
 
   return (
     <section className="rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm mb-6">
@@ -335,7 +335,7 @@ export function AdminProductsSection({
           type="button"
           disabled={busy}
           onClick={saveProducts}
-          className="rounded-xl border border-accent-amber/40 bg-accent-amber/15 px-5 py-2 text-sm font-bold tracking-wide text-accent-amber shadow-button transition-all hover:bg-accent-amber/25 hover:shadow-button-hover disabled:opacity-50"
+          className="rounded border border-accent-blue/60 bg-accent-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:brightness-110 disabled:opacity-50"
         >
           {t("admin.products.saveProducts")}
         </button>
@@ -362,7 +362,6 @@ export function AdminProductsSection({
               {pos.fp_id}
               {hasLift && (
                 <span className="absolute -right-1 -top-1 flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-emerald opacity-75" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent-emerald" />
                 </span>
               )}
@@ -389,10 +388,10 @@ export function AdminProductsSection({
               return (
                 <div
                   key={l.nozzleIndex}
-                  className="mb-4 flex items-start gap-3 rounded-xl border border-accent-emerald/40 bg-accent-emerald/10 px-4 py-3 text-sm shadow-sm"
+                  className="mb-4 flex items-start gap-3 rounded border border-border-primary border-l-2 border-l-accent-emerald px-4 py-3 text-sm"
                 >
                   <span className="mt-1 flex h-2.5 w-2.5 shrink-0">
-                    <span className="inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-accent-emerald opacity-75" />
+                    <span className="inline-flex h-2.5 w-2.5 rounded-full bg-accent-emerald" />
                   </span>
                   <div>
                     <span className="font-bold text-accent-emerald-dark dark:text-accent-emerald-light">
@@ -472,7 +471,7 @@ export function AdminProductsSection({
                         </span>
                         <span className="w-4 text-center">{n.index}</span>
                         {isLifted && (
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-accent-emerald px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white animate-pulse">
+                          <span className="inline-flex items-center gap-0.5 rounded border border-accent-emerald/50 px-1.5 py-0.5 text-[10px] font-medium text-accent-emerald">
                             {t("admin.products.lifted")}
                           </span>
                         )}
@@ -582,7 +581,7 @@ export function AdminProductsSection({
               type="button"
               disabled={busy}
               onClick={() => saveNozzlesForFp(selectedFp)}
-              className="rounded-xl border border-accent-amber/40 bg-accent-amber/15 px-5 py-2 text-sm font-bold tracking-wide text-accent-amber shadow-button transition-all hover:bg-accent-amber/25 hover:shadow-button-hover disabled:opacity-50"
+              className="rounded border border-accent-blue/60 bg-accent-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:brightness-110 disabled:opacity-50"
             >
               {t("admin.products.saveNozzles", { fpId: selectedFp })}
             </button>

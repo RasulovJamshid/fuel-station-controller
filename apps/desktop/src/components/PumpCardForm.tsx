@@ -26,6 +26,7 @@ type Props = {
   activeNozzles: NozzleSnapshot[];
   initialNozzle?: number | null;
   compact?: boolean;
+  volumeUnit?: string;
   disabled?: boolean;
   onStart: (req: AuthorizeRequest) => void;
   /** Called whenever the start-button's enabled state or handler changes. */
@@ -171,6 +172,7 @@ export function PumpCardForm({
   activeNozzles,
   initialNozzle = null,
   compact = false,
+  volumeUnit = "L",
   disabled = false,
   onStart,
   onReadyChange,
@@ -509,7 +511,7 @@ export function PumpCardForm({
                 <StepperRow
                   autoFocus
                   value={volLiters}
-                  unit="L"
+                  unit={volumeUnit}
                   disabled={disabled}
                   compact={compact}
                   onChange={(v) => {
@@ -531,7 +533,7 @@ export function PumpCardForm({
                 />
                 <QuickPresetRow
                   values={VOLUME_PRESETS}
-                  format={(value) => `${value} L`}
+                  format={(value) => `${value} ${volumeUnit}`}
                   onSelect={applyVolume}
                   disabled={disabled}
                   compact={compact}
@@ -613,7 +615,7 @@ export function PumpCardForm({
                 <div className="text-right">
                   <p className={`text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.liters")}</p>
                   <p className={`font-mono font-black tabular-nums text-text-primary ${compact ? "text-xl" : "text-2xl"}`}>
-                    {projectedLiters != null ? `${projectedLiters.toFixed(1)} L` : "—"}
+                    {projectedLiters != null ? `${projectedLiters.toFixed(1)} ${volumeUnit}` : "—"}
                   </p>
                 </div>
                 <div className="col-span-2">
@@ -641,12 +643,14 @@ export function PumpCardProgress({
   targetLiters,
   targetAmount,
   compact,
+  volumeUnit = "L",
 }: {
   volume: number;
   amount?: number;
   targetLiters: number | null;
   targetAmount?: number | null;
   compact?: boolean;
+  volumeUnit?: string;
 }) {
   const { t } = useTranslation();
 
@@ -654,20 +658,20 @@ export function PumpCardProgress({
   if (targetLiters != null && targetLiters > 0) {
     const pct = Math.min(100, (volume / targetLiters) * 100);
     return (
-      <div className={`pump-live-panel shrink-0 rounded-lg border px-3 py-2 ${compact ? "mt-2" : "mt-3"}`}>
-        <div className="mb-1 flex items-center justify-between">
+      <div className={`pump-live-panel pump-live-panel--target shrink-0 rounded-lg border px-3 py-2 ${compact ? "mt-2" : "mt-3"}`}>
+        <div className="pump-live-summary mb-1 flex items-center justify-between gap-2">
           <span className={`font-black uppercase tracking-wide text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.filled")}</span>
-          <span className={`font-mono font-black tabular-nums text-accent-amber ${compact ? "text-2xl" : "text-3xl"}`}>
-            {volume.toFixed(2)} L
+          <span className={`pump-live-volume font-mono font-black tabular-nums text-accent-amber ${compact ? "text-2xl" : "text-3xl"}`}>
+            {volume.toFixed(2)} {volumeUnit}
           </span>
         </div>
         <div className="progress-track h-4 overflow-hidden rounded-full">
           <div className="progress-fill h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
         </div>
-        <div className={`mt-0.5 flex justify-between font-mono tabular-nums text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>
+        <div className={`pump-progress-labels mt-0.5 flex min-w-0 justify-between gap-1 font-mono tabular-nums text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>
           <span>0</span>
           <span>{Math.round(pct)}%</span>
-          <span>{targetLiters} L</span>
+          <span>{targetLiters} {volumeUnit}</span>
         </div>
       </div>
     );
@@ -677,17 +681,17 @@ export function PumpCardProgress({
   if (targetAmount != null && targetAmount > 0 && amount != null) {
     const pct = Math.min(100, (amount / targetAmount) * 100);
     return (
-      <div className={`pump-live-panel shrink-0 rounded-lg border px-3 py-2 ${compact ? "mt-2" : "mt-3"}`}>
-        <div className="mb-1 flex items-center justify-between">
+      <div className={`pump-live-panel pump-live-panel--target shrink-0 rounded-lg border px-3 py-2 ${compact ? "mt-2" : "mt-3"}`}>
+        <div className="pump-live-summary mb-1 flex items-center justify-between gap-2">
           <span className={`font-black uppercase tracking-wide text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.filled")}</span>
-          <span className={`font-mono font-black tabular-nums text-accent-amber ${compact ? "text-2xl" : "text-3xl"}`}>
-            {volume.toFixed(2)} L
+          <span className={`pump-live-volume font-mono font-black tabular-nums text-accent-amber ${compact ? "text-2xl" : "text-3xl"}`}>
+            {volume.toFixed(2)} {volumeUnit}
           </span>
         </div>
         <div className="progress-track h-4 overflow-hidden rounded-full">
           <div className="progress-fill h-full rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
         </div>
-        <div className={`mt-0.5 flex justify-between font-mono tabular-nums text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>
+        <div className={`pump-progress-labels mt-0.5 flex min-w-0 justify-between gap-1 font-mono tabular-nums text-text-muted ${compact ? "text-[10px]" : "text-xs"}`}>
           <span>0</span>
           <span>{Math.round(pct)}%</span>
           <span>{fmtSum.format(targetAmount)} {t("pumpForm.amountUnit")}</span>
@@ -698,18 +702,18 @@ export function PumpCardProgress({
 
   // ── Full-fill / no-limit: live counter ────────────────────────────────────
   return (
-    <div className={`pump-live-panel shrink-0 rounded-lg border px-3 ${compact ? "mt-2 py-2" : "mt-3 py-3"}`}>
+    <div className={`pump-live-panel pump-live-panel--counter shrink-0 rounded-lg border px-3 ${compact ? "mt-2 py-2" : "mt-3 py-3"}`}>
       <div className="mb-1 flex items-center justify-between">
         <span className={`font-black uppercase tracking-wide text-text-muted ${compact ? "text-xs" : "text-sm"}`}>{t("pumpForm.filling")}</span>
         <span className="h-2.5 w-2.5 rounded-full bg-accent-emerald shadow-[0_0_10px_rgb(var(--color-accent-emerald))] animate-pulse" aria-hidden />
       </div>
-      <div className="flex items-baseline gap-1.5">
-        <span className={`font-mono font-black leading-none tabular-nums text-accent-amber ${compact ? "text-4xl" : "text-5xl"}`}>
+      <div className="pump-live-values flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1">
+        <span className={`pump-live-volume font-mono font-black leading-none tabular-nums text-accent-amber ${compact ? "text-4xl" : "text-5xl"}`}>
           {volume.toFixed(2)}
         </span>
-        <span className={`font-black text-text-muted ${compact ? "text-base" : "text-lg"}`}>L</span>
+        <span className={`pump-live-unit font-black text-text-muted ${compact ? "text-base" : "text-lg"}`}>{volumeUnit}</span>
         {amount != null && amount > 0 && (
-          <span className={`ml-auto font-mono font-black tabular-nums text-text-secondary ${compact ? "text-lg" : "text-2xl"}`}>
+          <span className={`pump-live-amount ml-auto max-w-full font-mono font-black leading-tight tabular-nums text-text-secondary ${compact ? "text-lg" : "text-2xl"}`}>
             {fmtSum.format(amount)} {t("pumpForm.amountUnit")}
           </span>
         )}

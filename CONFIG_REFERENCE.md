@@ -234,18 +234,25 @@ Push transaction records to a remote backend after completion.
 | Field                    | Type    | Required | Default | Description |
 |--------------------------|---------|----------|---------|-------------|
 | `enabled`                | boolean | yes      | —       | `false` = sync disabled, all other fields ignored |
-| `backend_url`            | string  | yes      | —       | HTTP endpoint to POST records to |
+| `backend_url`            | string  | yes      | —       | Dashboard server root URL (a trailing `/api/v1` is also accepted) |
 | `api_key`                | string  | yes      | —       | Authorization header value |
 | `retry_interval_secs`    | integer | no       | `30`    | How often the sync worker pushes queued records |
 | `batch_size`             | integer | no       | `100`   | Max records per HTTP batch |
 | `max_retries`            | integer | no       | `10`    | Records failing this many times are skipped permanently |
 | `price_pull_interval_hours` | integer | no  | `12`    | How often to pull price updates from the server (hours). `0` = startup only |
 
+When sync is enabled, the background service also sends a credential-free copy of
+the active configuration to the central dashboard whenever it changes. Company and
+super administrators can download a complete `site.config.json` from the station
+detail page. The download injects the station's current ID, API key, and dashboard
+URL. A configuration uploaded in the dashboard is kept separately from the live
+station backup, so a later backup cannot overwrite the reviewed dashboard version.
+
 ```json
 "sync": {
   "enabled": true,
-  "backend_url": "https://api.ung.uz/v1/transactions",
-  "api_key": "Bearer eyJ...",
+  "backend_url": "https://fillingstation.ung.uz",
+  "api_key": "station-api-key",
   "retry_interval_secs": 30,
   "batch_size": 100
 }

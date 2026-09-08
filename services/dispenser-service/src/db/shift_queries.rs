@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
 use sqlx::SqlitePool;
 use types::{
-    CreateOperatorCmd, EndShiftCmd, HandoverCmd, Operator, Shift, ShiftPositionTotal, ShiftStatus,
-    StartShiftCmd,
+    CreateOperatorCmd, EndShiftCmd, HandoverCmd, Operator, Shift, ShiftNozzleTotalizer,
+    ShiftPositionTotal, ShiftProductTotal, ShiftStatus, StartShiftCmd,
 };
 
 #[derive(sqlx::FromRow)]
@@ -30,8 +30,23 @@ fn row_status(s: &str) -> ShiftStatus {
     }
 }
 
+/// Everything derived from other tables that a `Shift` carries.
+struct ShiftBreakdown {
+    position_totals: Vec<ShiftPositionTotal>,
+    product_totals: Vec<ShiftProductTotal>,
+    nozzle_totalizers: Vec<ShiftNozzleTotalizer>,
+}
+
+async fn breakdown_for_shift(pool: &SqlitePool, shift_id: &str) -> Result<ShiftBreakdown> {
+    Ok(ShiftBreakdown {
+        position_totals: position_totals_for_shift(pool, shift_id).await?,
+        product_totals: product_totals_for_shift(pool, shift_id).await?,
+        nozzle_totalizers: nozzle_totalizers_for_shift(pool, shift_id).await?,
+    })
+}
+
 impl ShiftRow {
-    fn into_shift(self, position_totals: Vec<ShiftPositionTotal>) -> Shift {
+    fn into_shift(self, breakdown: ShiftBreakdown) -> Shift {
         Shift {
             id: self.id,
             operator_id: self.operator_id,
@@ -46,7 +61,9 @@ impl ShiftRow {
             total_amount: self.total_amount.max(0) as u64,
             status: row_status(&self.status),
             notes: self.notes,
-            position_totals,
+            position_totals: breakdown.position_totals,
+            product_totals: breakdown.product_totals,
+            nozzle_totalizers: breakdown.nozzle_totalizers,
         }
     }
 }
@@ -63,7 +80,7 @@ pub async fn load_active_shift(pool: &SqlitePool) -> Result<Option<Shift>> {
     Ok(match row {
         Some(r) => {
             let id = r.id.clone();
-            Some(r.into_shift(position_totals_for_shift(pool, &id).await?))
+            Some(r.into_shift(breakdown_for_shift(pool, &id).await?))
         }
         None => None,
     })
@@ -81,7 +98,7 @@ pub async fn get_shift(pool: &SqlitePool, id: &str) -> Result<Option<Shift>> {
     Ok(match row {
         Some(r) => {
             let sid = r.id.clone();
-            Some(r.into_shift(position_totals_for_shift(pool, &sid).await?))
+            Some(r.into_shift(breakdown_for_shift(pool, &sid).await?))
         }
         None => None,
     })
@@ -115,10 +132,17 @@ pub async fn list_shifts(
         .fetch_all(pool)
         .await?
     };
+    // The history list only renders headline figures, so it stays on the cheap
+    // per-position rollup. Grade breakdown and totalizer readings are loaded by
+    // `get_shift` when the operator opens one shift's report.
     let mut out = Vec::new();
     for r in rows {
         let sid = r.id.clone();
-        out.push(r.into_shift(position_totals_for_shift(pool, &sid).await?));
+        out.push(r.into_shift(ShiftBreakdown {
+            position_totals: position_totals_for_shift(pool, &sid).await?,
+            product_totals: vec![],
+            nozzle_totalizers: vec![],
+        }));
     }
     Ok(out)
 }
@@ -159,6 +183,206 @@ async fn position_totals_for_shift(
             total_amount: amt.max(0) as u64,
         })
         .collect())
+}
+
+/// Sales grouped by fuel grade — the Z-report grade section.
+async fn product_totals_for_shift(
+    pool: &SqlitePool,
+    shift_id: &str,
+) -> Result<Vec<ShiftProductTotal>> {
+    let rows: Vec<(i64, String, i64, f64, i64)> = sqlx::query_as(
+        r#"SELECT product_id, product_name,
+                  COUNT(CASE WHEN status != 'CONTINUED_FROM' THEN 1 END) as c,
+                  COALESCE(SUM(CASE
+                    WHEN status = 'CONTINUED_FROM' THEN volume
+                    WHEN combined_volume > 0 THEN combined_volume
+                    ELSE volume
+                  END), 0.0) as vol,
+                  COALESCE(SUM(CASE
+                    WHEN status = 'CONTINUED_FROM' THEN amount
+                    WHEN combined_amount > 0 THEN combined_amount
+                    ELSE amount
+                  END), 0) as amt
+           FROM transactions
+           WHERE shift_id = ? AND status IN ('COMPLETED', 'STOPPED', 'CONTINUED_FROM')
+           GROUP BY product_id, product_name
+           ORDER BY product_id"#,
+    )
+    .bind(shift_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(product_id, product_name, c, vol, amt)| ShiftProductTotal {
+                product_id: product_id.clamp(0, 255) as u8,
+                product_name,
+                transactions_count: c.clamp(0, i64::from(u32::MAX)) as u32,
+                total_volume: vol,
+                total_amount: amt.max(0) as u64,
+            },
+        )
+        .collect())
+}
+
+/// Per-nozzle transaction volume for a shift, keyed by `(fp_id, nozzle_index)`.
+/// Used to compare recorded sales against the totalizer delta.
+async fn recorded_volume_by_nozzle(
+    pool: &SqlitePool,
+    shift_id: &str,
+) -> Result<std::collections::HashMap<(String, u8), f64>> {
+    let rows: Vec<(String, i64, f64)> = sqlx::query_as(
+        r#"SELECT fp_id, nozzle_index,
+                  COALESCE(SUM(CASE
+                    WHEN status = 'CONTINUED_FROM' THEN volume
+                    WHEN combined_volume > 0 THEN combined_volume
+                    ELSE volume
+                  END), 0.0)
+           FROM transactions
+           WHERE shift_id = ? AND status IN ('COMPLETED', 'STOPPED', 'CONTINUED_FROM')
+           GROUP BY fp_id, nozzle_index"#,
+    )
+    .bind(shift_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(fp_id, nozzle, vol)| ((fp_id, nozzle.clamp(0, 255) as u8), vol))
+        .collect())
+}
+
+/// Totalizer open/close readings for a shift, joined with recorded sales volume so
+/// each row carries its own meter-vs-sales variance.
+async fn nozzle_totalizers_for_shift(
+    pool: &SqlitePool,
+    shift_id: &str,
+) -> Result<Vec<ShiftNozzleTotalizer>> {
+    #[allow(clippy::type_complexity)]
+    let rows: Vec<(
+        String,
+        String,
+        i64,
+        i64,
+        String,
+        Option<f64>,
+        Option<f64>,
+        Option<i64>,
+        Option<i64>,
+    )> = sqlx::query_as(
+        r#"SELECT fp_id, label, nozzle_index, product_id, product_name,
+                  open_volume, close_volume, open_amount, close_amount
+           FROM shift_nozzle_totals
+           WHERE shift_id = ?
+           ORDER BY fp_id, nozzle_index"#,
+    )
+    .bind(shift_id)
+    .fetch_all(pool)
+    .await?;
+    if rows.is_empty() {
+        return Ok(vec![]);
+    }
+    let recorded = recorded_volume_by_nozzle(pool, shift_id).await?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(fp_id, label, nozzle, product_id, product_name, ov, cv, oa, ca)| {
+                let nozzle_index = nozzle.clamp(0, 255) as u8;
+                // Only a genuine forward delta is meaningful: a totalizer that
+                // appears to run backwards means the pump was swapped or reset,
+                // so report no delta rather than a negative one.
+                let dispensed_volume = match (ov, cv) {
+                    (Some(o), Some(c)) if c >= o => Some(c - o),
+                    _ => None,
+                };
+                let recorded_volume = recorded
+                    .get(&(fp_id.clone(), nozzle_index))
+                    .copied()
+                    .unwrap_or(0.0);
+                ShiftNozzleTotalizer {
+                    fp_id,
+                    label,
+                    nozzle_index,
+                    product_id: product_id.clamp(0, 255) as u8,
+                    product_name,
+                    open_volume: ov,
+                    close_volume: cv,
+                    open_amount: oa.map(|v| v.max(0) as u64),
+                    close_amount: ca.map(|v| v.max(0) as u64),
+                    dispensed_volume,
+                    recorded_volume,
+                    variance_volume: dispensed_volume.map(|d| d - recorded_volume),
+                }
+            },
+        )
+        .collect())
+}
+
+/// Record the opening or closing totalizer reading for one nozzle.
+///
+/// Idempotent per `(shift, fp, nozzle)`: the open reading is written once at shift
+/// start and never overwritten by a later close, and re-closing a shift refreshes
+/// only the close columns.
+#[allow(clippy::too_many_arguments)]
+pub async fn upsert_nozzle_totalizer(
+    pool: &SqlitePool,
+    shift_id: &str,
+    fp_id: &str,
+    label: &str,
+    nozzle_index: u8,
+    product_id: u8,
+    product_name: &str,
+    volume: Option<f64>,
+    amount: Option<u64>,
+    at_ms: i64,
+    closing: bool,
+) -> Result<()> {
+    let amount = amount.map(|v| v as i64);
+    if closing {
+        sqlx::query(
+            r#"INSERT INTO shift_nozzle_totals (
+                   shift_id, fp_id, label, nozzle_index, product_id, product_name,
+                   close_volume, close_amount, captured_close_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(shift_id, fp_id, nozzle_index) DO UPDATE SET
+                   label             = excluded.label,
+                   product_id        = excluded.product_id,
+                   product_name      = excluded.product_name,
+                   close_volume      = excluded.close_volume,
+                   close_amount      = excluded.close_amount,
+                   captured_close_at = excluded.captured_close_at"#,
+        )
+        .bind(shift_id)
+        .bind(fp_id)
+        .bind(label)
+        .bind(nozzle_index as i64)
+        .bind(product_id as i64)
+        .bind(product_name)
+        .bind(volume)
+        .bind(amount)
+        .bind(at_ms)
+        .execute(pool)
+        .await?;
+    } else {
+        sqlx::query(
+            r#"INSERT INTO shift_nozzle_totals (
+                   shift_id, fp_id, label, nozzle_index, product_id, product_name,
+                   open_volume, open_amount, captured_open_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(shift_id, fp_id, nozzle_index) DO NOTHING"#,
+        )
+        .bind(shift_id)
+        .bind(fp_id)
+        .bind(label)
+        .bind(nozzle_index as i64)
+        .bind(product_id as i64)
+        .bind(product_name)
+        .bind(volume)
+        .bind(amount)
+        .bind(at_ms)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
 }
 
 async fn aggregate_totals_for_shift(pool: &SqlitePool, shift_id: &str) -> Result<(i64, f64, i64)> {
@@ -648,7 +872,172 @@ mod tests {
             status: ShiftStatus::Active,
             notes: None,
             position_totals: Vec::new(),
+            product_totals: Vec::new(),
+            nozzle_totalizers: Vec::new(),
         }
+    }
+
+    async fn sale(
+        pool: &SqlitePool,
+        id: &str,
+        shift_id: &str,
+        fp_id: &str,
+        nozzle: u8,
+        product_id: u8,
+        product_name: &str,
+        volume: f64,
+        amount: i64,
+    ) {
+        sqlx::query(
+            r#"INSERT INTO transactions (id, fp_id, label, address_byte, started_at, completed_at,
+                   volume, amount, price, nozzle_index, product_id, product_name, status,
+                   shift_id, combined_volume, combined_amount)
+               VALUES (?, ?, '1', 1, 1000, 1000, ?, ?, 0, ?, ?, ?, 'COMPLETED', ?, ?, ?)"#,
+        )
+        .bind(id)
+        .bind(fp_id)
+        .bind(volume)
+        .bind(amount)
+        .bind(nozzle as i64)
+        .bind(product_id as i64)
+        .bind(product_name)
+        .bind(shift_id)
+        .bind(volume)
+        .bind(amount)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn shift_report_breaks_sales_down_by_grade() {
+        let pool = memory_pool().await;
+        insert_shift(&pool, &active_shift("s1")).await.unwrap();
+        sale(&pool, "t1", "s1", "FP1", 1, 1, "AI-92", 10.0, 110_000).await;
+        sale(&pool, "t2", "s1", "FP2", 1, 1, "AI-92", 20.0, 220_000).await;
+        sale(&pool, "t3", "s1", "FP1", 2, 2, "AI-95", 5.0, 65_000).await;
+
+        let shift = get_shift(&pool, "s1").await.unwrap().unwrap();
+        assert_eq!(shift.product_totals.len(), 2);
+        let ai92 = shift
+            .product_totals
+            .iter()
+            .find(|p| p.product_id == 1)
+            .unwrap();
+        assert_eq!(ai92.transactions_count, 2);
+        assert!((ai92.total_volume - 30.0).abs() < 1e-9);
+        assert_eq!(ai92.total_amount, 330_000);
+        let ai95 = shift
+            .product_totals
+            .iter()
+            .find(|p| p.product_id == 2)
+            .unwrap();
+        assert_eq!(ai95.transactions_count, 1);
+        assert!((ai95.total_volume - 5.0).abs() < 1e-9);
+    }
+
+    #[tokio::test]
+    async fn totalizer_delta_is_compared_against_recorded_sales() {
+        let pool = memory_pool().await;
+        insert_shift(&pool, &active_shift("s1")).await.unwrap();
+        upsert_nozzle_totalizer(
+            &pool, "s1", "FP1", "1", 1, 1, "AI-92", Some(1_000.0), Some(0), 1_000, false,
+        )
+        .await
+        .unwrap();
+        sale(&pool, "t1", "s1", "FP1", 1, 1, "AI-92", 40.0, 440_000).await;
+        // Meter advanced 50 L but only 40 L of sales were recorded: 10 L unaccounted.
+        upsert_nozzle_totalizer(
+            &pool, "s1", "FP1", "1", 1, 1, "AI-92", Some(1_050.0), Some(0), 2_000, true,
+        )
+        .await
+        .unwrap();
+
+        let shift = get_shift(&pool, "s1").await.unwrap().unwrap();
+        let t = &shift.nozzle_totalizers[0];
+        assert_eq!(t.open_volume, Some(1_000.0));
+        assert_eq!(t.close_volume, Some(1_050.0));
+        assert!((t.dispensed_volume.unwrap() - 50.0).abs() < 1e-9);
+        assert!((t.recorded_volume - 40.0).abs() < 1e-9);
+        assert!((t.variance_volume.unwrap() - 10.0).abs() < 1e-9);
+    }
+
+    #[tokio::test]
+    async fn closing_capture_never_overwrites_the_opening_reading() {
+        let pool = memory_pool().await;
+        insert_shift(&pool, &active_shift("s1")).await.unwrap();
+        upsert_nozzle_totalizer(
+            &pool, "s1", "FP1", "1", 1, 1, "AI-92", Some(1_000.0), None, 1_000, false,
+        )
+        .await
+        .unwrap();
+        // A second opening capture (e.g. a retry) must not move the anchor.
+        upsert_nozzle_totalizer(
+            &pool, "s1", "FP1", "1", 1, 1, "AI-92", Some(1_020.0), None, 1_500, false,
+        )
+        .await
+        .unwrap();
+        upsert_nozzle_totalizer(
+            &pool, "s1", "FP1", "1", 1, 1, "AI-92", Some(1_060.0), None, 2_000, true,
+        )
+        .await
+        .unwrap();
+
+        let shift = get_shift(&pool, "s1").await.unwrap().unwrap();
+        let t = &shift.nozzle_totalizers[0];
+        assert_eq!(
+            t.open_volume,
+            Some(1_000.0),
+            "the first opening reading is the shift anchor"
+        );
+        assert!((t.dispensed_volume.unwrap() - 60.0).abs() < 1e-9);
+    }
+
+    #[tokio::test]
+    async fn totalizer_that_runs_backwards_reports_no_delta() {
+        let pool = memory_pool().await;
+        insert_shift(&pool, &active_shift("s1")).await.unwrap();
+        upsert_nozzle_totalizer(
+            &pool, "s1", "FP1", "1", 1, 1, "AI-92", Some(5_000.0), None, 1_000, false,
+        )
+        .await
+        .unwrap();
+        // Pump replaced mid-shift: its counter restarts far below the opening.
+        upsert_nozzle_totalizer(
+            &pool, "s1", "FP1", "1", 1, 1, "AI-92", Some(12.0), None, 2_000, true,
+        )
+        .await
+        .unwrap();
+
+        let shift = get_shift(&pool, "s1").await.unwrap().unwrap();
+        let t = &shift.nozzle_totalizers[0];
+        assert!(
+            t.dispensed_volume.is_none(),
+            "a backwards counter must not report a negative dispensed volume"
+        );
+        assert!(t.variance_volume.is_none());
+    }
+
+    #[tokio::test]
+    async fn nozzle_with_no_totalizer_support_still_records_the_attempt() {
+        let pool = memory_pool().await;
+        insert_shift(&pool, &active_shift("s1")).await.unwrap();
+        // Wayne reports no totals: a row is written with NULL readings.
+        upsert_nozzle_totalizer(
+            &pool, "s1", "FP1", "1", 1, 1, "AI-92", None, None, 1_000, false,
+        )
+        .await
+        .unwrap();
+        sale(&pool, "t1", "s1", "FP1", 1, 1, "AI-92", 40.0, 440_000).await;
+
+        let shift = get_shift(&pool, "s1").await.unwrap().unwrap();
+        let t = &shift.nozzle_totalizers[0];
+        assert!(t.open_volume.is_none());
+        assert!(t.dispensed_volume.is_none());
+        assert!(
+            (t.recorded_volume - 40.0).abs() < 1e-9,
+            "sales are still reported even without a meter reading"
+        );
     }
 
     /// Regression: the bulk close-on-restart path must enqueue a CLOSED sync record

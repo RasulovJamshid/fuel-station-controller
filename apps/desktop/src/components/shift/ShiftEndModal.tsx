@@ -36,7 +36,7 @@ export function ShiftEndModal({ open, shift, onClose, onConfirm }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-border-primary bg-bg-card p-6 shadow-xl">
+      <div className="flex w-full max-w-sm flex-col gap-4 rounded-lg border border-border-primary bg-bg-card p-5 shadow-[0_16px_40px_rgba(0,0,0,0.35)]">
         <h2 className="text-lg font-semibold text-text-primary">{t("shiftEnd.title")}</h2>
         <p className="text-sm text-text-secondary">{closeDesc}</p>
         <div>
@@ -45,19 +45,19 @@ export function ShiftEndModal({ open, shift, onClose, onConfirm }: Props) {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
-            className="w-full resize-none rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+            className="w-full resize-none rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
             placeholder={t("shiftEnd.notesPlaceholder")}
           />
         </div>
         {err && (
-          <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-sm text-accent-red-light">{err}</p>
+          <p className="rounded border border-accent-red/35 bg-accent-red/10 px-3 py-2 text-sm text-accent-red-light">{err}</p>
         )}
         <div className="flex gap-3">
           <button
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="flex-1 rounded-lg border border-border-primary py-2 text-sm text-text-secondary hover:bg-bg-secondary"
+            className="flex-1 rounded border border-border-primary py-2 text-sm text-text-secondary hover:bg-bg-secondary"
           >
             {t("shiftEnd.cancel")}
           </button>
@@ -65,7 +65,7 @@ export function ShiftEndModal({ open, shift, onClose, onConfirm }: Props) {
             type="button"
             disabled={busy}
             onClick={() => void submit()}
-            className="flex-1 rounded-lg bg-red-800 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40"
+            className="flex-1 rounded border border-red-700 bg-red-800 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40"
           >
             {t("shiftEnd.end")}
           </button>

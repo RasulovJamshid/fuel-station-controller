@@ -1,0 +1,68 @@
+{
+  "site": {
+    "id": "shelf-cng-001",
+    "name": "SHELF CNG Site",
+    "timezone": "Asia/Tashkent"
+  },
+  "service": {
+    "port": 3001,
+    "log_level": "info",
+    "log_file": "dispenser-service.shelf.log",
+    "db_path": "transactions.shelf.db",
+    "serial_log_file": "shelf-serial.log"
+  },
+  "connection": {
+    "protocol": "shelf_v2_2",
+    "port": "/dev/ttyUSB0",
+    "baud_rate": 19200,
+    "parity": "none",
+    "data_bits": 8,
+    "stop_bits": 1,
+    "response_timeout_ms": 20
+  },
+  "polling": {
+    "interval_ms": 100,
+    "offline_threshold_polls": 7,
+    "reconnect_settle_rounds": 2
+  },
+  "products": [
+    {
+      "id": 1,
+      "name": "CNG",
+      "color": "#2196F3",
+      "unit": "m³"
+    }
+  ],
+  "fueling_positions": [
+    {
+      "id": "SHELF-10",
+      "label": "CNG Gun 10",
+      "address_byte": 10,
+      "active": true,
+      "nozzles": [
+        {
+          "index": 1,
+          "product_id": 1,
+          "price": 5000,
+          "active": true
+        }
+      ]
+    }
+  ],
+  "sync": {
+    "enabled": false,
+    "backend_url": "",
+    "api_key": ""
+  },
+  "shifts": {
+    "mode": "disabled",
+    "require_operator_pin": false,
+    "scheduled": []
+  },
+  "ui": {
+    "default_auth_mode": "reactive",
+    "preauth_timeout_seconds": 300,
+    "use_decel_window_on_stop": false,
+    "use_cancel_mode": false
+  }
+}

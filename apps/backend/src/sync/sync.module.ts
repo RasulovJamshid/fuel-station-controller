@@ -5,9 +5,10 @@ import { StationApiKeyGuard } from '../common/guards/station-api-key.guard';
 import { DashboardModule } from '../dashboard/dashboard.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { ProductsModule } from '../products/products.module';
+import { StationsModule } from '../stations/stations.module';
 
 @Module({
-    imports: [DashboardModule, IntegrationsModule, ProductsModule],
+    imports: [DashboardModule, IntegrationsModule, ProductsModule, StationsModule],
     providers: [SyncService, StationApiKeyGuard],
     controllers: [SyncController],
 })

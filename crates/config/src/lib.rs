@@ -45,11 +45,6 @@ pub struct UiConfig {
     /// (old-app behavior).  Falls back to normal STOPPED state if the pump ignores BUSY.
     #[serde(default)]
     pub use_decel_window_on_stop: bool,
-    /// When true, the app Stop button acts as a final stop (no resume): the transaction
-    /// is promoted to COMPLETED once the nozzle is holstered.  When false (default) it
-    /// acts as Pause so the operator can resume the fill later.
-    #[serde(default)]
-    pub use_stop_mode: bool,
     /// When true, show a "Cancel" button during delivery instead of Pause/Stop.
     /// Clicking it stops the pump and immediately closes the transaction (no holster
     /// required).  Intended for simulator configs where there is no physical nozzle.
@@ -71,7 +66,6 @@ impl Default for UiConfig {
             default_auth_mode: default_auth_mode(),
             preauth_timeout_seconds: default_preauth_timeout_seconds(),
             use_decel_window_on_stop: false,
-            use_stop_mode: false,
             use_cancel_mode: false,
         }
     }
@@ -119,8 +113,31 @@ pub enum Protocol {
     /// AZT 2.0 (ОАО АЗТ) RS-485 protocol — 4800 baud, complementary-byte framing.
     #[serde(rename = "azt2_0")]
     Azt20,
+    /// TexnoUz "Дополненный протокол BlueSky" (controller TU_WB_KEY) — RS-485
+    /// half-duplex, 9600 8E1, BCD payloads. Each hose has its own bus address
+    /// (`base + hose number`), like AZT.
+    #[serde(rename = "texnouz_bluesky")]
+    TexnoUzBlueSky,
+    /// SHELF methane dispenser protocol V2.2 — 19200 8N1, 0x2D framing and
+    /// CRC-CCITT. Each fueling position represents one uniquely addressed gun.
+    #[serde(rename = "shelf_v2_2")]
+    ShelfV22,
     #[serde(rename = "mock")]
     Mock,
+}
+
+impl Protocol {
+    /// True when each nozzle occupies its own RS-485 address rather than sharing
+    /// the fueling position's address byte.
+    pub fn per_nozzle_addresses(self) -> bool {
+        matches!(self, Protocol::Azt20 | Protocol::TexnoUzBlueSky)
+    }
+
+    /// True when the pump can be armed while the nozzle is still holstered, so a
+    /// pre-authorization does not require a lift first.
+    pub fn arms_while_holstered(self) -> bool {
+        matches!(self, Protocol::Azt20 | Protocol::ShelfV22)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -630,6 +647,13 @@ impl SiteConfig {
         if self.connection.stop_bits != 1 && self.connection.stop_bits != 2 {
             bail!("connection.stop_bits must be 1 or 2");
         }
+        if self.connection.protocol == Protocol::ShelfV22
+            && (self.connection.data_bits != 8
+                || self.connection.parity != Parity::None
+                || self.connection.stop_bits != 1)
+        {
+            bail!("SHELF V2.2 requires connection format 8N1");
+        }
         Ok(())
     }
 
@@ -817,6 +841,12 @@ impl SiteConfig {
             }
 
             if fp.active {
+                if self.connection.protocol == Protocol::ShelfV22 && fp.address_byte == 0 {
+                    bail!(
+                        "SHELF fueling position '{}' must use a non-zero gun address",
+                        fp.id
+                    );
+                }
                 if !addr_bytes.insert(fp.address_byte) {
                     bail!(
                         "Duplicate address_byte {} in fueling position '{}'",
@@ -828,6 +858,15 @@ impl SiteConfig {
 
             if fp.active && fp.nozzles.is_empty() {
                 bail!("Fueling position '{}' is active but has no nozzles", fp.id);
+            }
+            if self.connection.protocol == Protocol::ShelfV22
+                && fp.active
+                && fp.nozzles.iter().filter(|n| n.active).count() != 1
+            {
+                bail!(
+                    "SHELF fueling position '{}' must have exactly one active nozzle because each position is one addressed gun",
+                    fp.id
+                );
             }
 
             let mut nozzle_indices = HashSet::new();
@@ -858,6 +897,17 @@ impl SiteConfig {
                         "Nozzle {} in position '{}' is active but has price = 0",
                         nozzle.index,
                         fp.id
+                    );
+                }
+                if self.connection.protocol == Protocol::ShelfV22
+                    && nozzle.active
+                    && nozzle.price > 9_999
+                {
+                    bail!(
+                        "SHELF nozzle {} in position '{}' has price {} above the V2.2 wire maximum 9999",
+                        nozzle.index,
+                        fp.id,
+                        nozzle.price
                     );
                 }
                 if self.connection.protocol == Protocol::Azt20 && fp.active && nozzle.active {
@@ -1044,6 +1094,33 @@ mod tests {
     fn rejects_zero_price_on_active_nozzle() {
         let mut cfg = sample_config();
         cfg.fueling_positions[0].nozzles[0].price = 0;
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn shelf_requires_one_nozzle_per_address_and_wire_range_price() {
+        let mut cfg = sample_config();
+        cfg.connection.protocol = Protocol::ShelfV22;
+        cfg.connection.baud_rate = 19_200;
+        cfg.connection.parity = Parity::None;
+        cfg.fueling_positions.truncate(1);
+        cfg.fueling_positions[0].address_byte = 10;
+        cfg.fueling_positions[0].nozzles[0].price = 5_000;
+        cfg.validate().unwrap();
+
+        cfg.fueling_positions[0].nozzles.push(NozzleConfig {
+            index: 2,
+            product_id: 3,
+            price: 5_000,
+            active: true,
+            azt_address: 0,
+            wayne_code: 0,
+            wayne_product_code: 0,
+        });
+        assert!(cfg.validate().is_err());
+
+        cfg.fueling_positions[0].nozzles.pop();
+        cfg.fueling_positions[0].nozzles[0].price = 10_000;
         assert!(cfg.validate().is_err());
     }
 

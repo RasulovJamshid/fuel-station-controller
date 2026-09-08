@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { Shift, Transaction, TxStatus } from "../types/api";
 import { txStatusI18nKey, txStatusLabel, txStatusParentId } from "../types/api";
+import { printHtmlDocument } from "../lib/printDocument";
 
 // ── print helpers ─────────────────────────────────────────────────────────────
 
@@ -11,13 +12,18 @@ const PRINT_STYLE_ID = "azs-print-style";
 const PRINT_CSS = `
   #${PRINT_ROOT_ID} { display: none; }
   @media print {
+    html, body {
+      height: auto !important;
+      overflow: visible !important;
+      background: #fff !important;
+    }
     body > *:not(#${PRINT_ROOT_ID}) { display: none !important; }
     #${PRINT_ROOT_ID} {
       display: block !important;
-      position: fixed;
-      inset: 0;
+      position: static;
+      width: 100%;
+      min-height: 0;
       background: #fff;
-      z-index: 999999;
       padding: 12mm 10mm;
       font-family: Arial, sans-serif;
       font-size: 11px;
@@ -229,24 +235,24 @@ const DATE_PRESETS = [
 
 function productPill(name: string) {
   const lower = name.toLowerCase();
-  let colors = "bg-bg-tertiary text-text-secondary ring-border-primary";
+  let colors = "border-border-primary text-text-secondary";
   if (lower.includes("95"))
-    colors = "bg-accent-amber/20 text-accent-amber-light ring-accent-amber/40";
+    colors = "border-accent-amber text-text-primary";
   else if (lower.includes("92") || lower.includes("80"))
-    colors = "bg-accent-emerald/20 text-accent-emerald-light ring-accent-emerald/40";
+    colors = "border-accent-emerald text-text-primary";
   else if (lower.includes("dt") || lower.includes("diesel"))
-    colors = "bg-accent-blue/20 text-accent-blue ring-accent-blue/40";
-  return `inline-flex max-w-full truncate rounded-md px-2 py-0.5 text-xs font-bold ring-1 ${colors}`;
+    colors = "border-accent-blue text-text-primary";
+  return `inline-flex max-w-full truncate border-l-2 px-1.5 py-0.5 text-xs font-medium ${colors}`;
 }
 
 function statusPill(s: TxStatus) {
-  const base = "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-wider";
+  const base = "inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium";
   switch (txStatusLabel(s)) {
-    case "COMPLETED":      return `${base} bg-accent-emerald/15 text-accent-emerald ring-1 ring-accent-emerald/30`;
-    case "ABORTED":        return `${base} bg-accent-amber/15 text-accent-amber ring-1 ring-accent-amber/30`;
-    case "STOPPED":        return `${base} bg-accent-red/15 text-accent-red ring-1 ring-accent-red/30`;
-    case "CONTINUED_FROM": return `${base} bg-accent-blue/15 text-accent-blue ring-1 ring-accent-blue/30`;
-    default:               return `${base} bg-bg-tertiary text-text-tertiary ring-1 ring-border-primary`;
+    case "COMPLETED":      return `${base} border-accent-emerald/45 text-accent-emerald`;
+    case "ABORTED":        return `${base} border-accent-amber/45 text-accent-amber`;
+    case "STOPPED":        return `${base} border-accent-red/45 text-accent-red`;
+    case "CONTINUED_FROM": return `${base} border-accent-blue/45 text-accent-blue`;
+    default:               return `${base} border-border-primary text-text-tertiary`;
   }
 }
 
@@ -259,10 +265,10 @@ function QuickBtn({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors border whitespace-nowrap
+      className={`rounded border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap
         ${active
-          ? "bg-accent-blue text-white border-accent-blue shadow-sm"
-          : "bg-bg-primary/80 text-text-secondary border-border-primary/50 hover:bg-bg-tertiary hover:text-text-primary"
+          ? "border-accent-blue/70 bg-accent-blue/10 text-accent-blue"
+          : "border-border-primary/50 bg-bg-primary text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
         }`}
     >
       {children}
@@ -449,47 +455,18 @@ export function HistoryPanel(props: {
         showCombinedForContinued,
       );
 
-      // Inject print root div
-      const existing = document.getElementById(PRINT_ROOT_ID);
-      existing?.remove();
-      const root = document.createElement("div");
-      root.id = PRINT_ROOT_ID;
-      root.innerHTML = innerHtml;
-      document.body.appendChild(root);
-
-      // Inject @media print styles that hide everything else
-      const existingStyle = document.getElementById(PRINT_STYLE_ID);
-      existingStyle?.remove();
-      const styleEl = document.createElement("style");
-      styleEl.id = PRINT_STYLE_ID;
-      styleEl.textContent = PRINT_CSS;
-      document.head.appendChild(styleEl);
-
-      let cleaned = false;
-      const cleanup = () => {
-        if (cleaned) return;
-        cleaned = true;
-        document.getElementById(PRINT_ROOT_ID)?.remove();
-        document.getElementById(PRINT_STYLE_ID)?.remove();
-        window.removeEventListener("afterprint", cleanup);
-        window.removeEventListener("focus", onFocus);
-      };
-      const onFocus = () => window.setTimeout(cleanup, 0);
-
-      window.addEventListener("afterprint", cleanup, { once: true });
-      window.addEventListener("focus", onFocus, { once: true });
-
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-      window.print();
-      window.setTimeout(cleanup, 400);
-    } catch {
-      // silently ignore — user can retry
+      await printHtmlDocument({
+        rootId: PRINT_ROOT_ID,
+        styleId: PRINT_STYLE_ID,
+        html: innerHtml,
+        css: PRINT_CSS,
+      });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setPrintLoading(false);
     }
-  }, [statusesParam, fromMs, untilMs, statusFilter, datePreset, customFrom, customUntil, filterProduct, summary, t]);
+  }, [statusesParam, filterShiftId, fromMs, untilMs, statusFilter, datePreset, customFrom, customUntil, filterProduct, summary, t, showCombinedForContinued]);
 
   if (!props.visible) return null;
 
@@ -531,18 +508,18 @@ export function HistoryPanel(props: {
       : <span className="text-xs ml-1 text-accent-blue">{sortDesc ? "↓" : "↑"}</span>;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border-primary/80 bg-bg-card/80 shadow-card backdrop-blur-sm print:border-none print:shadow-none print:bg-white">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border-primary/70 bg-bg-card print:border-none print:bg-white">
 
       {/* ── header ── */}
-      <div className={`flex flex-wrap shrink-0 items-center justify-between gap-3 border-b border-border-primary/60 bg-gradient-to-r from-bg-secondary/80 to-bg-tertiary/50 px-4 ${compact ? "py-2.5" : "py-3"} print:hidden`}>
-        <h2 className={`font-bold uppercase tracking-wider text-text-primary ${compact ? "text-sm" : "text-base"}`}>
+      <div className={`flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border-primary/60 bg-bg-secondary/40 px-4 ${compact ? "py-2" : "py-2.5"} print:hidden`}>
+        <h2 className={`font-semibold text-text-primary ${compact ? "text-sm" : "text-base"}`}>
           {t("history.title")}
         </h2>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={filterProduct}
             onChange={(e) => setFilterProduct(e.target.value)}
-            className={`rounded-lg border border-border-primary/50 bg-bg-secondary px-2 py-1 text-text-primary outline-none focus:border-accent-blue ${compact ? "text-xs" : "text-sm"}`}
+            className={`rounded border border-border-primary/60 bg-bg-primary px-2 py-1.5 text-text-primary outline-none focus:border-accent-blue ${compact ? "text-xs" : "text-sm"}`}
           >
             <option value="all">{t("history.allFuel")}</option>
             {products.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -551,7 +528,7 @@ export function HistoryPanel(props: {
             type="button"
             disabled={printLoading}
             onClick={() => void handlePrint()}
-            className="rounded-lg border border-border-primary bg-bg-primary/90 px-3 py-1.5 text-sm font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 shadow-sm transition-colors"
+            className="rounded border border-border-primary/60 bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary disabled:opacity-50"
           >
             {printLoading ? t("history.loading") : t("history.print")}
           </button>
@@ -559,17 +536,18 @@ export function HistoryPanel(props: {
             type="button"
             disabled={loading}
             onClick={() => { setPage(0); void load(0); }}
-            className="rounded-lg border border-border-primary bg-bg-primary/90 px-3 py-1.5 text-sm font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 shadow-sm transition-colors"
+            className="rounded border border-border-primary/60 bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary disabled:opacity-50"
           >
             {loading ? "…" : t("history.refresh")}
           </button>
         </div>
       </div>
 
-      {/* ── status filter ── */}
-      <div className={`shrink-0 border-b border-border-primary/40 bg-bg-secondary/50 print:hidden ${compact ? "px-3 py-1" : "px-4 py-2"}`}>
+      {/* ── filters ── */}
+      <div className={`shrink-0 border-b border-border-primary/50 bg-bg-primary print:hidden ${compact ? "px-3 py-1.5" : "px-4 py-2"}`}>
+        <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs font-bold uppercase tracking-wider text-text-muted">{t("history.statusLabel")}</span>
+          <span className="mr-1 w-16 shrink-0 text-xs font-medium text-text-muted">{t("history.statusLabel")}</span>
           {STATUS_FILTERS.map(({ id, labelKey }) => (
             <QuickBtn key={id} active={statusFilter === id} onClick={() => setStatusFilter(id as StatusFilterId)}>
               {t(labelKey)}
@@ -584,12 +562,9 @@ export function HistoryPanel(props: {
             </QuickBtn>
           )}
         </div>
-      </div>
 
-      {/* ── date-range toolbar ── */}
-      <div className={`shrink-0 border-b border-border-primary/40 bg-bg-secondary/40 print:hidden ${compact ? "px-3 py-1" : "px-4 py-2"}`}>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs font-bold uppercase tracking-wider text-text-muted">{t("history.periodLabel")}</span>
+          <span className="mr-1 w-16 shrink-0 text-xs font-medium text-text-muted">{t("history.periodLabel")}</span>
           {DATE_PRESETS.map(({ id, labelKey }) => {
             const isShift   = id === "shift";
             const disabled  = isShift && !props.currentShift;
@@ -603,12 +578,12 @@ export function HistoryPanel(props: {
                 disabled={disabled}
                 onClick={() => !disabled && setDatePreset(id)}
                 title={disabled ? t("history.noActiveShift") : undefined}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors border whitespace-nowrap
+                className={`rounded border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap
                   ${datePreset === id
-                    ? "bg-accent-blue text-white border-accent-blue shadow-sm"
+                    ? "border-accent-blue/70 bg-accent-blue/10 text-accent-blue"
                     : disabled
                       ? "bg-bg-primary/40 text-text-muted border-border-primary/30 cursor-not-allowed opacity-40"
-                      : "bg-bg-primary/80 text-text-secondary border-border-primary/50 hover:bg-bg-tertiary hover:text-text-primary"
+                      : "border-border-primary/50 bg-bg-primary text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
                   }`}
               >
                 {t(labelKey)}
@@ -627,14 +602,14 @@ export function HistoryPanel(props: {
                 type="date"
                 value={customFrom}
                 onChange={(e) => setCustomFrom(e.target.value)}
-                className="rounded-lg border border-border-primary/50 bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent-blue"
+                className="rounded border border-border-primary/50 bg-bg-input px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent-blue"
               />
               <span className="text-text-muted text-sm">—</span>
               <input
                 type="date"
                 value={customUntil}
                 onChange={(e) => setCustomUntil(e.target.value)}
-                className="rounded-lg border border-border-primary/50 bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent-blue"
+                className="rounded border border-border-primary/50 bg-bg-input px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent-blue"
               />
             </div>
           )}
@@ -648,10 +623,11 @@ export function HistoryPanel(props: {
             </span>
           )}
         </div>
+        </div>
       </div>
 
-      {/* ── full-filter summary cards ── */}
-      <div className={`shrink-0 grid grid-cols-3 border-b border-border-primary/40 bg-bg-secondary/30 print:hidden ${compact ? "gap-1.5 px-3 py-2" : "gap-3 px-4 py-3"}`}>
+      {/* ── full-filter summary ── */}
+      <div className="flex shrink-0 items-stretch border-b border-border-primary/50 bg-bg-secondary/25 px-3 py-2 print:hidden">
         {(["count", "vol", "amt"] as const).map((card) => {
           const isLoading = summaryLoading || !summary;
           const label     = card === "count" ? t("history.totalTransactions") : card === "vol" ? t("history.totalLiters") : t("history.totalAmount");
@@ -660,30 +636,14 @@ export function HistoryPanel(props: {
             : card === "vol"   ? fmtVol(summary.total_volume)
             : fmtInt.format(summary.total_amount);
           const unit      = card === "count" ? t("history.countSuffix") : card === "vol" ? "L" : t("history.currency");
-          const avg       = !isLoading && summary.count > 0 && !compact
-            ? card === "vol"
-              ? `${t("history.average")} ${fmtVol(summary.total_volume / summary.count)} L`
-              : card === "amt"
-                ? `${t("history.average")} ${fmtInt.format(Math.round(summary.total_amount / summary.count))} ${t("history.currency")}`
-                : null
-            : null;
           const color     = card === "vol" ? "text-accent-blue" : card === "amt" ? "text-accent-amber" : "text-text-primary";
           return (
-            <div key={card} className={`rounded-xl border border-border-primary/50 bg-bg-primary/70 shadow-sm ${compact ? "px-2 py-1.5" : "px-3 py-2.5"}`}>
-              {!compact && (
-                <div className="flex items-center justify-between mb-1">
-                  <div className="text-xs font-bold uppercase tracking-wider text-text-muted">{label}</div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted/60 bg-bg-tertiary/60 rounded px-1 py-0.5">{t("history.periodBadge")}</div>
-                </div>
-              )}
-              {compact && (
-                <div className="text-xs font-bold uppercase tracking-wider text-text-muted truncate mb-0.5">{label}</div>
-              )}
-              <div className={`font-mono font-bold tabular-nums ${color} ${isLoading ? "opacity-40" : ""} ${compact ? "text-base" : "text-xl"}`}>
+            <div key={card} className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-r border-border-primary/50 px-3 first:pl-1 last:border-r-0 last:pr-1">
+              <div className="truncate text-xs text-text-muted">{label}</div>
+              <div className={`font-mono font-semibold tabular-nums ${color} ${isLoading ? "opacity-40" : ""} ${compact ? "text-sm" : "text-base"}`}>
                 {value}
-                <span className={`ml-1 font-normal text-text-tertiary ${compact ? "text-xs" : "text-xs"}`}>{unit}</span>
+                <span className="ml-1 text-xs font-normal text-text-tertiary">{unit}</span>
               </div>
-              {avg && <div className="text-xs text-text-muted mt-0.5">{avg}</div>}
             </div>
           );
         })}
@@ -702,7 +662,6 @@ export function HistoryPanel(props: {
         </div>
       ) : processedRows.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-          <div className="text-3xl opacity-20">📋</div>
           <p className="text-sm font-medium text-text-muted">
             {rows.length === 0 ? t("history.noTransactions") : t("history.noResults")}
           </p>
@@ -720,27 +679,27 @@ export function HistoryPanel(props: {
         <div className="min-h-0 flex-1 overflow-hidden">
           <div className="h-full overflow-auto overscroll-contain">
             <table className={`w-full border-collapse text-left text-text-primary ${compact ? "min-w-[36rem] text-sm" : "min-w-[44rem] text-base"}`}>
-              <thead className="sticky top-0 z-[1] border-b border-border-primary bg-bg-secondary/95 text-xs font-bold uppercase tracking-wider text-text-muted backdrop-blur-md shadow-sm print:bg-transparent print:text-black print:border-gray-300">
+              <thead className="sticky top-0 z-[1] border-b border-border-primary bg-bg-secondary text-xs font-semibold text-text-muted print:border-gray-300 print:bg-transparent print:text-black">
                 <tr>
-                  <th className="whitespace-nowrap px-4 py-3">{t("history.colNo")}</th>
-                  <th className="px-3 py-3">{t("history.colFuel")}</th>
-                  <th className="whitespace-nowrap px-3 py-3 text-right cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("volume")}>
+                  <th className="whitespace-nowrap px-4 py-2.5">{t("history.colNo")}</th>
+                  <th className="px-3 py-2.5">{t("history.colFuel")}</th>
+                  <th className="whitespace-nowrap px-3 py-2.5 text-right cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("volume")}>
                     {t("history.colLiters")} <SortIcon col="volume" />
                   </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-right cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("amount")}>
+                  <th className="whitespace-nowrap px-3 py-2.5 text-right cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("amount")}>
                     {t("history.colAmount")} <SortIcon col="amount" />
                   </th>
-                  <th className="whitespace-nowrap px-3 py-3 cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("time")}>
+                  <th className="whitespace-nowrap px-3 py-2.5 cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("time")}>
                     {t("history.colDateTime")} <SortIcon col="time" />
                   </th>
-                  <th className="px-3 py-3 cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("pump")}>
+                  <th className="px-3 py-2.5 cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("pump")}>
                     {t("history.colDispenser")} <SortIcon col="pump" />
                   </th>
-                  <th className="px-4 py-3 cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("status")}>
+                  <th className="px-4 py-2.5 cursor-pointer hover:text-text-primary transition-colors select-none" onClick={() => handleSort("status")}>
                     {t("history.colStatus")} <SortIcon col="status" />
                   </th>
                   {!compact && (
-                    <th className="whitespace-nowrap px-3 py-3 text-text-muted">{t("history.colOperator")}</th>
+                    <th className="whitespace-nowrap px-3 py-2.5 text-text-muted">{t("history.colOperator")}</th>
                   )}
                 </tr>
               </thead>
@@ -749,10 +708,10 @@ export function HistoryPanel(props: {
                   const preset = presetDisplay(r, t);
                   return (
                   <tr key={r.id} className="hover:bg-bg-tertiary/40 transition-colors print:text-black">
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-semibold tabular-nums text-text-muted print:text-gray-600">
+                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs font-medium tabular-nums text-text-muted print:text-gray-600">
                       {page * PAGE_SIZE + i + 1}
                     </td>
-                    <td className="max-w-[8rem] px-3 py-3" title={r.product_name}>
+                    <td className="max-w-[8rem] px-3 py-2.5" title={r.product_name}>
                       <span className={`${productPill(r.product_name)} print:border print:border-gray-300 print:text-black print:bg-transparent`}>
                         {r.product_name}
                       </span>
@@ -762,19 +721,19 @@ export function HistoryPanel(props: {
                         </div>
                       ) : null}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold tabular-nums text-text-primary print:text-black">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-sm font-semibold tabular-nums text-text-primary print:text-black">
                       {fmtVol(rowVol(r))}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold tabular-nums text-text-secondary print:text-gray-800">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-sm font-semibold tabular-nums text-text-secondary print:text-gray-800">
                       {fmtInt.format(rowAmt(r))}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 font-mono text-xs font-medium text-text-tertiary print:text-gray-700">
+                    <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs font-medium text-text-tertiary print:text-gray-700">
                       {fmtTime(r.started_at)}
                     </td>
-                    <td className="px-3 py-3 text-sm font-bold text-text-primary print:text-black" title={r.fp_id}>
+                    <td className="px-3 py-2.5 text-sm font-semibold text-text-primary print:text-black" title={r.fp_id}>
                       {r.label || r.fp_id}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2.5">
                       <span
                         className={`${statusPill(r.status)} print:border print:border-gray-300 print:text-black print:bg-transparent`}
                         title={txStatusParentId(r.status) ?? undefined}
@@ -783,7 +742,7 @@ export function HistoryPanel(props: {
                       </span>
                     </td>
                     {!compact && (
-                      <td className="whitespace-nowrap px-3 py-3 text-xs text-text-muted print:text-gray-600">
+                      <td className="whitespace-nowrap px-3 py-2.5 text-xs text-text-muted print:text-gray-600">
                         {r.operator_name ?? "—"}
                       </td>
                     )}
@@ -791,11 +750,11 @@ export function HistoryPanel(props: {
                   );
                 })}
               </tbody>
-              <tfoot className="sticky bottom-0 z-[1] border-t border-border-primary bg-bg-secondary/95 text-xs font-bold text-text-primary backdrop-blur-md shadow-[0_-4px_10px_rgba(0,0,0,0.1)] print:bg-transparent print:border-gray-400 print:text-black">
+              <tfoot className="sticky bottom-0 z-[1] border-t border-border-primary bg-bg-secondary text-xs font-semibold text-text-primary print:border-gray-400 print:bg-transparent print:text-black">
                 <tr>
                   <td colSpan={2} className="px-4 py-3 text-right text-text-muted print:text-gray-700">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider bg-bg-tertiary/60 rounded px-1 py-0.5 mr-1">{t("history.page")}</span>
-                    <span className="text-xs uppercase tracking-wider">{t("history.pageTotal")}</span>
+                    <span className="mr-1 text-[10px] text-text-tertiary">{t("history.page")}</span>
+                    <span className="text-xs">{t("history.pageTotal")}</span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold text-accent-blue print:text-black">
                     {fmtVol(pageVol)} L
@@ -818,7 +777,7 @@ export function HistoryPanel(props: {
             type="button"
             disabled={page === 0 || loading}
             onClick={() => setPage((p) => Math.max(0, p - 1))}
-            className="rounded-lg border border-border-primary/50 bg-bg-primary/80 px-3 py-1.5 text-sm font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-30 transition-colors"
+            className="rounded border border-border-primary/50 bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary disabled:opacity-30"
           >
             {t("history.previous")}
           </button>
@@ -834,7 +793,7 @@ export function HistoryPanel(props: {
             type="button"
             disabled={!hasMore || loading}
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-lg border border-border-primary/50 bg-bg-primary/80 px-3 py-1.5 text-sm font-bold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-30 transition-colors"
+            className="rounded border border-border-primary/50 bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary disabled:opacity-30"
           >
             {t("history.next")}
           </button>

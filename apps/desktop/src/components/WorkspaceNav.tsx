@@ -142,17 +142,12 @@ function RailTab({
       aria-label={tab.label}
       onClick={onSelect}
       className={[
-        "group relative flex h-10 w-10 items-center justify-center rounded-xl transition-all",
+        "group relative flex h-10 w-10 items-center justify-center rounded border transition-colors",
         selected
-          ? "bg-accent-emerald/15 text-accent-emerald"
-          : "text-text-muted hover:bg-bg-tertiary hover:text-text-primary",
+          ? "border-border-primary bg-bg-secondary text-accent-emerald"
+          : "border-transparent text-text-muted hover:border-border-primary/50 hover:bg-bg-secondary hover:text-text-primary",
       ].join(" ")}
     >
-      {/* Left active stripe */}
-      {selected && (
-        <span className="absolute -left-px top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-accent-emerald" />
-      )}
-
       {icon && <NavIcon src={icon} active={selected} />}
 
       {/* Hover tooltip */}

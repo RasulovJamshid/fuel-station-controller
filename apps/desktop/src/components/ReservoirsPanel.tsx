@@ -43,41 +43,41 @@ export function ReservoirsPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[36px] border border-border-primary/60 bg-gradient-to-br from-bg-card/95 via-bg-card/85 to-bg-primary/70 shadow-[0_32px_60px_rgba(5,10,20,0.55)]">
-        <div className="flex flex-wrap items-center gap-4 border-b border-border-primary/60 bg-gradient-to-r from-bg-secondary/80 via-bg-tertiary/30 to-bg-secondary/70 px-6 py-5">
-          <div className="flex h-12 w-12 items-center justify-center rounded-3xl border border-border-primary/60 bg-bg-primary/90 shadow-inner">
-            <img src={dropletIcon} alt="" className="h-5 w-5 opacity-80" draggable={false} />
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-primary/60 bg-bg-card">
+        <div className="flex flex-wrap items-center gap-3 border-b border-border-primary/60 bg-bg-secondary/40 px-5 py-3.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded border border-border-primary/50 bg-bg-primary">
+            <img src={dropletIcon} alt="" className="h-4 w-4 opacity-70" draggable={false} />
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.45em] text-text-tertiary">{t("reservoirs.subtitle")}</p>
-            <h2 className="text-2xl font-black uppercase tracking-[0.2em] text-text-primary">{t("reservoirs.title")}</h2>
+            <h2 className="text-lg font-semibold text-text-primary">{t("reservoirs.title")}</h2>
+            <p className="mt-0.5 text-xs text-text-tertiary">{t("reservoirs.subtitle")}</p>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <div className="hidden items-center gap-3 rounded-2xl border border-border-primary/50 bg-bg-primary/70 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.3em] text-text-secondary sm:flex">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-accent-emerald" aria-hidden />
+            <div className="hidden items-center gap-2 text-xs text-text-secondary sm:flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent-emerald" aria-hidden />
               {t("reservoirs.live")}
-              <span className="ml-2 rounded-full border border-border-primary/40 px-2 py-0.5 text-xs text-text-primary">
+              <span className="border-l border-border-primary/60 pl-2 font-medium tabular-nums text-text-primary">
                 {t("reservoirs.tanks", { n: tanks.length })}
               </span>
             </div>
-            <button className="flex items-center justify-center rounded-2xl border border-border-primary/50 bg-bg-secondary/50 px-5 py-2 text-xs font-bold uppercase tracking-widest text-text-primary shadow-sm transition-all hover:bg-bg-tertiary hover:text-text-primary active:scale-95">
+            <button className="flex items-center justify-center rounded border border-border-primary/60 bg-bg-primary px-3 py-2 text-xs font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/40">
               {t("reservoirs.settings")}
             </button>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {tanks.length === 0 ? (
-            <div className="flex h-full min-h-[220px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border-primary/50 bg-bg-primary/35 px-6 text-center">
-              <p className="text-sm font-bold uppercase tracking-wide text-text-primary">
+            <div className="flex h-full min-h-[220px] flex-col items-center justify-center gap-2 rounded border border-dashed border-border-primary/50 bg-bg-primary/35 px-6 text-center">
+              <p className="text-sm font-semibold text-text-primary">
                 {t("reservoirs.noLiveData")}
               </p>
-              <p className="max-w-md text-xs font-semibold leading-5 text-text-muted">
+              <p className="max-w-md text-xs leading-5 text-text-muted">
                 {t("reservoirs.noLiveHint")}
               </p>
             </div>
           ) : (
-            <div className="grid auto-rows-fr gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-3">
               {tanks.map((tank) => (
                 <TankGauge
                   key={tank.product_id}

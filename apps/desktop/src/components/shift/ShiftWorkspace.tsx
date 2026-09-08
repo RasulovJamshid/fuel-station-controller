@@ -51,6 +51,7 @@ export function ShiftWorkspace({
   const [search, setSearch]     = useState("");
   const [sortAsc, setSortAsc]   = useState(false);
   const [page, setPage]         = useState(0);
+  const [expandedShiftId, setExpandedShiftId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -75,8 +76,8 @@ export function ShiftWorkspace({
 
   if (mode === "disabled") {
     return (
-      <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-accent-amber/40 bg-accent-amber/10 p-8 text-center shadow-inner sm:p-12">
-        <p className="font-bold text-text-primary">{t("shiftWorkspace.disabledTitle")}</p>
+      <div className="flex h-full flex-col items-center justify-center rounded-lg border border-border-primary bg-bg-card p-8 text-center sm:p-12">
+        <p className="font-semibold text-text-primary">{t("shiftWorkspace.disabledTitle")}</p>
         <p className="mt-3 max-w-lg text-sm leading-relaxed text-text-secondary">
           {t("shiftWorkspace.disabledDesc1")}
         </p>
@@ -88,10 +89,10 @@ export function ShiftWorkspace({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-6 overflow-y-auto pr-2 pb-10">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pb-6 pr-1">
       <div>
-        <h2 className="text-lg font-bold text-text-primary">{t("shiftWorkspace.title")}</h2>
-        <p className="mt-1 text-sm font-medium text-text-secondary">
+        <h2 className="text-base font-semibold text-text-primary">{t("shiftWorkspace.title")}</h2>
+        <p className="mt-0.5 text-sm text-text-secondary">
           {mode === "scheduled"
             ? t("shiftWorkspace.scheduledDescription")
             : t("shiftWorkspace.manualDescription")}
@@ -99,18 +100,18 @@ export function ShiftWorkspace({
       </div>
 
       {mode === "scheduled" && schedule.length > 0 ? (
-        <div className="rounded-2xl border border-border-primary/80 bg-bg-card/60 p-5 shadow-card backdrop-blur-sm">
-          <div className="mb-3 text-xs font-bold uppercase tracking-wider text-text-muted">
+        <div className="rounded-lg border border-border-primary/70 bg-bg-card p-3">
+          <div className="mb-2 text-xs font-semibold text-text-muted">
             {t("shiftWorkspace.dailySchedule")}
           </div>
-          <ul className="grid gap-2.5 sm:grid-cols-3">
+          <ul className="grid divide-y divide-border-primary/50 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             {schedule.map((s) => (
               <li
                 key={s.name}
-                className="rounded-xl border border-border-primary/50 bg-bg-secondary/50 px-4 py-3 text-sm transition-colors hover:bg-bg-tertiary/60 shadow-sm"
+                className="px-3 py-2 text-sm first:pl-1 last:pr-1"
               >
-                <span className="font-bold text-text-primary">{s.name}</span>
-                <span className="mt-1 block font-mono text-sm font-semibold text-text-tertiary">
+                <span className="font-medium text-text-primary">{s.name}</span>
+                <span className="mt-0.5 block font-mono text-xs text-text-tertiary">
                   {s.start} – {s.end}
                 </span>
               </li>
@@ -120,8 +121,8 @@ export function ShiftWorkspace({
       ) : null}
 
       {todayStats && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border-primary/50 bg-bg-secondary/50 px-4 py-2.5 shadow-sm">
-          <span className="text-xs font-bold uppercase tracking-widest text-text-muted">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-border-primary/60 bg-bg-secondary/30 px-3 py-2">
+          <span className="text-xs font-medium text-text-muted">
             {t("shiftWorkspace.todayTotals")}
           </span>
           <span className="font-mono text-sm font-semibold text-text-primary">
@@ -137,37 +138,37 @@ export function ShiftWorkspace({
       )}
 
       {currentShift ? (
-        <div className="space-y-4">
+        <div className="space-y-2">
           <ShiftReportPanel shift={currentShift} onViewTransactions={onViewShiftTransactions} />
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap justify-end gap-2">
             <button
               type="button"
               onClick={onHandover}
-              className="rounded-xl border border-accent-blue/40 bg-accent-blue/15 px-5 py-2.5 text-sm font-bold tracking-wide text-accent-blue shadow-button hover:bg-accent-blue/25 hover:shadow-button-hover transition-all"
+              className="rounded border border-accent-blue/60 bg-accent-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:brightness-110"
             >
               {t("shiftWorkspace.handover")}
             </button>
             <button
               type="button"
               onClick={onEnd}
-              className="rounded-xl border border-accent-red/40 bg-accent-red/15 px-5 py-2.5 text-sm font-bold tracking-wide text-accent-red shadow-button hover:bg-accent-red/25 hover:shadow-button-hover transition-all"
+              className="rounded border border-accent-red/50 bg-transparent px-4 py-2 text-sm font-medium text-accent-red transition-colors hover:bg-accent-red/10"
             >
               {t("shiftWorkspace.endShift")}
             </button>
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-accent-amber/40 bg-accent-amber/10 p-6 shadow-inner">
-          <p className="text-sm font-bold text-accent-amber-dark dark:text-accent-amber-light">
+        <div className="rounded-lg border border-border-primary bg-bg-card p-4 border-l-2 border-l-accent-amber">
+          <p className="text-sm font-semibold text-text-primary">
             {t("shiftWorkspace.noActiveShift")}
           </p>
-          <p className="mt-1 text-sm font-medium text-accent-amber-dark/80 dark:text-accent-amber-light/80">
+          <p className="mt-1 text-sm text-text-secondary">
             {t("shiftWorkspace.useStartInHeader")}
           </p>
           <button
             type="button"
             onClick={onStart}
-            className="mt-5 rounded-xl bg-accent-amber px-5 py-2.5 text-sm font-bold tracking-wide text-text-inverse shadow-button hover:brightness-110 hover:shadow-button-hover transition-all"
+            className="mt-4 rounded border border-accent-emerald/60 bg-accent-emerald px-4 py-2 text-sm font-medium text-white transition-colors hover:brightness-110"
           >
             {t("shiftWorkspace.startShift")}
           </button>
@@ -176,13 +177,13 @@ export function ShiftWorkspace({
 
       {/* ── Closed shifts ── */}
       {recentShifts.length > 0 ? (
-        <div className="min-h-0 shrink-0 space-y-4">
+        <div className="min-h-0 shrink-0 overflow-hidden rounded-lg border border-border-primary/70 bg-bg-card">
           {/* Header + controls */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-widest text-text-muted">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border-primary/60 bg-bg-secondary/30 px-3 py-2">
+            <span className="text-xs font-semibold text-text-secondary">
               {t("shiftWorkspace.closedShifts")}
             </span>
-            <span className="rounded-full border border-border-primary/50 bg-bg-secondary/60 px-2 py-0.5 text-[10px] font-semibold text-text-muted">
+            <span className="border-l border-border-primary pl-2 text-[10px] font-medium text-text-muted">
               {filtered.length}
             </span>
             <div className="ml-auto flex items-center gap-2">
@@ -191,12 +192,12 @@ export function ShiftWorkspace({
                 value={search}
                 onChange={(e) => handleSearch(e.target.value)}
                 placeholder={t("shiftWorkspace.searchPlaceholder")}
-                className="w-40 rounded-lg border border-border-primary/60 bg-bg-secondary px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-border-focus sm:w-52"
+                className="w-40 rounded border border-border-primary/60 bg-bg-primary px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-border-focus sm:w-52"
               />
               <button
                 type="button"
                 onClick={toggleSort}
-                className="rounded-lg border border-border-primary/60 bg-bg-secondary px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors whitespace-nowrap"
+                className="whitespace-nowrap rounded border border-border-primary/60 bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
               >
                 {sortAsc ? t("shiftWorkspace.sortOldest") : t("shiftWorkspace.sortNewest")}
               </button>
@@ -205,25 +206,31 @@ export function ShiftWorkspace({
 
           {/* Shift list */}
           {paged.length === 0 ? (
-            <p className="rounded-xl border border-border-primary/40 bg-bg-secondary/40 px-4 py-6 text-center text-sm text-text-muted">
+            <p className="px-4 py-8 text-center text-sm text-text-muted">
               {t("shiftWorkspace.noShiftsFound")}
             </p>
           ) : (
-            <div className="space-y-4">
+            <div className="divide-y divide-border-primary/60">
               {paged.map((s) => (
-                <ShiftReportPanel key={s.id} shift={s} onViewTransactions={onViewShiftTransactions} />
+                <ShiftReportPanel
+                  key={s.id}
+                  shift={s}
+                  onViewTransactions={onViewShiftTransactions}
+                  compact={expandedShiftId !== s.id}
+                  onToggleDetails={() => setExpandedShiftId((id) => id === s.id ? null : s.id)}
+                />
               ))}
             </div>
           )}
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-3 pt-1">
+            <div className="flex items-center justify-center gap-3 border-t border-border-primary/60 bg-bg-secondary/20 px-3 py-2">
               <button
                 type="button"
                 disabled={safePage === 0}
                 onClick={() => setPage((p) => p - 1)}
-                className="rounded-lg border border-border-primary/60 bg-bg-secondary px-3.5 py-1.5 text-sm font-semibold text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded border border-border-primary/60 bg-bg-primary px-3 py-1 text-sm text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
               >
                 ←
               </button>
@@ -234,7 +241,7 @@ export function ShiftWorkspace({
                 type="button"
                 disabled={safePage >= totalPages - 1}
                 onClick={() => setPage((p) => p + 1)}
-                className="rounded-lg border border-border-primary/60 bg-bg-secondary px-3.5 py-1.5 text-sm font-semibold text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded border border-border-primary/60 bg-bg-primary px-3 py-1 text-sm text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
               >
                 →
               </button>

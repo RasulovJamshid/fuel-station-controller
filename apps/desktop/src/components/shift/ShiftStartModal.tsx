@@ -80,7 +80,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-border-primary bg-bg-card p-6 shadow-xl">
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-sm flex-col gap-4 overflow-y-auto rounded-lg border border-border-primary bg-bg-card p-5 shadow-[0_16px_40px_rgba(0,0,0,0.35)]">
         <h2 className="text-lg font-semibold text-text-primary">{t("shiftStart.title")}</h2>
 
         {/* Operator selector */}
@@ -91,7 +91,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
               <select
                 value={selectedId}
                 onChange={(e) => { setSelectedId(e.target.value); setPin(""); }}
-                className="w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                className="w-full rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
               >
                 {operators.map((op) => (
                   <option key={op.id} value={op.id}>{op.name}</option>
@@ -102,7 +102,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="mt-2 w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                  className="mt-2 w-full rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                   placeholder={t("shiftStart.operatorNamePlaceholder")}
                   autoFocus
                   onKeyDown={(e) => e.key === "Enter" && !busy && effectiveName && void submit()}
@@ -113,7 +113,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+              className="w-full rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
               placeholder={t("shiftStart.operatorNamePlaceholder")}
               autoFocus
               onKeyDown={(e) => e.key === "Enter" && !busy && effectiveName && void submit()}
@@ -129,7 +129,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
               type="password"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              className="w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+              className="w-full rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
               placeholder="••••"
             />
           </div>
@@ -146,7 +146,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
         </button>
 
         {showAdvanced && (
-          <div className="flex flex-col gap-3 rounded-lg border border-border-secondary bg-bg-secondary/50 px-4 py-3">
+          <div className="flex flex-col gap-3 rounded border border-border-secondary bg-bg-secondary/40 px-4 py-3">
             <div>
               <label className="mb-2 block text-sm text-text-secondary">{t("shiftStart.startedAt")}</label>
               <div className="flex items-center gap-2">
@@ -158,7 +158,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
                     setSelHour(h);
                     if (selMin > curMaxMin) setSelMin(curMaxMin);
                   }}
-                  className="flex-1 rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                  className="flex-1 rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                 >
                   {Array.from({ length: nowH + 1 }, (_, i) => (
                     <option key={i} value={i}>{String(i).padStart(2, "0")}</option>
@@ -168,7 +168,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
                 <select
                   value={selMin}
                   onChange={(e) => setSelMin(Number(e.target.value))}
-                  className="flex-1 rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                  className="flex-1 rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                 >
                   {Array.from({ length: Math.floor(maxMin / 5) + 1 }, (_, i) => i * 5).map((m) => (
                     <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
@@ -183,7 +183,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
-                className="w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none resize-none"
+                className="w-full resize-none rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                 placeholder={t("shiftStart.notesPlaceholder")}
               />
             </div>
@@ -191,7 +191,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
         )}
 
         {err && (
-          <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-sm text-accent-red-light">{err}</p>
+          <p className="rounded border border-accent-red/35 bg-accent-red/10 px-3 py-2 text-sm text-accent-red-light">{err}</p>
         )}
 
         <div className="flex gap-3">
@@ -199,7 +199,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="flex-1 rounded-lg border border-border-primary py-2 text-sm text-text-secondary hover:bg-bg-secondary disabled:opacity-40"
+            className="flex-1 rounded border border-border-primary py-2 text-sm text-text-secondary hover:bg-bg-secondary disabled:opacity-40"
           >
             {t("shiftStart.cancel")}
           </button>
@@ -207,7 +207,7 @@ export function ShiftStartModal({ open, requirePin, onClose, onConfirm }: Props)
             type="button"
             disabled={!effectiveName || busy}
             onClick={() => void submit()}
-            className="flex-1 rounded-lg bg-emerald-700 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-40"
+            className="flex-1 rounded border border-emerald-600 bg-emerald-700 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-40"
           >
             {busy ? "…" : t("shiftStart.start")}
           </button>

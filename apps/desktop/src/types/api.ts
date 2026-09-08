@@ -99,7 +99,6 @@ export interface SiteSnapshot {
   require_operator_pin?: boolean;
   default_auth_mode?: AuthMode;
   preauth_timeout_seconds?: number;
-  use_stop_mode?: boolean;
   use_cancel_mode?: boolean;
 }
 
@@ -109,6 +108,34 @@ export interface ShiftPositionTotal {
   transactions_count: number;
   total_volume: number;
   total_amount: number;
+}
+
+export interface ShiftProductTotal {
+  product_id: number;
+  product_name: string;
+  transactions_count: number;
+  total_volume: number;
+  total_amount: number;
+}
+
+/**
+ * Opening and closing meter readings for one nozzle over a shift.
+ * `variance_volume` is metered litres minus recorded sales: non-zero means fuel
+ * passed the meter that no transaction accounts for.
+ */
+export interface ShiftNozzleTotalizer {
+  fp_id: string;
+  label: string;
+  nozzle_index: number;
+  product_id: number;
+  product_name: string;
+  open_volume?: number;
+  close_volume?: number;
+  open_amount?: number;
+  close_amount?: number;
+  dispensed_volume?: number;
+  recorded_volume: number;
+  variance_volume?: number;
 }
 
 export interface Shift {
@@ -126,6 +153,96 @@ export interface Shift {
   status: ShiftStatus;
   notes: string | null;
   position_totals: ShiftPositionTotal[];
+  /** Grade breakdown. Populated on the detail/report endpoints, empty in list views. */
+  product_totals?: ShiftProductTotal[];
+  /** Meter readings. Empty on protocols without totalizer support (Wayne). */
+  nozzle_totalizers?: ShiftNozzleTotalizer[];
+}
+
+// ── Forecourt operations ──────────────────────────────────────────────────
+
+export interface FuelDelivery {
+  id: string;
+  product_id: number;
+  product_name: string;
+  tank_label: string;
+  delivered_at: number;
+  document_ref?: string;
+  supplier?: string;
+  ordered_l: number;
+  delivered_l: number;
+  tank_before_l?: number;
+  tank_after_l?: number;
+  /** Measured tank gain minus the documented volume: negative is a short delivery. */
+  variance_l?: number;
+  temperature_c?: number;
+  price_per_l: number;
+  shift_id?: string;
+  operator_name?: string;
+  notes?: string;
+  created_at: number;
+}
+
+export interface CreateDeliveryCmd {
+  product_id: number;
+  tank_label?: string;
+  delivered_at?: number;
+  document_ref?: string;
+  supplier?: string;
+  ordered_l?: number;
+  delivered_l: number;
+  tank_before_l?: number;
+  tank_after_l?: number;
+  temperature_c?: number;
+  price_per_l?: number;
+  notes?: string;
+}
+
+export type VarianceStatus = "OK" | "WARN" | "ALARM";
+
+/** Book stock (opening + deliveries − sales) compared with the measured ATG dip. */
+export interface WetstockReconciliation {
+  id: string;
+  product_id: number;
+  product_name: string;
+  tank_label: string;
+  period_start: number;
+  period_end: number;
+  opening_l: number;
+  deliveries_l: number;
+  sales_l: number;
+  book_closing_l: number;
+  measured_l: number;
+  variance_l: number;
+  variance_pct: number;
+  status: VarianceStatus;
+  shift_id?: string;
+  /** False when no ATG reading was available, so `measured_l` is not a real dip. */
+  measured_available: boolean;
+  created_at: number;
+}
+
+export type ScheduledPriceStatus = "PENDING" | "APPLIED" | "CANCELLED" | "FAILED";
+
+export interface ScheduledPrice {
+  id: string;
+  product_id: number;
+  product_name: string;
+  new_price: number;
+  effective_at: number;
+  status: ScheduledPriceStatus;
+  created_by: string;
+  created_at: number;
+  applied_at?: number;
+  error?: string;
+  notes?: string;
+}
+
+export interface CreateScheduledPriceCmd {
+  product_id: number;
+  new_price: number;
+  effective_at: number;
+  notes?: string;
 }
 
 export interface StartShiftCmd {

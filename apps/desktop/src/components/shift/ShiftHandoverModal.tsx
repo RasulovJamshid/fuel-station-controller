@@ -90,12 +90,12 @@ export function ShiftHandoverModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="flex w-full max-w-md flex-col gap-4 rounded-xl border border-border-primary bg-bg-card p-6 shadow-xl">
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-lg border border-border-primary bg-bg-card p-5 shadow-[0_16px_40px_rgba(0,0,0,0.35)]">
         <h2 className="text-lg font-semibold text-text-primary">{t("shiftHandover.title")}</h2>
 
         {/* Outgoing shift summary */}
-        <div className="rounded-lg border border-border-secondary bg-bg-secondary/50 p-3">
-          <div className="text-xs font-medium uppercase tracking-wide text-text-muted">
+        <div className="rounded border border-border-secondary bg-bg-secondary/35 p-3">
+          <div className="text-xs font-medium text-text-muted">
             {t("shiftHandover.outgoingSummary")}
           </div>
           <div className="mt-1 text-sm font-medium text-text-primary">
@@ -104,20 +104,20 @@ export function ShiftHandoverModal({
               <span className="ml-2 text-text-secondary">{outgoingShift.shift_name}</span>
             ) : null}
           </div>
-          <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-            <div>
+          <div className="mt-2 grid grid-cols-3 divide-x divide-border-primary/50 text-center">
+            <div className="px-2">
               <div className="text-xs text-text-muted">{t("shiftHandover.transactions")}</div>
               <div className="font-mono text-sm font-semibold text-text-primary">
                 {outgoingShift.total_transactions}
               </div>
             </div>
-            <div>
+            <div className="px-2">
               <div className="text-xs text-text-muted">{t("shiftHandover.volume")}</div>
               <div className="font-mono text-sm font-semibold text-accent-blue">
                 {fmt.format(outgoingShift.total_volume)} L
               </div>
             </div>
-            <div>
+            <div className="px-2">
               <div className="text-xs text-text-muted">{t("shiftHandover.amount")}</div>
               <div className="font-mono text-sm font-semibold text-accent-amber">
                 {outgoingShift.total_amount.toLocaleString()}
@@ -134,7 +134,7 @@ export function ShiftHandoverModal({
               <select
                 value={selectedId}
                 onChange={(e) => { setSelectedId(e.target.value); setIncomingPin(""); }}
-                className="w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                className="w-full rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                 autoFocus
               >
                 {operators.map((op) => (
@@ -146,7 +146,7 @@ export function ShiftHandoverModal({
                 <input
                   value={incomingName}
                   onChange={(e) => setIncomingName(e.target.value)}
-                  className="mt-2 w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                  className="mt-2 w-full rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                   placeholder={t("shiftHandover.incomingOperatorPlaceholder")}
                 />
               )}
@@ -155,7 +155,7 @@ export function ShiftHandoverModal({
             <input
               value={incomingName}
               onChange={(e) => setIncomingName(e.target.value)}
-              className="w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+              className="w-full rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
               placeholder={t("shiftHandover.incomingOperatorPlaceholder")}
               autoFocus
             />
@@ -169,7 +169,7 @@ export function ShiftHandoverModal({
               type="password"
               value={incomingPin}
               onChange={(e) => setIncomingPin(e.target.value)}
-              className="w-full rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+              className="w-full rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
               placeholder="••••"
             />
           </div>
@@ -186,7 +186,7 @@ export function ShiftHandoverModal({
         </button>
 
         {showAdvanced && (
-          <div className="flex flex-col gap-3 rounded-lg border border-border-secondary bg-bg-secondary/50 px-4 py-3">
+          <div className="flex flex-col gap-3 rounded border border-border-secondary bg-bg-secondary/40 px-4 py-3">
             <div>
               <label className="mb-2 block text-sm text-text-secondary">{t("shiftHandover.incomingStartedAt")}</label>
               <div className="flex items-center gap-2">
@@ -198,7 +198,7 @@ export function ShiftHandoverModal({
                     setSelHour(h);
                     if (selMin > curMaxMin) setSelMin(curMaxMin);
                   }}
-                  className="flex-1 rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                  className="flex-1 rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                 >
                   {Array.from({ length: nowH + 1 }, (_, i) => (
                     <option key={i} value={i}>{String(i).padStart(2, "0")}</option>
@@ -208,7 +208,7 @@ export function ShiftHandoverModal({
                 <select
                   value={selMin}
                   onChange={(e) => setSelMin(Number(e.target.value))}
-                  className="flex-1 rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                  className="flex-1 rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                 >
                   {Array.from({ length: Math.floor(maxMin / 5) + 1 }, (_, i) => i * 5).map((m) => (
                     <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
@@ -223,7 +223,7 @@ export function ShiftHandoverModal({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
-                className="w-full resize-none rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+                className="w-full resize-none rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
                 placeholder={t("shiftHandover.notesPlaceholder")}
               />
             </div>
@@ -237,14 +237,14 @@ export function ShiftHandoverModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="w-full resize-none rounded-lg border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
+              className="w-full resize-none rounded border border-border-primary bg-bg-secondary px-3 py-2 text-sm text-text-primary focus:border-border-focus focus:outline-none"
               placeholder={t("shiftHandover.notesPlaceholder")}
             />
           </div>
         )}
 
         {err && (
-          <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-sm text-accent-red-light">{err}</p>
+          <p className="rounded border border-accent-red/35 bg-accent-red/10 px-3 py-2 text-sm text-accent-red-light">{err}</p>
         )}
 
         <div className="flex gap-3">
@@ -252,7 +252,7 @@ export function ShiftHandoverModal({
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="flex-1 rounded-lg border border-border-primary py-2 text-sm text-text-secondary hover:bg-bg-secondary"
+            className="flex-1 rounded border border-border-primary py-2 text-sm text-text-secondary hover:bg-bg-secondary"
           >
             {t("shiftHandover.cancel")}
           </button>
@@ -260,7 +260,7 @@ export function ShiftHandoverModal({
             type="button"
             disabled={!effectiveName || busy}
             onClick={() => void submit()}
-            className="flex-1 rounded-lg bg-sky-700 py-2 text-sm font-medium text-white hover:bg-sky-600 disabled:opacity-40"
+            className="flex-1 rounded border border-sky-600 bg-sky-700 py-2 text-sm font-medium text-white hover:bg-sky-600 disabled:opacity-40"
           >
             {busy ? "…" : t("shiftHandover.confirm")}
           </button>

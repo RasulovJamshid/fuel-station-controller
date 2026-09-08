@@ -80,7 +80,6 @@
     "default_auth_mode": "preauth",
     "preauth_timeout_seconds": 300,
     "use_decel_window_on_stop": true,
-    "use_stop_mode": true,
     "use_cancel_mode": false
   },
   "sync": {

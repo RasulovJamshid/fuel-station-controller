@@ -19,8 +19,8 @@ fn fmt_err(e: impl std::error::Error) -> String {
 use types::{
     AdminApplyPricesCmd, AdminAuthCmd, AdminAuthResponse, AdminCatalog, AdminChangePinCmd,
     AdminPriceEntry, AdminSettingsSnapshot, AdminShiftScheduleCmd, AdminUpdateOperatorCmd,
-    AuthorizeCmd, CloseStoppedTxCmd, ContinueFillCmd, CreateOperatorCmd, EndShiftCmd, FpState,
-    HandoverCmd, Operator, PriceChange, ResumeFillCmd, SavePositionNozzlesCmd, SaveProductsCmd,
+    AuthorizeCmd, CloseStoppedTxCmd, CreateOperatorCmd, EndShiftCmd, FpState,
+    HandoverCmd, Operator, PriceChange, SavePositionNozzlesCmd, SaveProductsCmd,
     Shift, SiteSnapshot, StartShiftCmd, StopCmd, Transaction, TxSummary, UpdateAllPricesCmd,
     UpdatePriceCmd,
 };
@@ -153,44 +153,6 @@ impl ServiceClient {
             .error_for_status()
             .map_err(fmt_err)?;
         Ok(())
-    }
-
-    pub async fn continue_fill(&self, fp_id: String, stopped_tx_id: String) -> Result<(), String> {
-        let path = format!("dispenser/{fp_id}/continue");
-        let url = self.base.join(&path).map_err(fmt_err)?;
-        let body = ContinueFillCmd { stopped_tx_id };
-        let resp = self
-            .http
-            .post(url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(fmt_err)?;
-        if resp.status().is_success() {
-            return Ok(());
-        }
-        let status = resp.status();
-        let detail = resp.text().await.unwrap_or_else(|_| status.to_string());
-        Err(detail)
-    }
-
-    pub async fn resume_fill(&self, fp_id: String, stopped_tx_id: String) -> Result<(), String> {
-        let path = format!("dispenser/{fp_id}/resume");
-        let url = self.base.join(&path).map_err(fmt_err)?;
-        let body = ResumeFillCmd { stopped_tx_id };
-        let resp = self
-            .http
-            .post(url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(fmt_err)?;
-        if resp.status().is_success() {
-            return Ok(());
-        }
-        let status = resp.status();
-        let detail = resp.text().await.unwrap_or_else(|_| status.to_string());
-        Err(detail)
     }
 
     pub async fn close_stopped_transaction(
@@ -812,6 +774,193 @@ impl ServiceClient {
         } else {
             Err(Self::response_error(resp).await)
         }
+    }
+
+    // ── Forecourt operations ──────────────────────────────────────────────
+
+    pub async fn list_deliveries(
+        &self,
+        product_id: Option<u8>,
+        limit: Option<i64>,
+    ) -> Result<Vec<types::FuelDelivery>, String> {
+        let mut url = self.base.join("deliveries").map_err(fmt_err)?;
+        {
+            let mut q = url.query_pairs_mut();
+            if let Some(p) = product_id {
+                q.append_pair("product_id", &p.to_string());
+            }
+            if let Some(l) = limit {
+                q.append_pair("limit", &l.to_string());
+            }
+        }
+        self.http
+            .get(url)
+            .send()
+            .await
+            .map_err(fmt_err)?
+            .error_for_status()
+            .map_err(fmt_err)?
+            .json()
+            .await
+            .map_err(fmt_err)
+    }
+
+    pub async fn create_delivery(
+        &self,
+        cmd: types::CreateDeliveryCmd,
+    ) -> Result<types::FuelDelivery, String> {
+        let url = self.base.join("deliveries").map_err(fmt_err)?;
+        let resp = self
+            .http
+            .post(url)
+            .json(&cmd)
+            .send()
+            .await
+            .map_err(fmt_err)?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let detail = resp.text().await.unwrap_or_else(|_| status.to_string());
+            return Err(detail);
+        }
+        resp.json().await.map_err(fmt_err)
+    }
+
+    pub async fn wetstock_preview(
+        &self,
+        product_id: Option<u8>,
+    ) -> Result<Vec<types::WetstockReconciliation>, String> {
+        let mut url = self.base.join("wetstock/preview").map_err(fmt_err)?;
+        if let Some(p) = product_id {
+            url.query_pairs_mut()
+                .append_pair("product_id", &p.to_string());
+        }
+        self.http
+            .get(url)
+            .send()
+            .await
+            .map_err(fmt_err)?
+            .error_for_status()
+            .map_err(fmt_err)?
+            .json()
+            .await
+            .map_err(fmt_err)
+    }
+
+    pub async fn wetstock_reconcile(
+        &self,
+        cmd: types::ReconcileCmd,
+    ) -> Result<Vec<types::WetstockReconciliation>, String> {
+        let url = self.base.join("wetstock/reconcile").map_err(fmt_err)?;
+        let resp = self
+            .http
+            .post(url)
+            .json(&cmd)
+            .send()
+            .await
+            .map_err(fmt_err)?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let detail = resp.text().await.unwrap_or_else(|_| status.to_string());
+            return Err(detail);
+        }
+        resp.json().await.map_err(fmt_err)
+    }
+
+    pub async fn list_reconciliations(
+        &self,
+        product_id: Option<u8>,
+        limit: Option<i64>,
+    ) -> Result<Vec<types::WetstockReconciliation>, String> {
+        let mut url = self
+            .base
+            .join("wetstock/reconciliations")
+            .map_err(fmt_err)?;
+        {
+            let mut q = url.query_pairs_mut();
+            if let Some(p) = product_id {
+                q.append_pair("product_id", &p.to_string());
+            }
+            if let Some(l) = limit {
+                q.append_pair("limit", &l.to_string());
+            }
+        }
+        self.http
+            .get(url)
+            .send()
+            .await
+            .map_err(fmt_err)?
+            .error_for_status()
+            .map_err(fmt_err)?
+            .json()
+            .await
+            .map_err(fmt_err)
+    }
+
+    pub async fn admin_list_scheduled_prices(
+        &self,
+        token: String,
+        status: Option<String>,
+    ) -> Result<Vec<types::ScheduledPrice>, String> {
+        let mut url = self.base.join("admin/prices/schedule").map_err(fmt_err)?;
+        if let Some(st) = status {
+            url.query_pairs_mut().append_pair("status", &st);
+        }
+        self.admin_http
+            .get(url)
+            .headers(Self::auth_headers(&token))
+            .send()
+            .await
+            .map_err(fmt_err)?
+            .error_for_status()
+            .map_err(fmt_err)?
+            .json()
+            .await
+            .map_err(fmt_err)
+    }
+
+    pub async fn admin_schedule_price(
+        &self,
+        token: String,
+        cmd: types::CreateScheduledPriceCmd,
+    ) -> Result<types::ScheduledPrice, String> {
+        let url = self.base.join("admin/prices/schedule").map_err(fmt_err)?;
+        let resp = self
+            .admin_http
+            .post(url)
+            .timeout(std::time::Duration::from_secs(ADMIN_WRITE_TIMEOUT_SECS))
+            .headers(Self::auth_headers(&token))
+            .json(&cmd)
+            .send()
+            .await
+            .map_err(fmt_err)?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let detail = resp.text().await.unwrap_or_else(|_| status.to_string());
+            return Err(detail);
+        }
+        resp.json().await.map_err(fmt_err)
+    }
+
+    pub async fn admin_cancel_scheduled_price(
+        &self,
+        token: String,
+        id: String,
+    ) -> Result<(), String> {
+        let path = format!("admin/prices/schedule/{id}");
+        let url = self.base.join(&path).map_err(fmt_err)?;
+        let resp = self
+            .admin_http
+            .delete(url)
+            .headers(Self::auth_headers(&token))
+            .send()
+            .await
+            .map_err(fmt_err)?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let detail = resp.text().await.unwrap_or_else(|_| status.to_string());
+            return Err(detail);
+        }
+        Ok(())
     }
 
     pub async fn admin_get_atg_config(&self) -> Result<serde_json::Value, String> {

@@ -129,6 +129,12 @@ model Station {
   lastSyncAt     DateTime?
   lastSeenAt     DateTime?
   syncLagAlerted Boolean   @default(false)
+  serviceConfig                Json?
+  serviceConfigVersion         Int       @default(0)
+  serviceConfigUpdatedAt       DateTime?
+  serviceConfigBackup          Json?
+  serviceConfigBackupVersion   Int       @default(0)
+  serviceConfigBackupUpdatedAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?

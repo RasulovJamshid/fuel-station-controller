@@ -13,7 +13,7 @@ use types::{
     AdminConfigEntry, AdminNozzleInput, AdminNozzleRow, AdminPositionCatalog, AdminPriceEntry,
     AdminSetConfigCmd, AdminSettingsSnapshot, AdminShiftScheduleCmd, AdminUpdateOperatorCmd,
     CreateOperatorCmd, Operator, Preset, PriceChange, ProductSnapshot, SavePositionNozzlesCmd,
-    SaveProductsCmd, UpdateAllPricesCmd,
+    SaveProductsCmd, UpdateAllPricesCmd, UpdatePriceCmd,
 };
 
 use super::routes::AppState;
@@ -207,7 +207,7 @@ async fn sync_runtimes_from_cfg(st: &AppState) {
     }
 }
 
-async fn require_admin(st: &AppState, headers: &HeaderMap) -> Result<String, (StatusCode, String)> {
+pub async fn require_admin(st: &AppState, headers: &HeaderMap) -> Result<String, (StatusCode, String)> {
     let auth = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
@@ -286,6 +286,46 @@ async fn admin_post_prices(
     Json(cmd): Json<UpdateAllPricesCmd>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let who = require_admin(&st, &headers).await?;
+    let n = apply_price_updates(&st, cmd.updates, &who).await?;
+    Ok(Json(serde_json::json!({ "ok": true, "updated": n })))
+}
+
+/// Expand a product-level price into one update per active nozzle carrying it.
+///
+/// Scheduled changes are expressed per grade ("AI-92 goes to 12000 at 06:00"), while
+/// the wire and price history work per nozzle, so the fan-out happens here.
+pub async fn updates_for_product(st: &AppState, product_id: u8, price: u32) -> Vec<UpdatePriceCmd> {
+    let cfg = st.cfg.read().await;
+    cfg.fueling_positions
+        .iter()
+        .filter(|fp| fp.active)
+        .flat_map(|fp| {
+            fp.nozzles
+                .iter()
+                .filter(|n| n.active && n.product_id == product_id)
+                .map(|n| UpdatePriceCmd {
+                    fp_id: fp.id.clone(),
+                    nozzle_index: n.index,
+                    price,
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// Validate, persist, push to the wire, and record price history for a batch of
+/// nozzle price changes.
+///
+/// Shared by the admin endpoint and the scheduler so a future-dated change reaches
+/// the pump, the DB, `price_history`, and the sync queue by exactly the same path as
+/// a manual one.
+pub async fn apply_price_updates(
+    st: &AppState,
+    requested: Vec<UpdatePriceCmd>,
+    who: &str,
+) -> Result<usize, (StatusCode, String)> {
+    let who = who.to_string();
+    let cmd = UpdateAllPricesCmd { updates: requested };
 
     struct ChangeRecord {
         fp_id: String,
@@ -323,6 +363,18 @@ async fn admin_post_prices(
                     return Err((
                         StatusCode::BAD_REQUEST,
                         "price must be greater than zero".into(),
+                    ));
+                }
+                if snap.connection.protocol == site_config::Protocol::ShelfV22
+                    && u.price > shelf_v22::MAX_PRICE
+                {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        format!(
+                            "SHELF V2.2 price {} exceeds the wire maximum {}",
+                            u.price,
+                            shelf_v22::MAX_PRICE
+                        ),
                     ));
                 }
                 let product_id = fp
@@ -367,7 +419,7 @@ async fn admin_post_prices(
         .map_err(internal)?;
     }
 
-    persist_site_config_with_runtime_sync(&st, cfg_snapshot, false).await?;
+    persist_site_config_with_runtime_sync(st, cfg_snapshot, false).await?;
 
     let n = updates.len();
     if !updates.is_empty() {
@@ -424,7 +476,7 @@ async fn admin_post_prices(
             }
         }
     }
-    Ok(Json(serde_json::json!({ "ok": true, "updated": n })))
+    Ok(n)
 }
 
 async fn admin_apply_prices_now(

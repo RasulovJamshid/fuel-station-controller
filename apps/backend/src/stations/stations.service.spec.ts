@@ -1,5 +1,15 @@
 import { StationsService } from './stations.service';
 
+const serviceConfig = {
+    site: { id: 'station-1', name: 'Station 1', timezone: 'Asia/Tashkent' },
+    service: { port: 3001 },
+    connection: { protocol: 'mock', port: 'mock' },
+    polling: { interval_ms: 200 },
+    products: [{ id: 1, name: 'AI-92' }],
+    fueling_positions: [{ id: 'FP1', nozzles: [{ index: 1, product_id: 1, price: 10000 }] }],
+    sync: { enabled: true, backend_url: 'https://old.example', api_key: 'local-secret' },
+};
+
 describe('StationsService', () => {
     it('computes today totals from an aggregate instead of the 20 recent rows', async () => {
         const recent = Array.from({ length: 20 }, (_, i) => ({
@@ -37,5 +47,70 @@ describe('StationsService', () => {
                 startedAt: { gte: expect.any(Date), lt: expect.any(Date) },
             }),
         }));
+    });
+
+    it('stores station backups separately and removes the API key', async () => {
+        const prisma: any = {
+            station: {
+                findFirst: jest.fn().mockResolvedValue({ id: 'station-1' }),
+                update: jest.fn().mockResolvedValue({
+                    serviceConfigBackupVersion: 3,
+                    serviceConfigBackupUpdatedAt: new Date('2026-09-08T05:00:00Z'),
+                }),
+            },
+        };
+        const service = new StationsService(prisma, {} as any, {} as any, {} as any);
+
+        const result = await service.backupServiceConfig('station-1', 'company-1', serviceConfig);
+
+        expect(result.version).toBe(3);
+        expect(prisma.station.update).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                serviceConfigBackup: expect.objectContaining({
+                    sync: expect.objectContaining({ api_key: '' }),
+                }),
+            }),
+        }));
+    });
+
+    it('downloads the dashboard config with current station identity and credentials', async () => {
+        const prisma: any = {
+            station: {
+                findFirst: jest.fn().mockResolvedValue({
+                    id: 'station-1',
+                    name: 'Current Station Name',
+                    address: 'Tashkent',
+                    timezone: 'Asia/Tashkent',
+                    apiKey: 'current-api-key',
+                    serviceConfig,
+                    serviceConfigVersion: 4,
+                    serviceConfigUpdatedAt: new Date('2026-09-08T05:00:00Z'),
+                    serviceConfigBackup: { ...serviceConfig, ui: { default_auth_mode: 'postpay' } },
+                    serviceConfigBackupVersion: 9,
+                    serviceConfigBackupUpdatedAt: new Date('2026-09-08T06:00:00Z'),
+                }),
+            },
+        };
+        const service = new StationsService(prisma, {} as any, {} as any, {} as any);
+
+        const result = await service.getServiceConfig(
+            'station-1',
+            'company-1',
+            'https://dashboard.example/',
+        );
+
+        expect(result.source).toBe('dashboard');
+        expect(result.version).toBe(4);
+        expect(result.config.site).toEqual(expect.objectContaining({
+            id: 'station-1',
+            name: 'Current Station Name',
+            address: 'Tashkent',
+        }));
+        expect(result.config.sync).toEqual(expect.objectContaining({
+            enabled: true,
+            backend_url: 'https://dashboard.example',
+            api_key: 'current-api-key',
+        }));
+        expect(result.config.ui).toBeUndefined();
     });
 });

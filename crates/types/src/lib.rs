@@ -5,11 +5,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum StopSource {
-    /// App-initiated pause — saves as STOPPED, operator can resume later.
+    /// Legacy app-initiated pause. No longer produced — pausing was removed and
+    /// every app stop is final — but kept so historical `"APP"` rows still load.
     App,
-    /// App-initiated stop (no-resume) — saves as STOPPED then promotes to COMPLETED on nozzle down.
+    /// App-initiated stop — saves as STOPPED then promotes to COMPLETED on nozzle down.
     AppFinal,
-    /// Pump-side stop (nozzle handle released) — operator can continue.
+    /// Pump-side stop (nozzle handle released) — saves as STOPPED for operator review.
     External,
 }
 
@@ -271,7 +272,12 @@ pub enum WsEvent {
     #[serde(rename = "shift.ended")]
     ShiftEnded(Shift),
     #[serde(rename = "shift.handover")]
-    ShiftHandover { outgoing: Shift, incoming: Shift },
+    /// Boxed so the rare handover payload does not set the size of every
+    /// `WsEvent` sent on the broadcast channel (status frames are the hot path).
+    ShiftHandover {
+        outgoing: Box<Shift>,
+        incoming: Box<Shift>,
+    },
     #[serde(rename = "shift.warning")]
     ShiftEndWarning {
         shift_id: String,
@@ -341,16 +347,6 @@ pub struct StopCmd {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ContinueFillCmd {
-    pub stopped_tx_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ResumeFillCmd {
-    pub stopped_tx_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CloseStoppedTxCmd {
     pub stopped_tx_id: String,
 }
@@ -383,10 +379,6 @@ pub struct SiteSnapshot {
     pub default_auth_mode: String,
     #[serde(default = "default_preauth_timeout_seconds")]
     pub preauth_timeout_seconds: u64,
-    /// When true the Stop button finalizes as Completed on nozzle-down (no resume).
-    /// When false the Stop button acts as Pause, allowing the operator to resume later.
-    #[serde(default)]
-    pub use_stop_mode: bool,
     /// When true show a "Cancel" button that stops and immediately closes the transaction.
     #[serde(default)]
     pub use_cancel_mode: bool,
@@ -484,6 +476,13 @@ pub struct Shift {
     pub notes: Option<String>,
     #[serde(default)]
     pub position_totals: Vec<ShiftPositionTotal>,
+    /// Sales broken down by fuel grade — the standard Z-report grade section.
+    #[serde(default)]
+    pub product_totals: Vec<ShiftProductTotal>,
+    /// Electronic totalizer readings captured at shift open and close, per nozzle.
+    /// Empty on protocols that do not report totalizers (e.g. Wayne Europump).
+    #[serde(default)]
+    pub nozzle_totalizers: Vec<ShiftNozzleTotalizer>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -493,6 +492,47 @@ pub struct ShiftPositionTotal {
     pub transactions_count: u32,
     pub total_volume: f64,
     pub total_amount: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShiftProductTotal {
+    pub product_id: u8,
+    pub product_name: String,
+    pub transactions_count: u32,
+    pub total_volume: f64,
+    pub total_amount: u64,
+}
+
+/// Opening and closing electronic totalizer readings for one nozzle over a shift.
+///
+/// `dispensed_volume` is the totalizer delta (close − open). Comparing it with the
+/// summed transaction volume for the same nozzle is the audit check that proves the
+/// recorded sales account for everything the meter actually delivered.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShiftNozzleTotalizer {
+    pub fp_id: String,
+    pub label: String,
+    pub nozzle_index: u8,
+    pub product_id: u8,
+    pub product_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_volume: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close_volume: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_amount: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close_amount: Option<u64>,
+    /// Totalizer delta over the shift (close − open), when both ends were captured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispensed_volume: Option<f64>,
+    /// Sum of recorded transaction volume on this nozzle during the shift.
+    #[serde(default)]
+    pub recorded_volume: f64,
+    /// `dispensed_volume − recorded_volume`. Non-zero means metered fuel that no
+    /// transaction accounts for (or vice versa).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variance_volume: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -717,4 +757,169 @@ pub struct TxSummary {
     pub count: i64,
     pub total_volume: f64,
     pub total_amount: i64,
+}
+
+// ── Wetstock: deliveries and reconciliation ───────────────────────────────
+
+/// A fuel delivery (tanker drop) into one tank.
+///
+/// Deliveries are the "in" side of book stock. Without them, book stock only ever
+/// falls and reconciliation against the ATG dip is meaningless.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FuelDelivery {
+    pub id: String,
+    pub product_id: u8,
+    pub product_name: String,
+    pub tank_label: String,
+    /// Unix ms when the fuel was actually dropped.
+    pub delivered_at: i64,
+    /// Waybill / delivery note reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supplier: Option<String>,
+    /// Litres stated on the delivery document.
+    pub ordered_l: f64,
+    /// Litres actually received (the figure that moves book stock).
+    pub delivered_l: f64,
+    /// Tank volume measured before the drop, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tank_before_l: Option<f64>,
+    /// Tank volume measured after the drop, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tank_after_l: Option<f64>,
+    /// `(tank_after_l − tank_before_l) − delivered_l`: short/over delivery.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variance_l: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature_c: Option<f64>,
+    /// Purchase price per litre in minor units.
+    pub price_per_l: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shift_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operator_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CreateDeliveryCmd {
+    pub product_id: u8,
+    #[serde(default)]
+    pub tank_label: Option<String>,
+    /// Defaults to now when omitted.
+    #[serde(default)]
+    pub delivered_at: Option<i64>,
+    #[serde(default)]
+    pub document_ref: Option<String>,
+    #[serde(default)]
+    pub supplier: Option<String>,
+    #[serde(default)]
+    pub ordered_l: f64,
+    pub delivered_l: f64,
+    #[serde(default)]
+    pub tank_before_l: Option<f64>,
+    #[serde(default)]
+    pub tank_after_l: Option<f64>,
+    #[serde(default)]
+    pub temperature_c: Option<f64>,
+    #[serde(default)]
+    pub price_per_l: u32,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum VarianceStatus {
+    /// Within tolerance.
+    Ok,
+    /// Outside tolerance but below the alarm threshold.
+    Warn,
+    /// Outside the alarm threshold — investigate for leak or theft.
+    Alarm,
+}
+
+/// One wetstock reconciliation: book stock versus measured (ATG) stock.
+///
+/// `book_closing_l = opening_l + deliveries_l − sales_l`, and
+/// `variance_l = measured_l − book_closing_l`. A persistent negative variance is
+/// the classic signature of a leak or unrecorded draw-off.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WetstockReconciliation {
+    pub id: String,
+    pub product_id: u8,
+    pub product_name: String,
+    pub tank_label: String,
+    pub period_start: i64,
+    pub period_end: i64,
+    pub opening_l: f64,
+    pub deliveries_l: f64,
+    pub sales_l: f64,
+    pub book_closing_l: f64,
+    pub measured_l: f64,
+    pub variance_l: f64,
+    /// Variance as a percentage of throughput (deliveries + sales).
+    pub variance_pct: f64,
+    pub status: VarianceStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shift_id: Option<String>,
+    /// False when no ATG reading was available, so `measured_l` is not trustworthy.
+    pub measured_available: bool,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReconcileCmd {
+    /// Reconcile only this product; omit to reconcile every configured tank.
+    #[serde(default)]
+    pub product_id: Option<u8>,
+    /// Start of the period. Defaults to the previous reconciliation for the tank,
+    /// or the current shift start, whichever is later.
+    #[serde(default)]
+    pub period_start: Option<i64>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+// ── Scheduled price changes ───────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ScheduledPriceStatus {
+    Pending,
+    Applied,
+    Cancelled,
+    Failed,
+}
+
+/// A future-dated price change. The scheduler applies it once `effective_at` passes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduledPrice {
+    pub id: String,
+    pub product_id: u8,
+    pub product_name: String,
+    pub new_price: u32,
+    pub effective_at: i64,
+    pub status: ScheduledPriceStatus,
+    pub created_by: String,
+    pub created_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub applied_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CreateScheduledPriceCmd {
+    pub product_id: u8,
+    pub new_price: u32,
+    /// Unix ms at which the price becomes effective. Must be in the future.
+    pub effective_at: i64,
+    #[serde(default)]
+    pub notes: Option<String>,
 }

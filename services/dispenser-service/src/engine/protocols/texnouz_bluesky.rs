@@ -91,7 +91,7 @@ pub(in crate::engine) async fn run(
                 interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 continue 'poll_loop;
             }
-            apply_command(&cfg, &runtimes, &events, &backend, cmd).await;
+            apply_command(&cfg, &runtimes, &events, &backend, &mut selected_hoses, cmd).await;
         }
 
         for byte in addrs.clone() {
@@ -109,7 +109,7 @@ pub(in crate::engine) async fn run(
                     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                     continue 'poll_loop;
                 }
-                apply_command(&cfg, &runtimes, &events, &backend, cmd).await;
+                apply_command(&cfg, &runtimes, &events, &backend, &mut selected_hoses, cmd).await;
             }
 
             poll_position(
@@ -491,6 +491,40 @@ fn select_next_idle_hose(
         }
     }
     current
+}
+
+/// Select the hose targeted by an operator command. Price writes may succeed on
+/// an unselected hose while dose writes are silently ignored, so authorization
+/// must not depend on where the background polling rotation happened to stop.
+fn select_hose_for_command(
+    fp_cfg: &FuelingPositionConfig,
+    backend: &SerialBackend,
+    selected_hoses: &mut HashMap<u8, u8>,
+    byte: u8,
+    target: u8,
+) -> bool {
+    let current = selected_hoses
+        .get(&byte)
+        .copied()
+        .or_else(|| poll_hose_statuses(fp_cfg, backend, None).1);
+    let Some(current) = current else {
+        warn!(target, "BlueSky: cannot locate selected hose for command");
+        return false;
+    };
+    if current == target {
+        selected_hoses.insert(byte, target);
+        return true;
+    }
+    if !expect_ok(
+        current,
+        &texnouz_bluesky::select_hose(current, target),
+        backend,
+        "select_hose_for_command",
+    ) {
+        return false;
+    }
+    selected_hoses.insert(byte, target);
+    true
 }
 
 /// Send a request whose reply carries data, returning that payload.
@@ -880,6 +914,7 @@ async fn do_authorize(
     runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
     events: &broadcast::Sender<WsEvent>,
     backend: &SerialBackend,
+    selected_hoses: &mut HashMap<u8, u8>,
     byte: u8,
     price: u32,
     preset: Preset,
@@ -901,6 +936,14 @@ async fn do_authorize(
         }
     };
     let hose = hose_address(&fp_cfg, nozzle_index);
+
+    if !select_hose_for_command(&fp_cfg, backend, selected_hoses, byte, hose) {
+        warn!(
+            hose,
+            "BlueSky: target hose selection failed — authorize aborted"
+        );
+        return;
+    }
 
     take_remote_control(hose, backend);
 
@@ -974,6 +1017,7 @@ async fn apply_command(
     runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
     events: &broadcast::Sender<WsEvent>,
     backend: &SerialBackend,
+    selected_hoses: &mut HashMap<u8, u8>,
     cmd: DispatchCommand,
 ) {
     match cmd {
@@ -984,7 +1028,18 @@ async fn apply_command(
             price,
             preset,
         } => {
-            do_authorize(cfg, runtimes, events, backend, byte, price, preset, None).await;
+            do_authorize(
+                cfg,
+                runtimes,
+                events,
+                backend,
+                selected_hoses,
+                byte,
+                price,
+                preset,
+                None,
+            )
+            .await;
         }
 
         DispatchCommand::Preauthorize {
@@ -998,6 +1053,7 @@ async fn apply_command(
                 runtimes,
                 events,
                 backend,
+                selected_hoses,
                 byte,
                 price,
                 preset,
@@ -1282,6 +1338,29 @@ mod tests {
                 texnouz_bluesky::select_hose(0x11, 0x12),
                 texnouz_bluesky::read_status(0x12),
             ]
+        );
+    }
+
+    #[test]
+    fn operator_command_selects_its_target_hose_before_authorization() {
+        let cfg = fp(0x10, &[(1, true), (3, true)]);
+        let fake = Arc::new(Mutex::new(FakeSerial::new([
+            texnouz_bluesky::build_request(0x11, 0xA1, &[0x59]).unwrap(),
+        ])));
+        let backend = SerialBackend::Fake(fake.clone());
+        let mut selected = HashMap::from([(0x10, 0x11)]);
+
+        assert!(select_hose_for_command(
+            &cfg,
+            &backend,
+            &mut selected,
+            0x10,
+            0x13
+        ));
+        assert_eq!(selected.get(&0x10), Some(&0x13));
+        assert_eq!(
+            fake.lock().unwrap().written(),
+            &[texnouz_bluesky::select_hose(0x11, 0x13)]
         );
     }
 

@@ -888,8 +888,9 @@ fn nozzles_from_input(
             product_id: n.product_id,
             price: n.price,
             active: n.active,
-            // Not editable via this form; the caller re-applies the existing
-            // per-nozzle AZT address so a nozzle edit never wipes it.
+            // Protocol-specific bus addresses are not editable via this form;
+            // the caller re-applies them from the existing JSON config.
+            bluesky_hose_number: 0,
             azt_address: 0,
             wayne_code: n.wayne_code,
             wayne_product_code: n.wayne_product_code,
@@ -912,11 +913,11 @@ async fn admin_save_position_nozzles(
             return Err((StatusCode::BAD_REQUEST, format!("unknown fp_id {fp_id}")));
         };
         let mut nozzles = nozzles_from_input(cmd.nozzles, &cfg)?;
-        // Preserve each nozzle's AZT RS-485 address (edited only in the site
-        // config JSON, not this form) so a price/product edit keeps multi-hose
-        // addressing intact.
+        // Preserve protocol-specific RS-485 addresses (edited only in the site
+        // config JSON) when the operator changes a price or product.
         for n in &mut nozzles {
             if let Some(e) = existing.nozzles.iter().find(|e| e.index == n.index) {
+                n.bluesky_hose_number = e.bluesky_hose_number;
                 n.azt_address = e.azt_address;
             }
         }

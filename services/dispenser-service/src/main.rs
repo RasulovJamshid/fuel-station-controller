@@ -162,11 +162,12 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
                 if let Some(nozzles) = nozzles_db.get(&fp.id) {
                     let mut merged = nozzles.clone();
                     // The DB is source of truth for product/price/active, but it
-                    // does not store azt_address (AZT per-nozzle RS-485 address).
-                    // Re-apply it from the JSON config so multi-hose addressing
-                    // survives the DB overlay.
+                    // does not store protocol-specific per-nozzle RS-485 addresses.
+                    // Re-apply them from JSON so multi-hose addressing survives
+                    // the DB product/price overlay.
                     for n in &mut merged {
                         if let Some(j) = fp.nozzles.iter().find(|j| j.index == n.index) {
+                            n.bluesky_hose_number = j.bluesky_hose_number;
                             n.azt_address = j.azt_address;
                         }
                     }

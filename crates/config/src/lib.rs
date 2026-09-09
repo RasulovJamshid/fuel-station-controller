@@ -196,6 +196,11 @@ pub struct NozzleConfig {
     pub product_id: u8,
     pub price: u32,
     pub active: bool,
+    /// TexnoUz BlueSky only: this nozzle's absolute bus address (1..=255).
+    /// Addresses printed as 11, 12, 21, etc. by TexnoUz are decimal values.
+    /// `0` keeps compatibility with older configs and derives `address_byte + index`.
+    #[serde(default)]
+    pub bluesky_hose_number: u8,
     /// AZT 2.0 only: this nozzle's own RS-485 network address (1..=15). AZT puts
     /// each hose on its own address, so one pump card groups several nozzles at
     /// different addresses. `None`/0 → fall back to the position's `address_byte`
@@ -827,6 +832,7 @@ impl SiteConfig {
         let product_ids: HashSet<u8> = self.products.iter().map(|p| p.id).collect();
         let mut addr_bytes = HashSet::new();
         let mut azt_addresses = HashSet::new();
+        let mut bluesky_addresses = HashSet::new();
         let mut fp_ids = HashSet::new();
 
         for fp in &self.fueling_positions {
@@ -928,6 +934,37 @@ impl SiteConfig {
                         bail!(
                             "Duplicate AZT address {} in active nozzle {} of position '{}'",
                             azt_addr,
+                            nozzle.index,
+                            fp.id
+                        );
+                    }
+                }
+                if self.connection.protocol == Protocol::TexnoUzBlueSky
+                    && fp.active
+                    && nozzle.active
+                {
+                    let bluesky_addr = if nozzle.bluesky_hose_number == 0 {
+                        fp.address_byte.checked_add(nozzle.index).ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "BlueSky address overflow for nozzle {} in position '{}'",
+                                nozzle.index,
+                                fp.id
+                            )
+                        })?
+                    } else {
+                        nozzle.bluesky_hose_number
+                    };
+                    if bluesky_addr == 0 {
+                        bail!(
+                            "Nozzle {} in position '{}' has invalid BlueSky address 0",
+                            nozzle.index,
+                            fp.id
+                        );
+                    }
+                    if !bluesky_addresses.insert(bluesky_addr) {
+                        bail!(
+                            "Duplicate BlueSky address {} in active nozzle {} of position '{}'",
+                            bluesky_addr,
                             nozzle.index,
                             fp.id
                         );
@@ -1113,6 +1150,7 @@ mod tests {
             product_id: 3,
             price: 5_000,
             active: true,
+            bluesky_hose_number: 0,
             azt_address: 0,
             wayne_code: 0,
             wayne_product_code: 0,
@@ -1141,6 +1179,22 @@ mod tests {
         cfg.fueling_positions[0].address_byte = 1;
         cfg.fueling_positions[1].address_byte = 2;
         cfg.fueling_positions[1].nozzles[1].azt_address = 1;
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn bluesky_allows_absolute_hose_addresses_and_rejects_duplicates() {
+        let mut cfg = sample_config();
+        cfg.connection.protocol = Protocol::TexnoUzBlueSky;
+        cfg.connection.parity = Parity::Even;
+        cfg.fueling_positions[0].address_byte = 1;
+        cfg.fueling_positions[1].address_byte = 2;
+        cfg.fueling_positions[0].nozzles[0].bluesky_hose_number = 1;
+        cfg.fueling_positions[1].nozzles[0].bluesky_hose_number = 2;
+        cfg.fueling_positions[1].nozzles[1].bluesky_hose_number = 28;
+        cfg.validate().unwrap();
+
+        cfg.fueling_positions[1].nozzles[1].bluesky_hose_number = 1;
         assert!(cfg.validate().is_err());
     }
 }

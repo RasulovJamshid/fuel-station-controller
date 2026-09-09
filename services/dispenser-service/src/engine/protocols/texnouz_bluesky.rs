@@ -72,18 +72,11 @@ pub(in crate::engine) async fn run(
 
     // Hoses that still owe us a startup totalizer read.
     let mut pending_startup_totals: HashMap<u8, u8> = addrs.iter().map(|&a| (a, 2)).collect();
+    // D5 answers only on the hose currently selected by TU_WB_KEY. Remember it
+    // per side so A1 can select the next hose after the current state is handled.
+    let mut selected_hoses: HashMap<u8, u8> = HashMap::new();
 
     info!(?addrs, "TexnoUz BlueSky poll loop started");
-
-    // Take remote control of every hose once at startup: the pump only honours
-    // commands while status bit 3 is set (разд. 7).
-    for &byte in &addrs {
-        if let Some(fp_cfg) = disp_by_byte.get(&byte) {
-            for (_, hose) in hose_addresses(fp_cfg) {
-                exchange(hose, &texnouz_bluesky::take_control(hose), &backend);
-            }
-        }
-    }
 
     'poll_loop: loop {
         while let Ok(cmd) = commands.try_recv() {
@@ -93,6 +86,7 @@ pub(in crate::engine) async fn run(
                 disp_by_byte = active_positions_by_byte(&cfg);
                 addrs = cfg.active_addresses();
                 pending_startup_totals = addrs.iter().map(|&a| (a, 2)).collect();
+                selected_hoses.clear();
                 interval = tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
                 interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 continue 'poll_loop;
@@ -109,6 +103,7 @@ pub(in crate::engine) async fn run(
                     disp_by_byte = active_positions_by_byte(&cfg);
                     addrs = cfg.active_addresses();
                     pending_startup_totals = addrs.iter().map(|&a| (a, 2)).collect();
+                    selected_hoses.clear();
                     interval =
                         tokio::time::interval(Duration::from_millis(cfg.polling.interval_ms));
                     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -127,6 +122,7 @@ pub(in crate::engine) async fn run(
                 &pool,
                 &shifts,
                 &mut pending_startup_totals,
+                &mut selected_hoses,
             )
             .await;
         }
@@ -149,6 +145,7 @@ async fn poll_position(
     pool: &SqlitePool,
     shifts: &ShiftCoordinator,
     pending_startup_totals: &mut HashMap<u8, u8>,
+    selected_hoses: &mut HashMap<u8, u8>,
 ) {
     let Some(fp_cfg) = disp_by_byte.get(&byte) else {
         return;
@@ -156,11 +153,12 @@ async fn poll_position(
 
     // Poll every hose so none of them times the link out, and remember which one
     // is doing something so a multi-hose position lands on the busy nozzle.
-    let mut statuses: Vec<(u8, u8, texnouz_bluesky::BlueSkyStatus)> = Vec::new();
-    for (nozzle_index, hose) in hose_addresses(fp_cfg) {
-        if let Some(st) = query_status(hose, backend) {
-            statuses.push((nozzle_index, hose, st));
-        }
+    let selected_hose = selected_hoses.get(&byte).copied();
+    let (statuses, selected_hose) = poll_hose_statuses(fp_cfg, backend, selected_hose);
+    if let Some(hose) = selected_hose {
+        selected_hoses.insert(byte, hose);
+    } else {
+        selected_hoses.remove(&byte);
     }
 
     if statuses.is_empty() {
@@ -221,10 +219,12 @@ async fn poll_position(
     }
 
     if !st.remote_control() {
-        // The pump ignores commands in local mode; re-assert control and wait for
-        // the next poll to observe bit 3.
-        debug!(hose, "BlueSky: pump in local mode — re-taking control");
-        exchange(hose, &texnouz_bluesky::take_control(hose), backend);
+        // Some TU_WB_KEY units leave bit 3 clear while still accepting D5, A1,
+        // and D9. Do not send E5 on every poll: the tested unit does not answer
+        // it, and waiting for that timeout pushes a full hose rotation beyond
+        // the documented five-second link interval. Authorization takes control
+        // explicitly before sending price and dose commands.
+        debug!(hose, "BlueSky: observing pump in local mode");
     }
 
     if st.dispensing() || st.paused() {
@@ -319,6 +319,8 @@ async fn poll_position(
         emit_nozzle_up(byte, nozzle_index, fp_cfg, cfg, runtimes, events).await;
     } else {
         idle_lane(byte, runtimes, events).await;
+        let next = select_next_idle_hose(fp_cfg, backend, hose);
+        selected_hoses.insert(byte, next);
     }
 
     broadcast_status(byte, runtimes, events).await;
@@ -328,20 +330,25 @@ async fn poll_position(
 
 /// Bus addresses of a position's active hoses, paired with the nozzle index.
 ///
-/// `ADDR = base + hose number` (разд. 3); the position's `address_byte` is the
-/// base and the nozzle index is the hose number.
+/// Explicit hose addresses support double-sided dispensers whose odd addresses
+/// are on one side and even addresses on the other. Older configs retain
+/// `address_byte + nozzle index`.
 fn hose_addresses(fp_cfg: &FuelingPositionConfig) -> Vec<(u8, u8)> {
     fp_cfg
         .nozzles
         .iter()
         .filter(|n| n.active)
-        .map(|n| {
-            (
-                n.index,
-                texnouz_bluesky::hose_address(fp_cfg.address_byte, n.index),
-            )
-        })
+        .map(|n| (n.index, hose_address(fp_cfg, n.index)))
         .collect()
+}
+
+fn hose_address(fp_cfg: &FuelingPositionConfig, nozzle_index: u8) -> u8 {
+    fp_cfg
+        .nozzles
+        .iter()
+        .find(|n| n.index == nozzle_index && n.bluesky_hose_number != 0)
+        .map(|n| n.bluesky_hose_number)
+        .unwrap_or_else(|| texnouz_bluesky::hose_address(fp_cfg.address_byte, nozzle_index))
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -356,7 +363,17 @@ fn hex(bytes: &[u8]) -> String {
 /// precode or a foreign address are never answered, so silence is an ordinary
 /// transient and the request is repeated (разд. 9).
 fn exchange(addr: u8, frame: &[u8], backend: &SerialBackend) -> Option<texnouz_bluesky::Response> {
-    for attempt in 0..EXCHANGE_RETRIES {
+    exchange_with_attempts(addr, frame, backend, EXCHANGE_RETRIES)
+}
+
+fn exchange_with_attempts(
+    addr: u8,
+    frame: &[u8],
+    backend: &SerialBackend,
+    attempts: usize,
+) -> Option<texnouz_bluesky::Response> {
+    let expected_cmd = frame.get(frame.len().checked_sub(2)?).copied()?;
+    for attempt in 0..attempts {
         let Ok(raw) = exchange_serial(backend, frame) else {
             continue;
         };
@@ -371,7 +388,15 @@ fn exchange(addr: u8, frame: &[u8], backend: &SerialBackend) -> Option<texnouz_b
             };
             cursor += used;
             if let Some(r) = texnouz_bluesky::decode_response(addr, &frame_bytes) {
-                return Some(r);
+                if r.cmd() == expected_cmd {
+                    return Some(r);
+                }
+                debug!(
+                    addr,
+                    expected_cmd,
+                    received_cmd = r.cmd(),
+                    "BlueSky: ignored stale reply for another command"
+                );
             }
         }
         debug!(
@@ -385,10 +410,87 @@ fn exchange(addr: u8, frame: &[u8], backend: &SerialBackend) -> Option<texnouz_b
     None
 }
 
+/// Request remote control and consume the firmware's optional acknowledgement.
+/// A single timeout is enough because this is retried whenever D5 still reports
+/// local mode on a later poll.
+fn take_remote_control(addr: u8, backend: &SerialBackend) {
+    let _ = exchange_with_attempts(addr, &texnouz_bluesky::take_control(addr), backend, 1);
+}
+
 /// Poll one hose's status byte (0xD5).
 fn query_status(addr: u8, backend: &SerialBackend) -> Option<texnouz_bluesky::BlueSkyStatus> {
-    let r = exchange(addr, &texnouz_bluesky::read_status(addr), backend)?;
+    // One documented timeout keeps a disconnected hose from delaying every
+    // other card. Mutating commands still use EXCHANGE_RETRIES.
+    let r = exchange_with_attempts(addr, &texnouz_bluesky::read_status(addr), backend, 1)?;
     texnouz_bluesky::parse_status(r.data())
+}
+
+/// Read every hose state exposed by one TU_WB_KEY side.
+///
+/// Real hardware answers D5 only at its currently selected hose address. Locate
+/// that address on startup, then rely on the selection cached after each A1.
+fn poll_hose_statuses(
+    fp_cfg: &FuelingPositionConfig,
+    backend: &SerialBackend,
+    cached_selected: Option<u8>,
+) -> (Vec<(u8, u8, texnouz_bluesky::BlueSkyStatus)>, Option<u8>) {
+    let hoses = hose_addresses(fp_cfg);
+    let mut statuses = Vec::new();
+    let mut selected = None;
+
+    if let Some(hose) = cached_selected.filter(|cached| hoses.iter().any(|(_, h)| h == cached)) {
+        if let Some(st) = query_status(hose, backend) {
+            if let Some((index, _)) = hoses.iter().find(|(_, h)| *h == hose) {
+                statuses.push((*index, hose, st));
+                selected = Some(hose);
+            }
+        }
+    }
+
+    // On startup, or if the pump changed its selection, locate the address that
+    // currently owns D5. Stop after the first reply because the others are
+    // expected to remain silent until selected with A1.
+    if selected.is_none() {
+        for &(index, hose) in &hoses {
+            if Some(hose) == cached_selected {
+                continue;
+            }
+            if let Some(st) = query_status(hose, backend) {
+                statuses.push((index, hose, st));
+                selected = Some(hose);
+                break;
+            }
+        }
+    }
+
+    (statuses, selected)
+}
+
+/// Select one other configured hose after the current hose has been completely
+/// processed. TU_WB_KEY does not answer D5 immediately after a successful A1,
+/// so the new selection is read on the next position poll.
+fn select_next_idle_hose(
+    fp_cfg: &FuelingPositionConfig,
+    backend: &SerialBackend,
+    current: u8,
+) -> u8 {
+    let hoses = hose_addresses(fp_cfg);
+    let current_index = hoses
+        .iter()
+        .position(|(_, hose)| *hose == current)
+        .unwrap_or(0);
+    for offset in 1..hoses.len() {
+        let target = hoses[(current_index + offset) % hoses.len()].1;
+        if expect_ok(
+            current,
+            &texnouz_bluesky::select_hose(current, target),
+            backend,
+            "select_hose_for_poll",
+        ) {
+            return target;
+        }
+    }
+    current
 }
 
 /// Send a request whose reply carries data, returning that payload.
@@ -798,9 +900,9 @@ async fn do_authorize(
                 .unwrap_or(1)
         }
     };
-    let hose = texnouz_bluesky::hose_address(fp_cfg.address_byte, nozzle_index);
+    let hose = hose_address(&fp_cfg, nozzle_index);
 
-    exchange(hose, &texnouz_bluesky::take_control(hose), backend);
+    take_remote_control(hose, backend);
 
     // Price first: the pump computes money from its own price register.
     let wire_price = price as u64 / WIRE_MONEY_UNIT;
@@ -914,8 +1016,8 @@ async fn apply_command(
                 let map = runtimes.read().await;
                 map.get(&byte).and_then(|rt| rt.state.nozzle_index)
             };
-            let hose = texnouz_bluesky::hose_address(
-                fp_cfg.address_byte,
+            let hose = hose_address(
+                &fp_cfg,
                 nozzle_index.unwrap_or_else(|| {
                     fp_cfg
                         .nozzles
@@ -985,7 +1087,7 @@ async fn apply_command(
                     .and_then(|rt| rt.pre_auth.as_ref().map(|p| p.nozzle_index))
             };
             if let Some(n) = nozzle_index {
-                let hose = texnouz_bluesky::hose_address(fp_cfg.address_byte, n);
+                let hose = hose_address(&fp_cfg, n);
                 // Drop the armed dose so a later lift cannot start a sale.
                 exchange(hose, &texnouz_bluesky::clear_keypad_preset(hose), backend);
                 expect_ok(
@@ -1044,7 +1146,7 @@ async fn apply_command(
                 let Some(fp_cfg) = cfg.position_by_id(&u.fp_id).cloned() else {
                     continue;
                 };
-                let hose = texnouz_bluesky::hose_address(fp_cfg.address_byte, u.nozzle_index);
+                let hose = hose_address(&fp_cfg, u.nozzle_index);
                 let wire = u.price as u64 / WIRE_MONEY_UNIT;
                 if wire == 0 || wire > MAX_PRICE {
                     warn!(
@@ -1111,8 +1213,10 @@ async fn apply_command(
 
 #[cfg(test)]
 mod tests {
+    use super::super::shared::FakeSerial;
     use super::*;
     use site_config::{NozzleConfig, Parity, Protocol};
+    use std::sync::Mutex;
 
     fn fp(address_byte: u8, nozzles: &[(u8, bool)]) -> FuelingPositionConfig {
         FuelingPositionConfig {
@@ -1127,6 +1231,7 @@ mod tests {
                     product_id: 1,
                     price: 11_300,
                     active: *active,
+                    bluesky_hose_number: 0,
                     azt_address: 0,
                     wayne_code: 0,
                     wayne_product_code: 0,
@@ -1146,6 +1251,101 @@ mod tests {
     fn inactive_nozzles_are_not_polled() {
         let cfg = fp(0x00, &[(1, true), (2, false)]);
         assert_eq!(hose_addresses(&cfg), vec![(1, 0x01)]);
+    }
+
+    #[test]
+    fn idle_hose_is_processed_before_a1_selects_the_next_hose() {
+        let cfg = fp(0x10, &[(1, true), (2, true)]);
+        let fake = Arc::new(Mutex::new(FakeSerial::new([
+            texnouz_bluesky::build_request(0x11, 0xD5, &[0x88]).unwrap(),
+            texnouz_bluesky::build_request(0x11, 0xA1, &[0x59]).unwrap(),
+            texnouz_bluesky::build_request(0x12, 0xD5, &[0x08]).unwrap(),
+        ])));
+        let backend = SerialBackend::Fake(fake.clone());
+
+        let (first_statuses, selected) = poll_hose_statuses(&cfg, &backend, Some(0x11));
+        assert_eq!(selected, Some(0x11));
+        assert_eq!(first_statuses.len(), 1);
+        assert!(!first_statuses[0].2.nozzle_lifted());
+
+        let selected = select_next_idle_hose(&cfg, &backend, selected.unwrap());
+        assert_eq!(selected, 0x12);
+
+        let (second_statuses, selected) = poll_hose_statuses(&cfg, &backend, Some(selected));
+        assert_eq!(selected, Some(0x12));
+        assert_eq!(second_statuses.len(), 1);
+        assert!(second_statuses[0].2.nozzle_lifted());
+        assert_eq!(
+            fake.lock().unwrap().written(),
+            &[
+                texnouz_bluesky::read_status(0x11),
+                texnouz_bluesky::select_hose(0x11, 0x12),
+                texnouz_bluesky::read_status(0x12),
+            ]
+        );
+    }
+
+    #[test]
+    fn e5_ack_is_consumed_before_selecting_another_hose() {
+        let cfg = fp(0x10, &[(1, true), (3, true)]);
+        let fake = Arc::new(Mutex::new(FakeSerial::new([
+            texnouz_bluesky::take_control(0x11),
+            texnouz_bluesky::build_request(0x11, 0xA1, &[0x59]).unwrap(),
+        ])));
+        let backend = SerialBackend::Fake(fake.clone());
+
+        take_remote_control(0x11, &backend);
+        assert_eq!(select_next_idle_hose(&cfg, &backend, 0x11), 0x13);
+
+        let fake = fake.lock().unwrap();
+        assert_eq!(fake.remaining(), 0);
+        assert_eq!(
+            fake.written(),
+            &[
+                texnouz_bluesky::take_control(0x11),
+                texnouz_bluesky::select_hose(0x11, 0x13),
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_e5_ack_does_not_prevent_selecting_another_hose() {
+        let cfg = fp(0x10, &[(1, true), (3, true)]);
+        let fake = Arc::new(Mutex::new(FakeSerial::new([
+            Vec::new(),
+            texnouz_bluesky::build_request(0x11, 0xA1, &[0x59]).unwrap(),
+        ])));
+        let backend = SerialBackend::Fake(fake.clone());
+
+        take_remote_control(0x11, &backend);
+        assert_eq!(select_next_idle_hose(&cfg, &backend, 0x11), 0x13);
+
+        let fake = fake.lock().unwrap();
+        assert_eq!(fake.remaining(), 0);
+        assert_eq!(
+            fake.written(),
+            &[
+                texnouz_bluesky::take_control(0x11),
+                texnouz_bluesky::select_hose(0x11, 0x13),
+            ]
+        );
+    }
+
+    #[test]
+    fn stale_reply_for_another_command_is_not_accepted() {
+        let fake = Arc::new(Mutex::new(FakeSerial::new([
+            texnouz_bluesky::take_control(0x11),
+            texnouz_bluesky::build_request(0x11, 0xA1, &[0x59]).unwrap(),
+        ])));
+        let backend = SerialBackend::Fake(fake.clone());
+
+        assert!(expect_ok(
+            0x11,
+            &texnouz_bluesky::select_hose(0x11, 0x13),
+            &backend,
+            "test_select"
+        ));
+        assert_eq!(fake.lock().unwrap().remaining(), 0);
     }
 
     #[test]
@@ -1181,6 +1381,48 @@ mod tests {
             let product_ids: Vec<u8> = fp.nozzles.iter().map(|n| n.product_id).collect();
             assert_eq!(product_ids, vec![3, 6, 5, 4]);
         }
+
+        let configured_hoses: Vec<Vec<u8>> = cfg
+            .active_positions()
+            .into_iter()
+            .map(|fp| fp.nozzles.iter().map(|n| n.bluesky_hose_number).collect())
+            .collect();
+        assert_eq!(
+            configured_hoses,
+            vec![
+                vec![1, 3, 5, 7],
+                vec![2, 4, 6, 8],
+                vec![11, 13, 15, 17],
+                vec![12, 14, 16, 18],
+                vec![21, 23, 25, 27],
+                vec![22, 24, 26, 28],
+            ]
+        );
+
+        let side_hoses: Vec<(u8, Vec<u8>)> = cfg
+            .active_positions()
+            .into_iter()
+            .map(|fp| {
+                (
+                    fp.address_byte,
+                    hose_addresses(fp)
+                        .into_iter()
+                        .map(|(_, address)| address)
+                        .collect(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            side_hoses,
+            vec![
+                (1, vec![1, 3, 5, 7]),
+                (2, vec![2, 4, 6, 8]),
+                (11, vec![11, 13, 15, 17]),
+                (12, vec![12, 14, 16, 18]),
+                (21, vec![21, 23, 25, 27]),
+                (22, vec![22, 24, 26, 28]),
+            ]
+        );
 
         let addresses: Vec<u8> = cfg
             .active_positions()

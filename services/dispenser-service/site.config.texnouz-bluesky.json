@@ -22,7 +22,7 @@
     "response_timeout_ms": 200
   },
   "polling": {
-    "interval_ms": 200,
+    "interval_ms": 150,
     "offline_threshold_polls": 2,
     "reconnect_settle_rounds": 3
   },

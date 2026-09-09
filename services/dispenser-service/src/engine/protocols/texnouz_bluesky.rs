@@ -1439,6 +1439,7 @@ mod tests {
         assert_eq!(cfg.connection.parity, Parity::Even);
         assert_eq!(cfg.connection.data_bits, 8);
         assert_eq!(cfg.connection.stop_bits, 1);
+        assert_eq!(cfg.polling.interval_ms, 150);
 
         let sides: Vec<(&str, &str)> = cfg
             .active_positions()

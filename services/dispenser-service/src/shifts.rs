@@ -79,6 +79,7 @@ impl ShiftCoordinator {
                         .filter(|n| n.active)
                         .map(|n| {
                             let totals = rt
+                                .filter(|rt| !matches!(rt.state.status, types::FpStatus::Offline))
                                 .and_then(|rt| {
                                     rt.state
                                         .pump_totals
@@ -153,6 +154,41 @@ impl ShiftCoordinator {
         self.active.read().await.clone()
     }
 
+    /// Report-only overlay: live readings never overwrite either saved boundary.
+    pub async fn report(&self, id: &str) -> Result<Option<Shift>> {
+        let Some(mut shift) = shift_queries::get_shift(&self.pool, id).await? else {
+            return Ok(None);
+        };
+        if shift.status == ShiftStatus::Active {
+            if let Some(runtimes) = &self.runtimes {
+                let map = runtimes.read().await;
+                for meter in &mut shift.nozzle_totalizers {
+                    meter.current_volume = map
+                        .values()
+                        .find(|rt| {
+                            rt.state.fp_id == meter.fp_id
+                                && !matches!(rt.state.status, types::FpStatus::Offline)
+                        })
+                        .and_then(|rt| {
+                            rt.state
+                                .pump_totals
+                                .iter()
+                                .find(|total| total.nozzle_index == meter.nozzle_index)
+                        })
+                        .map(|total| total.volume);
+                    meter.dispensed_volume = match (meter.open_volume, meter.current_volume) {
+                        (Some(open), Some(current)) if current >= open => Some(current - open),
+                        _ => None,
+                    };
+                    meter.variance_volume = meter
+                        .dispensed_volume
+                        .map(|volume| volume - meter.recorded_volume);
+                }
+            }
+        }
+        Ok(Some(shift))
+    }
+
     /// Returns (shift_id, operator_name) for the currently active shift in a single lock acquire.
     pub async fn active_info(&self) -> (Option<String>, Option<String>) {
         let g = self.active.read().await;
@@ -225,6 +261,10 @@ impl ShiftCoordinator {
             }
         }
 
+        // Include the saved opening readings in the initial response/event.
+        let shift = shift_queries::get_shift(&self.pool, &shift.id)
+            .await?
+            .unwrap_or(shift);
         *self.active.write().await = Some(shift.clone());
         Ok(shift)
     }
@@ -234,6 +274,16 @@ impl ShiftCoordinator {
             return Err(anyhow!("shift tracking is disabled for this site"));
         }
         shift_queries::validate_end(&cmd)?;
+        if self
+            .active
+            .read()
+            .await
+            .as_ref()
+            .map(|shift| shift.id.as_str())
+            != Some(cmd.shift_id.as_str())
+        {
+            return Err(anyhow!("shift is not active"));
+        }
         let ended_at = chrono::Utc::now().timestamp_millis();
         // Closing meter readings first, so the persisted shift already carries them.
         self.capture_totalizers(&cmd.shift_id, true).await;
@@ -369,4 +419,168 @@ pub fn spawn_warning_task(
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use types::{FpStatus, PumpNozzleTotals};
+
+    async fn setup(opening: Option<f64>) -> (ShiftCoordinator, RuntimeMap) {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let mut cfg: SiteConfig =
+            serde_json::from_str(include_str!("../site.config.gilbarco.json")).unwrap();
+        cfg.shifts.mode = ShiftMode::Manual;
+        cfg.shifts.require_operator_pin = false;
+        cfg.fueling_positions.truncate(1);
+        cfg.fueling_positions[0].nozzles.truncate(1);
+        let map = Arc::new(RwLock::new(crate::engine::initial_runtimes(&cfg)));
+        set_meter(&map, opening, false).await;
+        (
+            ShiftCoordinator::new(pool, Arc::new(cfg)).with_runtimes(map.clone()),
+            map,
+        )
+    }
+
+    async fn set_meter(map: &RuntimeMap, volume: Option<f64>, offline: bool) {
+        let mut map = map.write().await;
+        let rt = map.values_mut().next().unwrap();
+        rt.state.status = if offline {
+            FpStatus::Offline
+        } else {
+            FpStatus::Idle
+        };
+        rt.state.pump_totals = volume
+            .map(|volume| {
+                vec![PumpNozzleTotals {
+                    nozzle_index: 1,
+                    volume,
+                    amount: (volume * 10000.0) as u64,
+                    price: 10000,
+                }]
+            })
+            .unwrap_or_default();
+    }
+
+    async fn start(coordinator: &ShiftCoordinator) -> Shift {
+        coordinator
+            .start(StartShiftCmd {
+                operator_name: "Operator".into(),
+                operator_id: None,
+                pin: None,
+                notes: None,
+                started_at_override: None,
+            })
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn live_shift_delta_uses_saved_opening_without_writing_closing_values() {
+        let (coordinator, map) = setup(Some(1000.0)).await;
+        let shift = start(&coordinator).await;
+        assert_eq!(shift.nozzle_totalizers[0].open_volume, Some(1000.0));
+        set_meter(&map, Some(1050.25), false).await;
+        let live = coordinator.report(&shift.id).await.unwrap().unwrap();
+        let meter = &live.nozzle_totalizers[0];
+        assert_eq!(meter.current_volume, Some(1050.25));
+        assert_eq!(meter.dispensed_volume, Some(50.25));
+        assert_eq!(meter.variance_volume, Some(50.25));
+        assert_eq!(meter.close_volume, None);
+        let saved = shift_queries::get_shift(&coordinator.pool, &shift.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.nozzle_totalizers[0].open_volume, Some(1000.0));
+        assert_eq!(saved.nozzle_totalizers[0].close_volume, None);
+        assert_eq!(saved.nozzle_totalizers[0].current_volume, None);
+
+        // Restoring the coordinator must use the original persisted opening meter.
+        let restored = ShiftCoordinator::new(coordinator.pool.clone(), coordinator.cfg.clone())
+            .with_runtimes(map);
+        restored.restore().await.unwrap();
+        let report = restored.report(&shift.id).await.unwrap().unwrap();
+        assert_eq!(report.nozzle_totalizers[0].dispensed_volume, Some(50.25));
+    }
+
+    #[tokio::test]
+    async fn ended_shift_keeps_its_final_meter_after_new_sales_and_restart() {
+        let (coordinator, map) = setup(Some(1000.0)).await;
+        let shift = start(&coordinator).await;
+        set_meter(&map, Some(1060.0), false).await;
+        let cmd = EndShiftCmd {
+            shift_id: shift.id.clone(),
+            notes: None,
+        };
+        let closed = coordinator.end(cmd.clone()).await.unwrap();
+        assert_eq!(closed.nozzle_totalizers[0].close_volume, Some(1060.0));
+        assert_eq!(closed.nozzle_totalizers[0].dispensed_volume, Some(60.0));
+        set_meter(&map, Some(2000.0), false).await;
+        assert!(coordinator.end(cmd).await.is_err());
+        let restored = ShiftCoordinator::new(coordinator.pool.clone(), coordinator.cfg.clone())
+            .with_runtimes(map);
+        restored.restore().await.unwrap();
+        assert!(restored.current().await.is_none());
+        let saved = restored.report(&shift.id).await.unwrap().unwrap();
+        assert_eq!(saved.nozzle_totalizers[0].close_volume, Some(1060.0));
+        assert_eq!(saved.nozzle_totalizers[0].current_volume, None);
+        assert_eq!(saved.nozzle_totalizers[0].dispensed_volume, Some(60.0));
+    }
+
+    #[tokio::test]
+    async fn missing_or_reset_meters_never_become_zero_or_negative_shift_deltas() {
+        let (coordinator, map) = setup(Some(1000.0)).await;
+        let shift = start(&coordinator).await;
+        for (volume, offline) in [(Some(12.0), false), (None, false), (Some(1040.0), true)] {
+            set_meter(&map, volume, offline).await;
+            let report = coordinator.report(&shift.id).await.unwrap().unwrap();
+            assert_eq!(report.nozzle_totalizers[0].dispensed_volume, None);
+            assert_eq!(report.nozzle_totalizers[0].variance_volume, None);
+        }
+        let closed = coordinator
+            .end(EndShiftCmd {
+                shift_id: shift.id,
+                notes: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(closed.nozzle_totalizers[0].close_volume, None);
+        assert_eq!(closed.nozzle_totalizers[0].dispensed_volume, None);
+
+        let (coordinator, map) = setup(None).await;
+        let shift = start(&coordinator).await;
+        set_meter(&map, Some(1040.0), false).await;
+        let report = coordinator.report(&shift.id).await.unwrap().unwrap();
+        assert_eq!(report.nozzle_totalizers[0].current_volume, Some(1040.0));
+        assert_eq!(report.nozzle_totalizers[0].open_volume, None);
+        assert_eq!(report.nozzle_totalizers[0].dispensed_volume, None);
+    }
+
+    #[tokio::test]
+    async fn handover_saves_outgoing_delta_and_anchors_the_incoming_shift() {
+        let (coordinator, map) = setup(Some(1000.0)).await;
+        let shift = start(&coordinator).await;
+        set_meter(&map, Some(1100.0), false).await;
+        let (outgoing, incoming) = coordinator
+            .handover(HandoverCmd {
+                outgoing_shift_id: shift.id,
+                incoming_operator: "Next operator".into(),
+                incoming_operator_id: None,
+                incoming_pin: None,
+                notes: None,
+                incoming_started_at_override: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(outgoing.nozzle_totalizers[0].dispensed_volume, Some(100.0));
+        assert_eq!(incoming.nozzle_totalizers[0].open_volume, Some(1100.0));
+        set_meter(&map, Some(1130.0), false).await;
+        let report = coordinator.report(&incoming.id).await.unwrap().unwrap();
+        assert_eq!(report.nozzle_totalizers[0].dispensed_volume, Some(30.0));
+    }
 }

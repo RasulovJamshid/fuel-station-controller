@@ -127,6 +127,24 @@ function buildShiftPrintHtml(
       <div class="notes-box">${shift.notes}</div>
     </div>` : "";
 
+  const escape = (text: string) => text.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
+  const metersHtml = shift.nozzle_totalizers?.length ? `
+    <div class="section">
+      <h2>${t("shiftReport.meterReadings")} (L)</h2>
+      <table><thead><tr>
+        <th>${t("shiftReport.nozzle")}</th>
+        <th class="r">${t("shiftReport.meterOpen")}</th>
+        <th class="r">${t(shift.status === "ACTIVE" ? "shiftReport.meterCurrent" : "shiftReport.meterClose")}</th>
+        <th class="r">${t("shiftReport.meterChange")}</th>
+        <th class="r">${t("shiftReport.recorded")}</th>
+        <th class="r">${t("shiftReport.variance")}</th>
+      </tr></thead><tbody>${shift.nozzle_totalizers.map(meter => `<tr>
+        <td>${escape(meter.label || meter.fp_id)} · ${meter.nozzle_index} · ${escape(meter.product_name)}</td>
+        ${[meter.open_volume, shift.status === "ACTIVE" ? meter.current_volume : meter.close_volume, meter.dispensed_volume, meter.recorded_volume, meter.variance_volume].map(value => `<td class="r m">${value == null ? '—' : fmtV(value)}</td>`).join('')}
+      </tr>`).join('')}</tbody></table>
+      <p>${t(shift.status === "ACTIVE" ? "shiftReport.meterLiveHint" : "shiftReport.meterHint")}</p>
+    </div>` : '';
+
   return `
     <style>${SHIFT_INNER_CSS}</style>
     <div class="sh">
@@ -145,13 +163,14 @@ function buildShiftPrintHtml(
     </div>
     ${byDispenserHtml}
     ${byFuelHtml}
+    ${metersHtml}
     ${notesHtml}
     <div class="foot">${t("shiftReport.printedAt") || "Chop etildi"}: ${now}</div>
   `;
 }
 
 export function ShiftReportPanel({
-  shift,
+  shift: summaryShift,
   onViewTransactions,
   compact = false,
   onToggleDetails,
@@ -162,6 +181,31 @@ export function ShiftReportPanel({
   onToggleDetails?: () => void;
 }) {
   const { t } = useTranslation();
+  const [detail, setDetail] = useState<Shift | null>(null);
+  const [reportError, setReportError] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const shift = detail?.id === summaryShift.id && detail.status === summaryShift.status ? detail : summaryShift;
+
+  useEffect(() => {
+    if (compact) return;
+    let cancelled = false;
+    let pending = false;
+    let loaded = false;
+    const load = async () => {
+      if (pending || (loaded && summaryShift.status === "CLOSED")) return;
+      pending = true;
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const report = await invoke<Shift>("get_shift_report", { id: summaryShift.id });
+        if (!cancelled) { setDetail(report); setReportError(false); loaded = true; }
+      } catch {
+        if (!cancelled) setReportError(true);
+      } finally { pending = false; }
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 5000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [summaryShift.id, summaryShift.status, compact]);
   const durationMs = (shift.ended_at ?? Date.now()) - shift.started_at;
   const durationHrs = (durationMs / 3_600_000).toFixed(1);
   const startStr = new Date(shift.started_at).toLocaleString("uz-UZ");
@@ -224,13 +268,22 @@ export function ShiftReportPanel({
   }, [shift.id, shift.status, shift.product_totals]);
 
   const handlePrint = useCallback(async () => {
-    await printHtmlDocument({
-      rootId: SHIFT_PRINT_ROOT_ID,
-      styleId: SHIFT_PRINT_STYLE_ID,
-      html: buildShiftPrintHtml(shift, productTotals, t),
-      css: SHIFT_PRINT_CSS,
-    });
-  }, [shift, productTotals, t]);
+    setPrinting(true);
+    try {
+      // List rows omit meters: printing must fetch the full saved report too.
+      const { invoke } = await import("@tauri-apps/api/core");
+      const report = await invoke<Shift>("get_shift_report", { id: shift.id });
+      setDetail(report);
+      setReportError(false);
+      await printHtmlDocument({
+        rootId: SHIFT_PRINT_ROOT_ID,
+        styleId: SHIFT_PRINT_STYLE_ID,
+        html: buildShiftPrintHtml(report, report.product_totals?.map(pt => ({ name: pt.product_name, volume: pt.total_volume, amount: pt.total_amount, count: pt.transactions_count })) ?? productTotals, t),
+        css: SHIFT_PRINT_CSS,
+      });
+    } catch { setReportError(true); }
+    finally { setPrinting(false); }
+  }, [shift.id, productTotals, t]);
 
   return (
     <div className={`overflow-hidden bg-bg-card ${onToggleDetails ? "" : "rounded-lg border border-border-primary/70"}`}>
@@ -252,6 +305,7 @@ export function ShiftReportPanel({
           <button
             type="button"
             onClick={() => void handlePrint()}
+            disabled={printing}
             className="rounded border border-border-primary/60 bg-bg-primary px-2.5 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
           >
             {t("shiftReport.print")}
@@ -280,6 +334,7 @@ export function ShiftReportPanel({
         </div>
       </div>
 
+      {reportError && <p role="alert" className="px-3 py-2 text-sm text-accent-red">{t("shiftReport.reportLoadError")}</p>}
       <div className={`grid grid-cols-3 divide-x divide-border-primary/50 bg-bg-secondary/25 ${compact ? "border-t border-border-primary/40" : "border-b border-border-primary/60"}`}>
         <div className="min-w-0 px-3 py-2">
           <div className="truncate text-[10px] font-medium text-text-muted">{t("shiftReport.transactions")}</div>
@@ -353,7 +408,7 @@ export function ShiftReportPanel({
       {(shift.nozzle_totalizers?.length ?? 0) > 0 ? (
         <div>
           <div className="mb-2 text-xs font-semibold text-text-muted">
-            {t("shiftReport.meterReadings")}
+            {t("shiftReport.meterReadings")} (L)
           </div>
           <div className="overflow-x-auto rounded border border-border-primary/50">
             <table className="w-full min-w-[640px] text-sm">
@@ -361,8 +416,8 @@ export function ShiftReportPanel({
                 <tr className="bg-bg-secondary text-xs text-text-muted">
                   <th className="px-3 py-2 text-left font-semibold">{t("shiftReport.nozzle")}</th>
                   <th className="px-3 py-2 text-right font-semibold">{t("shiftReport.meterOpen")}</th>
-                  <th className="px-3 py-2 text-right font-semibold">{t("shiftReport.meterClose")}</th>
-                  <th className="px-3 py-2 text-right font-semibold">{t("shiftReport.metered")}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{t(shift.status === "ACTIVE" ? "shiftReport.meterCurrent" : "shiftReport.meterClose")}</th>
+                  <th className="px-3 py-2 text-right font-semibold">{t("shiftReport.meterChange")}</th>
                   <th className="px-3 py-2 text-right font-semibold">{t("shiftReport.recorded")}</th>
                   <th className="px-3 py-2 text-right font-semibold">{t("shiftReport.variance")}</th>
                 </tr>
@@ -372,6 +427,7 @@ export function ShiftReportPanel({
                   // Rounding in the meter and in the sale figures makes sub-litre
                   // differences meaningless; only flag a real discrepancy.
                   const off = nt.variance_volume != null && Math.abs(nt.variance_volume) >= 0.5;
+                  const reading = shift.status === "ACTIVE" ? nt.current_volume : nt.close_volume;
                   return (
                     <tr
                       key={`${nt.fp_id}-${nt.nozzle_index}`}
@@ -387,7 +443,7 @@ export function ShiftReportPanel({
                         {nt.open_volume != null ? fmtL.format(nt.open_volume) : "—"}
                       </td>
                       <td className="px-3 py-2 text-right text-text-tertiary">
-                        {nt.close_volume != null ? fmtL.format(nt.close_volume) : "—"}
+                        {reading != null ? fmtL.format(reading) : "—"}
                       </td>
                       <td className="px-3 py-2 text-right text-accent-blue">
                         {nt.dispensed_volume != null ? fmtL.format(nt.dispensed_volume) : "—"}
@@ -406,7 +462,7 @@ export function ShiftReportPanel({
               </tbody>
             </table>
           </div>
-          <p className="mt-1.5 text-xs text-text-muted">{t("shiftReport.meterHint")}</p>
+          <p className="mt-1.5 text-xs text-text-muted">{t(shift.status === "ACTIVE" ? "shiftReport.meterLiveHint" : "shiftReport.meterHint")}</p>
         </div>
       ) : null}
 

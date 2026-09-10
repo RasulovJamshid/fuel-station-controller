@@ -505,10 +505,10 @@ export default function App() {
     }
   }, [workspaceTab, totalizerAvailable]);
 
-  // Fetch fresh pump totalizers from the dispenser each time the totalizer view is
+  // Fetch fresh pump totalizers when the totalizer or shift view is
   // shown (between fills the cached values are only as of the last transaction).
   useEffect(() => {
-    if (workspaceTab !== "totalizer") return;
+    if (workspaceTab !== "totalizer" && !(workspaceTab === "shift" && totalizerAvailable)) return;
     let cancelled = false;
     (async () => {
       try {
@@ -521,7 +521,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [workspaceTab]);
+  }, [workspaceTab, totalizerAvailable]);
 
   // F11 toggles the totalizer view: open it, and pressing F11 again returns to the
   // main dispenser page. Suppress the browser/WebView fullscreen default.

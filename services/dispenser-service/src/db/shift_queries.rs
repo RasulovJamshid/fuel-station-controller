@@ -306,6 +306,7 @@ async fn nozzle_totalizers_for_shift(
                     product_name,
                     open_volume: ov,
                     close_volume: cv,
+                    current_volume: None,
                     open_amount: oa.map(|v| v.max(0) as u64),
                     close_amount: ca.map(|v| v.max(0) as u64),
                     dispensed_volume,
@@ -320,8 +321,7 @@ async fn nozzle_totalizers_for_shift(
 /// Record the opening or closing totalizer reading for one nozzle.
 ///
 /// Idempotent per `(shift, fp, nozzle)`: the open reading is written once at shift
-/// start and never overwritten by a later close, and re-closing a shift refreshes
-/// only the close columns.
+/// start and never overwritten. The first closing snapshot is also immutable.
 #[allow(clippy::too_many_arguments)]
 pub async fn upsert_nozzle_totalizer(
     pool: &SqlitePool,
@@ -349,7 +349,8 @@ pub async fn upsert_nozzle_totalizer(
                    product_name      = excluded.product_name,
                    close_volume      = excluded.close_volume,
                    close_amount      = excluded.close_amount,
-                   captured_close_at = excluded.captured_close_at"#,
+                   captured_close_at = excluded.captured_close_at
+               WHERE shift_nozzle_totals.captured_close_at IS NULL"#,
         )
         .bind(shift_id)
         .bind(fp_id)
@@ -991,6 +992,12 @@ mod tests {
             "the first opening reading is the shift anchor"
         );
         assert!((t.dispensed_volume.unwrap() - 60.0).abs() < 1e-9);
+        // A repeated close cannot rewrite a historical boundary.
+        upsert_nozzle_totalizer(
+            &pool, "s1", "FP1", "1", 1, 1, "AI-92", Some(2000.0), None, 3000, true,
+        ).await.unwrap();
+        let saved = get_shift(&pool, "s1").await.unwrap().unwrap();
+        assert_eq!(saved.nozzle_totalizers[0].close_volume, Some(1060.0));
     }
 
     #[tokio::test]

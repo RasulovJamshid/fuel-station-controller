@@ -131,6 +131,8 @@ export interface ShiftNozzleTotalizer {
   product_name: string;
   open_volume?: number;
   close_volume?: number;
+  /** Latest reported meter value while the shift is active. */
+  current_volume?: number;
   open_amount?: number;
   close_amount?: number;
   dispensed_volume?: number;

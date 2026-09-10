@@ -307,8 +307,15 @@ fn validate_shelf_preset(preset: &Preset) -> Result<(), (StatusCode, String)> {
     }
 }
 
-async fn get_current_shift(State(st): State<AppState>) -> Json<Option<Shift>> {
-    Json(st.shifts.current().await)
+async fn get_current_shift(State(st): State<AppState>) -> Result<Json<Option<Shift>>, StatusCode> {
+    let Some(shift) = st.shifts.current().await else {
+        return Ok(Json(None));
+    };
+    st.shifts
+        .report(&shift.id)
+        .await
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 async fn start_shift(
@@ -390,7 +397,8 @@ async fn shift_report(
     State(st): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Shift>, StatusCode> {
-    shift_queries::get_shift(&st.pool, &id)
+    st.shifts
+        .report(&id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .map(Json)

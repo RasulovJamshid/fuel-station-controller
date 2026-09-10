@@ -505,7 +505,7 @@ pub struct ShiftProductTotal {
 
 /// Opening and closing electronic totalizer readings for one nozzle over a shift.
 ///
-/// `dispensed_volume` is the totalizer delta (close − open). Comparing it with the
+/// `dispensed_volume` is the totalizer delta (current/close − open). Comparing it with the
 /// summed transaction volume for the same nozzle is the audit check that proves the
 /// recorded sales account for everything the meter actually delivered.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -519,11 +519,14 @@ pub struct ShiftNozzleTotalizer {
     pub open_volume: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub close_volume: Option<f64>,
+    /// Latest available meter reading for an active shift; never a closing snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_volume: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub open_amount: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub close_amount: Option<u64>,
-    /// Totalizer delta over the shift (close − open), when both ends were captured.
+    /// Meter change: current − open while active, close − open once closed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dispensed_volume: Option<f64>,
     /// Sum of recorded transaction volume on this nozzle during the shift.

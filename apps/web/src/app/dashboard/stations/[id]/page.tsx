@@ -8,6 +8,7 @@ import {
   DollarSign, ChevronLeft, ChevronRight, Download, Upload, ServerCog,
 } from 'lucide-react';
 import { stationsApi, transactionsApi } from '@/lib/api';
+import { configErrorMessage } from '@/lib/service-config';
 import { useAuthStore } from '@/store/auth';
 import { useFormats } from '@/hooks/use-formats';
 import { useT } from '@/hooks/use-t';
@@ -161,7 +162,7 @@ export default function StationDetailPage() {
       setConfigError(
         e instanceof SyntaxError
           ? t('serviceConfigInvalid')
-          : e?.response?.data?.message ?? t('saveError'),
+          : configErrorMessage(e, t('saveError')),
       );
     } finally {
       event.target.value = '';
@@ -271,10 +272,13 @@ export default function StationDetailPage() {
                   </span>
                 </div>
                 {configMessage && <p className="mt-2 text-xs font-medium text-emerald-600">{configMessage}</p>}
-                {configError && <p className="mt-2 text-xs font-medium text-red-600">{configError}</p>}
+                {configError && <p className="mt-2 whitespace-pre-line text-xs font-medium text-red-600">{configError}</p>}
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
+              <Link href={`/dashboard/stations/${id}/config`} className="btn btn-outline btn-md">
+                <ServerCog size={15} /> {t('editServiceConfig')}
+              </Link>
               <input
                 ref={configInputRef}
                 type="file"

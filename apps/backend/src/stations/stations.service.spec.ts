@@ -11,6 +11,33 @@ const serviceConfig = {
 };
 
 describe('StationsService', () => {
+    it('saves a new installation template, increments its version and strips only the sync key', async () => {
+        const prisma: any = {
+            station: {
+                findFirst: jest.fn().mockResolvedValue({ id: 'station-1', name: 'Station 1', timezone: 'Asia/Tashkent', address: null, apiKey: 'secret' }),
+                update: jest.fn().mockResolvedValue({ serviceConfigVersion: 1, serviceConfigUpdatedAt: new Date() }),
+            },
+        };
+        const service = new StationsService(prisma, {} as any, {} as any, {} as any);
+        const draft = await service.getServiceConfig('station-1', 'company-1', 'https://server.example');
+        expect(draft.source).toBe('template');
+        const result = await service.saveServiceConfig('station-1', 'company-1', draft.config);
+        expect(result.version).toBe(1);
+        expect(prisma.station.update).toHaveBeenCalledWith(expect.objectContaining({ data: {
+            serviceConfig: { ...draft.config, sync: { ...draft.config.sync, api_key: '' } },
+            serviceConfigVersion: { increment: 1 }, serviceConfigUpdatedAt: expect.any(Date),
+        } }));
+        expect(draft.config.sync.api_key).toBe('secret');
+    });
+
+    it('rejects malformed dashboard configs and mismatched station identity before writing', async () => {
+        const prisma: any = { station: { findFirst: jest.fn().mockResolvedValue({ id: 'station-1' }), update: jest.fn() } };
+        const service = new StationsService(prisma, {} as any, {} as any, {} as any);
+        await expect(service.saveServiceConfig('station-1', 'company-1', serviceConfig)).rejects.toThrow();
+        await expect(service.saveServiceConfig('station-1', 'company-1', { ...serviceConfig, site: { id: 'other-site' } })).rejects.toThrow('site.id');
+        expect(prisma.station.update).not.toHaveBeenCalled();
+    });
+
     it('computes today totals from an aggregate instead of the 20 recent rows', async () => {
         const recent = Array.from({ length: 20 }, (_, i) => ({
             id: `tx-${i}`, startedAt: new Date(), status: 'COMPLETED', volume: 1, amount: 100,

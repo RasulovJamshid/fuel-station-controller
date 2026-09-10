@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { currentDayUtcRange } from '../common/utils/timezone';
 import { Prisma, TxStatus } from '@prisma/client';
 import { PricesService } from '../prices/prices.service';
+import { validateDashboardServiceConfig } from './service-config.validation';
 
 const stationPublicSelect = {
     id: true,
@@ -198,6 +199,7 @@ export class StationsService {
         if (!station) throw new NotFoundException('Station not found');
 
         const config = validateServiceConfig(id, rawConfig);
+        validateDashboardServiceConfig(config);
         config.sync = { ...config.sync, api_key: '' };
         const updatedAt = new Date();
         const updated = await (this.prisma.station as any).update({

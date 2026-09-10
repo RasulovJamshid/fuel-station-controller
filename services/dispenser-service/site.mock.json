@@ -29,30 +29,35 @@
   "products": [
     {
       "id": 3,
+      "uuid": "93b3c691-b22a-4622-a7ff-c202a282cab0",
       "name": "AI-92",
       "color": "#2196F3",
       "unit": "litre"
     },
     {
       "id": 4,
+      "uuid": "88be5618-6198-4759-a943-fd08d52ba4dc",
       "name": "AI-95",
       "color": "#FF9800",
       "unit": "litre"
     },
     {
       "id": 5,
+      "uuid": "12d897b6-aa78-414a-a03f-dc49d7ef3820",
       "name": "AI-98",
       "color": "#E91E63",
       "unit": "litre"
     },
     {
       "id": 6,
+      "uuid": "64e0532a-5a09-4caf-a214-6e9a38043f6d",
       "name": "Diesel",
       "color": "#795548",
       "unit": "litre"
     },
     {
       "id": 7,
+      "uuid": "20893eba-fe29-42e9-a8a2-927ccdedd101",
       "name": "LPG",
       "color": "#9C27B0",
       "unit": "litre"
@@ -68,16 +73,18 @@
         {
           "index": 1,
           "product_id": 3,
-          "price": 10500,
+          "price": 11500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 4,
-          "price": 12000,
+          "price": 17500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -92,16 +99,18 @@
         {
           "index": 1,
           "product_id": 3,
-          "price": 11000,
+          "price": 11500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 4,
-          "price": 12000,
+          "price": 17500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -116,16 +125,18 @@
         {
           "index": 1,
           "product_id": 3,
-          "price": 11000,
+          "price": 11500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 4,
-          "price": 12000,
+          "price": 17500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -140,16 +151,18 @@
         {
           "index": 1,
           "product_id": 3,
-          "price": 11000,
+          "price": 11500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 6,
-          "price": 12000,
+          "price": 16000,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -164,24 +177,27 @@
         {
           "index": 1,
           "product_id": 3,
-          "price": 11000,
+          "price": 11500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 4,
-          "price": 12000,
+          "price": 17500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 3,
           "product_id": 6,
-          "price": 9800,
+          "price": 16000,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
@@ -190,6 +206,7 @@
           "product_id": 5,
           "price": 13500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -204,24 +221,27 @@
         {
           "index": 1,
           "product_id": 3,
-          "price": 11000,
+          "price": 11500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 2,
           "product_id": 4,
-          "price": 12000,
+          "price": 17500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
         {
           "index": 3,
           "product_id": 6,
-          "price": 9800,
+          "price": 16000,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         },
@@ -230,6 +250,7 @@
           "product_id": 7,
           "price": 6500,
           "active": true,
+          "azt_address": 0,
           "wayne_code": 0,
           "wayne_product_code": 0
         }
@@ -239,7 +260,12 @@
   "sync": {
     "enabled": false,
     "backend_url": "",
-    "api_key": ""
+    "api_key": "",
+    "retry_interval_secs": 30,
+    "batch_size": 100,
+    "max_retries": 10,
+    "price_pull_interval_hours": 12,
+    "price_pull_enabled": true
   },
   "shifts": {
     "mode": "manual",
@@ -251,6 +277,10 @@
   },
   "ui": {
     "default_auth_mode": "preauth",
-    "preauth_timeout_seconds": 300
-  }
+    "preauth_timeout_seconds": 300,
+    "use_decel_window_on_stop": false,
+    "use_cancel_mode": false
+  },
+  "tanks": [],
+  "atg": null
 }

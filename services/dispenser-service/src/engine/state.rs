@@ -7,6 +7,7 @@ use types::{
 use uuid::Uuid;
 use wayne_europump::{decode_amount, decode_volume, Frame};
 
+use super::protocols::bluesky_state::BlueSkyRuntimeState;
 use super::protocols::wayne_state::WayneRuntimeState;
 
 /// Idle polls required before accepting another reactive nozzle lift after ghost fill.
@@ -97,6 +98,7 @@ pub struct RuntimeFp {
     /// Protocol-owned state. Wayne wire mechanics are intentionally nested rather
     /// than exposed as part of the common fueling-position runtime contract.
     pub(in crate::engine) wayne: WayneRuntimeState,
+    pub(in crate::engine) bluesky: BlueSkyRuntimeState,
 }
 
 /// Hose lift notifications older than this are ignored for "still up" guards.
@@ -139,6 +141,7 @@ impl RuntimeFp {
             auth_session_started_at: None,
             completed_sale: None,
             wayne: WayneRuntimeState::default(),
+            bluesky: BlueSkyRuntimeState::default(),
             state: FpState {
                 fp_id: fp.id.clone(),
                 label: fp.label.clone(),

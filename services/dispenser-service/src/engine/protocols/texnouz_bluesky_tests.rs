@@ -454,6 +454,65 @@ async fn stop_and_emergency_stop_save_partial_fill_only_after_stable_end() {
 }
 
 #[tokio::test]
+async fn full_fill_holster_announces_finalizing_until_final_meters_are_confirmed() {
+    let h = Harness::new().await;
+    let id = h.authorize(Preset::Str("full".into())).await;
+    h.poll(vec![status(0x28), fill(1000, 113000)]).await;
+    let mut events = h.events.subscribe();
+
+    // Holster arrives before the final meter response is available.
+    h.poll(vec![status(0x88)]).await;
+    let WsEvent::Status(pending) = events.try_recv().unwrap() else {
+        panic!("expected immediate finalizing status");
+    };
+    assert_eq!(pending.status, FpStatus::Finalizing);
+    assert_eq!(pending.volume, 10.0);
+    assert_eq!(pending.amount, 113000);
+    assert!(h.sales().await.is_empty());
+    for cmd in [
+        DispatchCommand::ResetLane { byte: 1 },
+        DispatchCommand::Authorize {
+            byte: 1,
+            price: 11300,
+            preset: Preset::Volume(5.0),
+        },
+    ] {
+        assert!(h.command(cmd, vec![]).await.is_empty());
+    }
+    assert_eq!(
+        h.runtimes.read().await[&1].current_tx.as_ref().unwrap().id,
+        id
+    );
+
+    h.poll(final_replies(0x88, 1000, 113000, false)).await;
+    h.settle().await;
+    h.poll(final_replies(0x88, 1001, 113113, false)).await;
+    assert_eq!(
+        h.runtimes.read().await[&1].state.status,
+        FpStatus::Finalizing
+    );
+    assert!(h.sales().await.is_empty());
+    while let Ok(event) = events.try_recv() {
+        assert!(!matches!(event, WsEvent::Done(_)));
+    }
+    h.settle().await;
+    h.poll(final_replies(0x88, 1001, 113113, true)).await;
+    assert_eq!(h.runtimes.read().await[&1].state.status, FpStatus::Done);
+    let mut done_count = 0;
+    while let Ok(event) = events.try_recv() {
+        if matches!(event, WsEvent::Done(_)) {
+            done_count += 1;
+        }
+    }
+    assert_eq!(done_count, 1);
+    h.poll(vec![status(0x88)]).await;
+    assert_eq!(
+        h.sales().await,
+        vec![(id, 10.01, 113113, "COMPLETED".into())]
+    );
+}
+
+#[tokio::test]
 async fn final_confirmation_restarts_when_readings_change_or_flow_returns() {
     let h = Harness::new().await;
     h.authorize(Preset::Volume(10.0)).await;
@@ -465,6 +524,10 @@ async fn final_confirmation_restarts_when_readings_change_or_flow_returns() {
     assert!(h.sales().await.is_empty());
     h.settle().await;
     h.poll(vec![status(0x68), fill(1001, 113113)]).await; // paused, not completed
+    assert_eq!(
+        h.runtimes.read().await[&1].state.status,
+        FpStatus::Delivering
+    );
     assert!(h.runtimes.read().await[&1]
         .bluesky
         .finish_candidate

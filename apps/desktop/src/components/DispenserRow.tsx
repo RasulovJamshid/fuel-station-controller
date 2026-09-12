@@ -32,6 +32,7 @@ const STATUS_ICONS: Partial<Record<FpStatusTag, { src: string; spin?: boolean }>
   DELIVERING:     { src: dropletIcon },
   PRE_AUTHORIZED: { src: shieldIcon },
   NOZZLE_UP:      { src: playIcon },
+  FINALIZING: { src: loaderIcon, spin: true },
   AUTHORIZING:    { src: loaderIcon, spin: true },
   DONE:           { src: checkIcon },
   STOPPED:        { src: dangerIcon },
@@ -127,6 +128,7 @@ export function DispenserRow({
   const tag             = statusTag(state.status as FpStatus);
   const paused          = pausedInfo(state);
   const isDelivering    = tag === "DELIVERING";
+  const isFinalizing    = tag === "FINALIZING";
   const isDone          = tag === "DONE";
   const isIdle          = tag === "IDLE";
   const isNozzleUp      = tag === "NOZZLE_UP";
@@ -136,7 +138,7 @@ export function DispenserRow({
   const isExternalPause = paused?.stop_source === "EXTERNAL";
   const hasActivePreAuth =
     tag === "PRE_AUTHORIZED" ||
-    (state.pre_auth_preset != null && tag !== "DONE" && tag !== "DELIVERING" && tag !== "AUTHORIZING" && tag !== "OFFLINE");
+    (state.pre_auth_preset != null && tag !== "DONE" && tag !== "DELIVERING" && tag !== "AUTHORIZING" && tag !== "FINALIZING" && tag !== "OFFLINE");
   const usePreAuth   = defaultAuthMode === "preauth";
   const isOnline     = !isOffline;
 
@@ -257,6 +259,9 @@ export function DispenserRow({
           <Icon src={checkIcon} className="h-9 w-9" />
         </button>
       );
+    }
+    if (isFinalizing) {
+      return <span role="status" className="text-center text-xs font-semibold text-accent-amber">{t("dispenser.statusFinalizing")}</span>;
     }
     if (isAuthorizing && !isDelivering) {
       return <Icon src={loaderIcon} className="h-7 w-7 opacity-40" spin />;

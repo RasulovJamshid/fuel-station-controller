@@ -24,6 +24,8 @@ pub enum FpStatus {
     NozzleUp,
     Authorizing,
     Delivering,
+    /// Delivery has stopped; authoritative final meter data is still pending.
+    Finalizing,
     Done,
     Stopped {
         stopped_volume: f64,
@@ -42,6 +44,7 @@ impl FpStatus {
             FpStatus::NozzleUp => "NOZZLE_UP",
             FpStatus::Authorizing => "AUTHORIZING",
             FpStatus::Delivering => "DELIVERING",
+            FpStatus::Finalizing => "FINALIZING",
             FpStatus::Done => "DONE",
             FpStatus::Stopped { .. } => "STOPPED",
         }

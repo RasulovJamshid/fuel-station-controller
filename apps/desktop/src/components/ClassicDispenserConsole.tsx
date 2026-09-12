@@ -168,6 +168,7 @@ type PumpMeta = {
   isOffline: boolean;
   isDelivering: boolean;
   isAuthorizing: boolean;
+  isFinalizing: boolean;
   isPaused: boolean;
   hasActivePreAuth: boolean;
   canAuthorize: boolean;
@@ -206,6 +207,7 @@ function getMeta(
   const isOffline = tag === "OFFLINE";
   const isDelivering = tag === "DELIVERING";
   const isAuthorizing = tag === "AUTHORIZING";
+  const isFinalizing = tag === "FINALIZING";
   const isPaused = paused != null;
   const hasActivePreAuth =
     tag === "PRE_AUTHORIZED" ||
@@ -213,6 +215,7 @@ function getMeta(
       tag !== "DONE" &&
       tag !== "DELIVERING" &&
       tag !== "AUTHORIZING" &&
+      tag !== "FINALIZING" &&
       tag !== "OFFLINE");
   const canOpenPreAuth =
     (isIdle || isNozzleUp) &&
@@ -232,6 +235,7 @@ function getMeta(
     isOffline,
     isDelivering,
     isAuthorizing,
+    isFinalizing,
     isPaused,
     hasActivePreAuth,
     canAuthorize: positionActive && !isOffline && (canOpenPreAuth || canOpenReactive),
@@ -240,7 +244,7 @@ function getMeta(
 
 function statusTintClass(meta: PumpMeta): string {
   if (meta.isOffline) return "border-l-2 border-l-accent-red bg-bg-secondary/30 text-accent-red";
-  if (meta.isDelivering || meta.isAuthorizing) return "border-l-2 border-l-accent-emerald bg-bg-secondary/30 text-accent-emerald";
+  if (meta.isDelivering || meta.isAuthorizing || meta.isFinalizing) return "border-l-2 border-l-accent-emerald bg-bg-secondary/30 text-accent-emerald";
   if (meta.hasActivePreAuth || meta.isPaused) return "border-l-2 border-l-accent-amber bg-bg-secondary/30 text-accent-amber";
   if (meta.isNozzleUp) return "border-l-2 border-l-accent-blue bg-bg-secondary/30 text-accent-blue";
   return "border-l-2 border-l-border-primary bg-bg-secondary/30 text-text-secondary";
@@ -248,7 +252,7 @@ function statusTintClass(meta: PumpMeta): string {
 
 function statusSolidClass(meta: PumpMeta): string {
   if (meta.isOffline) return "border-accent-red/65 bg-bg-secondary text-accent-red";
-  if (meta.isDelivering || meta.isAuthorizing) return "border-accent-emerald/65 bg-bg-secondary text-accent-emerald";
+  if (meta.isDelivering || meta.isAuthorizing || meta.isFinalizing) return "border-accent-emerald/65 bg-bg-secondary text-accent-emerald";
   if (meta.hasActivePreAuth || meta.isPaused) return "border-accent-amber/65 bg-bg-secondary text-accent-amber";
   if (meta.isNozzleUp) return "border-accent-blue/65 bg-bg-secondary text-accent-blue";
   return "border-border-primary/60 bg-bg-secondary text-text-secondary";
@@ -411,7 +415,7 @@ export function ClassicDispenserConsole({
               ? (nozzles[0]?.index ?? null)
               : null;
         const prevTag = prevTags[state.fp_id];
-        const wasActive = prevTag === "DELIVERING" || prevTag === "AUTHORIZING";
+        const wasActive = prevTag === "DELIVERING" || prevTag === "AUTHORIZING" || prevTag === "FINALIZING";
         const enteredStopped = tag === "STOPPED" && prevTag !== "STOPPED";
         const stoppedClosed = prevTag === "STOPPED" && tag === "IDLE";
         const stopped = pausedInfo(state);
@@ -432,7 +436,7 @@ export function ClassicDispenserConsole({
           (tag === "DONE" || enteredStopped || stoppedClosed || (wasActive && tag === "IDLE")) &&
           completedVolume > 0;
         // Reset last-fill snapshot when a new transaction begins.
-        const clearLastFill = tag === "NOZZLE_UP" || tag === "AUTHORIZING" || tag === "DELIVERING";
+        const clearLastFill = tag === "NOZZLE_UP" || tag === "AUTHORIZING" || tag === "DELIVERING" || tag === "FINALIZING";
         const presetDraft =
           !clearValues && state.pre_auth_preset != null
             ? draftFromPreAuthPreset(state.pre_auth_preset)
@@ -774,7 +778,7 @@ export function ClassicDispenserConsole({
 
   const updateVolume = useCallback((state: FpState, raw: string) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
-    if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused) return;
+    if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused) return;
     const nextRaw = sanitizeVolumeInput(raw);
     const nozzle = selectedNozzle(state);
     const liters = parseNum(nextRaw);
@@ -787,7 +791,7 @@ export function ClassicDispenserConsole({
 
   const updateAmount = useCallback((state: FpState, raw: string) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
-    if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused) return;
+    if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused) return;
     const nextRaw = sanitizeAmountInput(raw);
     const nozzle = selectedNozzle(state);
     const amount = parseMoney(nextRaw);
@@ -800,7 +804,7 @@ export function ClassicDispenserConsole({
 
   const armFullFill = useCallback((state: FpState) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
-    if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused) return;
+    if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused) return;
     setDraft(state.fp_id, { mode: "full", volume: "", amount: "" });
     fullFillArmedRef.current = { fpId: state.fp_id, at: Date.now() };
     focusBottomControl("action");
@@ -808,7 +812,7 @@ export function ClassicDispenserConsole({
 
   const toggleSelectedOrderInput = useCallback((state: FpState) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
-    if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused) return;
+    if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused) return;
     const focusedControl = (document.activeElement as HTMLElement | null)
       ?.closest<HTMLElement>("[data-classic-control]")
       ?.dataset.classicControl;
@@ -835,7 +839,7 @@ export function ClassicDispenserConsole({
 
   const cycleSelectedProduct = useCallback((state: FpState) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
-    if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused) return;
+    if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused) return;
     const nozzles = (nozzlesByFp.get(state.fp_id) ?? []).filter((n) => n.active);
     if (nozzles.length <= 1) return;
     const draft = drafts[state.fp_id];
@@ -998,6 +1002,9 @@ export function ClassicDispenserConsole({
     const baseClass = `${ui.btnHeight} ${ui.btnPad} ${ui.btnText} rounded-none`;
     const cls = `${baseClass} w-full flex-1 font-semibold uppercase tracking-wide outline-none shadow-none transition-colors duration-75 active:brightness-95 focus-visible:brightness-95 disabled:cursor-not-allowed disabled:opacity-50`;
 
+    if (meta.isFinalizing) {
+      return <span role="status" className={`${cls} flex items-center justify-center text-accent-amber`}>{t("dispenser.statusFinalizing")}</span>;
+    }
     if (meta.canAuthorize) {
       return (
         <button
@@ -1054,7 +1061,7 @@ export function ClassicDispenserConsole({
   const renderModeButtons = (state: FpState, compact = false, keyboardControls = false) => {
     const draft = drafts[state.fp_id];
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
-    const setupLocked = meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused;
+    const setupLocked = meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused;
     const modes: FillMode[] = ["full", "volume", "amount"];
     const modeColorClass = (_mode: FillMode, active: boolean) =>
       active
@@ -1108,8 +1115,8 @@ export function ClassicDispenserConsole({
   const selectedAmountInvalid = selectedDraft?.mode === "amount" && !isValidAmount(selectedDraft.amount, selectedProduct);
   const selectedPositionActive = positionActiveByFp.get(selected.fp_id) ?? true;
   const selectedMeta = getMeta(selected, defaultAuthMode, selectedPositionActive);
-  const selectedSetupLocked = selectedMeta.hasActivePreAuth || selectedMeta.isDelivering || selectedMeta.isAuthorizing || selectedMeta.isPaused;
-  const selectedActiveReading = selectedMeta.isDelivering || selectedMeta.isAuthorizing || selectedMeta.isPaused;
+  const selectedSetupLocked = selectedMeta.hasActivePreAuth || selectedMeta.isDelivering || selectedMeta.isAuthorizing || selectedMeta.isFinalizing || selectedMeta.isPaused;
+  const selectedActiveReading = selectedMeta.isDelivering || selectedMeta.isAuthorizing || selectedMeta.isFinalizing || selectedMeta.isPaused;
   const selectedHasLastSale = !selectedActiveReading && selectedDraft?.lastFillVolume != null;
   const selectedDisplayVolume = selectedActiveReading
     ? (selectedMeta.paused?.stopped_volume ?? selected.volume)
@@ -1153,7 +1160,7 @@ export function ClassicDispenserConsole({
     const pumpTotalizer = pickPumpTotalizer(state, nozzle?.index ?? null);
     const showPumpTotalizer =
       pumpTotalizer != null && (meta.isIdle || meta.tag === "DONE" || meta.isPaused);
-    const activeReading = meta.isDelivering || meta.isAuthorizing || meta.isPaused;
+    const activeReading = meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused;
     const hasLastSale = !activeReading && draft?.lastFillVolume != null;
     const displayVolume = activeReading
       ? (meta.paused?.stopped_volume ?? state.volume)
@@ -1320,7 +1327,7 @@ export function ClassicDispenserConsole({
 	                const nozzles = (nozzlesByFp.get(state.fp_id) ?? []).filter((n) => n.active);
 	                const draft = drafts[state.fp_id];
 	                const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
-	                const setupLocked = meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused;
+	                const setupLocked = meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused;
 	                const activeNozzle = nozzles.find((n) => n.index === draft?.nozzleIndex) ?? null;
 	                const activeColor = productColorFor(state, activeNozzle);
 	                return (
@@ -1381,7 +1388,7 @@ export function ClassicDispenserConsole({
 	                const draft = drafts[state.fp_id];
 	                const volumeUnit = volumeUnitFor(state);
 	                const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
-	                const setupLocked = meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused;
+	                const setupLocked = meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused;
 	                const invalid = draft?.mode === "volume" && !isValidVolume(draft.volume);
 	                return (
 	                  <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="volume" data-fp-id={state.fp_id}>
@@ -1427,7 +1434,7 @@ export function ClassicDispenserConsole({
 	                const nozzle = selectedNozzle(state);
 	                const maxAmount = maxAmountForNozzle(nozzle);
 	                const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
-	                const setupLocked = meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isPaused;
+	                const setupLocked = meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused;
 	                const invalid = draft?.mode === "amount" && !isValidAmount(draft.amount, nozzle);
 	                return (
 	                  <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="amount" data-fp-id={state.fp_id}>
@@ -1478,7 +1485,7 @@ export function ClassicDispenserConsole({
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 const volumeUnit = volumeUnitFor(state);
                 const draft = drafts[state.fp_id];
-                const isActive = meta.isDelivering || meta.isAuthorizing;
+                const isActive = meta.isDelivering || meta.isAuthorizing || meta.isFinalizing;
                 const displayVol = isActive
                   ? (meta.paused?.stopped_volume ?? state.volume)
                   : (draft?.lastFillVolume ?? state.volume);
@@ -1497,7 +1504,7 @@ export function ClassicDispenserConsole({
               {states.map((state) => {
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 const draft = drafts[state.fp_id];
-                const isActive = meta.isDelivering || meta.isAuthorizing;
+                const isActive = meta.isDelivering || meta.isAuthorizing || meta.isFinalizing;
                 const displayAmt = isActive
                   ? (meta.paused?.stopped_amount ?? state.amount)
                   : (draft?.lastFillAmount ?? state.amount);
@@ -1517,7 +1524,7 @@ export function ClassicDispenserConsole({
                 const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
                 const draft = drafts[state.fp_id];
                 const volumeUnit = volumeUnitFor(state);
-                const isActive = meta.isDelivering || meta.isAuthorizing;
+                const isActive = meta.isDelivering || meta.isAuthorizing || meta.isFinalizing;
                 let cell = <span className="text-text-muted/50">—</span>;
                 if (isActive) {
                   const volTarget = parseVolumeTarget(state.pre_auth_preset);
@@ -1593,7 +1600,7 @@ export function ClassicDispenserConsole({
           </div>
           {/* Always-present progress track — fixed height so the panel never shifts */}
           {(() => {
-            const delivering = selectedMeta.isDelivering || selectedMeta.isAuthorizing;
+            const delivering = selectedMeta.isDelivering || selectedMeta.isAuthorizing || selectedMeta.isFinalizing;
             const vt = delivering ? parseVolumeTarget(selected.pre_auth_preset) : null;
             const at = delivering ? parseAmountTarget(selected.pre_auth_preset) : null;
             const liveVolume = selectedMeta.paused?.stopped_volume ?? selected.volume;

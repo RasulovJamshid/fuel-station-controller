@@ -9,6 +9,7 @@ export type FpStatusTag =
   | "NOZZLE_UP"
   | "AUTHORIZING"
   | "DELIVERING"
+  | "FINALIZING"
   | "DONE"
   | "STOPPED";
 

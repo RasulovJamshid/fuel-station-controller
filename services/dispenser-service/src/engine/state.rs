@@ -994,6 +994,8 @@ impl RuntimeFp {
         use FpStatus::*;
 
         match &self.state.status {
+            // Protocol runtimes own final-meter confirmation.
+            Finalizing => FrameEffect::None,
             Offline => {
                 self.state.status = Idle;
                 self.state.pre_auth_preset = None;
@@ -1688,7 +1690,7 @@ impl RuntimeFp {
             Stopped { .. } => {
                 Err("sale is paused — close the transaction or continue the fill".into())
             }
-            Delivering | Authorizing | PreAuthorized | NozzleUp => {
+            Delivering | Authorizing | Finalizing | PreAuthorized | NozzleUp => {
                 Err("pump is still active".into())
             }
             Offline => {

@@ -89,6 +89,7 @@ const STATUS_ICON_MAP: Partial<Record<FpStatusTag, { src: string; animated?: boo
   DELIVERING: { src: dropletIcon },
   PRE_AUTHORIZED: { src: shieldIcon },
   NOZZLE_UP: { src: fullTankIcon },
+  FINALIZING: { src: loaderIcon, animated: true },
   AUTHORIZING: { src: loaderIcon, animated: true },
   DONE: { src: checkIcon },
   STOPPED: { src: dangerIcon },
@@ -230,6 +231,7 @@ export function DispenserCard({
     const hasActiveTransaction =
       tag === "AUTHORIZING" ||
       tag === "DELIVERING" ||
+      tag === "FINALIZING" ||
       tag === "STOPPED" ||
       tag === "DONE";
     if (hasActiveTransaction && state.price > 0) return state.price;
@@ -253,6 +255,7 @@ export function DispenserCard({
 
   const paused = pausedInfo(state);
   const isDelivering = tag === "DELIVERING";
+  const isFinalizing = tag === "FINALIZING";
   const isPreAuthorized = tag === "PRE_AUTHORIZED";
   const hasActivePreAuth =
     isPreAuthorized ||
@@ -260,6 +263,7 @@ export function DispenserCard({
       tag !== "DONE" &&
       tag !== "DELIVERING" &&
       tag !== "AUTHORIZING" &&
+      tag !== "FINALIZING" &&
       tag !== "OFFLINE");
   const isIdle = tag === "IDLE";
   const isNozzleUp = tag === "NOZZLE_UP";
@@ -358,7 +362,9 @@ export function DispenserCard({
     let subtitle = state.label;
     let rightMeta: string | null = null;
 
-    if (isDelivering && hasDeliveryPlan) {
+    if (isFinalizing) {
+      subtitle = t("dispenser.statusFinalizing");
+    } else if (isDelivering && hasDeliveryPlan) {
       subtitle = `${productLabel ?? "—"} · ${deliveryLimit.kindLabel}`;
       rightMeta = deliveryLimit.value;
     } else if (isDelivering) {
@@ -404,6 +410,7 @@ export function DispenserCard({
     productLabel,
     deliveryLimit,
     isAuthorizing,
+    isFinalizing,
     isDone,
     holsterEndedSale,
     abortedSale,
@@ -826,6 +833,8 @@ export function DispenserCard({
             <p className="text-center text-xs font-semibold text-accent-red/80">
               {t("dispenser.replaceNozzle")}
             </p>
+          ) : isFinalizing ? (
+            <p role="status" className="text-center text-sm font-semibold text-accent-amber">{t("dispenser.statusFinalizing")}</p>
           ) : isDone && !shouldAutoDismiss ? (
             <button
               type="button"

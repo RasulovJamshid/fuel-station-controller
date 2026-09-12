@@ -274,6 +274,24 @@ async fn poll_position(
             .unwrap_or(false)
     };
     if had_sale {
+        let finalizing = {
+            let mut map = runtimes.write().await;
+            map.get_mut(&byte).is_some_and(|rt| {
+                if (st.nozzle_holstered() || rt.bluesky.stop_acknowledged)
+                    && rt.state.status != FpStatus::Finalizing
+                {
+                    rt.state.status = FpStatus::Finalizing;
+                    true
+                } else {
+                    false
+                }
+            })
+        };
+        // Publish before the potentially slow final reads. The last live meters
+        // remain visible, explicitly marked as provisional until the sale commits.
+        if finalizing {
+            broadcast_status(byte, runtimes, events).await;
+        }
         close_transaction(
             byte,
             nozzle_index,
@@ -845,6 +863,7 @@ async fn close_transaction(
             rt.bluesky.finish_candidate = None;
             false
         } else {
+            rt.state.status = FpStatus::Finalizing;
             rt.bluesky
                 .confirm_finish(fill, Utc::now().timestamp_millis())
         }

@@ -1,7 +1,8 @@
 # TexnoUz BlueSky transaction completion
 
-An accepted start command (`C3`) leaves the sale in `Authorizing` until the
-dispenser reports dispensing or paused status. Zero or small startup readings
+Sending a start command (`C3`) leaves the sale in `Authorizing` until the
+dispenser reports dispensing or paused status. Ownership is retained even when
+the Start acknowledgement is lost. Zero or small startup readings
 remain part of the same transaction; they do not by themselves create cancelled
 or completed history entries.
 
@@ -25,6 +26,24 @@ Repeated Auth commands and display resets cannot replace the transaction, and a
 completed sale holds the lane until polling observes the nozzle holstered and no
 longer dispensing or paused. A Stop requested during startup is retried when the
 dispenser reports flow.
+
+Cancelling a pre-authorization that has never sent `C3` first checks the owned
+hose's `D5` status. If it is idle and under remote control, the app revokes its
+pending Start permission and waits for holster before releasing the lane. The
+next authorization overwrites the stored price and dose. Cancellation does not
+use `AA` (the keypad-preset flag) or wait for `CA` (Stop during dispensing).
+Missing replies, local mode, or a keypad preset keep cancellation pending;
+ordinary status polling continues and no new Start is sent. Repeated operator
+requests can add at most one cancellation status check per five seconds. The
+pre-authorization timer is disarmed when cancellation is requested, preventing
+repeated timeout notices for the same order.
+
+If Start was sent or the hose reports unexpected flow, cancellation retains the
+transaction and uses Stop, followed by the normal final-meter checks. Active
+Stop attempts are paced at one per second (with the normal exchange retries);
+newly observed flow triggers an immediate attempt. This behavior needs physical
+verification on the site's firmware; replay tests do not emulate a dispenser's
+internal preset register or keypad.
 
 These changes are in `dispenser-service` and apply only to TexnoUz BlueSky. Deploy
 the rebuilt service using the normal site update procedure. No database migration

@@ -151,6 +151,23 @@ C:\Users\<username>\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startu
 
 ## Troubleshooting
 
+**Logging detail**
+
+`service.log_level` accepts `off`, `error`, `warn`, `info`, `debug`, or `trace`.
+Each more verbose level includes the preceding levels; `info` is the normal
+operating setting. `trace` includes raw serial TX/RX events. The value is read at
+service startup, so restart the service after changing it.
+
+Module filters are also accepted. For focused TexnoUz diagnostics, set:
+
+```json
+"log_level": "info,dispenser_service::engine::protocols::texnouz_bluesky=debug,dispenser_service::engine::serial=trace"
+```
+
+A valid `RUST_LOG` environment variable overrides this configuration. A separate
+raw frame file can be enabled with `service.serial_log_file`; it is independent
+of `log_level`, and `AZS_SERIAL_LOG` overrides its path.
+
 **Service fails to start — serial port error**
 Check `C:\azs\logs\service.err`. The most common cause is the wrong COM port name. Open Device Manager → Ports (COM & LPT) and match the port string exactly (e.g. `COM3`).
 

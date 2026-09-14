@@ -13,6 +13,7 @@ pub(in crate::engine) struct BlueSkyRuntimeState {
     pub stop_acknowledged: bool,
     /// Pace uncertain cancellation/status checks without holding up other hoses.
     pub next_stop_attempt: Option<Instant>,
+    pub cancel_wait: Option<types::PreAuthCancelWait>,
     /// A saved sale still owns this hose until a non-flowing holster is observed.
     pub completed_nozzle: Option<u8>,
     pub finish_candidate: Option<(FillData, i64)>,

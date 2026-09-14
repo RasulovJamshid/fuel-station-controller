@@ -48,6 +48,7 @@ export interface FpState {
   pump_total_price?: number | null;
   pump_totals?: PumpNozzleTotals[];
   pre_auth_preset?: string | null;
+  pre_auth_cancel_wait?: "AWAITING_STATUS" | "KEYPAD_PRESET" | null;
   stop_source?: StopSource | null;
 }
 

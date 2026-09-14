@@ -7,6 +7,7 @@ import type { AuthMode, FpState, FpStatus, NozzleSnapshot } from "../types/api";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 import { useAppStore } from "../store";
 import { formatMoneyInput, parseMoney } from "../lib/money";
+import { preAuthCancelWaitMessageKey } from "../lib/preAuthCancelWait";
 const fmtSum = new Intl.NumberFormat("uz-UZ");
 const MAX_VOLUME_LITERS = 999;
 
@@ -169,6 +170,7 @@ type PumpMeta = {
   isDelivering: boolean;
   isAuthorizing: boolean;
   isFinalizing: boolean;
+  cancelWaitKey: string | null;
   isPaused: boolean;
   hasActivePreAuth: boolean;
   canAuthorize: boolean;
@@ -236,6 +238,7 @@ function getMeta(
     isDelivering,
     isAuthorizing,
     isFinalizing,
+    cancelWaitKey: preAuthCancelWaitMessageKey(state),
     isPaused,
     hasActivePreAuth,
     canAuthorize: positionActive && !isOffline && (canOpenPreAuth || canOpenReactive),
@@ -259,6 +262,7 @@ function statusSolidClass(meta: PumpMeta): string {
 }
 
 function classicStatusLabel(meta: PumpMeta, t: (key: string) => string): string {
+  if (meta.cancelWaitKey) return t("dispenser.statusCancelling");
   const key = meta.isPaused
     ? "STOPPED"
     : meta.hasActivePreAuth
@@ -828,6 +832,7 @@ export function ClassicDispenserConsole({
   const stopOrCancelSelected = useCallback((state: FpState) => {
     const positionActive = positionActiveByFp.get(state.fp_id) ?? true;
     const meta = getMeta(state, defaultAuthMode, positionActive);
+    if (meta.cancelWaitKey) return;
     if (meta.isDelivering || meta.isAuthorizing) {
       onStop(state.fp_id);
       return;
@@ -1002,6 +1007,9 @@ export function ClassicDispenserConsole({
     const baseClass = `${ui.btnHeight} ${ui.btnPad} ${ui.btnText} rounded-none`;
     const cls = `${baseClass} w-full flex-1 font-semibold uppercase tracking-wide outline-none shadow-none transition-colors duration-75 active:brightness-95 focus-visible:brightness-95 disabled:cursor-not-allowed disabled:opacity-50`;
 
+    if (meta.cancelWaitKey) {
+      return <span role="status" className={`${cls} flex items-center justify-center text-accent-amber`}>{t(meta.cancelWaitKey)}</span>;
+    }
     if (meta.isFinalizing) {
       return <span role="status" className={`${cls} flex items-center justify-center text-accent-amber`}>{t("dispenser.statusFinalizing")}</span>;
     }

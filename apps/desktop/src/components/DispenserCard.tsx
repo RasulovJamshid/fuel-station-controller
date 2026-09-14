@@ -17,6 +17,7 @@ import wifiOffIcon from "@/assets/icons/wifi-off.svg";
 import xCircleIcon from "@/assets/icons/x-circle.svg";
 import type { AuthMode, FpState, FpStatus, FpStatusTag, NozzleSnapshot } from "../types/api";
 import { pausedInfo, statusTag } from "../types/api";
+import { preAuthCancelWaitMessageKey } from "../lib/preAuthCancelWait";
 import { useAppStore } from "../store";
 import { FillSetupModal } from "./FillSetupModal";
 import { PumpCardForm, PumpCardProgress } from "./PumpCardForm";
@@ -256,6 +257,7 @@ export function DispenserCard({
   const paused = pausedInfo(state);
   const isDelivering = tag === "DELIVERING";
   const isFinalizing = tag === "FINALIZING";
+  const cancelWaitKey = preAuthCancelWaitMessageKey(state);
   const isPreAuthorized = tag === "PRE_AUTHORIZED";
   const hasActivePreAuth =
     isPreAuthorized ||
@@ -358,11 +360,13 @@ export function DispenserCard({
   const cardMinH = compact ? "min-h-0 h-full" : "min-h-[560px]";
 
   const statusHeader = useMemo(() => {
-    const statusLabel = classicStatusLabel(tag, isPaused, hasActivePreAuth, t);
+    const statusLabel = cancelWaitKey ? t("dispenser.statusCancelling") : classicStatusLabel(tag, isPaused, hasActivePreAuth, t);
     let subtitle = state.label;
     let rightMeta: string | null = null;
 
-    if (isFinalizing) {
+    if (cancelWaitKey) {
+      subtitle = t(cancelWaitKey);
+    } else if (isFinalizing) {
       subtitle = t("dispenser.statusFinalizing");
     } else if (isDelivering && hasDeliveryPlan) {
       subtitle = `${productLabel ?? "—"} · ${deliveryLimit.kindLabel}`;
@@ -401,6 +405,7 @@ export function DispenserCard({
 
     return { statusLabel, subtitle, rightMeta };
   }, [
+    cancelWaitKey,
     tag,
     state.label,
     state.volume,
@@ -746,7 +751,9 @@ export function DispenserCard({
           className={`flex shrink-0 flex-col justify-end ${compact ? "gap-1.5 pt-1" : "gap-2"}`}
           onClick={(e) => e.stopPropagation()}
         >
-          {showPumpForm ? (
+          {cancelWaitKey ? (
+            <p role="status" className="text-center text-sm font-semibold text-accent-amber">{t(cancelWaitKey)}</p>
+          ) : showPumpForm ? (
             shiftRequired ? (
               <div className={`flex flex-col items-center gap-1.5 rounded-lg border border-accent-amber/40 bg-accent-amber/10 px-2 ${compact ? "py-1.5" : "py-2"}`}>
                 <p className={`text-center font-black uppercase tracking-wide text-accent-amber ${compact ? "text-xs" : "text-sm"}`}>

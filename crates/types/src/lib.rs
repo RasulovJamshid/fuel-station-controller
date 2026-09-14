@@ -72,6 +72,13 @@ pub struct PumpNozzleTotals {
     pub price: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PreAuthCancelWait {
+    AwaitingStatus,
+    KeypadPreset,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FpState {
     pub fp_id: String,
@@ -121,6 +128,10 @@ pub struct FpState {
     /// Human-readable active preset/limit shown while pre-authorized or filling.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pre_auth_preset: Option<String>,
+    /// Pending cancellation of an unstarted order. Serialize null explicitly so
+    /// clients clear an earlier notice when the condition resolves.
+    #[serde(default)]
+    pub pre_auth_cancel_wait: Option<PreAuthCancelWait>,
     /// Mirror of `STOPPED` payload for clients that read flat fields.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop_source: Option<StopSource>,

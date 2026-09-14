@@ -31,7 +31,10 @@ use site_config::{FuelingPositionConfig, SiteConfig};
 use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
-use types::{preset_label, FpStatus, Preset, PumpNozzleTotals, Transaction, TxStatus, WsEvent};
+use types::{
+    preset_label, FpStatus, PreAuthCancelWait, Preset, PumpNozzleTotals, Transaction, TxStatus,
+    WsEvent,
+};
 
 use super::shared::{
     active_positions_by_byte, broadcast_status, commit_sale, exchange_serial, mark_missed,
@@ -181,6 +184,9 @@ async fn poll_position(
     {
         if let Some(rt) = runtimes.write().await.get_mut(&byte) {
             rt.bluesky.finish_candidate = None;
+            if rt.bluesky.stop_requested && rt.pre_auth.is_some() && rt.current_tx.is_none() {
+                rt.bluesky.cancel_wait = Some(PreAuthCancelWait::AwaitingStatus);
+            }
         }
         mark_missed(
             byte,
@@ -622,6 +628,7 @@ async fn update_live(
     let Some(rt) = map.get_mut(&byte) else { return };
 
     let price = nozzle_price(fp_cfg, rt, nozzle_index);
+    rt.bluesky.cancel_wait = None;
     if rt.state.status != FpStatus::Delivering {
         // Newly observed flow overrides the slower checks used before startup.
         rt.bluesky.next_stop_attempt = None;
@@ -1000,13 +1007,18 @@ async fn request_stop(
             }
         };
         let Some(status) = status else {
+            if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+                rt.bluesky.cancel_wait = Some(PreAuthCancelWait::AwaitingStatus);
+            }
             warn!(hose, "BlueSky: cancellation waiting for hose status");
             return;
         };
-        if status.remote_control() && status.idle() {
-            // No C3 has been sent for this order. A programmed dose alone does
-            // not start delivery in remote mode: revoke the app's permission
-            // to send C3. The next authorization overwrites price and dose.
+        if status.idle() {
+            // No C3 has been sent for this app-owned order. TU_WB_KEY can leave
+            // bit 3 clear even during successful app-controlled sales, so it
+            // cannot gate cancellation. Verify this hose has no flow/pause or
+            // keypad preset, then revoke the app's permission to send C3.
+            // The next authorization overwrites the stored price and dose.
             // AA only clears the keypad flag; CA is answered during a fill.
             let mut map = runtimes.write().await;
             let Some(rt) = map.get_mut(&byte) else { return };
@@ -1018,12 +1030,15 @@ async fn request_stop(
             let _ = events.send(WsEvent::PreAuthCancelled {
                 fp_id: fp.id.clone(),
             });
-            info!(hose, label = %fp.label, "BlueSky: pre-authorization cancelled before Start");
+            info!(hose, label = %fp.label, status = status.0, "BlueSky: pre-authorization cancelled before Start");
             return;
         }
         if !status.dispensing() && !status.paused() {
-            // Local/keypad mode cannot establish that the order is safe to
-            // release. Continue ordinary D5 polling without flooding commands.
+            // A keypad order has separate ownership; keep it pending without
+            // sending Start or clearing an order whose origin is uncertain.
+            if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+                rt.bluesky.cancel_wait = Some(PreAuthCancelWait::KeypadPreset);
+            }
             return;
         }
         // Unexpected flow is still a real sale. Retain it before Stop, even if
@@ -1038,6 +1053,7 @@ async fn request_stop(
             });
             rt.state.status = FpStatus::Authorizing;
             rt.pre_auth = None;
+            rt.bluesky.cancel_wait = None;
             rt.bluesky.next_stop_attempt = None;
         }
     }

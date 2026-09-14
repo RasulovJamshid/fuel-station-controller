@@ -28,15 +28,25 @@ longer dispensing or paused. A Stop requested during startup is retried when the
 dispenser reports flow.
 
 Cancelling a pre-authorization that has never sent `C3` first checks the owned
-hose's `D5` status. If it is idle and under remote control, the app revokes its
-pending Start permission and waits for holster before releasing the lane. The
+hose's `D5` status. If it has no dispensing, pause, or keypad-preset flag, the app
+revokes its pending Start permission and waits for holster before releasing the
+lane. Bit 3 (remote control) is not required: the site's TU_WB_KEY reports that
+bit clear even during successful app-controlled sales. The
 next authorization overwrites the stored price and dose. Cancellation does not
 use `AA` (the keypad-preset flag) or wait for `CA` (Stop during dispensing).
-Missing replies, local mode, or a keypad preset keep cancellation pending;
+Missing replies or a keypad preset keep cancellation pending;
 ordinary status polling continues and no new Start is sent. Repeated operator
 requests can add at most one cancellation status check per five seconds. The
 pre-authorization timer is disarmed when cancellation is requested, preventing
 repeated timeout notices for the same order.
+
+API and WebSocket snapshots expose `pre_auth_cancel_wait` as `AWAITING_STATUS`
+or `KEYPAD_PRESET` while an unstarted cancellation is blocked, and explicitly
+send `null` when it resolves. Classic and modern desktop layouts display the
+pending reason in place of the Cancel action. Ordinary polling completes the
+cancellation automatically when a valid idle status arrives, including replies
+with the remote-control bit clear. Rebuild both the service and desktop to ship
+the protocol correction and its operator feedback.
 
 If Start was sent or the hose reports unexpected flow, cancellation retains the
 transaction and uses Stop, followed by the normal final-meter checks. Active

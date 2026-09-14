@@ -169,6 +169,7 @@ impl RuntimeFp {
                 pump_total_price: None,
                 pump_totals: Vec::new(),
                 pre_auth_preset: None,
+                pre_auth_cancel_wait: None,
                 stop_source: None,
             },
         }
@@ -182,6 +183,11 @@ impl RuntimeFp {
     /// lift stays `NOZZLE_UP` so the operator can assign volume/amount (lift-first flow).
     pub fn snapshot_state(&self) -> FpState {
         let mut s = self.state.clone();
+        s.pre_auth_cancel_wait = if self.pre_auth.is_some() && self.current_tx.is_none() {
+            self.bluesky.cancel_wait
+        } else {
+            None
+        };
         if self.pre_auth.is_some() {
             if s.status == FpStatus::Idle {
                 s.status = FpStatus::PreAuthorized;

@@ -471,44 +471,52 @@ async fn holstered_preauth_waits_for_lift_then_waits_for_actual_flow() {
 
 #[tokio::test]
 async fn cancel_unstarted_order_needs_only_status_and_never_starts_on_later_lift() {
-    let h = Harness::new().await;
-    h.arm(Preset::Amount(223000)).await;
-    let mut events = h.events.subscribe();
-    assert_eq!(
-        h.command(
-            DispatchCommand::CancelPreauth { byte: 1 },
-            vec![status(0x88)]
-        )
-        .await,
-        vec![texnouz_bluesky::read_status(1)]
-    );
-    assert!(h
-        .command(DispatchCommand::CancelPreauth { byte: 1 }, vec![])
-        .await
-        .is_empty());
-    let mut cancelled = 0;
-    while let Ok(event) = events.try_recv() {
-        if matches!(event, WsEvent::PreAuthCancelled { .. }) {
-            cancelled += 1;
+    // The site reports bit 3 clear even when it accepts app commands. Cover
+    // both values, with the nozzle holstered and already lifted.
+    for idle_status in [0x80, 0x88, 0x00, 0x08] {
+        let h = Harness::new().await;
+        h.arm(Preset::Amount(300000)).await;
+        let mut events = h.events.subscribe();
+        assert_eq!(
+            h.command(
+                DispatchCommand::CancelPreauth { byte: 1 },
+                vec![status(idle_status)]
+            )
+            .await,
+            vec![texnouz_bluesky::read_status(1)]
+        );
+        assert!(h
+            .command(DispatchCommand::CancelPreauth { byte: 1 }, vec![])
+            .await
+            .is_empty());
+        let mut cancelled = 0;
+        while let Ok(event) = events.try_recv() {
+            if matches!(event, WsEvent::PreAuthCancelled { .. }) {
+                cancelled += 1;
+            }
+            assert!(!matches!(event, WsEvent::Done(_)));
         }
-        assert!(!matches!(event, WsEvent::Done(_)));
+        assert_eq!(cancelled, 1);
+        assert!(h.runtimes.read().await[&1]
+            .snapshot_state()
+            .pre_auth_cancel_wait
+            .is_none());
+        h.poll(vec![status(0x88)]).await;
+        assert_eq!(h.runtimes.read().await[&1].state.status, FpStatus::Idle);
+        assert_eq!(
+            h.poll(vec![status(0x08)]).await,
+            vec![texnouz_bluesky::read_status(1)]
+        );
+        assert!(h.runtimes.read().await[&1].current_tx.is_none());
+        assert!(h.sales().await.is_empty());
+        // A new authorization programs a fresh dose and can complete normally.
+        let id = h.authorize(Preset::Volume(5.0)).await;
+        h.poll(vec![status(0x28), fill(500, 56500)]).await;
+        h.poll(final_replies(0x88, 500, 56500, false)).await;
+        h.settle().await;
+        h.poll(final_replies(0x88, 500, 56500, true)).await;
+        assert_eq!(h.sales().await, vec![(id, 5.0, 56500, "COMPLETED".into())]);
     }
-    assert_eq!(cancelled, 1);
-    h.poll(vec![status(0x88)]).await;
-    assert_eq!(h.runtimes.read().await[&1].state.status, FpStatus::Idle);
-    assert_eq!(
-        h.poll(vec![status(0x08)]).await,
-        vec![texnouz_bluesky::read_status(1)]
-    );
-    assert!(h.runtimes.read().await[&1].current_tx.is_none());
-    assert!(h.sales().await.is_empty());
-    // A new authorization programs a fresh dose and can complete normally.
-    let id = h.authorize(Preset::Volume(5.0)).await;
-    h.poll(vec![status(0x28), fill(500, 56500)]).await;
-    h.poll(final_replies(0x88, 500, 56500, false)).await;
-    h.settle().await;
-    h.poll(final_replies(0x88, 500, 56500, true)).await;
-    assert_eq!(h.sales().await, vec![(id, 5.0, 56500, "COMPLETED".into())]);
 }
 
 #[tokio::test]
@@ -520,8 +528,18 @@ async fn uncertain_cancel_keeps_polling_without_command_or_timeout_flood() {
             .await,
         vec![texnouz_bluesky::read_status(1)]
     );
-    for state in [0x80, 0x8A, 0x08] {
-        // local, keypad dose, then remote idle/lifted
+    let pending = h.runtimes.read().await[&1].snapshot_state();
+    assert_eq!(
+        pending.pre_auth_cancel_wait,
+        Some(PreAuthCancelWait::AwaitingStatus)
+    );
+    assert_eq!(
+        serde_json::to_value(&pending).unwrap()["pre_auth_cancel_wait"],
+        "AWAITING_STATUS"
+    );
+    for state in [0x82, 0x8A, 0x00] {
+        // Keypad presets remain protected with either mode bit. An idle reply
+        // with the mode bit clear must release the app's never-started order.
         for _ in 0..10 {
             assert!(h
                 .command(DispatchCommand::CancelPreauth { byte: 1 }, vec![])
@@ -533,10 +551,96 @@ async fn uncertain_cancel_keeps_polling_without_command_or_timeout_flood() {
             h.poll(vec![status(state)]).await,
             vec![texnouz_bluesky::read_status(1)]
         );
+        let snapshot = h.runtimes.read().await[&1].snapshot_state();
+        assert_eq!(
+            snapshot.pre_auth_cancel_wait,
+            if state == 0 {
+                None
+            } else {
+                Some(PreAuthCancelWait::KeypadPreset)
+            }
+        );
     }
     assert!(h.runtimes.read().await[&1].pre_auth.is_none());
     assert_eq!(h.runtimes.read().await[&1].state.status, FpStatus::Done);
     assert!(h.sales().await.is_empty());
+}
+
+#[tokio::test]
+async fn missing_cancel_status_is_published_and_recovers_without_another_click() {
+    let h = Harness::new().await;
+    h.arm(Preset::Amount(300000)).await;
+    let mut events = h.events.subscribe();
+    h.command(DispatchCommand::CancelPreauth { byte: 1 }, vec![])
+        .await;
+    let WsEvent::Status(pending) = events.try_recv().unwrap() else {
+        panic!("cancellation must publish its wait reason");
+    };
+    assert_eq!(
+        pending.pre_auth_cancel_wait,
+        Some(PreAuthCancelWait::AwaitingStatus)
+    );
+    // A later poll is still missing: preserve the notice and continue polling.
+    assert_eq!(h.poll(vec![]).await, vec![texnouz_bluesky::read_status(1)]);
+    assert!(h.runtimes.read().await[&1].pre_auth.is_some());
+    // The real firmware's idle reply has its mode bit clear.
+    assert_eq!(
+        h.poll(vec![status(0x80)]).await,
+        vec![texnouz_bluesky::read_status(1)]
+    );
+    let done = h.runtimes.read().await[&1].snapshot_state();
+    assert!(done.pre_auth_cancel_wait.is_none());
+    // Null must be present on the wire so merging clients clear the notice.
+    let json = serde_json::to_value(&done).unwrap();
+    assert!(json
+        .get("pre_auth_cancel_wait")
+        .is_some_and(serde_json::Value::is_null));
+    let mut cancelled = 0;
+    while let Ok(event) = events.try_recv() {
+        if matches!(event, WsEvent::PreAuthCancelled { .. }) {
+            cancelled += 1;
+        }
+        assert!(!matches!(event, WsEvent::Done(_)));
+    }
+    assert_eq!(cancelled, 1);
+    assert!(h.sales().await.is_empty());
+    h.poll(vec![status(0x80)]).await;
+    assert_eq!(h.runtimes.read().await[&1].state.status, FpStatus::Idle);
+}
+
+#[tokio::test]
+async fn keypad_wait_changes_to_missing_status_and_flow_clears_the_notice() {
+    let h = Harness::new().await;
+    h.arm(Preset::Volume(10.0)).await;
+    h.command(
+        DispatchCommand::CancelPreauth { byte: 1 },
+        vec![status(0x82)],
+    )
+    .await;
+    assert_eq!(
+        h.runtimes.read().await[&1]
+            .snapshot_state()
+            .pre_auth_cancel_wait,
+        Some(PreAuthCancelWait::KeypadPreset)
+    );
+    h.poll(vec![]).await;
+    assert_eq!(
+        h.runtimes.read().await[&1]
+            .snapshot_state()
+            .pre_auth_cancel_wait,
+        Some(PreAuthCancelWait::AwaitingStatus)
+    );
+    // A mode-bit-clear dispensing reply is still real flow; stop and save it.
+    h.poll(vec![status(0x20), fill(50, 5650), reply(1, 0xCA, &[])])
+        .await;
+    assert!(h.runtimes.read().await[&1]
+        .snapshot_state()
+        .pre_auth_cancel_wait
+        .is_none());
+    h.poll(final_replies(0x80, 50, 5650, false)).await;
+    h.settle().await;
+    h.poll(final_replies(0x80, 50, 5650, true)).await;
+    assert_eq!(h.sales().await[0].1, 0.5);
 }
 
 #[tokio::test]

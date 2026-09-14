@@ -14,6 +14,7 @@ import wifiOffIcon   from "@/assets/icons/wifi-off.svg";
 import xCircleIcon   from "@/assets/icons/x-circle.svg";
 import { useAppStore } from "../store";
 import { pausedInfo, statusTag } from "../types/api";
+import { preAuthCancelWaitMessageKey } from "../lib/preAuthCancelWait";
 import type { FpStatus, FpStatusTag } from "../types/api";
 import type { DispenserCardProps } from "./DispenserCard";
 import { FillSetupModal } from "./FillSetupModal";
@@ -195,7 +196,8 @@ export function DispenserRow({
     state.label?.trim() ||
     (state.fp_id.match(/\d+/) ? `${state.fp_id.match(/\d+/)![0]}-KOLONKA` : `${state.fp_id}-KOLONKA`);
   const pumpNum = state.fp_id.match(/\d+/)?.[0] ?? state.fp_id.slice(0, 2).toUpperCase();
-  const displayStatusLabel = classicStatusLabel(tag, isPaused, hasActivePreAuth, t);
+  const cancelWaitKey = preAuthCancelWaitMessageKey(state);
+  const displayStatusLabel = cancelWaitKey ? t("dispenser.statusCancelling") : classicStatusLabel(tag, isPaused, hasActivePreAuth, t);
 
   const handleAuthorize = (req: Parameters<typeof onAuthorize>[0]) => {
     if (!positionActive) return;
@@ -208,6 +210,9 @@ export function DispenserRow({
 
   /* ── action buttons (icon-only — zone is too narrow for long labels) ──────── */
   const actionButton = (() => {
+    if (cancelWaitKey) {
+      return <span role="status" className="text-center text-xs font-semibold text-accent-amber">{t(cancelWaitKey)}</span>;
+    }
     if (canAuthorize && !isDone) {
       if (shiftRequired) {
         return (

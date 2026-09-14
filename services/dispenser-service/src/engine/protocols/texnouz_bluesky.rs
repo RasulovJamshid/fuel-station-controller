@@ -1,25 +1,25 @@
-//! TexnoUz "Дополненный протокол BlueSky" runtime (controller TU_WB_KEY).
+//! TexnoUz "Р”РѕРїРѕР»РЅРµРЅРЅС‹Р№ РїСЂРѕС‚РѕРєРѕР» BlueSky" runtime (controller TU_WB_KEY).
 //!
 //! Reached only when `cfg.connection.protocol` is `Protocol::TexnoUzBlueSky`
 //! (exhaustive match in `run_poll_loop`), so it cannot affect Wayne, Gilbarco or
 //! AZT.
 //!
-//! Master–slave over RS-485 at 9600 8E1: the service initiates every exchange
+//! MasterвЂ“slave over RS-485 at 9600 8E1: the service initiates every exchange
 //! and the pump never speaks unprompted. Each hose owns a bus address
-//! (`ADDR = base + hose number`, разд. 3), so one fueling position spans several
-//! addresses — the same shape as AZT.
+//! (`ADDR = base + hose number`, СЂР°Р·Рґ. 3), so one fueling position spans several
+//! addresses вЂ” the same shape as AZT.
 //!
-//! Sale cycle (разд. 9):
-//!   poll `0xD5` → write price `0xB2` → set dose `0xB5`/`0xB9` → wait for lift
-//!   (bit 7 clears) → start `0xC3` → poll live data `0xD9` while bit 5 is set
-//!   → confirmed end (holster, Stop, or reached preset) → stable final `0xD9`
-//!   → persist + shift + Done. A start ACK is not evidence of fuel flowing.
+//! Sale cycle (СЂР°Р·Рґ. 9):
+//!   reserve in software в†’ poll `0xD5` until lift в†’ write price `0xB2`
+//!   в†’ set dose `0xB5`/`0xB9` в†’ start `0xC3` в†’ poll live data `0xD9` while bit 5 is set
+//!   в†’ confirmed end (holster, Stop, or reached preset) в†’ stable final `0xD9`
+//!   в†’ persist + shift + Done. A start ACK is not evidence of fuel flowing.
 //!
 //! Stops are terminal (site policy, all protocols): Stop sends `0xCA`
 //! and the close path records the partial sale. The protocol's pause/resume
 //! (`0xBA`/`0xB3`) is deliberately left unwired.
 //!
-//! The pump drops the link after 5 s without a request (разд. 2), so every
+//! The pump drops the link after 5 s without a request (СЂР°Р·Рґ. 2), so every
 //! configured hose must be visited more often than that.
 
 use std::collections::HashMap;
@@ -31,10 +31,7 @@ use site_config::{FuelingPositionConfig, SiteConfig};
 use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
-use types::{
-    preset_label, FpStatus, PreAuthCancelWait, Preset, PumpNozzleTotals, Transaction, TxStatus,
-    WsEvent,
-};
+use types::{preset_label, FpStatus, Preset, PumpNozzleTotals, Transaction, TxStatus, WsEvent};
 
 use super::shared::{
     active_positions_by_byte, broadcast_status, commit_sale, exchange_serial, mark_missed,
@@ -44,10 +41,10 @@ use crate::engine::poll_loop::DispatchCommand;
 use crate::engine::state::{CurrentTx, PreAuthContext, RuntimeFp};
 use crate::shifts::ShiftCoordinator;
 
-/// Wire money unit in soum — see `texnouz_bluesky::WIRE_MONEY_UNIT` for why this
+/// Wire money unit in soum вЂ” see `texnouz_bluesky::WIRE_MONEY_UNIT` for why this
 /// is 1:1 and what still needs confirming against real hardware.
 const WIRE_MONEY_UNIT: u64 = texnouz_bluesky::WIRE_MONEY_UNIT;
-/// Largest price the 3-byte BCD field accepts (разд. 5).
+/// Largest price the 3-byte BCD field accepts (СЂР°Р·Рґ. 5).
 const MAX_PRICE: u64 = texnouz_bluesky::MAX_PRICE;
 /// Largest dose either 4-byte BCD field accepts.
 const MAX_DOSE: u64 = texnouz_bluesky::MAX_DOSE;
@@ -55,9 +52,8 @@ const MAX_DOSE: u64 = texnouz_bluesky::MAX_DOSE;
 /// own shut-off end the sale.
 const FULL_TANK_CENTILITRES: u64 = MAX_DOSE;
 /// A reply must arrive well inside the pump's own 5 s link timeout; silence
-/// means the frame was dropped and the request is retried (разд. 9).
+/// means the frame was dropped and the request is retried (СЂР°Р·Рґ. 9).
 const EXCHANGE_RETRIES: usize = 2;
-const CANCEL_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 const STOP_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 
 pub(in crate::engine) async fn run(
@@ -127,6 +123,7 @@ pub(in crate::engine) async fn run(
                 &pool,
                 &shifts,
                 &mut pending_startup_totals,
+                &mut selected_hoses,
             )
             .await;
         }
@@ -136,7 +133,7 @@ pub(in crate::engine) async fn run(
 /// Poll every hose of one fueling position, then dispatch on the active one.
 ///
 /// All hoses are polled each rotation rather than only the active one: the pump
-/// drops the link on any address left unpolled for 5 s (разд. 2), and a customer
+/// drops the link on any address left unpolled for 5 s (СЂР°Р·Рґ. 2), and a customer
 /// can lift any hose at any time.
 #[allow(clippy::too_many_arguments)]
 async fn poll_position(
@@ -149,10 +146,13 @@ async fn poll_position(
     pool: &SqlitePool,
     shifts: &ShiftCoordinator,
     pending_startup_totals: &mut HashMap<u8, u8>,
+    selected_hoses: &mut HashMap<u8, u8>,
 ) {
     let Some(fp_cfg) = disp_by_byte.get(&byte) else {
         return;
     };
+
+    expire_reservation(byte, fp_cfg, cfg, runtimes, events).await;
 
     // The vendor application sends D5 directly to every hose. In particular,
     // it does not rotate hoses with A1 while idle: that command changes the
@@ -184,9 +184,6 @@ async fn poll_position(
     {
         if let Some(rt) = runtimes.write().await.get_mut(&byte) {
             rt.bluesky.finish_candidate = None;
-            if rt.bluesky.stop_requested && rt.pre_auth.is_some() && rt.current_tx.is_none() {
-                rt.bluesky.cancel_wait = Some(PreAuthCancelWait::AwaitingStatus);
-            }
         }
         mark_missed(
             byte,
@@ -248,7 +245,7 @@ async fn poll_position(
             hose,
             ?code,
             label = %fp_cfg.label,
-            "BlueSky: pump reports error — clearing flag"
+            "BlueSky: pump reports error вЂ” clearing flag"
         );
         expect_ok(
             hose,
@@ -317,8 +314,8 @@ async fn poll_position(
         return;
     }
 
-    // Armed pre-authorization: the dose is already on the pump, so the lift is
-    // the only thing left before start (разд. 9, п. 3).
+    // Pre-authorization is a software reservation. Program the pump only after
+    // the reserved hose is lifted.
     //
     // This must be handled before the idle/nozzle-up paths below: an armed lane
     // sits holstered for as long as the customer takes, and idling it there
@@ -336,29 +333,14 @@ async fn poll_position(
             .get(&byte)
             .is_some_and(|rt| rt.bluesky.stop_requested)
         {
-            request_stop(byte, fp_cfg, backend, runtimes, events, Some(st)).await;
+            request_stop(byte, fp_cfg, backend, runtimes, events).await;
             broadcast_status(byte, runtimes, events).await;
             return;
         }
-        // Still holstered is the normal case while the customer walks up — hold
+        // Still holstered is the normal case while the customer walks up вЂ” hold
         // the armed state silently and keep waiting.
         if st.nozzle_lifted() {
-            // A lost C3 acknowledgement must still own the sale: the dispenser
-            // may have accepted Start and begun dispensing.
-            begin_delivery(byte, nozzle_index, fp_cfg, cfg, runtimes).await;
-            if expect_ok(
-                hose,
-                &texnouz_bluesky::start(hose),
-                backend,
-                "start_on_lift",
-            ) {
-                info!(hose, label = %fp_cfg.label, "BlueSky: lift confirmed → start sent");
-            } else {
-                warn!(
-                    hose,
-                    "BlueSky: start not confirmed after lift — retaining sale for status confirmation"
-                );
-            }
+            start_reservation(byte, fp_cfg, cfg, backend, selected_hoses, runtimes, events).await;
         }
         broadcast_status(byte, runtimes, events).await;
         return;
@@ -375,9 +357,12 @@ async fn poll_position(
     }
 
     // A dose entered on the pump keypad would start a sale we never priced;
-    // this site is app-controlled, so clear it (mirrors the AZT БМУ policy).
+    // this site is app-controlled, so clear it (mirrors the AZT Р‘РњРЈ policy).
     if st.keypad_preset_ready() && !armed {
-        info!(hose, "BlueSky: keypad dose rejected — app-controlled site");
+        info!(
+            hose,
+            "BlueSky: keypad dose rejected вЂ” app-controlled site"
+        );
         exchange(hose, &texnouz_bluesky::clear_keypad_preset(hose), backend);
     }
 
@@ -390,7 +375,7 @@ async fn poll_position(
     broadcast_status(byte, runtimes, events).await;
 }
 
-// ── Wire helpers ─────────────────────────────────────────────────────────────
+// в”Ђв”Ђ Wire helpers в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 /// Bus addresses of a position's active hoses, paired with the nozzle index.
 ///
@@ -425,7 +410,7 @@ fn hex(bytes: &[u8]) -> String {
 
 /// One request/response exchange with retry. Frames with a bad CRC, wrong
 /// precode or a foreign address are never answered, so silence is an ordinary
-/// transient and the request is repeated (разд. 9).
+/// transient and the request is repeated (СЂР°Р·Рґ. 9).
 fn exchange(addr: u8, frame: &[u8], backend: &SerialBackend) -> Option<texnouz_bluesky::Response> {
     exchange_with_attempts(addr, frame, backend, EXCHANGE_RETRIES)
 }
@@ -468,15 +453,15 @@ fn exchange_with_attempts(
             attempt,
             tx = %hex(frame),
             rx = %hex(&raw),
-            "BlueSky: no valid reply — retrying"
+            "BlueSky: no valid reply вЂ” retrying"
         );
     }
     None
 }
 
 /// Request remote control and consume the firmware's optional acknowledgement.
-/// A single timeout is enough because this is retried whenever D5 still reports
-/// local mode on a later poll.
+/// A single timeout is enough: some site firmware accepts app commands without
+/// acknowledging E5. Do not delay the remaining hoses with repeated attempts.
 fn take_remote_control(addr: u8, backend: &SerialBackend) {
     let _ = exchange_with_attempts(addr, &texnouz_bluesky::take_control(addr), backend, 1);
 }
@@ -578,7 +563,7 @@ fn expect_ok(addr: u8, frame: &[u8], backend: &SerialBackend, action: &'static s
     }
 }
 
-// ── Lane state transitions ───────────────────────────────────────────────────
+// в”Ђв”Ђ Lane state transitions в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 fn nozzle_product(fp_cfg: &FuelingPositionConfig, cfg: &SiteConfig, index: u8) -> (u8, String) {
     let product_id = fp_cfg
@@ -645,6 +630,10 @@ async fn update_live(
         rt.state.amount = f.amount_wire * WIRE_MONEY_UNIT;
     }
     if rt.current_tx.is_none() {
+        // Flow without our Start is unexpected. Preserve the readings and stop.
+        rt.bluesky.stop_requested = true;
+        rt.pre_auth = None;
+        rt.pre_auth_started_at = None;
         rt.current_tx = Some(CurrentTx {
             id: uuid::Uuid::new_v4().to_string(),
             started_at: Utc::now().timestamp_millis(),
@@ -941,7 +930,7 @@ async fn close_transaction(
     true
 }
 
-// ── Commands ─────────────────────────────────────────────────────────────────
+// в”Ђв”Ђ Commands в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 fn preset_reached(preset: &Preset, fill: texnouz_bluesky::FillData) -> bool {
     match preset {
@@ -958,106 +947,84 @@ fn can_authorize(rt: &RuntimeFp) -> bool {
         && rt.bluesky.completed_nozzle.is_none()
 }
 
-/// Stop intent must survive startup and lost replies, without discarding the
-/// current transaction or publishing a fictitious already-persisted STOPPED row.
+/// Revoke an unstarted software reservation without any dispenser exchange.
+async fn cancel_reservation(
+    byte: u8,
+    fp: &FuelingPositionConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+) -> bool {
+    let mut map = runtimes.write().await;
+    let Some(rt) = map.get_mut(&byte) else {
+        return false;
+    };
+    if rt.pre_auth.is_none() || rt.current_tx.is_some() {
+        return false;
+    }
+    rt.cancel_pre_auth();
+    rt.bluesky = Default::default();
+    let _ = events.send(WsEvent::PreAuthCancelled {
+        fp_id: fp.id.clone(),
+    });
+    info!(byte, "BlueSky: software pre-authorization cancelled");
+    true
+}
+
+/// Expiry runs in the protocol loop, so an old queued timeout cannot stop a
+/// later sale. Check again immediately before preparing a lifted nozzle.
+async fn expire_reservation(
+    byte: u8,
+    fp: &FuelingPositionConfig,
+    cfg: &SiteConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+) -> bool {
+    let expired = runtimes.read().await.get(&byte).is_some_and(|rt| {
+        cfg.ui.preauth_timeout_seconds > 0
+            && rt.pre_auth.is_some()
+            && rt.current_tx.is_none()
+            && rt.pre_auth_started_at.is_some_and(|started| {
+                Utc::now().timestamp_millis().saturating_sub(started).max(0) as u64
+                    >= cfg.ui.preauth_timeout_seconds.saturating_mul(1000)
+            })
+    });
+    if expired && cancel_reservation(byte, fp, runtimes, events).await {
+        let _ = events.send(WsEvent::PreAuthTimeout {
+            fp_id: fp.id.clone(),
+        });
+        broadcast_status(byte, runtimes, events).await;
+        return true;
+    }
+    false
+}
+
+/// Once Start has been sent or flow observed, keep the transaction through Stop
+/// and final meter confirmation. An unstarted reservation cancels locally.
 async fn request_stop(
     byte: u8,
     fp: &FuelingPositionConfig,
     backend: &SerialBackend,
     runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
     events: &broadcast::Sender<WsEvent>,
-    observed_status: Option<texnouz_bluesky::BlueSkyStatus>,
 ) {
-    let pending = {
+    if cancel_reservation(byte, fp, runtimes, events).await {
+        return;
+    }
+    let nozzle = {
         let mut map = runtimes.write().await;
         let Some(rt) = map.get_mut(&byte) else { return };
-        let nozzle = rt
-            .current_tx
-            .as_ref()
-            .map(|tx| tx.nozzle_index)
-            .or(rt.pre_auth.as_ref().map(|pre| pre.nozzle_index));
-        nozzle.map(|n| {
-            if !rt.bluesky.stop_requested {
-                rt.bluesky.finish_candidate = None;
-            }
-            rt.bluesky.stop_requested = true;
-            // Cancellation is already being handled; don't enqueue it again
-            // from the pre-authorization timeout task every 15 seconds.
-            rt.pre_auth_started_at = None;
-            (n, rt.current_tx.is_none())
-        })
-    };
-    let Some((nozzle, armed_only)) = pending else {
-        return;
-    };
-    let hose = hose_address(fp, nozzle);
-    if armed_only {
-        let status = match observed_status {
-            Some(status) => Some(status),
-            None => {
-                let due = runtimes
-                    .write()
-                    .await
-                    .get_mut(&byte)
-                    .is_some_and(|rt| rt.bluesky.claim_stop_attempt(CANCEL_CHECK_INTERVAL));
-                if !due {
-                    return;
-                }
-                query_status(hose, backend)
-            }
-        };
-        let Some(status) = status else {
-            if let Some(rt) = runtimes.write().await.get_mut(&byte) {
-                rt.bluesky.cancel_wait = Some(PreAuthCancelWait::AwaitingStatus);
-            }
-            warn!(hose, "BlueSky: cancellation waiting for hose status");
+        let Some(tx) = rt.current_tx.as_ref() else {
             return;
         };
-        if status.idle() {
-            // No C3 has been sent for this app-owned order. TU_WB_KEY can leave
-            // bit 3 clear even during successful app-controlled sales, so it
-            // cannot gate cancellation. Verify this hose has no flow/pause or
-            // keypad preset, then revoke the app's permission to send C3.
-            // The next authorization overwrites the stored price and dose.
-            // AA only clears the keypad flag; CA is answered during a fill.
-            let mut map = runtimes.write().await;
-            let Some(rt) = map.get_mut(&byte) else { return };
-            rt.cancel_pre_auth();
-            rt.bluesky = Default::default();
-            rt.bluesky.completed_nozzle = Some(nozzle);
-            rt.state.nozzle_index = Some(nozzle);
-            rt.state.status = FpStatus::Done;
-            let _ = events.send(WsEvent::PreAuthCancelled {
-                fp_id: fp.id.clone(),
-            });
-            info!(hose, label = %fp.label, status = status.0, "BlueSky: pre-authorization cancelled before Start");
-            return;
+        let nozzle = tx.nozzle_index;
+        if !rt.bluesky.stop_requested {
+            rt.bluesky.finish_candidate = None;
         }
-        if !status.dispensing() && !status.paused() {
-            // A keypad order has separate ownership; keep it pending without
-            // sending Start or clearing an order whose origin is uncertain.
-            if let Some(rt) = runtimes.write().await.get_mut(&byte) {
-                rt.bluesky.cancel_wait = Some(PreAuthCancelWait::KeypadPreset);
-            }
-            return;
-        }
-        // Unexpected flow is still a real sale. Retain it before Stop, even if
-        // flow ends before the next poll gets a chance to adopt it.
-        if let Some(rt) = runtimes.write().await.get_mut(&byte) {
-            rt.current_tx = Some(CurrentTx {
-                id: uuid::Uuid::new_v4().to_string(),
-                started_at: Utc::now().timestamp_millis(),
-                product_id: rt.pre_auth.as_ref().unwrap().product_id,
-                product_name: rt.state.product_name.clone().unwrap_or_default(),
-                nozzle_index: nozzle,
-            });
-            rt.state.status = FpStatus::Authorizing;
-            rt.pre_auth = None;
-            rt.bluesky.cancel_wait = None;
-            rt.bluesky.next_stop_attempt = None;
-        }
-    }
-    stop_active_sale(byte, hose, backend, runtimes).await;
+        rt.bluesky.stop_requested = true;
+        rt.pre_auth_started_at = None;
+        nozzle
+    };
+    stop_active_sale(byte, hose_address(fp, nozzle), backend, runtimes).await;
 }
 
 async fn stop_active_sale(
@@ -1127,8 +1094,7 @@ fn dose_frame(hose: u8, preset: &Preset, price: u32) -> Result<Vec<u8>, &'static
     }
 }
 
-/// Arm a hose: take control, write the price, set the dose, and start if the
-/// nozzle is already lifted. `nozzle_index` selects the hose.
+/// Reserve a hose in software; lifted hoses proceed to device authorization.
 #[allow(clippy::too_many_arguments)]
 async fn do_authorize(
     cfg: &SiteConfig,
@@ -1150,7 +1116,7 @@ async fn do_authorize(
     if !runtimes.read().await.get(&byte).is_some_and(can_authorize) {
         warn!(
             byte,
-            "BlueSky: authorization ignored — previous sale still owns the lane"
+            "BlueSky: authorization ignored вЂ” previous sale still owns the lane"
         );
         return;
     }
@@ -1174,54 +1140,24 @@ async fn do_authorize(
     {
         return;
     }
-    if !query_status(hose, backend).is_some_and(|st| !st.dispensing() && !st.paused()) {
-        warn!(
-            hose,
-            "BlueSky: authorization refused — hose busy or status unavailable"
-        );
-        return;
-    }
-
-    if !select_hose_for_command(&fp_cfg, backend, selected_hoses, byte, hose) {
-        warn!(
-            hose,
-            "BlueSky: target hose selection failed — authorize aborted"
-        );
-        return;
-    }
-
-    take_remote_control(hose, backend);
-
-    // Price first: the pump computes money from its own price register.
     let wire_price = price as u64 / WIRE_MONEY_UNIT;
-    if wire_price == 0 || wire_price > MAX_PRICE {
+    if wire_price == 0 || wire_price > MAX_PRICE || dose_frame(hose, &preset, price).is_err() {
         warn!(
             hose,
-            price, "BlueSky: price out of range — authorize aborted"
+            "BlueSky: invalid price or preset - reservation refused"
         );
         return;
     }
-    if let Some(f) = texnouz_bluesky::write_price(hose, wire_price) {
-        if !expect_ok(hose, &f, backend, "write_price") {
-            warn!(hose, "BlueSky: price write refused — authorize aborted");
-            return;
-        }
-    }
-
-    let frame = match dose_frame(hose, &preset, price) {
-        Ok(f) => f,
-        Err(e) => {
-            warn!(hose, error = e, ?preset, "BlueSky: dose rejected");
-            return;
-        }
-    };
-    if !expect_ok(hose, &frame, backend, "set_dose") {
-        warn!(hose, "BlueSky: dose refused — authorize aborted");
+    let status = query_status(hose, backend);
+    if !status.is_some_and(|st| !st.dispensing() && !st.paused()) {
+        warn!(
+            hose,
+            "BlueSky: authorization refused вЂ” hose busy or status unavailable"
+        );
         return;
     }
 
     let (product_id, product_name) = nozzle_product(&fp_cfg, cfg, nozzle_index);
-    let lifted = query_status(hose, backend).map(|st| st.nozzle_lifted());
 
     {
         let mut map = runtimes.write().await;
@@ -1244,23 +1180,98 @@ async fn do_authorize(
         }
     }
 
-    // Дозу можно ставить при повешенном пистолете; старт — только после снятия
-    // (разд. 9, п. 3). If it is already lifted, start immediately.
-    if lifted == Some(true) {
-        begin_delivery(byte, nozzle_index, &fp_cfg, cfg, runtimes).await;
-        if expect_ok(hose, &texnouz_bluesky::start(hose), backend, "start") {
-            info!(hose, label = %fp_cfg.label, ?preset, "BlueSky: authorized and started");
-        } else {
-            warn!(
-                hose,
-                "BlueSky: start not confirmed — retaining sale for status confirmation"
-            );
-        }
+    if status.is_some_and(|st| st.nozzle_lifted()) {
+        start_reservation(
+            byte,
+            &fp_cfg,
+            cfg,
+            backend,
+            selected_hoses,
+            runtimes,
+            events,
+        )
+        .await;
     } else {
-        info!(hose, label = %fp_cfg.label, ?preset, "BlueSky: dose armed, waiting for lift");
+        info!(hose, label = %fp_cfg.label, ?preset, "BlueSky: software reservation waiting for lift");
     }
-
     broadcast_status(byte, runtimes, events).await;
+}
+
+/// All device setup happens together after lift. Failure before Start cancels
+/// the reservation; a lost Start reply retains ownership of the possible sale.
+#[allow(clippy::too_many_arguments)]
+async fn start_reservation(
+    byte: u8,
+    fp: &FuelingPositionConfig,
+    cfg: &SiteConfig,
+    backend: &SerialBackend,
+    selected_hoses: &mut HashMap<u8, u8>,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+) {
+    if expire_reservation(byte, fp, cfg, runtimes, events).await {
+        return;
+    }
+    let pending = {
+        let map = runtimes.read().await;
+        map.get(&byte).and_then(|rt| {
+            rt.pre_auth
+                .as_ref()
+                .filter(|_| rt.current_tx.is_none() && !rt.bluesky.stop_requested)
+                .map(|pre| (pre.nozzle_index, rt.state.price, rt.last_preset.clone()))
+        })
+    };
+    let Some((nozzle, price, preset)) = pending else {
+        return;
+    };
+    let hose = hose_address(fp, nozzle);
+    let prepared = (|| {
+        if !select_hose_for_command(fp, backend, selected_hoses, byte, hose) {
+            return None;
+        }
+        take_remote_control(hose, backend);
+        let Some(price_frame) = texnouz_bluesky::write_price(hose, price as u64 / WIRE_MONEY_UNIT)
+        else {
+            return None;
+        };
+        if !expect_ok(hose, &price_frame, backend, "write_price") {
+            return None;
+        }
+        let Ok(dose) = dose_frame(hose, &preset, price) else {
+            return None;
+        };
+        if !expect_ok(hose, &dose, backend, "set_dose") {
+            return None;
+        }
+        // The customer may have holstered while setup was in progress.
+        query_status(hose, backend)
+    })();
+    if let Some(st) = prepared.filter(|st| st.dispensing() || st.paused()) {
+        // The device started independently during setup. Adopt and stop that
+        // flow now; never discard an observed sale as a software cancellation.
+        update_live(byte, nozzle, hose, fp, cfg, backend, runtimes, st).await;
+        return;
+    }
+    if !prepared.is_some_and(|st| st.nozzle_lifted()) {
+        warn!(
+            hose,
+            "BlueSky: setup failed or lift no longer confirmed - cancelling before Start"
+        );
+        cancel_reservation(byte, fp, runtimes, events).await;
+        return;
+    }
+    begin_delivery(byte, nozzle, fp, cfg, runtimes).await;
+    if expect_ok(hose, &texnouz_bluesky::start(hose), backend, "start") {
+        info!(
+            hose,
+            "BlueSky: lifted hose programmed and Start acknowledged"
+        );
+    } else {
+        warn!(
+            hose,
+            "BlueSky: Start not confirmed - retaining transaction for status confirmation"
+        );
+    }
 }
 
 async fn apply_command(
@@ -1313,19 +1324,19 @@ async fn apply_command(
             .await;
         }
 
-        // Stops are terminal on this site — the protocol's pause/resume
+        // Stops are terminal on this site вЂ” the protocol's pause/resume
         // (0xBA/0xB3) is deliberately not exposed. Same policy as Gilbarco/AZT.
         DispatchCommand::Stop { byte } => {
             let Some(fp_cfg) = cfg.position_by_address(byte).cloned() else {
                 return;
             };
-            request_stop(byte, &fp_cfg, backend, runtimes, events, None).await;
+            request_stop(byte, &fp_cfg, backend, runtimes, events).await;
             broadcast_status(byte, runtimes, events).await;
         }
 
         DispatchCommand::EStop => {
             for fp in cfg.active_positions() {
-                request_stop(fp.address_byte, fp, backend, runtimes, events, None).await;
+                request_stop(fp.address_byte, fp, backend, runtimes, events).await;
                 for (_, hose) in hose_addresses(fp) {
                     expect_ok(hose, &texnouz_bluesky::stop(hose), backend, "estop");
                 }
@@ -1343,7 +1354,7 @@ async fn apply_command(
             };
             // The command may have been queued before a lift/start. It must
             // stop that same session, never erase a now-running transaction.
-            request_stop(byte, &fp_cfg, backend, runtimes, events, None).await;
+            request_stop(byte, &fp_cfg, backend, runtimes, events).await;
             broadcast_status(byte, runtimes, events).await;
         }
 
@@ -1380,14 +1391,14 @@ async fn apply_command(
                     warn!(
                         hose,
                         price = u.price,
-                        "BlueSky: price out of range — skipped"
+                        "BlueSky: price out of range вЂ” skipped"
                     );
                     continue;
                 }
                 match texnouz_bluesky::write_price(hose, wire) {
                     Some(f) if expect_ok(hose, &f, backend, "update_price") => {}
                     _ => {
-                        warn!(hose, "BlueSky: price write refused — cached anyway");
+                        warn!(hose, "BlueSky: price write refused вЂ” cached anyway");
                     }
                 }
 
@@ -1474,7 +1485,7 @@ mod tests {
 
     #[test]
     fn hose_addresses_are_base_plus_nozzle_index() {
-        // разд. 3: ADDR = базовый адрес + номер рукава.
+        // СЂР°Р·Рґ. 3: ADDR = Р±Р°Р·РѕРІС‹Р№ Р°РґСЂРµСЃ + РЅРѕРјРµСЂ СЂСѓРєР°РІР°.
         let cfg = fp(0x10, &[(1, true), (2, true), (3, true)]);
         assert_eq!(hose_addresses(&cfg), vec![(1, 0x11), (2, 0x12), (3, 0x13)]);
     }

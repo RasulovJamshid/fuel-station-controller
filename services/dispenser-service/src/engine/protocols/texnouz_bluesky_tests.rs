@@ -118,11 +118,6 @@ impl Harness {
             .unwrap()
             .state
             .status = FpStatus::Idle;
-        let dose_cmd = if matches!(preset, Preset::Amount(_)) {
-            0xB5
-        } else {
-            0xB9
-        };
         self.command(
             DispatchCommand::Preauthorize {
                 byte: 1,
@@ -130,13 +125,7 @@ impl Harness {
                 preset,
                 nozzle_index: 1,
             },
-            vec![
-                status(0x88),
-                reply(1, 0xE5, &[]),
-                reply(1, 0xB2, &[0x59]),
-                reply(1, dose_cmd, &[]),
-                status(0x88),
-            ],
+            vec![status(0x88)],
         )
         .await;
         assert_eq!(
@@ -157,6 +146,7 @@ impl Harness {
             &self.pool,
             &self.shifts,
             &mut HashMap::new(),
+            &mut HashMap::from([(1, 1)]),
         )
         .await;
         let fake = fake.lock().unwrap();
@@ -433,62 +423,90 @@ async fn failed_database_commit_retries_same_id_without_done() {
 }
 
 #[tokio::test]
-async fn holstered_preauth_waits_for_lift_then_waits_for_actual_flow() {
-    let h = Harness::new().await;
-    h.runtimes.write().await.get_mut(&1).unwrap().state.status = FpStatus::Idle;
-    h.command(
-        DispatchCommand::Preauthorize {
-            byte: 1,
-            price: 11300,
-            preset: Preset::Volume(10.0),
-            nozzle_index: 1,
-        },
-        vec![
-            status(0x88),
-            reply(1, 0xE5, &[]),
-            reply(1, 0xB2, &[0x59]),
-            reply(1, 0xB9, &[]),
-            status(0x88),
-        ],
-    )
-    .await;
-    assert_eq!(
-        h.runtimes.read().await[&1].state.status,
-        FpStatus::PreAuthorized
-    );
-    h.poll(vec![status(0x88)]).await;
-    assert!(h.runtimes.read().await[&1].current_tx.is_none());
-    h.poll(vec![status(0x08), reply(1, 0xC3, &[0x59])]).await;
-    assert_eq!(
-        h.runtimes.read().await[&1].state.status,
-        FpStatus::Authorizing
-    );
-    h.poll(final_replies(0x08, 0, 0, false)).await;
-    h.settle().await;
-    h.poll(final_replies(0x08, 0, 0, false)).await;
-    assert!(h.sales().await.is_empty());
+async fn holstered_reservation_only_polls_then_programs_on_lift() {
+    for preset in [
+        Preset::Volume(10.0),
+        Preset::Amount(300000),
+        Preset::Str("full".into()),
+    ] {
+        let h = Harness::new().await;
+        let sent = h
+            .command(
+                DispatchCommand::Preauthorize {
+                    byte: 1,
+                    price: 11300,
+                    preset: preset.clone(),
+                    nozzle_index: 1,
+                },
+                vec![status(0x80)],
+            )
+            .await;
+        assert_eq!(sent, vec![texnouz_bluesky::read_status(1)]);
+        for _ in 0..5 {
+            assert_eq!(
+                h.poll(vec![status(0x80)]).await,
+                vec![texnouz_bluesky::read_status(1)]
+            );
+        }
+        assert!(h.runtimes.read().await[&1].current_tx.is_none());
+        let dose = dose_frame(1, &preset, 11300).unwrap();
+        let dose_cmd = dose[dose.len() - 2];
+        let sent = h
+            .poll(vec![
+                status(0x00),
+                reply(1, 0xE5, &[]),
+                reply(1, 0xB2, &[0x59]),
+                reply(1, dose_cmd, &[]),
+                status(0x00),
+                reply(1, 0xC3, &[0x59]),
+            ])
+            .await;
+        assert_eq!(
+            sent,
+            vec![
+                texnouz_bluesky::read_status(1),
+                texnouz_bluesky::take_control(1),
+                texnouz_bluesky::write_price(1, 11300).unwrap(),
+                dose,
+                texnouz_bluesky::read_status(1),
+                texnouz_bluesky::start(1)
+            ]
+        );
+        assert_eq!(
+            h.runtimes.read().await[&1].state.status,
+            FpStatus::Authorizing
+        );
+        h.poll(final_replies(0x00, 0, 0, false)).await;
+        h.settle().await;
+        h.poll(final_replies(0x00, 0, 0, false)).await;
+        assert!(h.sales().await.is_empty());
+    }
 }
 
 #[tokio::test]
-async fn cancel_unstarted_order_needs_only_status_and_never_starts_on_later_lift() {
-    // The site reports bit 3 clear even when it accepts app commands. Cover
-    // both values, with the nozzle holstered and already lifted.
-    for idle_status in [0x80, 0x88, 0x00, 0x08] {
+async fn reservation_cancel_is_local_even_without_replies_and_never_starts_later() {
+    for stop in [false, true] {
         let h = Harness::new().await;
         h.arm(Preset::Amount(300000)).await;
+        h.poll(vec![]).await;
         let mut events = h.events.subscribe();
-        assert_eq!(
-            h.command(
-                DispatchCommand::CancelPreauth { byte: 1 },
-                vec![status(idle_status)]
-            )
-            .await,
-            vec![texnouz_bluesky::read_status(1)]
-        );
+        let cmd = if stop {
+            DispatchCommand::Stop { byte: 1 }
+        } else {
+            DispatchCommand::CancelPreauth { byte: 1 }
+        };
+        assert!(h.command(cmd, vec![]).await.is_empty());
         assert!(h
             .command(DispatchCommand::CancelPreauth { byte: 1 }, vec![])
             .await
             .is_empty());
+        let rt = h.runtimes.read().await;
+        assert!(rt[&1].pre_auth.is_none());
+        assert!(rt[&1].pre_auth_started_at.is_none());
+        assert!(rt[&1].bluesky.completed_nozzle.is_none());
+        assert_eq!(rt[&1].state.status, FpStatus::Idle);
+        assert!(rt[&1].snapshot_state().pre_auth_cancel_wait.is_none());
+        drop(rt);
         let mut cancelled = 0;
         while let Ok(event) = events.try_recv() {
             if matches!(event, WsEvent::PreAuthCancelled { .. }) {
@@ -497,19 +515,12 @@ async fn cancel_unstarted_order_needs_only_status_and_never_starts_on_later_lift
             assert!(!matches!(event, WsEvent::Done(_)));
         }
         assert_eq!(cancelled, 1);
-        assert!(h.runtimes.read().await[&1]
-            .snapshot_state()
-            .pre_auth_cancel_wait
-            .is_none());
-        h.poll(vec![status(0x88)]).await;
-        assert_eq!(h.runtimes.read().await[&1].state.status, FpStatus::Idle);
         assert_eq!(
-            h.poll(vec![status(0x08)]).await,
+            h.poll(vec![status(0x00)]).await,
             vec![texnouz_bluesky::read_status(1)]
         );
         assert!(h.runtimes.read().await[&1].current_tx.is_none());
         assert!(h.sales().await.is_empty());
-        // A new authorization programs a fresh dose and can complete normally.
         let id = h.authorize(Preset::Volume(5.0)).await;
         h.poll(vec![status(0x28), fill(500, 56500)]).await;
         h.poll(final_replies(0x88, 500, 56500, false)).await;
@@ -520,158 +531,86 @@ async fn cancel_unstarted_order_needs_only_status_and_never_starts_on_later_lift
 }
 
 #[tokio::test]
-async fn uncertain_cancel_keeps_polling_without_command_or_timeout_flood() {
-    let h = Harness::new().await;
-    h.arm(Preset::Amount(223000)).await;
-    assert_eq!(
-        h.command(DispatchCommand::CancelPreauth { byte: 1 }, vec![])
-            .await,
-        vec![texnouz_bluesky::read_status(1)]
-    );
-    let pending = h.runtimes.read().await[&1].snapshot_state();
-    assert_eq!(
-        pending.pre_auth_cancel_wait,
-        Some(PreAuthCancelWait::AwaitingStatus)
-    );
-    assert_eq!(
-        serde_json::to_value(&pending).unwrap()["pre_auth_cancel_wait"],
-        "AWAITING_STATUS"
-    );
-    for state in [0x82, 0x8A, 0x00] {
-        // Keypad presets remain protected with either mode bit. An idle reply
-        // with the mode bit clear must release the app's never-started order.
-        for _ in 0..10 {
-            assert!(h
-                .command(DispatchCommand::CancelPreauth { byte: 1 }, vec![])
-                .await
-                .is_empty());
-        }
-        assert!(h.runtimes.read().await[&1].pre_auth_started_at.is_none());
+async fn reservation_timeout_cancels_once_before_lift_or_even_without_status() {
+    for response in [vec![], vec![status(0x00)]] {
+        let mut h = Harness::new().await;
+        h.cfg.ui.preauth_timeout_seconds = 120;
+        h.arm(Preset::Volume(10.0)).await;
+        h.runtimes
+            .write()
+            .await
+            .get_mut(&1)
+            .unwrap()
+            .pre_auth_started_at = Some(Utc::now().timestamp_millis() - 121000);
+        let mut events = h.events.subscribe();
         assert_eq!(
-            h.poll(vec![status(state)]).await,
+            h.poll(response).await,
             vec![texnouz_bluesky::read_status(1)]
         );
-        let snapshot = h.runtimes.read().await[&1].snapshot_state();
-        assert_eq!(
-            snapshot.pre_auth_cancel_wait,
-            if state == 0 {
-                None
-            } else {
-                Some(PreAuthCancelWait::KeypadPreset)
+        assert!(h.runtimes.read().await[&1].pre_auth.is_none());
+        assert!(h.runtimes.read().await[&1].current_tx.is_none());
+        h.poll(vec![status(0x00)]).await;
+        let mut timeouts = 0;
+        while let Ok(event) = events.try_recv() {
+            if matches!(event, WsEvent::PreAuthTimeout { .. }) {
+                timeouts += 1;
             }
-        );
-    }
-    assert!(h.runtimes.read().await[&1].pre_auth.is_none());
-    assert_eq!(h.runtimes.read().await[&1].state.status, FpStatus::Done);
-    assert!(h.sales().await.is_empty());
-}
-
-#[tokio::test]
-async fn missing_cancel_status_is_published_and_recovers_without_another_click() {
-    let h = Harness::new().await;
-    h.arm(Preset::Amount(300000)).await;
-    let mut events = h.events.subscribe();
-    h.command(DispatchCommand::CancelPreauth { byte: 1 }, vec![])
-        .await;
-    let WsEvent::Status(pending) = events.try_recv().unwrap() else {
-        panic!("cancellation must publish its wait reason");
-    };
-    assert_eq!(
-        pending.pre_auth_cancel_wait,
-        Some(PreAuthCancelWait::AwaitingStatus)
-    );
-    // A later poll is still missing: preserve the notice and continue polling.
-    assert_eq!(h.poll(vec![]).await, vec![texnouz_bluesky::read_status(1)]);
-    assert!(h.runtimes.read().await[&1].pre_auth.is_some());
-    // The real firmware's idle reply has its mode bit clear.
-    assert_eq!(
-        h.poll(vec![status(0x80)]).await,
-        vec![texnouz_bluesky::read_status(1)]
-    );
-    let done = h.runtimes.read().await[&1].snapshot_state();
-    assert!(done.pre_auth_cancel_wait.is_none());
-    // Null must be present on the wire so merging clients clear the notice.
-    let json = serde_json::to_value(&done).unwrap();
-    assert!(json
-        .get("pre_auth_cancel_wait")
-        .is_some_and(serde_json::Value::is_null));
-    let mut cancelled = 0;
-    while let Ok(event) = events.try_recv() {
-        if matches!(event, WsEvent::PreAuthCancelled { .. }) {
-            cancelled += 1;
         }
-        assert!(!matches!(event, WsEvent::Done(_)));
+        assert_eq!(timeouts, 1);
+        assert!(h.sales().await.is_empty());
     }
-    assert_eq!(cancelled, 1);
-    assert!(h.sales().await.is_empty());
-    h.poll(vec![status(0x80)]).await;
-    assert_eq!(h.runtimes.read().await[&1].state.status, FpStatus::Idle);
 }
 
 #[tokio::test]
-async fn keypad_wait_changes_to_missing_status_and_flow_clears_the_notice() {
-    let h = Harness::new().await;
-    h.arm(Preset::Volume(10.0)).await;
-    h.command(
-        DispatchCommand::CancelPreauth { byte: 1 },
-        vec![status(0x82)],
-    )
-    .await;
-    assert_eq!(
-        h.runtimes.read().await[&1]
-            .snapshot_state()
-            .pre_auth_cancel_wait,
-        Some(PreAuthCancelWait::KeypadPreset)
-    );
-    h.poll(vec![]).await;
-    assert_eq!(
-        h.runtimes.read().await[&1]
-            .snapshot_state()
-            .pre_auth_cancel_wait,
-        Some(PreAuthCancelWait::AwaitingStatus)
-    );
-    // A mode-bit-clear dispensing reply is still real flow; stop and save it.
-    h.poll(vec![status(0x20), fill(50, 5650), reply(1, 0xCA, &[])])
-        .await;
-    assert!(h.runtimes.read().await[&1]
-        .snapshot_state()
-        .pre_auth_cancel_wait
-        .is_none());
-    h.poll(final_replies(0x80, 50, 5650, false)).await;
-    h.settle().await;
-    h.poll(final_replies(0x80, 50, 5650, true)).await;
-    assert_eq!(h.sales().await[0].1, 0.5);
-}
-
-#[tokio::test]
-async fn cancellation_cannot_use_another_hoses_idle_status() {
+async fn another_hose_lift_cannot_start_the_reservation() {
     let mut h = Harness::new().await;
     h.arm(Preset::Volume(10.0)).await;
-    h.command(DispatchCommand::CancelPreauth { byte: 1 }, vec![])
-        .await;
     let mut other = h.cfg.fueling_positions[0].nozzles[0].clone();
     other.index = 2;
     other.bluesky_hose_number = 2;
     h.cfg.fueling_positions[0].nozzles.push(other);
-    assert_eq!(
-        h.poll(vec![vec![], reply(2, 0xD5, &[0x88])]).await,
-        vec![
-            texnouz_bluesky::read_status(1),
-            texnouz_bluesky::read_status(2)
-        ]
-    );
-    assert!(h.runtimes.read().await[&1].pre_auth.is_some());
+    for own in [status(0x80), vec![]] {
+        assert_eq!(
+            h.poll(vec![own, reply(2, 0xD5, &[0x00])]).await,
+            vec![
+                texnouz_bluesky::read_status(1),
+                texnouz_bluesky::read_status(2)
+            ]
+        );
+        assert!(h.runtimes.read().await[&1].current_tx.is_none());
+        assert!(h.runtimes.read().await[&1].pre_auth.is_some());
+    }
     assert!(h
-        .command(
-            DispatchCommand::Authorize {
-                byte: 1,
-                price: 11300,
-                preset: Preset::Volume(5.0)
-            },
-            vec![]
-        )
+        .command(DispatchCommand::CancelPreauth { byte: 1 }, vec![])
         .await
         .is_empty());
+}
+
+#[tokio::test]
+async fn failed_setup_or_reholster_does_not_start_or_retry_a_cancelled_reservation() {
+    for responses in [
+        vec![status(0x00), reply(1, 0xE5, &[])], // Price replies lost.
+        vec![status(0x00), reply(1, 0xE5, &[]), reply(1, 0xB2, &[0x59])], // Dose replies lost.
+        vec![
+            status(0x00),
+            reply(1, 0xE5, &[]),
+            reply(1, 0xB2, &[0x59]),
+            reply(1, 0xB9, &[]),
+            status(0x80),
+        ],
+    ] {
+        let h = Harness::new().await;
+        h.arm(Preset::Volume(10.0)).await;
+        let sent = h.poll(responses).await;
+        assert!(!sent.contains(&texnouz_bluesky::start(1)));
+        assert!(h.runtimes.read().await[&1].pre_auth.is_none());
+        assert!(h.runtimes.read().await[&1].current_tx.is_none());
+        assert_eq!(
+            h.poll(vec![status(0x00)]).await,
+            vec![texnouz_bluesky::read_status(1)]
+        );
+        assert!(h.sales().await.is_empty());
+    }
 }
 
 #[tokio::test]
@@ -680,7 +619,14 @@ async fn lost_start_reply_cannot_be_cancelled_as_an_unstarted_order() {
         let h = Harness::new().await;
         if start_on_lift {
             h.arm(Preset::Volume(10.0)).await;
-            h.poll(vec![status(0x08)]).await; // Both C3 replies lost.
+            h.poll(vec![
+                status(0x08),
+                reply(1, 0xE5, &[]),
+                reply(1, 0xB2, &[0x59]),
+                reply(1, 0xB9, &[]),
+                status(0x08),
+            ])
+            .await; // Both C3 replies lost.
         } else {
             h.command(
                 DispatchCommand::Authorize {
@@ -724,14 +670,12 @@ async fn lost_start_reply_cannot_be_cancelled_as_an_unstarted_order() {
 }
 
 #[tokio::test]
-async fn unexpected_flow_during_cancel_is_saved_even_if_stopped_before_next_poll() {
+async fn unexpected_flow_during_reservation_is_stopped_and_saved() {
     let h = Harness::new().await;
     h.arm(Preset::Volume(10.0)).await;
-    h.command(
-        DispatchCommand::CancelPreauth { byte: 1 },
-        vec![status(0x28), reply(1, 0xCA, &[])],
-    )
-    .await;
+    h.poll(vec![status(0x28), fill(50, 5650), reply(1, 0xCA, &[])])
+        .await;
+    assert!(h.runtimes.read().await[&1].pre_auth.is_none());
     let id = h.runtimes.read().await[&1]
         .current_tx
         .as_ref()
@@ -908,4 +852,29 @@ async fn stale_idle_runtime_does_not_authorize_physically_busy_hose() {
         .await;
     assert_eq!(written, vec![texnouz_bluesky::read_status(1)]);
     assert!(h.runtimes.read().await[&1].current_tx.is_none());
+}
+
+#[tokio::test]
+async fn flow_observed_during_setup_is_retained_and_stopped_without_sending_start() {
+    let h = Harness::new().await;
+    h.arm(Preset::Volume(10.0)).await;
+    let sent = h
+        .poll(vec![
+            status(0x00),
+            reply(1, 0xE5, &[]),
+            reply(1, 0xB2, &[0x59]),
+            reply(1, 0xB9, &[]),
+            status(0x20),
+            fill(50, 5650),
+            reply(1, 0xCA, &[]),
+        ])
+        .await;
+    assert!(!sent.contains(&texnouz_bluesky::start(1)));
+    assert!(sent.contains(&texnouz_bluesky::stop(1)));
+    assert!(h.runtimes.read().await[&1].pre_auth.is_none());
+    assert!(h.runtimes.read().await[&1].current_tx.is_some());
+    h.poll(final_replies(0x80, 50, 5650, false)).await;
+    h.settle().await;
+    h.poll(final_replies(0x80, 50, 5650, true)).await;
+    assert_eq!(h.sales().await[0].1, 0.5);
 }

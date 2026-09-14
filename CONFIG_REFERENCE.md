@@ -316,8 +316,7 @@ Controls operator-facing behaviour in the desktop application.
 | `default_auth_mode`        | string  | `"reactive"` | Authorization flow (see below) |
 | `preauth_timeout_seconds`  | integer | `300`        | Seconds before an unanswered pre-authorization is automatically cancelled. `0` = disabled |
 | `use_decel_window_on_stop` | boolean | `false`      | Keep sending BUSY ~10 s after a stop so the pump can be re-authorized without resetting its counter |
-| `use_stop_mode`            | boolean | `false`      | Changes Stop button behavior (see table below) |
-| `use_cancel_mode`          | boolean | `false`      | Shows a Cancel button instead of Stop/Pause. Intended for simulator configs only (see below) |
+| `use_cancel_mode`          | boolean | `false`      | Legacy compatibility field; desktop layouts always use Cancel regardless of this value |
 
 **`default_auth_mode` values:**
 
@@ -326,24 +325,22 @@ Controls operator-facing behaviour in the desktop application.
 | `"reactive"` | Operator authorizes after the customer lifts the nozzle |
 | `"preauth"`  | Operator pre-authorizes while the pump is idle; customer lifts nozzle to start |
 
-**Stop button behavior (`use_stop_mode` vs `use_cancel_mode`):**
+**Cancel behavior:**
 
-| Config                          | Button label | Fuel stops on click? | Transaction finalized when |
-|---------------------------------|--------------|----------------------|----------------------------|
-| both `false` (default)          | **Pause**    | Yes                  | Operator clicks "Resume" or "Close Transaction" |
-| `use_stop_mode: true`           | **Stop**     | Yes                  | Customer holsters the nozzle (freshest meter reading) |
-| `use_cancel_mode: true`         | **Cancel**   | Yes                  | Immediately on button click |
-| both `true`                     | **Cancel**   | Yes                  | Immediately on button click, `stop_source = APP_FINAL` |
+Classic, modern cards, and modern rows use Cancel during authorization and delivery.
+Classic's Delete shortcut uses the same action. Cancel requests a stop, waits for
+the resulting status, and closes a stopped transaction or dismisses a completed
+sale when available. Final readings and completion timing still depend on the
+protocol. Pre-authorized orders use the separate pre-authorization cancellation
+flow, including any pending-cancellation message.
 
-**Recommendation:**
-- Real pumps → `use_stop_mode: true`. Fuel stops immediately; transaction records the final meter reading at holster time.
-- Simulator (no physical nozzle) → `use_cancel_mode: true`. Closes the transaction in one click since there is no holster event.
+No mode flag is needed. `use_cancel_mode` remains accepted for compatibility;
+`use_stop_mode` is no longer a supported UI setting.
 
 ```json
 "ui": {
   "default_auth_mode": "preauth",
-  "preauth_timeout_seconds": 300,
-  "use_stop_mode": true
+  "preauth_timeout_seconds": 300
 }
 ```
 
@@ -533,7 +530,7 @@ The service rejects the config at startup if any of these are violated:
   },
   "ui": {
     "default_auth_mode": "preauth",
-    "use_stop_mode": true
+    "preauth_timeout_seconds": 300
   }
 }
 ```

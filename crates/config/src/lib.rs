@@ -45,9 +45,8 @@ pub struct UiConfig {
     /// (old-app behavior).  Falls back to normal STOPPED state if the pump ignores BUSY.
     #[serde(default)]
     pub use_decel_window_on_stop: bool,
-    /// When true, show a "Cancel" button during delivery instead of Pause/Stop.
-    /// Clicking it stops the pump and immediately closes the transaction (no holster
-    /// required).  Intended for simulator configs where there is no physical nozzle.
+    /// Legacy compatibility field. Desktop layouts always use Cancel, regardless
+    /// of this value.
     #[serde(default)]
     pub use_cancel_mode: bool,
 }

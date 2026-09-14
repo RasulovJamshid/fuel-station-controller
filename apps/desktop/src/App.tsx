@@ -142,7 +142,6 @@ export default function App() {
   }, [siteSnapshot]);
 
   const defaultAuthMode = siteSnapshot?.default_auth_mode ?? "preauth";
-  const useCancelMode = siteSnapshot?.use_cancel_mode ?? false;
   // Terminal-stop protocols: every stop ends the sale (no pause/continue), and
   // stopped sales are closed by the service poll loop via dismiss/ResetLane —
   // not the Wayne stopped-transaction flow. Gilbarco and AZT 2.0 both behave
@@ -252,23 +251,6 @@ export default function App() {
       }
     },
     [setInvokeError, fetchAllStatus, setStates, clearPreAuthNozzleMismatch],
-  );
-
-  const onStop = useCallback(
-    async (fpId: string) => {
-      const { invoke } = await import("@tauri-apps/api/core");
-      try {
-        setInvokeError(null);
-        await invoke("stop_dispenser", { fpId });
-        const rows = await invoke<import("./types/api").FpState[]>("get_all_status");
-        setStates(rows);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setInvokeError(msg);
-        console.error("stop_dispenser failed", e);
-      }
-    },
-    [setInvokeError, setStates],
   );
 
   const onCancel = useCallback(
@@ -596,12 +578,10 @@ export default function App() {
                   onAuthorize={onAuthorize}
                   onPreAuthorize={onPreAuthorize}
                   onCancelPreAuth={onCancelPreAuth}
-                  onStop={onStop}
                   onCancel={onCancel}
                   onCloseStopped={onCloseStopped}
                   shiftRequired={shiftRequired}
                   onStartShift={openStartShift}
-                  useCancelMode={useCancelMode}
                   gilbarcoMode={gilbarcoMode}
                 />
               ) : smallScreen ? (
@@ -655,13 +635,11 @@ export default function App() {
                         onAuthorize={onAuthorize}
                         onPreAuthorize={onPreAuthorize}
                         onCancelPreAuth={onCancelPreAuth}
-                        onStop={onStop}
                         onCancel={onCancel}
                         onCloseStopped={onCloseStopped}
                         onDismissSale={onDismissSale}
                         shiftRequired={shiftRequired}
                         onStartShift={openStartShift}
-                        useCancelMode={useCancelMode}
                         gilbarcoMode={gilbarcoMode}
                       />
                     </div>
@@ -724,13 +702,11 @@ export default function App() {
                               onAuthorize={onAuthorize}
                               onPreAuthorize={onPreAuthorize}
                               onCancelPreAuth={onCancelPreAuth}
-                              onStop={onStop}
                               onCancel={onCancel}
                               onCloseStopped={onCloseStopped}
                               onDismissSale={onDismissSale}
                               shiftRequired={shiftRequired}
                               onStartShift={openStartShift}
-                              useCancelMode={useCancelMode}
                               gilbarcoMode={gilbarcoMode}
                             />
                           </div>

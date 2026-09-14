@@ -6,7 +6,6 @@ import dangerIcon    from "@/assets/icons/danger.svg";
 import dispenserIcon from "@/assets/icons/dispenser.svg";
 import dropletIcon   from "@/assets/icons/fuel.svg";
 import loaderIcon    from "@/assets/icons/loader.svg";
-import pauseIcon     from "@/assets/icons/pause.svg";
 import playIcon      from "@/assets/icons/play.svg";
 import powerIcon     from "@/assets/icons/power.svg";
 import shieldIcon    from "@/assets/icons/shield.svg";
@@ -66,7 +65,7 @@ function parseAmountTarget(preset: string | null | undefined): number | null {
 
 export function DispenserRow({
   state, fpNozzles, positionActive = true, defaultAuthMode = "reactive",
-  onAuthorize, onPreAuthorize, onCancelPreAuth, onStop,
+  onAuthorize, onPreAuthorize, onCancelPreAuth, onCancel,
   onCloseStopped, onDismissSale,
   shiftRequired = false, onStartShift,
   gilbarcoMode = false,
@@ -231,11 +230,11 @@ export function DispenserRow({
         </button>
       );
     }
-    if (isDelivering) {
+    if (isDelivering || isAuthorizing) {
       return (
-        <button type="button" data-no-keyboard="true" title={t("dispenser.stop")} onClick={() => onStop(state.fp_id)}
-          className="flex h-full w-full items-center justify-center rounded-lg border border-amber-800/50 bg-amber-950/40 text-accent-amber hover:bg-amber-950/60">
-          <Icon src={pauseIcon} className="h-9 w-9" />
+        <button type="button" data-no-keyboard="true" title={t("dispenser.cancel")} onClick={() => onCancel(state.fp_id)}
+          className="flex h-full w-full items-center justify-center rounded-lg border border-accent-red/70 bg-accent-red/10 text-accent-red hover:bg-accent-red/20 hover:border-accent-red">
+          <Icon src={xCircleIcon} className="h-9 w-9" />
         </button>
       );
     }
@@ -267,9 +266,6 @@ export function DispenserRow({
     }
     if (isFinalizing) {
       return <span role="status" className="text-center text-xs font-semibold text-accent-amber">{t("dispenser.statusFinalizing")}</span>;
-    }
-    if (isAuthorizing && !isDelivering) {
-      return <Icon src={loaderIcon} className="h-7 w-7 opacity-40" spin />;
     }
     if (isOffline) {
       return <Icon src={wifiOffIcon} className="h-6 w-6 opacity-30" />;

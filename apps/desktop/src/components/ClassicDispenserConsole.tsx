@@ -188,12 +188,10 @@ type Props = {
   onAuthorize: (req: AuthorizeRequest) => void;
   onPreAuthorize?: (req: AuthorizeRequest) => void;
   onCancelPreAuth?: (fpId: string) => void;
-  onStop: (fpId: string) => void;
-  onCancel?: (fpId: string) => void;
+  onCancel: (fpId: string) => void;
   onCloseStopped: (fpId: string, stoppedTxId: string) => void;
   shiftRequired?: boolean;
   onStartShift?: () => void;
-  useCancelMode?: boolean;
   gilbarcoMode?: boolean;
 };
 
@@ -282,12 +280,10 @@ export function ClassicDispenserConsole({
   onAuthorize,
   onPreAuthorize,
   onCancelPreAuth,
-  onStop,
   onCancel,
   onCloseStopped,
   shiftRequired = false,
   onStartShift,
-  useCancelMode = false,
   gilbarcoMode = false,
 }: Props) {
   const { t } = useTranslation();
@@ -829,18 +825,18 @@ export function ClassicDispenserConsole({
     focusBottomControl(nextMode);
   }, [defaultAuthMode, drafts, focusBottomControl, positionActiveByFp, setDraft]);
 
-  const stopOrCancelSelected = useCallback((state: FpState) => {
+  const cancelSelected = useCallback((state: FpState) => {
     const positionActive = positionActiveByFp.get(state.fp_id) ?? true;
     const meta = getMeta(state, defaultAuthMode, positionActive);
     if (meta.cancelWaitKey) return;
     if (meta.isDelivering || meta.isAuthorizing) {
-      onStop(state.fp_id);
+      onCancel(state.fp_id);
       return;
     }
     if (meta.hasActivePreAuth) {
       onCancelPreAuth?.(state.fp_id);
     }
-  }, [defaultAuthMode, onCancelPreAuth, onStop, positionActiveByFp]);
+  }, [defaultAuthMode, onCancelPreAuth, onCancel, positionActiveByFp]);
 
   const cycleSelectedProduct = useCallback((state: FpState) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
@@ -891,7 +887,7 @@ export function ClassicDispenserConsole({
     if (e.key === "Delete") {
       e.preventDefault();
       e.stopPropagation();
-      stopOrCancelSelected(selectedState);
+      cancelSelected(selectedState);
       return;
     }
 
@@ -945,7 +941,7 @@ export function ClassicDispenserConsole({
     selectPumpByOffset,
     startPump,
     states,
-    stopOrCancelSelected,
+    cancelSelected,
     toggleSelectedOrderInput,
   ]);
 
@@ -986,7 +982,7 @@ export function ClassicDispenserConsole({
         return;
       }
       if (event.key === "Delete") {
-        stopOrCancelSelected(selectedState);
+        cancelSelected(selectedState);
         return;
       }
       if (event.key === "PageUp") {
@@ -998,7 +994,7 @@ export function ClassicDispenserConsole({
 
     window.addEventListener("keydown", onWindowKeyDown);
     return () => window.removeEventListener("keydown", onWindowKeyDown);
-  }, [activeState, armFullFill, selectPumpByOffset, startPump, states, stopOrCancelSelected]);
+  }, [activeState, armFullFill, selectPumpByOffset, startPump, states, cancelSelected]);
 
   const renderAction = (state: FpState, compact = false) => {
     const positionActive = positionActiveByFp.get(state.fp_id) ?? true;
@@ -1026,18 +1022,13 @@ export function ClassicDispenserConsole({
       );
     }
     if (meta.isDelivering || meta.isAuthorizing) {
-      const cancel = useCancelMode && onCancel != null;
       return (
         <button
           type="button"
-          onClick={() => cancel ? onCancel(state.fp_id) : onStop(state.fp_id)}
-          className={`${cls} border ${
-            cancel
-              ? "border-accent-red/80 bg-accent-red text-white hover:bg-accent-red-light"
-              : "border-accent-amber/80 bg-accent-amber text-white hover:bg-accent-amber-light"
-          }`}
+          onClick={() => onCancel(state.fp_id)}
+          className={`${cls} border border-accent-red/80 bg-accent-red text-white hover:bg-accent-red-light`}
         >
-          {cancel ? t("classic.cancel") : t("classic.stop")}
+          {t("classic.cancel")}
         </button>
       );
     }

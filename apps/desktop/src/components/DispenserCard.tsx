@@ -9,7 +9,6 @@ import dropletIcon from "@/assets/icons/fuel.svg";
 import eyeOffIcon from "@/assets/icons/eye-off.svg";
 import fullTankIcon from "@/assets/icons/full-tank.svg";
 import loaderIcon from "@/assets/icons/loader.svg";
-import pauseIcon from "@/assets/icons/pause.svg";
 import playIcon from "@/assets/icons/play.svg";
 import powerIcon from "@/assets/icons/power.svg";
 import shieldIcon from "@/assets/icons/shield.svg";
@@ -134,16 +133,13 @@ export interface DispenserCardProps {
   onAuthorize: (req: AuthorizeRequest) => void;
   onPreAuthorize?: (req: AuthorizeRequest) => void;
   onCancelPreAuth?: (fpId: string) => void;
-  onStop: (fpId: string) => void;
   onCloseStopped: (fpId: string, stoppedTxId: string) => void;
   onDismissSale?: (fpId: string) => void;
   /** When true and pump is idle/waiting, block authorization and prompt to start a shift. */
   shiftRequired?: boolean;
   onStartShift?: () => void;
-  /** When true, the Stop/Pause button acts as a final stop (no resume). */
-  /** When true, show a Cancel button that stops + immediately closes the transaction. */
-  useCancelMode?: boolean;
-  onCancel?: (fpId: string) => void;
+  /** Stop fueling and close the transaction once the stop is confirmed. */
+  onCancel: (fpId: string) => void;
   gilbarcoMode?: boolean;
 }
 
@@ -157,12 +153,10 @@ export function DispenserCard({
   onAuthorize,
   onPreAuthorize,
   onCancelPreAuth,
-  onStop,
   onCloseStopped,
   onDismissSale,
   shiftRequired = false,
   onStartShift,
-  useCancelMode = false,
   onCancel,
   gilbarcoMode = false,
 }: DispenserCardProps) {
@@ -781,19 +775,15 @@ export function DispenserCard({
                 {t("dispenser.start")}
               </button>
             )
-          ) : isDelivering ? (
+          ) : (isDelivering || isAuthorizing) ? (
             <button
               type="button"
               data-no-keyboard="true"
-              className={`flex w-full items-center justify-center gap-2 rounded-lg border font-black uppercase tracking-wide leading-tight ${
-                useCancelMode
-                  ? "border-accent-red/70 bg-accent-red/10 text-accent-red hover:bg-accent-red/20 hover:border-accent-red"
-                  : "border-accent-amber/60 bg-accent-amber/10 text-accent-amber hover:bg-accent-amber/20 hover:border-accent-amber"
-              } ${compact ? "py-3 text-base" : "py-4 text-lg"}`}
-              onClick={() => useCancelMode ? onCancel?.(state.fp_id) : onStop(state.fp_id)}
+              className={`flex w-full items-center justify-center gap-2 rounded-lg border border-accent-red/70 bg-accent-red/10 font-black uppercase tracking-wide leading-tight text-accent-red hover:bg-accent-red/20 hover:border-accent-red ${compact ? "py-3 text-base" : "py-4 text-lg"}`}
+              onClick={() => onCancel(state.fp_id)}
             >
-              <InlineIcon src={useCancelMode ? xCircleIcon : pauseIcon} className={compact ? "h-5 w-5 shrink-0" : "h-6 w-6 shrink-0"} />
-              {useCancelMode ? t("dispenser.cancel") : t("dispenser.stop")}
+              <InlineIcon src={xCircleIcon} className={compact ? "h-5 w-5 shrink-0" : "h-6 w-6 shrink-0"} />
+              {t("dispenser.cancel")}
             </button>
           ) : showNozzleRemovedBanner ? (
             <p className={`text-center font-semibold text-accent-amber-light ${compact ? "text-sm" : "text-sm"}`}>

@@ -174,6 +174,7 @@ export default function SiteConfigPage() {
           {fp.nozzles.map((nozzle: ConfigRecord, j: number) => <div key={j} className="rounded-lg bg-slate-50 p-3 space-y-2">
             {fields(nozzle, [number('index', undefined, 1, 255), productField, number('price', undefined, 0, 4294967295), checkbox('active'),
               ...(config.connection.protocol === 'azt2_0' ? [number('azt_address', 0, 0, 225)] : []),
+              ...(config.connection.protocol === 'shelf_v2_2' ? [number('shelf_address', 0, 0, 255)] : []),
               ...(config.connection.protocol === 'texnouz_bluesky' ? [number('bluesky_hose_number', 0, 0, 255)] : []),
               ...(config.connection.protocol.startsWith('wayne') ? [number('wayne_code', 0, 0, 255), number('wayne_product_code', 0, 0, 255)] : []),
             ], next => changeRow('fueling_positions', i, { ...fp, nozzles: fp.nozzles.map((n: ConfigRecord, k: number) => k === j ? next : n) }))}

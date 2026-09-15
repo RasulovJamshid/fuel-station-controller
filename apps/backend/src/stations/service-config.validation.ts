@@ -12,7 +12,7 @@ const positive = () => Joi.number().greater(0);
 const nozzle = object({
     index: byte().min(1).required(), product_id: byte().required(),
     price: uint(4294967295).required(), active: Joi.boolean().required(),
-    azt_address: byte(), bluesky_hose_number: byte(), wayne_code: byte(), wayne_product_code: byte(),
+    azt_address: byte(), shelf_address: byte(), bluesky_hose_number: byte(), wayne_code: byte(), wayne_product_code: byte(),
 });
 const schema = object({
     site: object({ id: text().required(), name: text().required(), timezone: text().required(), address: optionalText().allow(null) }).required(),
@@ -86,16 +86,17 @@ export function validateDashboardServiceConfig(value: Record<string, any>): void
             if (addresses.has(fp.address_byte)) errors.push(`${fp.id}: duplicate active address ${fp.address_byte}`);
             addresses.add(fp.address_byte);
             if (!fp.nozzles.length) errors.push(`${fp.id}: active position requires nozzles`);
-            if (protocol === 'shelf_v2_2' && (fp.address_byte === 0 || fp.nozzles.filter((n: any) => n.active).length !== 1)) {
-                errors.push(`${fp.id}: SHELF requires a non-zero address and exactly one active nozzle`);
+            if (protocol === 'shelf_v2_2' && (fp.address_byte === 0 || !fp.nozzles.some((n: any) => n.active))) {
+                errors.push(`${fp.id}: SHELF requires a non-zero address and at least one active nozzle`);
             }
         }
         for (const n of fp.nozzles) {
             if (!products.has(n.product_id)) errors.push(`${fp.id}/${n.index}: unknown product ${n.product_id}`);
             if (n.active && n.price === 0) errors.push(`${fp.id}/${n.index}: active nozzle price must be positive`);
-            if (protocol === 'shelf_v2_2' && n.active && n.price > 9999) errors.push(`${fp.id}/${n.index}: SHELF price maximum is 9999`);
-            if (fp.active && n.active && ['azt2_0', 'texnouz_bluesky'].includes(protocol)) {
-                const address = protocol === 'azt2_0' ? n.azt_address || fp.address_byte : n.bluesky_hose_number || fp.address_byte + n.index;
+            if (protocol === 'shelf_v2_2' && n.active && n.price > 65535) errors.push(`${fp.id}/${n.index}: SHELF two-byte wire price maximum is 65535`);
+            if (protocol === 'shelf_v2_2' && n.active && n.index > 5) errors.push(`${fp.id}/${n.index}: SHELF nozzle index must be the physical gun number 1–5`);
+            if (fp.active && n.active && ['azt2_0', 'texnouz_bluesky', 'shelf_v2_2'].includes(protocol)) {
+                const address = protocol === 'shelf_v2_2' ? n.shelf_address || fp.address_byte : protocol === 'azt2_0' ? n.azt_address || fp.address_byte : n.bluesky_hose_number || fp.address_byte + n.index;
                 const max = protocol === 'azt2_0' ? 225 : 255;
                 if (address < 1 || address > max) errors.push(`${fp.id}/${n.index}: hose address must be 1–${max}`);
                 if (hoseAddresses.has(address)) errors.push(`${fp.id}/${n.index}: duplicate hose address ${address}`);

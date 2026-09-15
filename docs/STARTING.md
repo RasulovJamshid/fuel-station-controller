@@ -38,6 +38,21 @@ Configs shipped for the launcher:
 - `services/dispenser-service/site.mock.json` — `protocol: mock`, separate SQLite file.
 - `services/dispenser-service/site.pty.json` — `wayne_europump` + `/tmp/wayne-real` + **odd** parity (matches `tools/simulators/wayne-sim/sim.config.json`).
 
+For the Shelf petrol installation (six sides, each with AI-95 / AI-92 / DT;
+18 gun addresses in total), run:
+
+```bash
+AZS_SERVICE_CONFIG=services/dispenser-service/site.config.shelf-petrol.json \
+AZS_SERIAL_PORT=/dev/ttyUSB0 \
+AZS_SERIAL_LOG=1 \
+bash scripts/azs.sh dev-real
+```
+
+This builds/runs the service from current source and opens the operator desktop,
+using `services/dispenser-service/site.config.shelf-petrol.json`. Raw serial logs
+go to `.azs-run/serial.log` with `AZS_SERIAL_LOG=1`. For the service alone, replace
+`dev-real` with `service-real-fg`; use `bash scripts/azs.sh help` to see the available modes.
+
 ---
 
 ## Prerequisites

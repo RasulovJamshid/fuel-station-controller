@@ -1476,6 +1476,7 @@ mod tests {
                     active: *active,
                     bluesky_hose_number: 0,
                     azt_address: 0,
+                    shelf_address: 0,
                     wayne_code: 0,
                     wayne_product_code: 0,
                 })

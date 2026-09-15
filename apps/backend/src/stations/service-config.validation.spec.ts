@@ -28,7 +28,7 @@ describe('dashboard service config validation', () => {
         expect(JSON.stringify(value)).toBe(original);
     });
 
-    it.each(['azt', 'gilbarco', 'shelf', 'texnouz-bluesky'])('accepts the bundled %s configuration', name => {
+    it.each(['azt', 'gilbarco', 'shelf', 'shelf-petrol', 'texnouz-bluesky'])('accepts the bundled %s configuration', name => {
         const file = resolve(__dirname, `../../../../services/dispenser-service/site.config.${name}.json`);
         validateDashboardServiceConfig(JSON.parse(readFileSync(file, 'utf8')));
     });
@@ -55,8 +55,9 @@ describe('dashboard service config validation', () => {
         ['invalid scheduled times', c => { c.shifts = { mode: 'scheduled', scheduled: [{ name: 'Day', start: '25:00', end: '20:00' }] }; }],
         ['missing scheduled slots', c => { c.shifts = { mode: 'scheduled' }; }],
         ['SHELF serial format', c => { c.connection.protocol = 'shelf_v2_2'; c.connection.parity = 'even'; }],
-        ['SHELF wire price limit', c => { c.connection.protocol = 'shelf_v2_2'; c.fueling_positions[0].nozzles[0].price = 10000; }],
-        ['multiple SHELF nozzles', c => { c.connection.protocol = 'shelf_v2_2'; c.fueling_positions[0].nozzles.push({ ...c.fueling_positions[0].nozzles[0], index: 2 }); }],
+        ['SHELF wire price limit', c => { c.connection.protocol = 'shelf_v2_2'; c.fueling_positions[0].nozzles[0].price = 65536; }],
+        ['SHELF physical gun number', c => { c.connection.protocol = 'shelf_v2_2'; c.fueling_positions[0].nozzles[0].index = 6; }],
+        ['duplicate SHELF nozzle addresses', c => { c.connection.protocol = 'shelf_v2_2'; c.fueling_positions[0].nozzles.push({ ...c.fueling_positions[0].nozzles[0], index: 2 }); }],
         ['duplicate AZT hose addresses', c => { c.connection.protocol = 'azt2_0'; c.fueling_positions[0].nozzles.push({ ...c.fueling_positions[0].nozzles[0], index: 2 }); }],
         ['BlueSky address overflow', c => { c.connection.protocol = 'texnouz_bluesky'; c.fueling_positions[0].address_byte = 255; }],
     ])('rejects %s', (_, mutate) => {
@@ -72,6 +73,22 @@ describe('dashboard service config validation', () => {
         validateDashboardServiceConfig(value);
         value.connection.protocol = 'texnouz_bluesky';
         value.fueling_positions[0].nozzles[1].bluesky_hose_number = 28;
+        validateDashboardServiceConfig(value);
+    });
+
+    it.each([11600, 65535])('accepts SHELF price %i and physical gun 2', price => {
+        const value = config();
+        value.connection.protocol = 'shelf_v2_2';
+        value.fueling_positions[0].address_byte = 21;
+        value.fueling_positions[0].nozzles[0].index = 2;
+        value.fueling_positions[0].nozzles[0].price = price;
+        validateDashboardServiceConfig(value);
+    });
+
+    it('does not apply SHELF price or physical gun limits to other protocols', () => {
+        const value = config();
+        value.fueling_positions[0].nozzles[0].index = 6;
+        value.fueling_positions[0].nozzles[0].price = 65536;
         validateDashboardServiceConfig(value);
     });
 });

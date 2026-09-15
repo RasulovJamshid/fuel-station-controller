@@ -40,6 +40,26 @@ pub struct LiveStatus {
 }
 
 impl LiveStatus {
+    /// Individual bits D1..D5 take precedence over the aggregate D0 flag.
+    /// A shared controller reports the same bitmap at each gun address.
+    pub fn gun_lifted(self, gun_number: u8) -> bool {
+        if !(1..=5).contains(&gun_number) {
+            return false;
+        }
+        if self.guns & 0x3e != 0 {
+            self.guns & (1 << gun_number) != 0
+        } else {
+            self.guns & 1 != 0
+        }
+    }
+
+    /// Replies at an inactive gun may describe delivery by another gun on the
+    /// same controller (captured as 0x85 at addresses 20/22 while 21 delivers).
+    pub fn describes_other_gun(self, queried_address: u8) -> bool {
+        self.active_address
+            .is_some_and(|active| active != 0 && active != queried_address)
+    }
+
     pub fn any_gun_lifted(self) -> bool {
         // D0 is the aggregate "one or more guns lifted" flag, while D1..D5
         // identify individual guns. Some documented replies set only the

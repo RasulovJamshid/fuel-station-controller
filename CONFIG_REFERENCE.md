@@ -93,6 +93,7 @@ Serial port connection to the dispensers.
 | `"wayne_dart_v1"`  | Wayne Dart v1 |
 | `"wayne_dart_v2"`  | Wayne Dart v2 |
 | `"gilbarco"`       | Gilbarco |
+| `"shelf_v2_2"`     | Shelf V2.2; see [capture findings, nozzle mapping, and petrol setup](docs/protocols/shelf_v2_2.md) |
 | `"mock"`           | Software mock (testing only) |
 
 **Typical values for Wayne Europump:**
@@ -181,6 +182,7 @@ One entry per dispenser side. Each position maps to one RS-485 address.
 | `price`              | integer | yes      | —       | Price per litre in sum (minor units). Active nozzles must have `price > 0` |
 | `active`             | boolean | yes      | —       | `false` = nozzle is installed but not in service |
 | `bluesky_hose_number` | integer | no      | `0`     | TexnoUz BlueSky local hose number (`1`–`15`). The service adds the dispenser base from `address_byte`; `0` derives `address_byte + index` for older configs |
+| `shelf_address`      | integer | no       | `0`     | Shelf gun bus address (1–255). Set a distinct address for each nozzle when grouping a side. `0` uses the position address for legacy single-gun configs; `index` identifies physical gun 1–5. |
 | `wayne_code`         | integer | no       | `0`     | Wayne hose byte on lift (≥ 0x10). Used to identify which physical hose was lifted when a position has multiple nozzles. `0` = auto-detect by index |
 | `wayne_product_code` | integer | no       | `0`     | Wayne product byte in the data frame (`03 04 01 [PP] 00 [HH]`). Needed when multiple hoses share the same grade. `0` = match by `wayne_code` only |
 

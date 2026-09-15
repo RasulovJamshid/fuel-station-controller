@@ -169,6 +169,7 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
                         if let Some(j) = fp.nozzles.iter().find(|j| j.index == n.index) {
                             n.bluesky_hose_number = j.bluesky_hose_number;
                             n.azt_address = j.azt_address;
+                            n.shelf_address = j.shelf_address;
                         }
                     }
                     fp.nozzles = merged;

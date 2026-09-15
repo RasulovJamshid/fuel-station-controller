@@ -99,4 +99,37 @@ mod tests {
         assert_eq!(sale.amount, 3917);
         assert_eq!(sale.price, 162);
     }
+
+    #[test]
+    fn shared_gun_status_is_not_the_queried_guns_delivery() {
+        let frame = [
+            0x2D, 0x14, 0xCC, 0x16, 0x85, 5, 0x81, 1, 0x15, 0, 0, 0, 0xE8, 3, 0, 0x74, 0x27, 0,
+            0xF2, 3, 0x21, 0xD5,
+        ];
+        let response = crate::decode_response(20, 0xCC, &frame).unwrap();
+        let status = parse_live_status(&response).unwrap();
+        assert!(status.describes_other_gun(20));
+        assert!(!status.describes_other_gun(21));
+        assert_eq!(status.active_address, Some(21));
+        assert!(status.gun_lifted(2));
+        assert!(!status.gun_lifted(1));
+        assert!(!status.gun_lifted(3));
+        // Legacy single-gun controllers may report only aggregate D0.
+        assert!(LiveStatus { guns: 1, ..status }.gun_lifted(1));
+        assert!(!LiveStatus { guns: 0, ..status }.gun_lifted(1));
+        assert!(!status.gun_lifted(6));
+    }
+
+    #[test]
+    fn captured_petrol_final_sale_decodes_without_price_truncation() {
+        let frame = [
+            0x2D, 0x15, 0x17, 0x11, 0x93, 5, 0xA1, 0xE8, 3, 0, 0x20, 0xC5, 1, 0x50, 0x2D, 0xB1,
+            0xCF,
+        ];
+        let response = crate::decode_response(21, 0x17, &frame).unwrap();
+        let sale = parse_final_sale(&response).unwrap();
+        assert_eq!(sale.volume_steps, 1000);
+        assert_eq!(sale.price, 11600);
+        assert_eq!(sale.amount, 116000);
+    }
 }

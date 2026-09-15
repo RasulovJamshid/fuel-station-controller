@@ -52,9 +52,11 @@ type PumpRow = {
 export function TotalizerPanel({
   states,
   nozzlesByFp,
+  volumeOnly = false,
 }: {
   states: FpState[];
   nozzlesByFp: Map<string, NozzleSnapshot[]>;
+  volumeOnly?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -117,7 +119,7 @@ export function TotalizerPanel({
               {t("totalizer.stationAmount")}
             </p>
             <p className="font-mono text-lg font-black tabular-nums text-accent-blue">
-              {fmtSum.format(station.amount)}
+              {volumeOnly ? "—" : fmtSum.format(station.amount)}
             </p>
           </div>
         </div>
@@ -172,7 +174,7 @@ export function TotalizerPanel({
                         {totals?.volume != null ? `${fmtVol.format(totals.volume)} L` : "—"}
                       </span>
                       <span className="w-28 text-right font-mono text-sm tabular-nums text-text-muted">
-                        {totals?.amount != null ? fmtSum.format(totals.amount) : "—"}
+                        {!volumeOnly && totals?.amount != null ? fmtSum.format(totals.amount) : "—"}
                       </span>
                     </div>
                   ))
@@ -193,7 +195,7 @@ export function TotalizerPanel({
                     {fmtVol.format(volumeSum)} L
                   </span>
                   <span className="w-28 text-right font-mono text-sm font-black tabular-nums text-accent-blue">
-                    {fmtSum.format(amountSum)}
+                    {volumeOnly ? "—" : fmtSum.format(amountSum)}
                   </span>
                 </div>
               )}

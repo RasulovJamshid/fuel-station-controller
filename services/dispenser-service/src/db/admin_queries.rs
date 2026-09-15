@@ -329,6 +329,7 @@ pub async fn load_fp_nozzles_from_db(
             // catalog table; main.rs restores them after this overlay.
             bluesky_hose_number: 0,
             azt_address: 0,
+            shelf_address: 0,
             wayne_code: r.wayne_code as u8,
             wayne_product_code: r.wayne_product_code as u8,
         });

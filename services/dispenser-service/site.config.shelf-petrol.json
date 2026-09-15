@@ -1,0 +1,326 @@
+{
+  "site": {
+    "id": "shelf-petrol-001",
+    "name": "SHELF Petrol Station",
+    "timezone": "Asia/Tashkent",
+    "address": null
+  },
+  "service": {
+    "port": 3001,
+    "log_level": "debug",
+    "log_file": "dispenser-service.shelf-petrol.log",
+    "db_path": "transactions.shelf-petrol.db",
+    "serial_log_file": "shelf-petrol-serial.log"
+  },
+  "connection": {
+    "protocol": "shelf_v2_2",
+    "port": "/dev/ttyUSB0",
+    "baud_rate": 19200,
+    "parity": "none",
+    "data_bits": 8,
+    "stop_bits": 1,
+    "response_timeout_ms": 20
+  },
+  "polling": {
+    "interval_ms": 100,
+    "offline_threshold_polls": 7,
+    "reconnect_settle_rounds": 2
+  },
+  "products": [
+    {
+      "id": 1,
+      "uuid": "3f6613b4-b503-4b01-97ec-cd29e4aef221",
+      "name": "AI-95",
+      "color": "#8B5CF6",
+      "unit": "litre"
+    },
+    {
+      "id": 2,
+      "uuid": "2fc7b673-68a9-4863-907b-d90d9c6d8b83",
+      "name": "AI-92",
+      "color": "#22C55E",
+      "unit": "litre"
+    },
+    {
+      "id": 3,
+      "uuid": "2fe96a26-8f68-4bdb-86e6-a0c3b082ea1a",
+      "name": "DT",
+      "color": "#F59E0B",
+      "unit": "litre"
+    }
+  ],
+  "fueling_positions": [
+    {
+      "id": "1",
+      "label": "1",
+      "address_byte": 10,
+      "active": true,
+      "nozzles": [
+        {
+          "index": 1,
+          "product_id": 1,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 10,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 2,
+          "product_id": 2,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 11,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 3,
+          "product_id": 3,
+          "price": 16000,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 12,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "label": "2",
+      "address_byte": 15,
+      "active": true,
+      "nozzles": [
+        {
+          "index": 1,
+          "product_id": 1,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 15,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 2,
+          "product_id": 2,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 16,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 3,
+          "product_id": 3,
+          "price": 16000,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 17,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "label": "3",
+      "address_byte": 20,
+      "active": true,
+      "nozzles": [
+        {
+          "index": 1,
+          "product_id": 1,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 20,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 2,
+          "product_id": 2,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 21,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 3,
+          "product_id": 3,
+          "price": 16000,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 22,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "label": "4",
+      "address_byte": 25,
+      "active": true,
+      "nozzles": [
+        {
+          "index": 1,
+          "product_id": 1,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 25,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 2,
+          "product_id": 2,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 26,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 3,
+          "product_id": 3,
+          "price": 16000,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 27,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "label": "5",
+      "address_byte": 30,
+      "active": true,
+      "nozzles": [
+        {
+          "index": 1,
+          "product_id": 1,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 30,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 2,
+          "product_id": 2,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 31,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 3,
+          "product_id": 3,
+          "price": 16000,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 32,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        }
+      ]
+    },
+    {
+      "id": "6",
+      "label": "6",
+      "address_byte": 35,
+      "active": true,
+      "nozzles": [
+        {
+          "index": 1,
+          "product_id": 1,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 35,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 2,
+          "product_id": 2,
+          "price": 11600,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 36,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        },
+        {
+          "index": 3,
+          "product_id": 3,
+          "price": 16000,
+          "active": true,
+          "bluesky_hose_number": 0,
+          "azt_address": 0,
+          "shelf_address": 37,
+          "wayne_code": 0,
+          "wayne_product_code": 0
+        }
+      ]
+    }
+  ],
+  "sync": {
+    "enabled": false,
+    "backend_url": "",
+    "api_key": "",
+    "retry_interval_secs": 30,
+    "batch_size": 100,
+    "max_retries": 10,
+    "price_pull_interval_hours": 12,
+    "price_pull_enabled": true
+  },
+  "shifts": {
+    "mode": "manual",
+    "scheduled": [],
+    "require_operator_pin": false,
+    "warn_before_end_minutes": 15,
+    "allow_overlap_minutes": 30,
+    "auto_close_on_restart": false
+  },
+  "ui": {
+    "default_auth_mode": "preauth",
+    "preauth_timeout_seconds": 300,
+    "use_decel_window_on_stop": false,
+    "use_cancel_mode": false
+  },
+  "tanks": [],
+  "atg": null
+}

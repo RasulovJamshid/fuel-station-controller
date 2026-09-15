@@ -150,18 +150,17 @@ export default function App() {
     (siteSnapshot?.protocol ?? "").toLowerCase().includes(p),
   );
 
-  // The pump totalizer view only makes sense for protocols that report lifetime
-  // totals (currently Gilbarco). Drive it off the actual data so the tab/page is
-  // hidden entirely on protocols that don't provide it.
+  // Shelf can read lifetime counters before its first sale. Make the page
+  // reachable before data arrives so opening it can request a refresh.
   const totalizerAvailable = useMemo(
     () =>
-      states.some(
+      siteSnapshot?.protocol === "shelf_v2_2" || states.some(
         (s) =>
           (s.pump_totals?.length ?? 0) > 0 ||
           s.pump_total_volume != null ||
           s.pump_total_amount != null,
       ),
-    [states],
+    [states, siteSnapshot?.protocol],
   );
 
   // Shift requirement: operators must start a shift before authorizing dispensers.
@@ -733,7 +732,7 @@ export default function App() {
             <div className={`flex h-full min-h-0 flex-1 flex-col overflow-hidden ${smallScreen ? "p-2" : "p-4 md:p-6"}`}>
               {workspaceTab === "reservoirs" ? <ReservoirsPanel /> : null}
               {workspaceTab === "totalizer" ? (
-                <TotalizerPanel states={sorted} nozzlesByFp={nozzlesByFp} />
+                <TotalizerPanel states={sorted} nozzlesByFp={nozzlesByFp} volumeOnly={siteSnapshot?.protocol === "shelf_v2_2"} />
               ) : null}
               {workspaceTab === "history" ? <HistoryPanel visible compact={smallScreen} currentShift={shift.currentShift} /> : null}
 {workspaceTab === "shift" ? (

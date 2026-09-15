@@ -61,6 +61,7 @@ pub(super) mod bluesky_state;
 pub(super) mod gilbarco;
 pub(super) mod shared;
 pub(super) mod shelf;
+pub(super) mod shelf_state;
 pub(super) mod texnouz_bluesky;
 pub(super) mod wayne;
 pub(super) mod wayne_state;

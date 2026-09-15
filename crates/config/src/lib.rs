@@ -117,7 +117,7 @@ pub enum Protocol {
     /// (`base + hose number`), like AZT.
     #[serde(rename = "texnouz_bluesky")]
     TexnoUzBlueSky,
-    /// SHELF methane dispenser protocol V2.2 — 19200 8N1, 0x2D framing and
+    /// SHELF dispenser protocol V2.2 — 19200 8N1, 0x2D framing and
     /// CRC-CCITT. Each fueling position represents one uniquely addressed gun.
     #[serde(rename = "shelf_v2_2")]
     ShelfV22,
@@ -129,7 +129,7 @@ impl Protocol {
     /// True when each nozzle occupies its own RS-485 address rather than sharing
     /// the fueling position's address byte.
     pub fn per_nozzle_addresses(self) -> bool {
-        matches!(self, Protocol::Azt20 | Protocol::TexnoUzBlueSky)
+        matches!(self, Protocol::Azt20 | Protocol::TexnoUzBlueSky | Protocol::ShelfV22)
     }
 
     /// True when the pump can be armed while the nozzle is still holstered, so a
@@ -206,6 +206,10 @@ pub struct NozzleConfig {
     /// (single-hose pumps and all other protocols ignore this field).
     #[serde(default)]
     pub azt_address: u8,
+    /// Shelf gun's absolute bus address. Zero falls back to the position address
+    /// for legacy single-gun configurations; grouped sides specify every gun.
+    #[serde(default)]
+    pub shelf_address: u8,
     /// Wayne hose byte on lift (`>= 0x10`) and holster (`lift - 0x10`, e.g. 18/2, 17/1, 19/3).
     #[serde(default)]
     pub wayne_code: u8,
@@ -831,6 +835,7 @@ impl SiteConfig {
         let product_ids: HashSet<u8> = self.products.iter().map(|p| p.id).collect();
         let mut addr_bytes = HashSet::new();
         let mut azt_addresses = HashSet::new();
+        let mut shelf_addresses = HashSet::new();
         let mut bluesky_addresses = HashSet::new();
         let mut fp_ids = HashSet::new();
 
@@ -866,16 +871,26 @@ impl SiteConfig {
             }
             if self.connection.protocol == Protocol::ShelfV22
                 && fp.active
-                && fp.nozzles.iter().filter(|n| n.active).count() != 1
+                && !fp.nozzles.iter().any(|n| n.active)
             {
                 bail!(
-                    "SHELF fueling position '{}' must have exactly one active nozzle because each position is one addressed gun",
+                    "SHELF fueling position '{}' must have at least one active nozzle",
                     fp.id
                 );
             }
 
             let mut nozzle_indices = HashSet::new();
             for nozzle in &fp.nozzles {
+                if self.connection.protocol == Protocol::ShelfV22 && fp.active && nozzle.active {
+                    let address = if nozzle.shelf_address == 0 {
+                        fp.address_byte
+                    } else {
+                        nozzle.shelf_address
+                    };
+                    if !shelf_addresses.insert(address) {
+                        bail!("Duplicate SHELF gun address {} in position '{}' (set shelf_address for each nozzle)", address, fp.id);
+                    }
+                }
                 if !nozzle_indices.insert(nozzle.index) {
                     bail!(
                         "Duplicate nozzle index {} in position '{}'",
@@ -886,6 +901,15 @@ impl SiteConfig {
                 if nozzle.index == 0 {
                     bail!(
                         "Nozzle index cannot be 0 in position '{}' (use 1-based indexing)",
+                        fp.id
+                    );
+                }
+                if self.connection.protocol == Protocol::ShelfV22
+                    && nozzle.active
+                    && nozzle.index > 5
+                {
+                    bail!(
+                        "SHELF nozzle index in position '{}' must be the physical gun number 1..=5",
                         fp.id
                     );
                 }
@@ -906,10 +930,10 @@ impl SiteConfig {
                 }
                 if self.connection.protocol == Protocol::ShelfV22
                     && nozzle.active
-                    && nozzle.price > 9_999
+                    && nozzle.price > u16::MAX as u32
                 {
                     bail!(
-                        "SHELF nozzle {} in position '{}' has price {} above the V2.2 wire maximum 9999",
+                        "SHELF nozzle {} in position '{}' has price {} above the two-byte wire maximum 65535",
                         nozzle.index,
                         fp.id,
                         nozzle.price
@@ -1134,7 +1158,7 @@ mod tests {
     }
 
     #[test]
-    fn shelf_requires_one_nozzle_per_address_and_wire_range_price() {
+    fn shelf_requires_unique_gun_addresses_and_wire_range_price() {
         let mut cfg = sample_config();
         cfg.connection.protocol = Protocol::ShelfV22;
         cfg.connection.baud_rate = 19_200;
@@ -1151,13 +1175,24 @@ mod tests {
             active: true,
             bluesky_hose_number: 0,
             azt_address: 0,
+            shelf_address: 0,
             wayne_code: 0,
             wayne_product_code: 0,
         });
         assert!(cfg.validate().is_err());
 
+        cfg.fueling_positions[0].nozzles[1].shelf_address = 11;
+        cfg.validate().unwrap();
         cfg.fueling_positions[0].nozzles.pop();
-        cfg.fueling_positions[0].nozzles[0].price = 10_000;
+        cfg.fueling_positions[0].nozzles[0].price = 11_600;
+        cfg.fueling_positions[0].nozzles[0].index = 2;
+        cfg.validate().unwrap();
+        cfg.fueling_positions[0].nozzles[0].index = 6;
+        assert!(cfg.validate().is_err());
+        cfg.fueling_positions[0].nozzles[0].index = 2;
+        cfg.fueling_positions[0].nozzles[0].price = u16::MAX as u32;
+        cfg.validate().unwrap();
+        cfg.fueling_positions[0].nozzles[0].price += 1;
         assert!(cfg.validate().is_err());
     }
 

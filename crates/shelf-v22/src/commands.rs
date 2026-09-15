@@ -13,9 +13,11 @@ pub const TOTAL_COUNTERS: u8 = 0x15;
 pub const CURRENT_COUNTERS: u8 = 0x16;
 pub const PRESSURE: u8 = 0x19;
 
-pub const MAX_PRICE: u32 = 9_999;
-/// Documented minimum volume authorization: 3.00 m³.
-pub const MIN_VOLUME_STEPS: u32 = 300;
+/// Two-byte unsigned wire price. The 2026-09-14 capture confirms 11,600;
+/// individual dispenser firmware may impose a lower limit than the wire field.
+pub const MAX_PRICE: u32 = u16::MAX as u32;
+/// Smallest positive wire quantity (0.01 product units); no business minimum.
+pub const MIN_VOLUME_STEPS: u32 = 1;
 pub const MAX_DOSE: u32 = 999_999;
 
 fn bare(addr: u8, index: u8, command: u8) -> Vec<u8> {
@@ -51,7 +53,8 @@ pub fn write_price(addr: u8, index: u8, price: u32) -> Option<Vec<u8>> {
     build_request(addr, index, WRITE_PRICE, &(price as u16).to_le_bytes())
 }
 
-/// Authorize by volume. Volume is in 0.01 m³, price is per m³ in wire money units.
+/// Authorize by volume. Volume is in hundredths of the configured product unit;
+/// price is per unit in wire money units.
 pub fn write_volume(addr: u8, index: u8, volume: u32, price: u32) -> Option<Vec<u8>> {
     if !(MIN_VOLUME_STEPS..=MAX_DOSE).contains(&volume) || price == 0 || price > MAX_PRICE {
         return None;
@@ -91,5 +94,17 @@ mod tests {
         assert!(write_volume(1, 1, MIN_VOLUME_STEPS - 1, 1).is_none());
         assert!(write_volume(1, 1, MAX_DOSE + 1, 1).is_none());
         assert!(write_money(1, 1, 0).is_none());
+        assert!(write_volume(1, 1, 1, 11600).is_some());
+        assert!(write_volume(1, 1, 100, 11600).is_some());
+    }
+
+    #[test]
+    fn captured_petrol_authorization_matches_byte_for_byte() {
+        assert_eq!(
+            write_volume(21, 0xCC, 1000, 11600).unwrap(),
+            [0x2D, 0x15, 0xCC, 0x0E, 0x05, 0, 0, 0xE8, 3, 0, 0x50, 0x2D, 0x8E, 0xB4]
+        );
+        assert_eq!(&write_price(21, 1, MAX_PRICE).unwrap()[5..7], &[0xFF, 0xFF]);
+        assert!(write_volume(21, 1, 1000, MAX_PRICE + 1).is_none());
     }
 }

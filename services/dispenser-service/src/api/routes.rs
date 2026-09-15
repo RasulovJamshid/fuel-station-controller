@@ -284,14 +284,25 @@ fn validate_preset(preset: &Preset) -> Result<(), (StatusCode, String)> {
     }
 }
 
+fn validate_shelf_minimum(preset: &Preset, price: u32, unit: &str) -> Result<(), (StatusCode, String)> {
+    let liquid = matches!(unit.trim().to_lowercase().as_str(),
+        "l" | "litre" | "liter" | "litres" | "liters" | "л" | "литр");
+    if liquid && (matches!(preset, Preset::Volume(v) if *v < 2.0)
+        || matches!(preset, Preset::Amount(a) if *a < u64::from(price) * 2)) {
+        return Err((StatusCode::BAD_REQUEST,
+            format!("SHELF minimum dose is 2 litres ({} sum at the selected price)", u64::from(price) * 2)));
+    }
+    Ok(())
+}
+
 fn validate_shelf_preset(preset: &Preset) -> Result<(), (StatusCode, String)> {
     match preset {
         Preset::Str(value) if value.eq_ignore_ascii_case("full") => Ok(()),
-        Preset::Volume(volume) if *volume >= 3.0 && *volume <= 9_999.99 => Ok(()),
+        Preset::Volume(volume) if *volume >= 0.01 && *volume <= 9_999.99 => Ok(()),
         Preset::Amount(amount) if *amount > 0 && *amount <= shelf_v22::MAX_DOSE as u64 => Ok(()),
         Preset::Volume(_) => Err((
             StatusCode::BAD_REQUEST,
-            "SHELF V2.2 volume preset must be between 3.00 and 9999.99 m³".into(),
+            "SHELF V2.2 volume preset must be positive, representable in 0.01 product volume units, and at most 9999.99".into(),
         )),
         Preset::Amount(_) => Err((
             StatusCode::BAD_REQUEST,
@@ -304,6 +315,33 @@ fn validate_shelf_preset(preset: &Preset) -> Result<(), (StatusCode, String)> {
             StatusCode::BAD_REQUEST,
             "unsupported SHELF preset".into(),
         )),
+    }
+}
+
+#[cfg(test)]
+mod shelf_preset_tests {
+    use super::*;
+
+    #[test]
+    fn petrol_minimum_uses_selected_price_and_leaves_gas_unchanged() {
+        for price in [11600, 17000, 16000] {
+            assert!(validate_shelf_minimum(&Preset::Amount(u64::from(price) * 2 - 1), price, "litre").is_err());
+            assert!(validate_shelf_minimum(&Preset::Amount(u64::from(price) * 2), price, "litre").is_ok());
+        }
+        assert!(validate_shelf_minimum(&Preset::Volume(1.99), 11600, "L").is_err());
+        assert!(validate_shelf_minimum(&Preset::Volume(2.0), 11600, "L").is_ok());
+        assert!(validate_shelf_minimum(&Preset::Volume(0.5), 11600, "m³").is_ok());
+        assert!(validate_shelf_minimum(&Preset::Str("full".into()), 11600, "litre").is_ok());
+    }
+
+    #[test]
+    fn small_shelf_presets_are_allowed_but_invalid_wire_quantities_are_rejected() {
+        for volume in [0.01, 0.5, 1.0, 2.99, 9999.99] {
+            assert!(validate_shelf_preset(&Preset::Volume(volume)).is_ok());
+        }
+        for volume in [0.0, -1.0, 0.001, 10000.0, f64::NAN, f64::INFINITY] {
+            assert!(validate_shelf_preset(&Preset::Volume(volume)).is_err());
+        }
     }
 }
 
@@ -560,6 +598,12 @@ pub async fn authorize(
             )
         })?;
     drop(map);
+    if is_shelf {
+        let cfg = st.cfg.read().await;
+        let unit = fp.nozzles.iter().find(|n| n.index == nozzle_index)
+            .and_then(|n| cfg.product(n.product_id)).map(|p| p.unit.as_str()).unwrap_or("m³");
+        validate_shelf_minimum(&cmd.preset, price, unit)?;
+    }
     st.commands
         .send(DispatchCommand::Authorize {
             byte,
@@ -692,6 +736,12 @@ pub async fn preauthorize(
                 )
             })?
     };
+    if is_shelf {
+        let cfg = st.cfg.read().await;
+        let unit = fp.nozzles.iter().find(|n| n.index == nozzle_index)
+            .and_then(|n| cfg.product(n.product_id)).map(|p| p.unit.as_str()).unwrap_or("m³");
+        validate_shelf_minimum(&cmd.preset, price, unit)?;
+    }
     let command = if route_as_reactive {
         DispatchCommand::Authorize {
             byte,
@@ -722,9 +772,16 @@ pub async fn cancel_preauth(
     // Idempotent: if the preauth was already cleared (e.g. auto-cancelled by a
     // nozzle mismatch or timeout), the lane is already in the desired state — return
     // ok rather than a confusing 400 to the operator who just pressed Cancel.
+    let is_shelf = st.cfg.read().await.connection.protocol == Protocol::ShelfV22;
     let cancellable = {
-        let map = st.runtimes.read().await;
-        map.get(&byte).is_some_and(|r| r.has_cancellable_preauth())
+        let mut map = st.runtimes.write().await;
+        map.get_mut(&byte).is_some_and(|r| {
+            if is_shelf {
+                r.request_shelf_cancel()
+            } else {
+                r.has_cancellable_preauth()
+            }
+        })
     };
     if cancellable {
         st.commands
@@ -787,6 +844,11 @@ pub async fn stop(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let fp = fp_config(&st, &cmd.fp_id).await?;
     let byte = fp.address_byte;
+    if st.cfg.read().await.connection.protocol == Protocol::ShelfV22 {
+        if let Some(rt) = st.runtimes.write().await.get_mut(&byte) {
+            rt.request_shelf_cancel();
+        }
+    }
     st.commands
         .send(DispatchCommand::Stop { byte })
         .await
@@ -797,6 +859,11 @@ pub async fn stop(
 pub async fn emergency_stop(
     st: State<AppState>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    if st.cfg.read().await.connection.protocol == Protocol::ShelfV22 {
+        for rt in st.runtimes.write().await.values_mut() {
+            rt.request_shelf_cancel();
+        }
+    }
     st.commands
         .send(DispatchCommand::EStop)
         .await

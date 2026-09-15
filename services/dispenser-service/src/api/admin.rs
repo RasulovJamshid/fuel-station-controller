@@ -892,6 +892,7 @@ fn nozzles_from_input(
             // the caller re-applies them from the existing JSON config.
             bluesky_hose_number: 0,
             azt_address: 0,
+            shelf_address: 0,
             wayne_code: n.wayne_code,
             wayne_product_code: n.wayne_product_code,
         });
@@ -919,6 +920,7 @@ async fn admin_save_position_nozzles(
             if let Some(e) = existing.nozzles.iter().find(|e| e.index == n.index) {
                 n.bluesky_hose_number = e.bluesky_hose_number;
                 n.azt_address = e.azt_address;
+                n.shelf_address = e.shelf_address;
             }
         }
         nozzles

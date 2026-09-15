@@ -31,9 +31,12 @@ pub fn spawn_preauth_timeout_task(
     commands: mpsc::Sender<DispatchCommand>,
     events: broadcast::Sender<WsEvent>,
 ) {
-    // BlueSky reservations expire inside its serial loop, before lift/start.
+    // BlueSky and Shelf reservations expire inside their serial loops, before lift/start.
     // Queuing cancellation here could race with a new or already-started sale.
-    if cfg.connection.protocol == site_config::Protocol::TexnoUzBlueSky {
+    if matches!(
+        cfg.connection.protocol,
+        site_config::Protocol::TexnoUzBlueSky | site_config::Protocol::ShelfV22
+    ) {
         return;
     }
     let timeout_secs = cfg.ui.preauth_timeout_seconds;

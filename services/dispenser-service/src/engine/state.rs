@@ -8,6 +8,7 @@ use uuid::Uuid;
 use wayne_europump::{decode_amount, decode_volume, Frame};
 
 use super::protocols::bluesky_state::BlueSkyRuntimeState;
+use super::protocols::shelf_state::ShelfRuntimeState;
 use super::protocols::wayne_state::WayneRuntimeState;
 
 /// Idle polls required before accepting another reactive nozzle lift after ghost fill.
@@ -99,6 +100,7 @@ pub struct RuntimeFp {
     /// than exposed as part of the common fueling-position runtime contract.
     pub(in crate::engine) wayne: WayneRuntimeState,
     pub(in crate::engine) bluesky: BlueSkyRuntimeState,
+    pub(in crate::engine) shelf: ShelfRuntimeState,
 }
 
 /// Hose lift notifications older than this are ignored for "still up" guards.
@@ -142,6 +144,7 @@ impl RuntimeFp {
             completed_sale: None,
             wayne: WayneRuntimeState::default(),
             bluesky: BlueSkyRuntimeState::default(),
+            shelf: ShelfRuntimeState::default(),
             state: FpState {
                 fp_id: fp.id.clone(),
                 label: fp.label.clone(),
@@ -1512,6 +1515,19 @@ impl RuntimeFp {
                 self.state.status,
                 FpStatus::NozzleUp | FpStatus::Authorizing
             ) && self.state.pre_auth_preset.is_some())
+    }
+
+    /// Linearize a Shelf cancellation against a nozzle-triggered start.
+    /// The caller holds the same runtime write lock used before serial start.
+    pub fn request_shelf_cancel(&mut self) -> bool {
+        if !self.has_cancellable_preauth()
+            && self.current_tx.is_none()
+            && !self.shelf.start_attempted
+        {
+            return false;
+        }
+        self.shelf.cancel_requested = true;
+        true
     }
 
     pub fn cancel_pre_auth(&mut self) {

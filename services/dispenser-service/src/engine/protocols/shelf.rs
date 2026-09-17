@@ -343,6 +343,34 @@ async fn poll_position(
         return;
     };
 
+    if let Some(wrong_gun) =
+        cancel_reservation_on_wrong_lift(byte, cfg, status, runtimes, events).await
+    {
+        // A shared reply can already describe physical flow on another gun.
+        // Keep those meters and stop the actual gun instead of losing the sale
+        // when clearing the unsent reservation.
+        let flowing_gun = if status.dispensing() {
+            cfg.position_by_address(byte).and_then(|side| {
+                side.nozzles.iter().filter(|n| n.active).find_map(|n| {
+                    let gun = gun_position(side, Some(n.index))?;
+                    let flowing_address =
+                        status.active_address.filter(|&a| a != 0).unwrap_or(address);
+                    (gun_address(&gun) == flowing_address).then_some(gun)
+                })
+            })
+        } else {
+            None
+        };
+        if let Some(gun) = flowing_gun {
+            update_live(gun_address(&gun), &gun, cfg, status, runtimes).await;
+            request_cancel(byte, backend, runtimes, events, indices).await;
+        } else {
+            emit_nozzle_up(gun_address(&wrong_gun), &wrong_gun, cfg, runtimes, events).await;
+            broadcast_status(byte, runtimes, events).await;
+        }
+        return;
+    }
+
     if status.describes_other_gun(address) {
         // A shared controller returns 0x85 throughout another gun's delivery.
         // It is neither this gun's meter nor an end-of-fill handshake for it.
@@ -422,7 +450,13 @@ async fn poll_position(
                 )
             };
             if let Some((price, preset)) = reservation {
-                if status.gun_lifted(gun_number) && !cancel_requested {
+                // Aggregate D0 cannot identify the lifted nozzle on a multi-gun
+                // side. Require its individual bit before sending a dose.
+                let identified_lift = status.guns & 0x3e != 0
+                    || cfg
+                        .position_by_address(byte)
+                        .is_some_and(|side| side.nozzles.iter().filter(|n| n.active).count() == 1);
+                if identified_lift && status.gun_lifted(gun_number) && !cancel_requested {
                     // Check expiry again after the serial exchange, before start.
                     if !expire_reservation(byte, cfg, runtimes, events).await {
                         authorize(
@@ -488,6 +522,59 @@ async fn poll_position(
 async fn has_pending_preauth(address: u8, runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>) -> bool {
     let map = runtimes.read().await;
     map.get(&address).is_some_and(|rt| rt.pre_auth.is_some())
+}
+
+async fn cancel_reservation_on_wrong_lift(
+    byte: u8,
+    cfg: &SiteConfig,
+    status: shelf_v22::LiveStatus,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+) -> Option<FuelingPositionConfig> {
+    // poll_position receives a single-gun view; inspect the full side here.
+    let side = cfg.position_by_address(byte)?;
+    let mut map = runtimes.write().await;
+    let rt = map.get_mut(&byte)?;
+    if rt.shelf.start_attempted || rt.current_tx.is_some() || rt.shelf.final_sale.is_some() {
+        return None;
+    }
+    let pre = rt.pre_auth.as_ref()?;
+    let expected_nozzle_index = pre.nozzle_index;
+    let wrong = side.nozzles.iter().find(|n| {
+        n.active
+            && n.index != expected_nozzle_index
+            && (1..=5).contains(&n.index)
+            && status.guns & (1 << n.index) != 0
+    })?;
+    let wrong_gun = gun_position(side, Some(wrong.index))?;
+    let expected_product_name = cfg
+        .product(pre.product_id)
+        .map(|p| p.name.clone())
+        .unwrap_or_default();
+    let lifted_product_name = cfg
+        .product(wrong.product_id)
+        .map(|p| p.name.clone())
+        .unwrap_or_default();
+    rt.cancel_pre_auth();
+    rt.shelf = Default::default();
+    drop(map);
+    let _ = events.send(WsEvent::PreAuthCancelled {
+        fp_id: side.id.clone(),
+    });
+    let _ = events.send(WsEvent::PreAuthNozzleMismatch {
+        fp_id: side.id.clone(),
+        expected_nozzle_index,
+        expected_product_name,
+        lifted_nozzle_index: wrong.index,
+        lifted_product_name,
+    });
+    warn!(
+        byte,
+        expected_nozzle_index,
+        lifted_nozzle_index = wrong.index,
+        "SHELF: wrong nozzle lifted - pre-authorization cancelled"
+    );
+    Some(wrong_gun)
 }
 
 async fn reserve(

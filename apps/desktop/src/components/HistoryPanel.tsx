@@ -300,6 +300,8 @@ export function HistoryPanel(props: {
   const [summary, setSummary]               = useState<TxSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [printLoading, setPrintLoading]     = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportNotice, setExportNotice] = useState<{ error: boolean; text: string } | null>(null);
 
   // sort
   const [sortCol,  setSortCol]  = useState<"time" | "volume" | "amount" | "pump" | "status">("time");
@@ -470,6 +472,42 @@ export function HistoryPanel(props: {
 
   if (!props.visible) return null;
 
+  const handleExcelExport = async () => {
+    if (exportLoading) return;
+    setExportLoading(true);
+    setExportNotice(null);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const { loadExportTransactions, buildHistoryWorkbook, downloadWorkbook } = await import("../lib/excelExport");
+      const filters = {
+        statuses: statusesParam || null,
+        shiftId: filterShiftId,
+        fromMs: fromMs ?? null,
+        untilMs: Math.min(untilMs ?? Infinity, Date.now()),
+      };
+      const allRows = await loadExportTransactions((request) => invoke<Transaction[]>("get_transactions", request), filters);
+      const shiftReport = filterShiftId
+        ? await invoke<Shift>("get_shift_report", { id: filterShiftId })
+        : null;
+      const exportRows = filterProduct === "all" ? allRows : allRows.filter((row) => row.product_name === filterProduct);
+      exportRows.sort((a, b) => {
+        let comparison = a.started_at - b.started_at;
+        if (sortCol === "volume") comparison = a.volume - b.volume;
+        else if (sortCol === "amount") comparison = a.amount - b.amount;
+        else if (sortCol === "pump") comparison = (a.label || a.fp_id).localeCompare(b.label || b.fp_id);
+        else if (sortCol === "status") comparison = txStatusLabel(a.status).localeCompare(txStatusLabel(b.status));
+        return sortDesc ? -comparison : comparison;
+      });
+      const workbook = buildHistoryWorkbook(exportRows, filters, filterProduct === "all" ? t("history.allFuel") : filterProduct, t, shiftReport);
+      const path = await downloadWorkbook(workbook, "transactions");
+      setExportNotice({ error: false, text: path ? t("excel.saved", { path }) : t("excel.downloadStarted") });
+    } catch (error) {
+      setExportNotice({ error: true, text: t("excel.failed", { error: error instanceof Error ? error.message : String(error) }) });
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   const compact = props.compact ?? false;
 
   // client-side product filter + sort (applied on top of server-filtered page)
@@ -534,6 +572,14 @@ export function HistoryPanel(props: {
           </button>
           <button
             type="button"
+            disabled={exportLoading}
+            onClick={() => void handleExcelExport()}
+            className="rounded border border-border-primary/60 bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary disabled:opacity-50"
+          >
+            {exportLoading ? t("excel.exporting") : t("excel.download")}
+          </button>
+          <button
+            type="button"
             disabled={loading}
             onClick={() => { setPage(0); void load(0); }}
             className="rounded border border-border-primary/60 bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary disabled:opacity-50"
@@ -542,6 +588,12 @@ export function HistoryPanel(props: {
           </button>
         </div>
       </div>
+
+      {exportNotice && (
+        <p role={exportNotice.error ? "alert" : "status"} className={`break-all px-4 py-2 text-sm print:hidden ${exportNotice.error ? "text-accent-red" : "text-accent-emerald"}`}>
+          {exportNotice.text}
+        </p>
+      )}
 
       {/* ── filters ── */}
       <div className={`shrink-0 border-b border-border-primary/50 bg-bg-primary print:hidden ${compact ? "px-3 py-1.5" : "px-4 py-2"}`}>

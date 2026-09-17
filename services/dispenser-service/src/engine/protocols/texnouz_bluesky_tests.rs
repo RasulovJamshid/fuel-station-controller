@@ -135,6 +135,15 @@ impl Harness {
     }
 
     async fn poll(&self, responses: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+        self.poll_with_selection(responses, &mut HashMap::from([(1, 1)]))
+            .await
+    }
+
+    async fn poll_with_selection(
+        &self,
+        responses: Vec<Vec<u8>>,
+        selected_hoses: &mut HashMap<u8, u8>,
+    ) -> Vec<Vec<u8>> {
         let fake = Arc::new(Mutex::new(FakeSerial::new(responses)));
         poll_position(
             1,
@@ -146,7 +155,7 @@ impl Harness {
             &self.pool,
             &self.shifts,
             &mut HashMap::new(),
-            &mut HashMap::from([(1, 1)]),
+            selected_hoses,
         )
         .await;
         let fake = fake.lock().unwrap();
@@ -191,6 +200,19 @@ impl Harness {
             .fetch_all(&self.pool)
             .await
             .unwrap()
+    }
+
+    fn set_hoses(&mut self, hoses: &[(u8, u8)]) {
+        let template = self.cfg.fueling_positions[0].nozzles[0].clone();
+        self.cfg.fueling_positions[0].nozzles = hoses
+            .iter()
+            .map(|&(index, address)| {
+                let mut nozzle = template.clone();
+                nozzle.index = index;
+                nozzle.bluesky_hose_number = address;
+                nozzle
+            })
+            .collect();
     }
 }
 
@@ -484,6 +506,162 @@ async fn holstered_reservation_only_polls_then_programs_on_lift() {
 }
 
 #[tokio::test]
+async fn unselected_hose_reservation_waits_for_its_own_lift() {
+    let mut h = Harness::new().await;
+    // Site trace: hose 2 answers D5 while hoses 4 and 8 remain silent.
+    h.set_hoses(&[(1, 2), (2, 4), (4, 8)]);
+    h.runtimes.write().await.get_mut(&1).unwrap().state.status = FpStatus::Idle;
+    let sent = h
+        .command(
+            DispatchCommand::Preauthorize {
+                byte: 1,
+                price: 11300,
+                preset: Preset::Volume(10.0),
+                nozzle_index: 2,
+            },
+            vec![vec![], reply(2, 0xD5, &[0x88]), vec![]],
+        )
+        .await;
+    assert_eq!(
+        sent,
+        vec![
+            texnouz_bluesky::read_status(4),
+            texnouz_bluesky::read_status(2),
+            texnouz_bluesky::read_status(8),
+        ]
+    );
+    assert_eq!(
+        h.runtimes.read().await[&1].state.status,
+        FpStatus::PreAuthorized
+    );
+    let mut selected_hoses = HashMap::new();
+    for _ in 0..=h.cfg.polling.offline_threshold_polls {
+        assert_eq!(
+            h.poll_with_selection(
+                vec![reply(2, 0xD5, &[0x88]), vec![], vec![]],
+                &mut selected_hoses,
+            )
+            .await,
+            vec![
+                texnouz_bluesky::read_status(2),
+                texnouz_bluesky::read_status(4),
+                texnouz_bluesky::read_status(8),
+            ]
+        );
+        let map = h.runtimes.read().await;
+        assert_eq!(map[&1].state.status, FpStatus::PreAuthorized);
+        assert_eq!(map[&1].state.missed_polls, 0);
+        assert_eq!(map[&1].pre_auth.as_ref().unwrap().nozzle_index, 2);
+        assert!(map[&1].current_tx.is_none());
+    }
+    let dose = dose_frame(4, &Preset::Volume(10.0), 11300).unwrap();
+    let sent = h
+        .poll_with_selection(
+            vec![
+                vec![],
+                reply(4, 0xD5, &[0x08]),
+                vec![],
+                reply(4, 0xA1, &[0x59]),
+                reply(4, 0xE5, &[]),
+                reply(4, 0xB2, &[0x59]),
+                reply(4, 0xB9, &[0x59]),
+                reply(4, 0xD5, &[0x08]),
+                reply(4, 0xC3, &[0x59]),
+            ],
+            &mut selected_hoses,
+        )
+        .await;
+    assert_eq!(
+        sent,
+        vec![
+            texnouz_bluesky::read_status(2),
+            texnouz_bluesky::read_status(4),
+            texnouz_bluesky::read_status(8),
+            texnouz_bluesky::select_hose(4, 4),
+            texnouz_bluesky::take_control(4),
+            texnouz_bluesky::write_price(4, 11300).unwrap(),
+            dose,
+            texnouz_bluesky::read_status(4),
+            texnouz_bluesky::start(4),
+        ]
+    );
+    let map = h.runtimes.read().await;
+    assert_eq!(map[&1].state.status, FpStatus::Authorizing);
+    assert_eq!(map[&1].current_tx.as_ref().unwrap().nozzle_index, 2);
+}
+
+#[tokio::test]
+async fn unselected_hose_cannot_reserve_a_busy_lifted_faulted_or_silent_side() {
+    for other_state in [
+        Some(0x28),
+        Some(0x48),
+        Some(0x08),
+        Some(0x89),
+        Some(0x8A),
+        None,
+    ] {
+        let mut h = Harness::new().await;
+        h.set_hoses(&[(1, 2), (2, 4), (4, 8)]);
+        h.runtimes.write().await.get_mut(&1).unwrap().state.status = FpStatus::Idle;
+        let responses = match other_state {
+            Some(state) => vec![vec![], reply(2, 0xD5, &[state]), reply(8, 0xD5, &[0x88])],
+            None => vec![vec![], vec![], vec![]],
+        };
+        let sent = h
+            .command(
+                DispatchCommand::Preauthorize {
+                    byte: 1,
+                    price: 11300,
+                    preset: Preset::Volume(10.0),
+                    nozzle_index: 2,
+                },
+                responses,
+            )
+            .await;
+        assert_eq!(
+            sent,
+            vec![
+                texnouz_bluesky::read_status(4),
+                texnouz_bluesky::read_status(2),
+                texnouz_bluesky::read_status(8),
+            ]
+        );
+        let map = h.runtimes.read().await;
+        assert!(map[&1].pre_auth.is_none(), "state {other_state:?}");
+        assert!(map[&1].current_tx.is_none());
+    }
+}
+
+#[tokio::test]
+async fn another_hose_flow_during_reservation_is_stopped_without_starting_reserved_hose() {
+    let mut h = Harness::new().await;
+    h.arm(Preset::Volume(10.0)).await;
+    h.set_hoses(&[(1, 1), (2, 2)]);
+    let sent = h
+        .poll(vec![
+            vec![],
+            reply(2, 0xD5, &[0x28]),
+            reply(2, 0xD9, &[0, 0, 0, 0x50, 0, 0, 0x56, 0x50]),
+            reply(2, 0xCA, &[]),
+        ])
+        .await;
+    assert_eq!(
+        sent,
+        vec![
+            texnouz_bluesky::read_status(1),
+            texnouz_bluesky::read_status(2),
+            texnouz_bluesky::read_fill(2),
+            texnouz_bluesky::stop(2),
+        ]
+    );
+    let map = h.runtimes.read().await;
+    assert!(map[&1].pre_auth.is_none());
+    assert_eq!(map[&1].current_tx.as_ref().unwrap().nozzle_index, 2);
+    assert_eq!(map[&1].state.volume, 0.5);
+    assert_eq!(map[&1].state.amount, 5650);
+}
+
+#[tokio::test]
 async fn reservation_cancel_is_local_even_without_replies_and_never_starts_later() {
     for stop in [false, true] {
         let h = Harness::new().await;
@@ -562,28 +740,69 @@ async fn reservation_timeout_cancels_once_before_lift_or_even_without_status() {
 }
 
 #[tokio::test]
-async fn another_hose_lift_cannot_start_the_reservation() {
-    let mut h = Harness::new().await;
-    h.arm(Preset::Volume(10.0)).await;
-    let mut other = h.cfg.fueling_positions[0].nozzles[0].clone();
-    other.index = 2;
-    other.bluesky_hose_number = 2;
-    h.cfg.fueling_positions[0].nozzles.push(other);
-    for own in [status(0x80), vec![]] {
+async fn another_hose_lift_cancels_reservation_and_requires_new_authorization() {
+    // The reserved hose may be holstered, silent, or lifted simultaneously.
+    for own in [status(0x80), vec![], status(0x00)] {
+        let mut h = Harness::new().await;
+        h.arm(Preset::Volume(10.0)).await;
+        h.set_hoses(&[(1, 1), (2, 2)]);
+        let mut events = h.events.subscribe();
         assert_eq!(
-            h.poll(vec![own, reply(2, 0xD5, &[0x00])]).await,
+            h.poll(vec![own.clone(), reply(2, 0xD5, &[0x00])]).await,
             vec![
                 texnouz_bluesky::read_status(1),
                 texnouz_bluesky::read_status(2)
             ]
         );
+        {
+            let map = h.runtimes.read().await;
+            assert!(map[&1].current_tx.is_none());
+            assert!(map[&1].pre_auth.is_none());
+            assert!(map[&1].pre_auth_started_at.is_none());
+            assert!(map[&1].state.pre_auth_preset.is_none());
+            assert_eq!(map[&1].state.status, FpStatus::NozzleUp);
+            assert_eq!(map[&1].state.nozzle_index, Some(2));
+        }
+        // Repeated wrong lift, holster, then the correct lift never resurrects
+        // the cancelled preset or programs either hose.
+        for responses in [
+            vec![own, reply(2, 0xD5, &[0x00])],
+            vec![status(0x80), reply(2, 0xD5, &[0x80])],
+            vec![status(0x00), reply(2, 0xD5, &[0x80])],
+        ] {
+            assert_eq!(
+                h.poll(responses).await,
+                vec![
+                    texnouz_bluesky::read_status(1),
+                    texnouz_bluesky::read_status(2)
+                ]
+            );
+        }
+        let mut cancelled = 0;
+        let mut mismatched = 0;
+        while let Ok(event) = events.try_recv() {
+            match event {
+                WsEvent::PreAuthCancelled { .. } => cancelled += 1,
+                WsEvent::PreAuthNozzleMismatch {
+                    expected_nozzle_index,
+                    lifted_nozzle_index,
+                    ..
+                } => {
+                    assert_eq!(expected_nozzle_index, 1);
+                    assert_eq!(lifted_nozzle_index, 2);
+                    mismatched += 1;
+                }
+                WsEvent::Done(_) => panic!("a wrong lift must not create a sale"),
+                _ => {}
+            }
+        }
+        assert_eq!(cancelled, 1);
+        assert_eq!(mismatched, 1);
         assert!(h.runtimes.read().await[&1].current_tx.is_none());
-        assert!(h.runtimes.read().await[&1].pre_auth.is_some());
+        assert!(h.sales().await.is_empty());
+        // A fresh, explicit authorization is still allowed.
+        h.authorize(Preset::Volume(5.0)).await;
     }
-    assert!(h
-        .command(DispatchCommand::CancelPreauth { byte: 1 }, vec![])
-        .await
-        .is_empty());
 }
 
 #[tokio::test]

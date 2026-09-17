@@ -468,16 +468,26 @@ async fn software_reservation_survives_idle_and_cancels_without_wire_commands() 
 }
 
 #[tokio::test]
-async fn only_selected_nozzle_lift_sends_the_reserved_authorization() {
-    let h = Harness::new().await;
-    h.reserve(Preset::Volume(10.0)).await;
+async fn grouped_side_requires_identified_reserved_nozzle_before_authorization() {
+    let h = Harness::grouped().await;
+    h.command(
+        DispatchCommand::Preauthorize {
+            byte: 20,
+            price: 11600,
+            preset: Preset::Volume(10.0),
+            nozzle_index: 2,
+        },
+        vec![],
+    )
+    .await;
     let writes = h
-        .poll_raw(21, 0, vec![reply(21, 0, 0x81, &[3, 0x21])])
+        .poll_group(20, 0, vec![reply(21, 0, 0x81, &[1, 0x21])])
         .await;
-    assert_eq!(writes.len(), 1); // gun 1 is not the reserved gun 2
+    assert_eq!(writes, vec![shelf_v22::status(21, 0)]); // Aggregate D0 is ambiguous.
+    assert!(h.runtimes.read().await[&20].pre_auth.is_some());
     let writes = h
-        .poll_raw(
-            21,
+        .poll_group(
+            20,
             1,
             vec![
                 reply(21, 1, 0x81, &[5, 0x21]),
@@ -493,8 +503,211 @@ async fn only_selected_nozzle_lift_sends_the_reserved_authorization() {
         ]
     );
     let map = h.runtimes.read().await;
-    assert_eq!(map[&21].state.status, FpStatus::Authorizing);
-    assert!(map[&21].current_tx.is_some());
+    assert_eq!(map[&20].state.status, FpStatus::Authorizing);
+    assert!(map[&20].current_tx.is_some());
+}
+
+#[tokio::test]
+async fn grouped_side_wrong_lift_cancels_and_requires_new_authorization() {
+    // Wrong gun alone, and wrong plus reserved gun lifted simultaneously.
+    for (guns, wrong_nozzle, wrong_address) in [(3, 1, 20), (7, 1, 20), (9, 3, 22), (13, 3, 22)] {
+        let h = Harness::grouped().await;
+        for byte in [20, 25] {
+            assert!(h
+                .command(
+                    DispatchCommand::Preauthorize {
+                        byte,
+                        price: 11600,
+                        preset: Preset::Volume(10.0),
+                        nozzle_index: 2,
+                    },
+                    vec![]
+                )
+                .await
+                .is_empty());
+        }
+        let mut events = h.events.subscribe();
+        assert_eq!(
+            h.poll_group(20, 0, vec![reply(21, 0, 0x81, &[guns, 0x21])])
+                .await,
+            vec![shelf_v22::status(21, 0)]
+        );
+        {
+            let map = h.runtimes.read().await;
+            let rt = &map[&20];
+            assert!(rt.pre_auth.is_none());
+            assert!(rt.pre_auth_started_at.is_none());
+            assert!(rt.state.pre_auth_preset.is_none());
+            assert!(rt.shelf.order_price.is_none());
+            assert!(!rt.shelf.start_attempted);
+            assert!(rt.current_tx.is_none());
+            assert_eq!(rt.state.status, FpStatus::NozzleUp);
+            assert_eq!(rt.state.nozzle_index, Some(wrong_nozzle));
+            assert_eq!(rt.shelf.wire_address, Some(wrong_address));
+            assert!(map[&25].pre_auth.is_some()); // Another side is independent.
+        }
+        assert_eq!(
+            h.poll_group(20, 1, vec![reply(wrong_address, 1, 0x81, &[guns, 0x21])])
+                .await,
+            vec![shelf_v22::status(wrong_address, 1)]
+        );
+        assert_eq!(
+            h.poll_group(20, 2, vec![reply(wrong_address, 2, 0x81, &[0, 0x20])])
+                .await,
+            vec![shelf_v22::status(wrong_address, 2)]
+        );
+        // Correct lift after holstering cannot revive the old reservation.
+        assert_eq!(
+            h.poll_group(
+                20,
+                3,
+                vec![
+                    reply(20, 3, 0x81, &[5, 0x21]),
+                    reply(21, 3, 0x81, &[5, 0x21]),
+                ]
+            )
+            .await,
+            vec![shelf_v22::status(20, 3), shelf_v22::status(21, 3)]
+        );
+        assert!(h.runtimes.read().await[&20].current_tx.is_none());
+        let mut cancelled = 0;
+        let mut mismatched = 0;
+        while let Ok(event) = events.try_recv() {
+            match event {
+                WsEvent::PreAuthCancelled { fp_id } => {
+                    assert_eq!(fp_id, h.cfg.position_by_address(20).unwrap().id);
+                    cancelled += 1;
+                }
+                WsEvent::PreAuthNozzleMismatch {
+                    expected_nozzle_index,
+                    lifted_nozzle_index,
+                    expected_product_name,
+                    lifted_product_name,
+                    ..
+                } => {
+                    assert_eq!(expected_nozzle_index, 2);
+                    assert_eq!(lifted_nozzle_index, wrong_nozzle);
+                    assert_eq!(expected_product_name, "AI-92");
+                    assert_eq!(
+                        lifted_product_name,
+                        if wrong_nozzle == 1 { "AI-95" } else { "DT" }
+                    );
+                    mismatched += 1;
+                }
+                WsEvent::Done(_) => panic!("wrong lift must not create a sale"),
+                _ => {}
+            }
+        }
+        assert_eq!((cancelled, mismatched), (1, 1));
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM transactions")
+            .fetch_one(&h.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+        h.command(
+            DispatchCommand::Preauthorize {
+                byte: 20,
+                price: 11600,
+                preset: Preset::Volume(5.0),
+                nozzle_index: 2,
+            },
+            vec![],
+        )
+        .await;
+        assert_eq!(
+            h.poll_group(
+                20,
+                4,
+                vec![reply(21, 4, 0x81, &[5, 0x21]), reply(21, 5, 0x00, &[]),]
+            )
+            .await,
+            vec![
+                shelf_v22::status(21, 4),
+                shelf_v22::write_volume(21, 5, 500, 11600).unwrap()
+            ]
+        );
+    }
+}
+
+#[tokio::test]
+async fn grouped_side_wrong_lift_with_unexpected_flow_preserves_and_stops_actual_gun() {
+    let h = Harness::grouped().await;
+    h.command(
+        DispatchCommand::Preauthorize {
+            byte: 20,
+            price: 11600,
+            preset: Preset::Volume(10.0),
+            nozzle_index: 2,
+        },
+        vec![],
+    )
+    .await;
+    assert_eq!(
+        h.poll_group(
+            20,
+            0,
+            vec![
+                reply(21, 0, 0x85, &[9, 0x81, 1, 22, 100, 0, 0]),
+                reply(22, 0, 0x00, &[]),
+            ]
+        )
+        .await,
+        vec![shelf_v22::status(21, 0), shelf_v22::stop(22, 0)]
+    );
+    let map = h.runtimes.read().await;
+    let rt = &map[&20];
+    assert!(rt.pre_auth.is_none());
+    assert_eq!(rt.state.status, FpStatus::Finalizing);
+    assert_eq!(rt.current_tx.as_ref().unwrap().nozzle_index, 3);
+    assert_eq!(rt.shelf.wire_address, Some(22));
+    assert_eq!(rt.state.volume, 1.0);
+    assert_eq!(rt.state.price, 16000); // Wrong gun's price, not the cancelled order.
+}
+
+#[tokio::test]
+async fn grouped_side_wrong_lift_does_not_discard_already_sent_sale() {
+    let h = Harness::grouped().await;
+    h.command(
+        DispatchCommand::Preauthorize {
+            byte: 20,
+            price: 11600,
+            preset: Preset::Volume(10.0),
+            nozzle_index: 2,
+        },
+        vec![],
+    )
+    .await;
+    h.poll_group(
+        20,
+        0,
+        vec![reply(21, 0, 0x81, &[5, 0x21]), reply(21, 1, 0x00, &[])],
+    )
+    .await;
+    let id = h.runtimes.read().await[&20]
+        .current_tx
+        .as_ref()
+        .unwrap()
+        .id
+        .clone();
+    let mut events = h.events.subscribe();
+    assert_eq!(
+        h.poll_group(
+            20,
+            2,
+            vec![reply(21, 2, 0x84, &[7, 0x81, 1, 21, 100, 0, 0])]
+        )
+        .await,
+        vec![shelf_v22::status(21, 2)]
+    );
+    let map = h.runtimes.read().await;
+    assert_eq!(map[&20].current_tx.as_ref().unwrap().id, id);
+    assert_eq!(map[&20].state.status, FpStatus::Delivering);
+    while let Ok(event) = events.try_recv() {
+        assert!(!matches!(
+            event,
+            WsEvent::PreAuthCancelled { .. } | WsEvent::PreAuthNozzleMismatch { .. }
+        ));
+    }
 }
 
 #[tokio::test]
@@ -921,7 +1134,7 @@ async fn grouped_side_reservation_is_exclusive_and_cancel_before_lift_is_local()
     )
     .await;
     let writes = h
-        .poll_group(20, 0, vec![reply(21, 0, 0x81, &[3, 0x21])])
+        .poll_group(20, 0, vec![reply(21, 0, 0x81, &[0, 0x20])])
         .await;
     assert_eq!(writes, vec![shelf_v22::status(21, 0)]);
     {

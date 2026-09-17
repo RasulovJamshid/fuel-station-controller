@@ -694,7 +694,8 @@ export function DispenserCard({
                 key={formResetKey}
                 fpId={state.fp_id}
                 activeNozzles={activeNozzles}
-                initialNozzle={effectiveNozzle}
+                initialNozzle={isNozzleUp ? state.nozzle_index : effectiveNozzle}
+                nozzleLocked={isNozzleUp}
                 compact={compact}
                 volumeUnit={volumeUnit}
                 disabled={!positionActive}

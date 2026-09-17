@@ -163,7 +163,7 @@ impl ShiftCoordinator {
             if let Some(runtimes) = &self.runtimes {
                 let map = runtimes.read().await;
                 for meter in &mut shift.nozzle_totalizers {
-                    meter.current_volume = map
+                    let current = map
                         .values()
                         .find(|rt| {
                             rt.state.fp_id == meter.fp_id
@@ -174,8 +174,9 @@ impl ShiftCoordinator {
                                 .pump_totals
                                 .iter()
                                 .find(|total| total.nozzle_index == meter.nozzle_index)
-                        })
-                        .map(|total| total.volume);
+                        });
+                    meter.current_volume = current.map(|total| total.volume);
+                    meter.current_amount = current.map(|total| total.amount);
                     meter.dispensed_volume = match (meter.open_volume, meter.current_volume) {
                         (Some(open), Some(current)) if current >= open => Some(current - open),
                         _ => None,
@@ -489,6 +490,7 @@ mod tests {
         let live = coordinator.report(&shift.id).await.unwrap().unwrap();
         let meter = &live.nozzle_totalizers[0];
         assert_eq!(meter.current_volume, Some(1050.25));
+        assert_eq!(meter.current_amount, Some(10_502_500));
         assert_eq!(meter.dispensed_volume, Some(50.25));
         assert_eq!(meter.variance_volume, Some(50.25));
         assert_eq!(meter.close_volume, None);
@@ -499,6 +501,7 @@ mod tests {
         assert_eq!(saved.nozzle_totalizers[0].open_volume, Some(1000.0));
         assert_eq!(saved.nozzle_totalizers[0].close_volume, None);
         assert_eq!(saved.nozzle_totalizers[0].current_volume, None);
+        assert_eq!(saved.nozzle_totalizers[0].current_amount, None);
 
         // Restoring the coordinator must use the original persisted opening meter.
         let restored = ShiftCoordinator::new(coordinator.pool.clone(), coordinator.cfg.clone())
@@ -529,6 +532,8 @@ mod tests {
         let saved = restored.report(&shift.id).await.unwrap().unwrap();
         assert_eq!(saved.nozzle_totalizers[0].close_volume, Some(1060.0));
         assert_eq!(saved.nozzle_totalizers[0].current_volume, None);
+        assert_eq!(saved.nozzle_totalizers[0].close_amount, Some(10_600_000));
+        assert_eq!(saved.nozzle_totalizers[0].current_amount, None);
         assert_eq!(saved.nozzle_totalizers[0].dispensed_volume, Some(60.0));
     }
 

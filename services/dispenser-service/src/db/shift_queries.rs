@@ -307,6 +307,7 @@ async fn nozzle_totalizers_for_shift(
                     open_volume: ov,
                     close_volume: cv,
                     current_volume: None,
+                    current_amount: None,
                     open_amount: oa.map(|v| v.max(0) as u64),
                     close_amount: ca.map(|v| v.max(0) as u64),
                     dispensed_volume,

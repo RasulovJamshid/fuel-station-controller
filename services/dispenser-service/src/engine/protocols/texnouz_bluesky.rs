@@ -159,9 +159,11 @@ async fn poll_position(
     // physical display to the selected hose's previous transaction.
     let statuses = poll_hose_statuses(fp_cfg, backend);
 
-    // A sale owns one hose. Missing replies from it must never let another
-    // hose's idle status or previous sale close this transaction.
-    let (armed_nozzle, owns_hose) = {
+    // A started or completed sale owns one hose. Missing replies from it must
+    // never let another hose's status close the transaction. A software
+    // reservation can instead observe the side's currently selected hose:
+    // some firmware stays silent on the reserved hose until it is lifted.
+    let (mut armed_nozzle, owns_hose, reserved_nozzle) = {
         let map = runtimes.read().await;
         map.get(&byte)
             .map(|rt| {
@@ -172,12 +174,14 @@ async fn poll_position(
                         .or(rt.pre_auth.as_ref().map(|pre| pre.nozzle_index))
                         .or(rt.bluesky.completed_nozzle)
                         .or(rt.state.nozzle_index),
-                    rt.current_tx.is_some()
-                        || rt.pre_auth.is_some()
-                        || rt.bluesky.completed_nozzle.is_some(),
+                    rt.current_tx.is_some() || rt.bluesky.completed_nozzle.is_some(),
+                    rt.pre_auth
+                        .as_ref()
+                        .filter(|_| rt.current_tx.is_none())
+                        .map(|pre| pre.nozzle_index),
                 )
             })
-            .unwrap_or((None, false))
+            .unwrap_or((None, false, None))
     };
     if statuses.is_empty()
         || (owns_hose && !statuses.iter().any(|(n, _, _)| Some(*n) == armed_nozzle))
@@ -201,6 +205,38 @@ async fn poll_position(
         let mut map = runtimes.write().await;
         if let Some(rt) = map.get_mut(&byte) {
             rt.on_poll_success();
+        }
+    }
+
+    // Check every responding hose before preferring the reserved one. A wrong
+    // lift cancels even if the reserved hose also answers or is lifted too.
+    if let Some(expected_nozzle) = reserved_nozzle {
+        if let Some(&(lifted_nozzle, hose, _)) = statuses
+            .iter()
+            .find(|(nozzle, _, st)| *nozzle != expected_nozzle && st.nozzle_lifted())
+        {
+            if cancel_reservation(byte, fp_cfg, runtimes, events).await {
+                let (_, expected_product_name) = nozzle_product(fp_cfg, cfg, expected_nozzle);
+                let (_, lifted_product_name) = nozzle_product(fp_cfg, cfg, lifted_nozzle);
+                let _ = events.send(WsEvent::PreAuthNozzleMismatch {
+                    fp_id: fp_cfg.id.clone(),
+                    expected_nozzle_index: expected_nozzle,
+                    expected_product_name,
+                    lifted_nozzle_index: lifted_nozzle,
+                    lifted_product_name,
+                });
+                warn!(
+                    byte,
+                    hose,
+                    expected_nozzle,
+                    lifted_nozzle,
+                    "BlueSky: wrong nozzle lifted - pre-authorization cancelled"
+                );
+                // Display the mismatching nozzle after cancelling preauth.
+                armed_nozzle = Some(lifted_nozzle);
+                // Continue observing physical state: any unexpected flow must
+                // still be adopted and stopped, never hidden by cancellation.
+            }
         }
     }
 
@@ -339,7 +375,7 @@ async fn poll_position(
         }
         // Still holstered is the normal case while the customer walks up вЂ” hold
         // the armed state silently and keep waiting.
-        if st.nozzle_lifted() {
+        if Some(nozzle_index) == armed_nozzle && st.nozzle_lifted() {
             start_reservation(byte, fp_cfg, cfg, backend, selected_hoses, runtimes, events).await;
         }
         broadcast_status(byte, runtimes, events).await;
@@ -1149,9 +1185,36 @@ async fn do_authorize(
         return;
     }
     let status = query_status(hose, backend);
-    if !status.is_some_and(|st| !st.dispensing() && !st.paused()) {
+    let can_reserve = match status {
+        Some(st) => !st.dispensing() && !st.paused(),
+        None => {
+            // Site firmware answers D5 only on the side's selected hose,
+            // although totalizers remain readable on its other addresses.
+            // Reserve in software if this same side is idle and holstered;
+            // do not use A1 just to make the target answer while waiting.
+            let side_statuses: Vec<_> = hose_addresses(&fp_cfg)
+                .into_iter()
+                .filter(|(_, addr)| *addr != hose)
+                .filter_map(|(_, addr)| query_status(addr, backend).map(|st| (addr, st)))
+                .collect();
+            let side_idle = !side_statuses.is_empty()
+                && side_statuses
+                    .iter()
+                    .all(|(_, st)| st.idle() && st.nozzle_holstered() && !st.error());
+            if side_idle {
+                info!(
+                    hose,
+                    ?side_statuses,
+                    "BlueSky: reserving silent hose using idle status from the same side"
+                );
+            }
+            side_idle
+        }
+    };
+    if !can_reserve {
         warn!(
             hose,
+            ?status,
             "BlueSky: authorization refused вЂ” hose busy or status unavailable"
         );
         return;

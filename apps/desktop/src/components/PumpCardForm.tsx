@@ -25,6 +25,7 @@ type Props = {
   fpId: string;
   activeNozzles: NozzleSnapshot[];
   initialNozzle?: number | null;
+  nozzleLocked?: boolean;
   compact?: boolean;
   volumeUnit?: string;
   disabled?: boolean;
@@ -171,6 +172,7 @@ export function PumpCardForm({
   fpId,
   activeNozzles,
   initialNozzle = null,
+  nozzleLocked = false,
   compact = false,
   volumeUnit = "L",
   disabled = false,
@@ -195,8 +197,9 @@ export function PumpCardForm({
     }
   }, [fpId, initialNozzle, activeNozzles]);
 
-  const effectiveNozzle =
-    selectedNozzle ?? (activeNozzles.length === 1 ? activeNozzles[0]!.index : null);
+  const effectiveNozzle = nozzleLocked
+    ? initialNozzle
+    : selectedNozzle ?? (activeNozzles.length === 1 ? activeNozzles[0]!.index : null);
 
   const selectedSnap = useMemo(
     () => activeNozzles.find((n) => n.index === effectiveNozzle) ?? null,
@@ -272,11 +275,12 @@ export function PumpCardForm({
     (fillMode === "amount" && parseMoney(amtSum) <= 0);
 
   const hasSelection = Boolean(selectedSnap);
-  const showResetSelection = activeNozzles.length > 1 && selectedNozzle != null;
+  const showResetSelection = !nozzleLocked && activeNozzles.length > 1 && selectedNozzle != null;
 
   const handleResetSelection = useCallback(() => {
+    if (disabled || nozzleLocked) return;
     setSelectedNozzle(null);
-  }, []);
+  }, [disabled, nozzleLocked]);
 
   const selectFillMode = useCallback((mode: FillMode) => {
     setFillMode(mode);
@@ -287,7 +291,7 @@ export function PumpCardForm({
   }, []);
 
   const handleStart = useCallback(() => {
-    if (effectiveNozzle == null || !selectedSnap) return;
+    if (startDisabled || effectiveNozzle == null || !selectedSnap) return;
     let limitValue: number | null = null;
     if (fillMode === "volume") {
       const v = parseNum(volLiters);
@@ -299,7 +303,7 @@ export function PumpCardForm({
       limitValue = a;
     }
     onStart({ fpId, nozzleIndex: effectiveNozzle, fillMode, limitValue, priceOverride: null });
-  }, [effectiveNozzle, selectedSnap, fillMode, volLiters, amtSum, onStart, fpId]);
+  }, [startDisabled, effectiveNozzle, selectedSnap, fillMode, volLiters, amtSum, onStart, fpId]);
 
   useEffect(() => {
     onReadyChange({ disabled: startDisabled, onStart: handleStart });
@@ -365,13 +369,14 @@ export function PumpCardForm({
               aria-hidden
             />
             <select
-              disabled={disabled || activeNozzles.length <= 1}
+              disabled={disabled || nozzleLocked || activeNozzles.length <= 1}
               value={effectiveNozzle ?? ""}
               onChange={(e) => {
+                if (disabled || nozzleLocked) return;
                 const raw = e.target.value;
                 setSelectedNozzle(raw ? Number(raw) : null);
               }}
-              className={`w-full appearance-none rounded-lg border border-border-primary bg-bg-input py-2 pl-7 pr-9 font-black text-text-primary outline-none focus:border-accent-blue/60 ${compact ? "text-base" : "text-lg"}`}
+              className={`w-full appearance-none rounded-lg border border-border-primary bg-bg-input py-2 pl-7 pr-9 font-black text-text-primary outline-none focus:border-accent-blue/60 disabled:cursor-not-allowed disabled:opacity-70 ${compact ? "text-base" : "text-lg"}`}
             >
               {activeNozzles.length > 1 && !effectiveNozzle ? (
                 <option value="">—</option>

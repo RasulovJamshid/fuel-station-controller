@@ -252,11 +252,11 @@ function statusTintClass(meta: PumpMeta): string {
 }
 
 function statusSolidClass(meta: PumpMeta): string {
-  if (meta.isOffline) return "border-accent-red/65 bg-bg-secondary text-accent-red";
-  if (meta.isDelivering || meta.isAuthorizing || meta.isFinalizing) return "border-accent-emerald/65 bg-bg-secondary text-accent-emerald";
-  if (meta.hasActivePreAuth || meta.isPaused) return "border-accent-amber/65 bg-bg-secondary text-accent-amber";
-  if (meta.isNozzleUp) return "border-accent-blue/65 bg-bg-secondary text-accent-blue";
-  return "border-border-primary/60 bg-bg-secondary text-text-secondary";
+  if (meta.isOffline) return "border-red-700 bg-red-700 text-white";
+  if (meta.isDelivering || meta.isAuthorizing || meta.isFinalizing) return "border-emerald-700 bg-emerald-700 text-white";
+  if (meta.hasActivePreAuth || meta.isPaused) return "border-amber-400 bg-amber-400 text-slate-900";
+  if (meta.isNozzleUp) return "border-blue-700 bg-blue-700 text-white";
+  return "border-gray-600 bg-gray-600 text-white";
 }
 
 function classicStatusLabel(meta: PumpMeta, t: (key: string) => string): string {
@@ -489,7 +489,12 @@ export function ClassicDispenserConsole({
   const selectedNozzle = useCallback((state: FpState) => {
     const nozzles = (nozzlesByFp.get(state.fp_id) ?? []).filter((n) => n.active);
     const draft = drafts[state.fp_id];
-    const idx = draft?.nozzleIndex ?? (nozzles.length === 1 ? nozzles[0]!.index : null);
+    // Use the hardware nozzle immediately, before the draft synchronization effect runs.
+    const idx = statusTag(state.status) === "NOZZLE_UP"
+      ? state.nozzle_index
+      : state.nozzle_index != null && statusTag(state.status) !== "IDLE"
+        ? state.nozzle_index
+        : draft?.nozzleIndex ?? (nozzles.length === 1 ? nozzles[0]!.index : null);
     return nozzles.find((n) => n.index === idx) ?? null;
   }, [drafts, nozzlesByFp]);
 
@@ -840,7 +845,7 @@ export function ClassicDispenserConsole({
 
   const cycleSelectedProduct = useCallback((state: FpState) => {
     const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
-    if (meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused) return;
+    if (meta.isNozzleUp || meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused) return;
     const nozzles = (nozzlesByFp.get(state.fp_id) ?? []).filter((n) => n.active);
     if (nozzles.length <= 1) return;
     const draft = drafts[state.fp_id];
@@ -1115,6 +1120,7 @@ export function ClassicDispenserConsole({
   const selectedPositionActive = positionActiveByFp.get(selected.fp_id) ?? true;
   const selectedMeta = getMeta(selected, defaultAuthMode, selectedPositionActive);
   const selectedSetupLocked = selectedMeta.hasActivePreAuth || selectedMeta.isDelivering || selectedMeta.isAuthorizing || selectedMeta.isFinalizing || selectedMeta.isPaused;
+  const selectedProductLocked = selectedSetupLocked || selectedMeta.isNozzleUp;
   const selectedActiveReading = selectedMeta.isDelivering || selectedMeta.isAuthorizing || selectedMeta.isFinalizing || selectedMeta.isPaused;
   const selectedHasLastSale = !selectedActiveReading && selectedDraft?.lastFillVolume != null;
   const selectedDisplayVolume = selectedActiveReading
@@ -1208,10 +1214,10 @@ export function ClassicDispenserConsole({
           onKeyDown={(e) => handlePumpKeyDown(state, e)}
           className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-inset"
         >
-          <div className={`flex items-center justify-between gap-2 border-b border-border-primary/25 ${ui.topCardPad} ${statusSolidClass(meta)}`}>
+          <div className={`flex items-center justify-between gap-2 border-b ${ui.topCardPad} ${statusSolidClass(meta)}`}>
             <span className="flex min-w-0 items-center gap-2">
               <span className={`${ui.topCardText} shrink-0 font-semibold`}>{pumpNumber(state)}</span>
-              <span className="line-clamp-2 min-w-0 break-words text-[11px] font-medium leading-tight text-text-secondary" title={pumpTitle(state)}>
+              <span className="line-clamp-2 min-w-0 break-words text-[11px] font-medium leading-tight" title={pumpTitle(state)}>
                 {pumpTitle(state)}
               </span>
             </span>
@@ -1324,10 +1330,9 @@ export function ClassicDispenserConsole({
               <th className={tableRowHeaderClass}>{t("classic.fuel")}</th>
 	              {states.map((state) => {
 	                const nozzles = (nozzlesByFp.get(state.fp_id) ?? []).filter((n) => n.active);
-	                const draft = drafts[state.fp_id];
 	                const meta = getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true);
-	                const setupLocked = meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused;
-	                const activeNozzle = nozzles.find((n) => n.index === draft?.nozzleIndex) ?? null;
+	                const productLocked = meta.isNozzleUp || meta.hasActivePreAuth || meta.isDelivering || meta.isAuthorizing || meta.isFinalizing || meta.isPaused;
+	                const activeNozzle = selectedNozzle(state);
 	                const activeColor = productColorFor(state, activeNozzle);
 	                return (
                   <td key={state.fp_id} className={`${ui.tdPad} ${centerCellClass(state.fp_id)}`} data-table-row="fuel" data-fp-id={state.fp_id}>
@@ -1338,12 +1343,12 @@ export function ClassicDispenserConsole({
                         aria-hidden
                       />
 	                      <select
-	                        value={draft?.nozzleIndex ?? ""}
-	                        disabled={nozzles.length <= 1 || setupLocked}
+	                        value={activeNozzle?.index ?? ""}
+	                        disabled={nozzles.length <= 1 || productLocked}
 	                        onFocus={() => onSelectFp(state.fp_id)}
 	                        onKeyDown={(e) => handleEditKeyDown(state, e)}
 	                        onChange={(e) => {
-	                          if (setupLocked) return;
+	                          if (productLocked) return;
 	                          const nozzleIndex = e.target.value ? Number(e.target.value) : null;
 	                          const nozzle = nozzles.find((n) => n.index === nozzleIndex);
 	                          const draft = drafts[state.fp_id];
@@ -1353,7 +1358,7 @@ export function ClassicDispenserConsole({
                           });
                         }}
 	                        className={`${ui.inputHeight} w-full rounded border ${ui.inputPad} pl-7 ${ui.inputText} font-semibold transition-[border-color,background-color] duration-75 outline-none disabled:cursor-not-allowed disabled:opacity-70 ${
-	                          setupLocked
+	                          productLocked
 	                            ? lockedInputClass
 	                            : "border-border-primary/40 bg-bg-input text-text-primary focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/30 focus:ring-offset-0"
 	                        }`}
@@ -1630,9 +1635,9 @@ export function ClassicDispenserConsole({
 	            <label className={bottomLabelClass}>{t("classic.fuel")}</label>
 	            <div
 	              data-classic-control="fuel"
-	              tabIndex={selectedNozzles.length > 0 && !selectedSetupLocked ? 0 : -1}
+	              tabIndex={selectedNozzles.length > 0 && !selectedProductLocked ? 0 : -1}
 	              onKeyDown={(e) => {
-	                if (selectedSetupLocked) {
+	                if (selectedProductLocked) {
 	                  handleEditKeyDown(selected, e);
 	                  return;
 	                }
@@ -1648,7 +1653,7 @@ export function ClassicDispenserConsole({
                 }
               }}
 	              className={`flex min-h-0 w-full flex-1 gap-1 rounded border border-border-primary/40 p-1 outline-none transition-[border-color,background-color,opacity] duration-75 ${
-	                selectedSetupLocked
+	                selectedProductLocked
 	                  ? "cursor-not-allowed bg-bg-secondary/40 opacity-70"
 	                  : `bg-bg-input/60 ${focusControlClass} ${selectedNozzles.length <= 1 ? "opacity-80" : "cursor-pointer"}`
 	              }`}
@@ -1659,15 +1664,15 @@ export function ClassicDispenserConsole({
                 </div>
               ) : (
                 selectedNozzles.map((n) => {
-                  const isActive = selectedDraft?.nozzleIndex === n.index;
+                  const isActive = selectedProduct?.index === n.index;
                   return (
                     <button
 	                      key={n.index}
 	                      type="button"
 	                      tabIndex={-1}
-	                      disabled={selectedSetupLocked}
+	                      disabled={selectedProductLocked}
 	                      onClick={(e) => {
-	                        if (selectedSetupLocked) return;
+	                        if (selectedProductLocked) return;
 	                        e.stopPropagation();
 	                        setDraft(selected.fp_id, {
                           nozzleIndex: n.index,

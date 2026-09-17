@@ -184,6 +184,8 @@ export function ShiftReportPanel({
   const [detail, setDetail] = useState<Shift | null>(null);
   const [reportError, setReportError] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<{ error: boolean; text: string } | null>(null);
   const shift = detail?.id === summaryShift.id && detail.status === summaryShift.status ? detail : summaryShift;
 
   useEffect(() => {
@@ -285,6 +287,27 @@ export function ShiftReportPanel({
     finally { setPrinting(false); }
   }, [shift.id, productTotals, t]);
 
+  const handleExcelExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setExportNotice(null);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const { loadExportTransactions, buildShiftWorkbook, downloadWorkbook } = await import("../../lib/excelExport");
+      const report = await invoke<Shift>("get_shift_report", { id: shift.id });
+      const transactions = await loadExportTransactions(
+        (request) => invoke<Transaction[]>("get_transactions", request),
+        { shiftId: report.id, statuses: null, fromMs: null, untilMs: null },
+      );
+      const path = await downloadWorkbook(buildShiftWorkbook(report, t, transactions), "shift");
+      setExportNotice({ error: false, text: path ? t("excel.saved", { path }) : t("excel.downloadStarted") });
+    } catch (error) {
+      setExportNotice({ error: true, text: t("excel.failed", { error: error instanceof Error ? error.message : String(error) }) });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className={`overflow-hidden bg-bg-card ${onToggleDetails ? "" : "rounded-lg border border-border-primary/70"}`}>
       <div className={`flex flex-wrap items-start justify-between gap-3 px-3 ${compact ? "py-2.5" : "border-b border-border-primary/60 py-3"}`}>
@@ -302,6 +325,14 @@ export function ShiftReportPanel({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleExcelExport()}
+            disabled={exporting}
+            className="rounded border border-border-primary/60 bg-bg-primary px-2.5 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary disabled:opacity-50"
+          >
+            {exporting ? t("excel.exporting") : t("excel.download")}
+          </button>
           <button
             type="button"
             onClick={() => void handlePrint()}
@@ -334,6 +365,11 @@ export function ShiftReportPanel({
         </div>
       </div>
 
+      {exportNotice && (
+        <p role={exportNotice.error ? "alert" : "status"} className={`break-all px-3 py-2 text-sm ${exportNotice.error ? "text-accent-red" : "text-accent-emerald"}`}>
+          {exportNotice.text}
+        </p>
+      )}
       {reportError && <p role="alert" className="px-3 py-2 text-sm text-accent-red">{t("shiftReport.reportLoadError")}</p>}
       <div className={`grid grid-cols-3 divide-x divide-border-primary/50 bg-bg-secondary/25 ${compact ? "border-t border-border-primary/40" : "border-b border-border-primary/60"}`}>
         <div className="min-w-0 px-3 py-2">

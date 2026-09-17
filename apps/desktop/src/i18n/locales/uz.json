@@ -309,6 +309,23 @@
     "live": "Jonli",
     "atgUpdate": "Zaxira maʼlumotlari ATG orqali yangilanadi."
   },
+  "excel": {
+    "totalizerScope": "Hisoblagich ko‘rsatkichlari butun smenaga tegishli; tranzaksiya filtrlariga bog‘liq emas.",
+    "download": "Excel yuklab olish",
+    "exporting": "Eksport qilinmoqda…",
+    "saved": "Excel fayli saqlandi: {{path}}",
+    "downloadStarted": "Excel faylini yuklab olish boshlandi.",
+    "failed": "Excel eksporti amalga oshmadi: {{error}}",
+    "summary": "Xulosa",
+    "field": "Maydon",
+    "value": "Qiymat",
+    "exportedAt": "Eksport vaqti",
+    "from": "Boshlanish",
+    "until": "Tugash",
+    "shiftId": "Smena ID",
+    "transactionId": "Tranzaksiya ID",
+    "completedAt": "Yakunlangan vaqt"
+  },
   "history": {
     "title": "Realizatsiya tarixi",
     "allFuel": "Barcha yoqilgʼi",

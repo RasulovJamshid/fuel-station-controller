@@ -35,6 +35,23 @@ acquisition, price and dose writes, and Start. A fresh status check before Start
 must still report that nozzle lifted and neither dispensing nor paused.
 Authorization after an already-lifted nozzle uses the same setup path.
 
+Some site firmware answers status (`D5`) only for the currently selected hose,
+even though other hoses answer totalizer reads (`C5`). If the requested hose is
+silent, pre-authorization checks the other active hoses on that same fueling
+position. It accepts a software reservation only if at least one answers and
+every responding hose is idle, holstered, and free of errors. A silent side,
+flow, pause, a lifted hose, or a pending keypad preset prevents this fallback.
+While reserved, another holstered hose's replies keep the position online.
+Lifting any other nozzle on the same position cancels the reservation as soon
+as polling detects it and emits `PreAuthCancelled` and `PreAuthNozzleMismatch`.
+This also applies if the reserved nozzle is silent or both nozzles are lifted.
+Returning the wrong nozzle and lifting the correct one does not restore the
+reservation: a new authorization is required. Without a mismatch, the reserved
+hose must report its own lift, and its status is checked again before Start.
+Unexpected flow on another hose is adopted and stopped. Once a transaction
+starts, its own hose must still answer; another hose's status cannot complete
+or replace that sale.
+
 Cancel or Stop before device startup removes the software reservation immediately,
 even if the dispenser has stopped replying. It clears the preset display and
 timeout and publishes `PreAuthCancelled` plus an Idle snapshot, without creating

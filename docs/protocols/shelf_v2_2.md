@@ -86,6 +86,19 @@ waiting. A fresh idle status identifying the selected lifted gun triggers the
 wire authorization. Other gun bits or another active address cannot trigger it.
 The same path checks reactive orders against a fresh status before starting.
 
+While waiting, an individual lift bit for another configured nozzle on the same
+side cancels the reservation, clears the preset and timeout, and emits
+`PreAuthCancelled` and `PreAuthNozzleMismatch`. The wrong nozzle is shown as
+lifted. This also applies when both the reserved and wrong nozzles are lifted.
+Returning the wrong nozzle and lifting the reserved one cannot restore the
+order; the operator must authorize again. Other sides' reservations and already
+sent sales retain their ownership. Unexpected flow reported during cancellation
+is retained against the actual gun and stopped.
+
+On a side with multiple active nozzles, aggregate lift flag D0 alone does not
+identify a nozzle and cannot trigger authorization. The service waits for an
+individual nozzle bit. Single-nozzle sides retain aggregate-flag support.
+
 Before any authorization write, Cancel removes the local reservation, with no
 serial Stop and no transaction row. HTTP cancellation sets an interlock under
 the runtime lock before queuing the command, so a later lift cannot start it.

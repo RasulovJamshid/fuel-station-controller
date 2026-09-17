@@ -536,6 +536,9 @@ pub struct ShiftNozzleTotalizer {
     /// Latest available meter reading for an active shift; never a closing snapshot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_volume: Option<f64>,
+    /// Latest available money totalizer for an active shift.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_amount: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub open_amount: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

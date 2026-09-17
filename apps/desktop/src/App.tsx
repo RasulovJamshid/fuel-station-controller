@@ -37,7 +37,7 @@ function statusTag(raw: FpState["status"]): string {
 
 const WORKSPACE_TAB_IDS: WorkspaceTabId[] = ["dispensers", "shift", "reservoirs", "totalizer", "history", "admin"];
 const SELECTED_DISPENSER_FRAME_CLASS =
-  "ring-2 ring-accent-blue/90 ring-offset-2 ring-offset-bg-primary shadow-[0_2px_8px_rgb(var(--color-accent-blue)/0.18)]";
+  "ring-2 ring-accent-red/90 ring-offset-2 ring-offset-bg-primary shadow-[0_2px_8px_rgb(var(--color-accent-red)/0.18)]";
 
 export default function App() {
   const { t } = useTranslation();
@@ -620,7 +620,7 @@ export default function App() {
                         activeDispenserFpId === s.fp_id
                           ? SELECTED_DISPENSER_FRAME_CLASS
                           : ""
-                      } focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary`}
+                      } focus-visible:ring-2 focus-visible:ring-accent-red focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary`}
                       onFocus={() => setActiveDispenserFpId(s.fp_id)}
                       onClick={() => setActiveDispenserFpId(s.fp_id)}
                       onKeyDown={(e) => onDispenserKeyDown(s.fp_id, e)}
@@ -686,7 +686,7 @@ export default function App() {
                               activeDispenserFpId === s.fp_id
                                 ? SELECTED_DISPENSER_FRAME_CLASS
                                 : ""
-                            } focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary`}
+                            } focus-visible:ring-2 focus-visible:ring-accent-red focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary`}
                             onFocus={() => setActiveDispenserFpId(s.fp_id)}
                             onClick={() => setActiveDispenserFpId(s.fp_id)}
                             onKeyDown={(e) => onDispenserKeyDown(s.fp_id, e)}

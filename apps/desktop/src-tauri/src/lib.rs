@@ -1,5 +1,6 @@
 mod client;
 mod commands;
+mod exports;
 
 use client::{ServiceClient, SimClient};
 use tauri::Manager;
@@ -10,6 +11,7 @@ pub fn run() {
         .manage(ServiceClient::default())
         .manage(SimClient::default())
         .invoke_handler(tauri::generate_handler![
+            exports::save_excel_export,
             commands::get_health,
             commands::get_all_status,
             commands::get_site_config,

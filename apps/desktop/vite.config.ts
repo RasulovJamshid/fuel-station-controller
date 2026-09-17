@@ -10,6 +10,12 @@ export default defineConfig({
     },
   },
   clearScreen: false,
+  // Excel is loaded on demand. Pre-bundle its CommonJS browser build at startup
+  // so the first download does not trigger dependency optimization and a stale
+  // module request (504 / "Importing a module script failed" in WebKit).
+  optimizeDeps: {
+    include: ["exceljs"],
+  },
   server: {
     port: 5173,
     strictPort: true,

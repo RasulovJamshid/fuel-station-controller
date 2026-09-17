@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:excel": "node tests/excelExport.test.cjs",
+    "test:excel:browser": "node --experimental-vm-modules tests/excelImport.test.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "service": "cargo run --manifest-path ../../Cargo.toml -p dispenser-service --",
@@ -13,6 +15,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
+    "exceljs": "^4.4.0",
     "i18next": "^26.3.0",
     "lucide-react": "^1.16.0",
     "react": "^18.3.1",

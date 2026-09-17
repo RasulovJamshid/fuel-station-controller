@@ -10,6 +10,7 @@ import playIcon      from "@/assets/icons/play.svg";
 import xCircleIcon   from "@/assets/icons/x-circle.svg";
 import { formatMoneyInput, parseMoney } from "../lib/money";
 import type { FpState, NozzleSnapshot } from "../types/api";
+import { statusTag } from "../types/api";
 import type { AuthorizeRequest, FillMode } from "./DispenserCard";
 
 const fmtSum = new Intl.NumberFormat("uz-UZ");
@@ -39,6 +40,7 @@ export function FillSetupModal({
 
   const activeNozzles = useMemo(() => fpNozzles.filter((n) => n.active), [fpNozzles]);
   const multiNozzle   = activeNozzles.length > 1;
+  const nozzleLocked = mode === "reactive" || statusTag(state.status) !== "IDLE";
 
   type Step = "nozzle" | "mode" | "value";
 
@@ -46,7 +48,7 @@ export function FillSetupModal({
   const [fillMode, setFillMode]             = useState<FillMode>("volume");
   const [vol, setVol]                       = useState("10");
   const [amt, setAmt]                       = useState("150 000"); // overwritten on open by initPrice×10
-  const [step, setStep]                     = useState<Step>(multiNozzle ? "nozzle" : "value");
+  const [step, setStep]                     = useState<Step>(multiNozzle && !nozzleLocked ? "nozzle" : "value");
   const dialogRef   = useRef<HTMLDivElement>(null);
   const volInputRef = useRef<HTMLInputElement>(null);
   const amtInputRef = useRef<HTMLInputElement>(null);
@@ -62,8 +64,12 @@ export function FillSetupModal({
     setFillMode("volume");
     setVol("10");
     setAmt(initPrice > 0 ? formatMoneyInput(initPrice * 10) : "150 000");
-    setStep(activeNozzles.length > 1 ? "nozzle" : "value");
+    setStep(multiNozzle && !nozzleLocked ? "nozzle" : "value");
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (open && nozzleLocked && step === "nozzle") setStep("mode");
+  }, [open, nozzleLocked, step]);
 
   useEffect(() => {
     if (!open) return;
@@ -85,7 +91,9 @@ export function FillSetupModal({
     return () => window.cancelAnimationFrame(frame);
   }, [step, open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const effectiveNozzle = selectedNozzle ?? (activeNozzles.length === 1 ? activeNozzles[0]!.index : null);
+  const effectiveNozzle = nozzleLocked
+    ? state.nozzle_index
+    : selectedNozzle ?? (activeNozzles.length === 1 ? activeNozzles[0]!.index : null);
   const selectedSnap    = useMemo(
     () => activeNozzles.find((n) => n.index === effectiveNozzle) ?? null,
     [activeNozzles, effectiveNozzle],
@@ -100,7 +108,7 @@ export function FillSetupModal({
   const maxAmt  = price > 0 ? Math.floor(price * MAX_VOL) : null;
 
   const canConfirm =
-    effectiveNozzle != null &&
+    selectedSnap != null &&
     (fillMode === "full" ||
       (fillMode === "volume" && volNum > 0 && volNum <= MAX_VOL) ||
       (fillMode === "amount" && amtNum > 0 && (maxAmt == null || amtNum <= maxAmt)));
@@ -168,7 +176,7 @@ export function FillSetupModal({
     if (e.key === "Escape") {
       e.preventDefault();
       if (step === "value")                  { setStep("mode");   return; }
-      if (step === "mode" && multiNozzle)    { setStep("nozzle"); return; }
+      if (step === "mode" && multiNozzle && !nozzleLocked) { setStep("nozzle"); return; }
       onClose();
       return;
     }
@@ -182,7 +190,7 @@ export function FillSetupModal({
       else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
       return;
     }
-    if (step === "nozzle") {
+    if (step === "nozzle" && !nozzleLocked) {
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
         const ci = activeNozzles.findIndex((n) => n.index === effectiveNozzle);
@@ -372,10 +380,15 @@ export function FillSetupModal({
                       data-nozzle-option={n.index}
                       data-selected={sel ? "true" : "false"}
                       aria-pressed={sel}
-                      onClick={() => { setSelectedNozzle(n.index); setStep("mode"); }}
+                      disabled={nozzleLocked}
+                      onClick={() => {
+                        if (nozzleLocked) return;
+                        setSelectedNozzle(n.index);
+                        setStep("mode");
+                      }}
                       style={sel ? { borderLeftColor: n.product_color ?? "#888" } : undefined}
                       className={[
-                        "flex items-center gap-3 rounded-xl border px-4 py-4 text-left shadow-sm transition-all",
+                        "flex items-center gap-3 rounded-xl border px-4 py-4 text-left shadow-sm transition-all disabled:cursor-not-allowed",
                         "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/45 focus-visible:ring-offset-1",
                         sel ? `pump-selected-product ${accentActive}` : "border-border-primary/60 bg-bg-secondary/35 hover:border-border-primary hover:bg-bg-secondary/65",
                       ].join(" ")}

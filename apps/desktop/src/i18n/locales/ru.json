@@ -309,6 +309,23 @@
     "live": "Онлайн",
     "atgUpdate": "Данные об остатках обновляются через ATG."
   },
+  "excel": {
+    "totalizerScope": "Показания счётчиков относятся ко всей смене и не зависят от фильтров транзакций.",
+    "download": "Скачать Excel",
+    "exporting": "Экспорт…",
+    "saved": "Файл Excel сохранён: {{path}}",
+    "downloadStarted": "Скачивание файла Excel началось.",
+    "failed": "Не удалось экспортировать Excel: {{error}}",
+    "summary": "Сводка",
+    "field": "Поле",
+    "value": "Значение",
+    "exportedAt": "Время экспорта",
+    "from": "Начало",
+    "until": "Окончание",
+    "shiftId": "ID смены",
+    "transactionId": "ID транзакции",
+    "completedAt": "Время завершения"
+  },
   "history": {
     "title": "История реализации",
     "allFuel": "Всё топливо",

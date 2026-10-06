@@ -33,13 +33,13 @@ test('copying a site preserves hardware extensions while replacing identity and 
   assert.equal(result.sync.backend_url, 'https://destination.example');
   assert.equal(result.sync.enabled, true);
   assert.equal(result.sync.batch_size, 50);
-  assert.equal(result.atg.auth, null);
+  assert.equal(result.atg, null);
   assert.equal(result.tanks[0].current_l, 0);
   assert.equal(result.tanks[0].capacity_l, 20000);
   assert.equal(result.products[0].uuid, 'stable-product-id');
   assert.equal(result.connection.custom_timing, 42);
   assert.equal(result.fueling_positions[0].nozzles[0].azt_address, 16);
-  assert.equal(result.atg.branches[0].slots[0].maxima.product_volume, 20000);
+  // Source hardware identity must not be active on the destination.
   assert.equal(JSON.stringify(original), before);
   result.site.name = 'Edited';
   assert.equal(target.site.name, 'Destination');
@@ -49,7 +49,24 @@ test('older configurations can be copied without optional tanks or ATG', () => {
   const target = { site: { id: 'new' }, sync: { enabled: true, api_key: 'key', backend_url: 'https://server.example' } };
   const result = copySiteSetup({ site: { id: 'old' }, sync: {} }, target);
   assert.equal(result.tanks.length, 0);
-  assert.equal(result.atg, undefined);
+  assert.equal(result.atg, null);
+});
+
+test('copying preserves the destination physical tanks and controller mappings', () => {
+  const source = { site: { id: 'source' }, sync: {}, tanks: [{ tank_id: 'source-tank' }] };
+  const target = {
+    site: { id: 'target' }, sync: {},
+    tanks: [{ tank_id: 'target-tank', product_id: 1, capacity_l: 18000, current_l: 5000 }],
+    atg: { auth: { api_token: 'secret' }, branches: [{ host: '192.168.2.20', slots: [{ tank_id: 'target-tank' }] }] },
+  };
+  const result = copySiteSetup(source, target);
+  assert.equal(result.tanks[0].tank_id, 'target-tank');
+  assert.equal(result.tanks[0].capacity_l, 18000);
+  assert.equal(result.atg.branches[0].slots[0].tank_id, 'target-tank');
+  assert.equal(result.atg.auth, null);
+  result.tanks[0].capacity_l = 30000;
+  assert.equal(target.tanks[0].capacity_l, 18000);
+  assert.equal(target.atg.auth.api_token, 'secret');
 });
 
 test('new identifiers fill gaps and never reuse occupied IDs on exhaustion', () => {

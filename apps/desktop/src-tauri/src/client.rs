@@ -19,10 +19,9 @@ fn fmt_err(e: impl std::error::Error) -> String {
 use types::{
     AdminApplyPricesCmd, AdminAuthCmd, AdminAuthResponse, AdminCatalog, AdminChangePinCmd,
     AdminPriceEntry, AdminSettingsSnapshot, AdminShiftScheduleCmd, AdminUpdateOperatorCmd,
-    AuthorizeCmd, CloseStoppedTxCmd, CreateOperatorCmd, EndShiftCmd, FpState,
-    HandoverCmd, Operator, PriceChange, SavePositionNozzlesCmd, SaveProductsCmd,
-    Shift, SiteSnapshot, StartShiftCmd, StopCmd, Transaction, TxSummary, UpdateAllPricesCmd,
-    UpdatePriceCmd,
+    AuthorizeCmd, CloseStoppedTxCmd, CreateOperatorCmd, EndShiftCmd, FpState, HandoverCmd,
+    Operator, PriceChange, SavePositionNozzlesCmd, SaveProductsCmd, Shift, SiteSnapshot,
+    StartShiftCmd, StopCmd, Transaction, TxSummary, UpdateAllPricesCmd, UpdatePriceCmd,
 };
 
 #[derive(Clone)]
@@ -782,8 +781,12 @@ impl ServiceClient {
         &self,
         product_id: Option<u8>,
         limit: Option<i64>,
+        tank_id: Option<String>,
     ) -> Result<Vec<types::FuelDelivery>, String> {
         let mut url = self.base.join("deliveries").map_err(fmt_err)?;
+        if let Some(id) = tank_id {
+            url.query_pairs_mut().append_pair("tank_id", &id);
+        }
         {
             let mut q = url.query_pairs_mut();
             if let Some(p) = product_id {
@@ -828,8 +831,12 @@ impl ServiceClient {
     pub async fn wetstock_preview(
         &self,
         product_id: Option<u8>,
+        tank_id: Option<String>,
     ) -> Result<Vec<types::WetstockReconciliation>, String> {
         let mut url = self.base.join("wetstock/preview").map_err(fmt_err)?;
+        if let Some(id) = tank_id {
+            url.query_pairs_mut().append_pair("tank_id", &id);
+        }
         if let Some(p) = product_id {
             url.query_pairs_mut()
                 .append_pair("product_id", &p.to_string());
@@ -870,11 +877,15 @@ impl ServiceClient {
         &self,
         product_id: Option<u8>,
         limit: Option<i64>,
+        tank_id: Option<String>,
     ) -> Result<Vec<types::WetstockReconciliation>, String> {
         let mut url = self
             .base
             .join("wetstock/reconciliations")
             .map_err(fmt_err)?;
+        if let Some(id) = tank_id {
+            url.query_pairs_mut().append_pair("tank_id", &id);
+        }
         {
             let mut q = url.query_pairs_mut();
             if let Some(p) = product_id {
@@ -963,73 +974,67 @@ impl ServiceClient {
         Ok(())
     }
 
-    pub async fn admin_get_atg_config(&self) -> Result<serde_json::Value, String> {
-        let url = self.base.join("admin/atg-config").map_err(fmt_err)?;
-        self.http
-            .get(url)
-            .send()
-            .await
-            .map_err(fmt_err)?
-            .error_for_status()
-            .map_err(fmt_err)?
-            .json()
-            .await
-            .map_err(fmt_err)
-    }
-
-    pub async fn admin_atg_discover(
-        &self,
-        port: Option<u16>,
-        unit_id: Option<u8>,
-        start_register: Option<u16>,
-        address_base: Option<u16>,
-        register_count: Option<u16>,
-    ) -> Result<serde_json::Value, String> {
-        let mut url = self.base.join("admin/atg-discover").map_err(fmt_err)?;
-        {
-            let mut query = url.query_pairs_mut();
-            if let Some(p) = port {
-                query.append_pair("port", &p.to_string());
-            }
-            if let Some(id) = unit_id {
-                query.append_pair("unit_id", &id.to_string());
-            }
-            if let Some(register) = start_register {
-                query.append_pair("start_register", &register.to_string());
-            }
-            if let Some(base) = address_base {
-                query.append_pair("address_base", &base.to_string());
-            }
-            if let Some(count) = register_count {
-                query.append_pair("register_count", &count.to_string());
-            }
-        }
-        self.http
-            .get(url)
-            .send()
-            .await
-            .map_err(fmt_err)?
-            .error_for_status()
-            .map_err(fmt_err)?
-            .json()
-            .await
-            .map_err(fmt_err)
-    }
-
-    pub async fn admin_save_atg_config(&self, body: serde_json::Value) -> Result<(), String> {
-        let url = self.base.join("admin/atg-config").map_err(fmt_err)?;
+    pub async fn admin_get_atg_config(&self, token: &str) -> Result<serde_json::Value, String> {
         let resp = self
             .http
-            .post(url)
+            .get(self.base.join("admin/atg-config").map_err(fmt_err)?)
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(fmt_err)?;
+        if !resp.status().is_success() {
+            return Err(Self::response_error(resp).await);
+        }
+        resp.json().await.map_err(fmt_err)
+    }
+    pub async fn admin_atg_discover(
+        &self,
+        token: &str,
+        query: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let mut url = self.base.join("admin/atg-discover").map_err(fmt_err)?;
+        if let Some(fields) = query.as_object() {
+            for (key, value) in fields {
+                if !value.is_null() {
+                    url.query_pairs_mut().append_pair(
+                        key,
+                        &value
+                            .as_str()
+                            .map(str::to_string)
+                            .unwrap_or_else(|| value.to_string()),
+                    );
+                }
+            }
+        }
+        let resp = self
+            .http
+            .get(url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(fmt_err)?;
+        if !resp.status().is_success() {
+            return Err(Self::response_error(resp).await);
+        }
+        resp.json().await.map_err(fmt_err)
+    }
+    pub async fn admin_save_atg_config(
+        &self,
+        token: &str,
+        body: serde_json::Value,
+    ) -> Result<(), String> {
+        let resp = self
+            .http
+            .post(self.base.join("admin/atg-config").map_err(fmt_err)?)
+            .bearer_auth(token)
             .json(&body)
             .send()
             .await
             .map_err(fmt_err)?;
-        if resp.status().is_success() {
-            Ok(())
-        } else {
-            Err(Self::response_error(resp).await)
+        if !resp.status().is_success() {
+            return Err(Self::response_error(resp).await);
         }
+        Ok(())
     }
 }
 

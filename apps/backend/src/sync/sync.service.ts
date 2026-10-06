@@ -1,3 +1,4 @@
+import { storeStockRecord, STOCK_TYPES } from './stock-sync';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { DashboardGateway } from '../dashboard/dashboard.gateway';
@@ -22,14 +23,39 @@ export class SyncService {
 
         for (const record of dto.records) {
             try {
+                if (!STOCK_TYPES.has(record.entity_type) && !['transaction','shift','price_change','health_event'].includes(record.entity_type)) throw new Error(`Unsupported entity_type: ${record.entity_type}`);
                 const exists = await this.prisma.processedSyncRecord.findUnique({
                     where: { id: record.id },
                 });
-                if (exists) {
+                const stockHistory = ["fuel_delivery", "wetstock_reconciliation"].includes(record.entity_type);
+                if (exists && !stockHistory) {
+                    if (exists.stationId && exists.stationId !== stationId) throw new Error("Sync record belongs to another station");
                     accepted.push(record.id);
                     continue;
                 }
 
+                if (STOCK_TYPES.has(record.entity_type)) {
+                    const result = await this.prisma.$transaction(async tx => {
+                        const prior = await tx.processedSyncRecord.findUnique({ where: { id: record.id } });
+                        if (prior) {
+                            if (prior.stationId !== stationId) throw new Error('Sync record belongs to another station');
+                            if (!stockHistory) return { changed: false };
+                            // Older servers acknowledged these types without persisting them.
+                            const stored = await tx.stationStockRecord.findUnique({where:{stationId_entityType_sourceId:{stationId,entityType:record.entity_type,sourceId:String(record.payload.id)}}});
+                            if (stored) return { changed: false };
+                            await storeStockRecord(tx,stationId,companyId,record);
+                            return { changed: true };
+                        }
+                        await tx.processedSyncRecord.create({ data: { id: record.id, stationId } });
+                        const reading = await storeStockRecord(tx, stationId, companyId, record);
+                        return { changed: true, reading };
+                    });
+                    accepted.push(record.id);
+                    if (!result.changed) continue;
+                    this.gateway.broadcast('tank.updated', { stationId, tankId: record.payload.tank_id });
+                    if (result.reading) this.integrations.dispatch(companyId, stationId, 'tank.reading', { ...result.reading }).catch(() => {});
+                    continue;
+                }
                 await this.processRecord(stationId, companyId, record);
 
                 await this.prisma.processedSyncRecord.create({
@@ -54,11 +80,10 @@ export class SyncService {
         switch (record.entity_type) {
             case 'transaction':       return this.upsertTransaction(stationId, companyId, record.payload);
             case 'shift':             return this.upsertShift(stationId, companyId, record.payload);
-            case 'reservoir_reading': return this.upsertReservoirReading(stationId, companyId, record.payload);
             case 'price_change':      return this.recordPriceChange(stationId, companyId, record.payload);
             case 'health_event':      return this.recordHealthEvent(stationId, companyId, record.payload);
             default:
-                this.logger.warn(`Unknown entity_type: ${record.entity_type}`);
+                throw new Error(`Unsupported entity_type: ${record.entity_type}`);
         }
     }
 
@@ -243,70 +268,6 @@ export class SyncService {
     private toBigInt(value: bigint | number | null | undefined): bigint {
         if (typeof value === 'bigint') return value;
         return BigInt(value ?? 0);
-    }
-
-    private async upsertReservoirReading(stationId: string, companyId: string, p: any) {
-        let reservoir = await this.prisma.reservoir.findFirst({
-            where: { stationId, tankId: p.tank_id },
-        });
-        if (!reservoir) {
-            // Auto-provision the tank on its first reading so ATG data is never
-            // dropped. The label/capacity are placeholders an admin can edit later.
-            reservoir = await this.autoCreateReservoir(stationId, p);
-        }
-
-        const fillPercent = reservoir.capacity > 0
-            ? p.volume_litres / reservoir.capacity * 100
-            : p.fill_percent ?? null;
-
-        await this.prisma.reservoirReading.create({
-            data: {
-                reservoirId:  reservoir.id,
-                stationId,
-                companyId,
-                readingAt:    new Date(p.reading_at),
-                volumeLitres: p.volume_litres,
-                levelMm:      p.level_mm ?? null,
-                temperatureC: p.temperature_c ?? null,
-                waterMm:      p.water_mm ?? null,
-                fillPercent,
-            },
-        });
-
-        this.gateway.broadcast('tank.updated', { stationId, tankId: p.tank_id });
-
-        this.integrations.dispatch(companyId, stationId, 'tank.reading', {
-            tankId: p.tank_id, reservoirId: reservoir.id,
-            volumeLitres: p.volume_litres, fillPercent,
-            levelMm: p.level_mm ?? null, readingAt: p.reading_at,
-        }).catch(() => {});
-    }
-
-    /**
-     * Create a reservoir for a tank we've never seen before. The product name
-     * is resolved from the station's nozzles when possible; label and capacity
-     * are placeholders (capacity 0 = unknown) that an admin can edit afterwards.
-     */
-    private async autoCreateReservoir(stationId: string, p: any) {
-        const productId = p.product_id ?? 0;
-        const nozzle = await this.prisma.nozzle.findFirst({
-            where:  { productId, position: { stationId } },
-            select: { productName: true },
-        });
-        const reservoir = await this.prisma.reservoir.upsert({
-            where:  { stationId_tankId: { stationId, tankId: p.tank_id } },
-            create: {
-                stationId,
-                tankId:      p.tank_id,
-                label:       `Tank ${p.tank_id}`,
-                productId,
-                productName: nozzle?.productName ?? '',
-                capacity:    0,
-            },
-            update: {},
-        });
-        this.logger.log(`Auto-created reservoir tank_id=${p.tank_id} on station ${stationId}`);
-        return reservoir;
     }
 
     private async recordPriceChange(stationId: string, companyId: string, p: any) {

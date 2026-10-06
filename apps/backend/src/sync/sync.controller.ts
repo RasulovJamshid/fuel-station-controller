@@ -6,6 +6,7 @@ import { SyncBatchDto } from './dto/sync-batch.dto';
 import { StationApiKeyGuard } from '../common/guards/station-api-key.guard';
 import { StationsService } from '../stations/stations.service';
 import { SaveServiceConfigDto } from '../stations/dto/service-config.dto';
+import { StationResponse } from '../common/decorators/station-response.decorator';
 
 @ApiTags('sync')
 @ApiSecurity('station-key')
@@ -20,6 +21,7 @@ export class SyncController {
     @ApiUnauthorizedResponse({ description: 'Missing or invalid station API key' })
     @UseGuards(StationApiKeyGuard)
     @HttpCode(HttpStatus.OK)
+    @StationResponse('sync')
     batch(
         @Param('stationId') stationId: string,
         @Body() dto: SyncBatchDto,
@@ -40,6 +42,7 @@ export class SyncController {
     @ApiOkResponse({ description: 'Current price settings for the station' })
     @ApiUnauthorizedResponse({ description: 'Missing or invalid station API key' })
     @UseGuards(StationApiKeyGuard)
+    @StationResponse('prices')
     prices(@Param('stationId') stationId: string) {
         return this.sync.getCurrentPricesForStation(stationId);
     }

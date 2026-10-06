@@ -7,6 +7,7 @@ use types::{
 use uuid::Uuid;
 use wayne_europump::{decode_amount, decode_volume, Frame};
 
+use super::protocols::azt_state::AztRuntimeState;
 use super::protocols::bluesky_state::BlueSkyRuntimeState;
 use super::protocols::shelf_state::ShelfRuntimeState;
 use super::protocols::wayne_state::WayneRuntimeState;
@@ -48,7 +49,7 @@ pub struct StoppedContext {
     pub nozzle_index: u8,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PreAuthContext {
     pub nozzle_index: u8,
     #[allow(dead_code)]
@@ -101,12 +102,13 @@ pub struct RuntimeFp {
     pub(in crate::engine) wayne: WayneRuntimeState,
     pub(in crate::engine) bluesky: BlueSkyRuntimeState,
     pub(in crate::engine) shelf: ShelfRuntimeState,
+    pub(in crate::engine) azt: AztRuntimeState,
 }
 
 /// Hose lift notifications older than this are ignored for "still up" guards.
 const WIRE_LIFT_STALE_MS: i64 = 4_000;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CurrentTx {
     pub id: String,
     pub started_at: i64,
@@ -145,6 +147,7 @@ impl RuntimeFp {
             wayne: WayneRuntimeState::default(),
             bluesky: BlueSkyRuntimeState::default(),
             shelf: ShelfRuntimeState::default(),
+            azt: AztRuntimeState::default(),
             state: FpState {
                 fp_id: fp.id.clone(),
                 label: fp.label.clone(),
@@ -161,6 +164,7 @@ impl RuntimeFp {
                 seq: 0,
                 missed_polls: 0,
                 updated_at: now,
+                protocol_error: None,
                 stopped_tx_id: None,
                 base_volume: None,
                 base_amount: None,

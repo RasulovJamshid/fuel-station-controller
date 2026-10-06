@@ -37,6 +37,7 @@ export interface FpState {
   seq: number;
   missed_polls: number;
   updated_at: number;
+  protocol_error?: string | null;
   stopped_tx_id?: string | null;
   base_volume?: number | null;
   base_amount?: number | null;
@@ -76,6 +77,10 @@ export interface ShiftSlot {
 }
 
 export interface TankSnapshot {
+  tank_id: string;
+  reading_status: 'fresh' | 'stale' | 'offline' | 'waiting' | 'disabled';
+  stale_after_ms: number;
+  last_error?: string;
   product_id: number;
   label: string;
   capacity_l: number;
@@ -167,6 +172,7 @@ export interface Shift {
 // ── Forecourt operations ──────────────────────────────────────────────────
 
 export interface FuelDelivery {
+  tank_id?: string | null;
   id: string;
   product_id: number;
   product_name: string;
@@ -189,6 +195,7 @@ export interface FuelDelivery {
 }
 
 export interface CreateDeliveryCmd {
+  tank_id?: string;
   product_id: number;
   tank_label?: string;
   delivered_at?: number;
@@ -207,6 +214,7 @@ export type VarianceStatus = "OK" | "WARN" | "ALARM";
 
 /** Book stock (opening + deliveries − sales) compared with the measured ATG dip. */
 export interface WetstockReconciliation {
+  tank_id?: string | null;
   id: string;
   product_id: number;
   product_name: string;
@@ -411,6 +419,9 @@ export interface AtgSlotInfo {
 }
 
 export interface AtgBranchInfo {
+  external_station_id?: number | null;
+  word_order?: "ABCD" | "CDAB" | "BADC" | "DCBA";
+  height_unit?: "mm" | "m";
   id: number;
   name: string;
   host: string;
@@ -422,12 +433,24 @@ export interface AtgBranchInfo {
   slots: AtgSlotInfo[];
 }
 
+export interface TankConfig {
+  tank_id: string; product_id: number; label: string; capacity_l: number; current_l: number;
+  nozzle_sources?: { fp_id: string; nozzle_index: number }[];
+}
 export interface AtgConfigSnapshot {
+  export_enabled?: boolean;
+  tanks: TankConfig[];
+  stale_after_secs?: number | null;
+  pending_exports?: number;
+  export_error?: string | null;
+  environment_overrides?: string[];
   enabled: boolean;
   poll_interval_secs: number;
   modbus_timeout_secs: number;
   api_url: string;
   auth?: {
+    api_token_set?: boolean;
+    password_set?: boolean;
     api_token?: string;
     username?: string;
     password?: string;

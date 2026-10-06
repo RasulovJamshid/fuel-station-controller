@@ -90,6 +90,15 @@ pub async fn enqueue(
     entity_id: &str,
     payload: &serde_json::Value,
 ) -> anyhow::Result<()> {
+    enqueue_on(pool, entity_type, entity_id, payload).await
+}
+
+pub(crate) async fn enqueue_on<'e>(
+    executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    entity_type: &str,
+    entity_id: &str,
+    payload: &serde_json::Value,
+) -> anyhow::Result<()> {
     let json = serde_json::to_string(payload)?;
     let sync_id = deterministic_id(entity_type, entity_id, &json);
     let now = chrono::Utc::now().timestamp_millis();
@@ -108,7 +117,7 @@ pub async fn enqueue(
     .bind(entity_id)
     .bind(json)
     .bind(now)
-    .execute(pool)
+    .execute(executor)
     .await?;
 
     Ok(())

@@ -140,11 +140,11 @@ impl SimDispenser {
         }
 
         if self.status == SimStatus::Dispensing {
-            let cap = if self.full_tank {
-                FULL_TANK_CAP_CL
-            } else {
-                self.dose_cl.unwrap_or(FULL_TANK_CAP_CL)
-            };
+            // The encoded dose remains a ceiling in full-tank mode (§7.13).
+            let cap = self
+                .dose_cl
+                .unwrap_or(FULL_TANK_CAP_CL)
+                .min(FULL_TANK_CAP_CL);
             self.volume_cl += (self.fill_rate * dt * 100.0) as u64;
             if self.volume_cl >= cap {
                 self.volume_cl = cap;
@@ -371,10 +371,7 @@ impl SimDispenser {
 
     /// Physical/forecourt emergency stop: end the sale where it stands.
     pub fn force_stop(&mut self) {
-        if matches!(
-            self.status,
-            SimStatus::Authorized | SimStatus::Dispensing
-        ) {
+        if matches!(self.status, SimStatus::Authorized | SimStatus::Dispensing) {
             self.finish(false);
         }
     }
@@ -479,6 +476,18 @@ mod tests {
         // UINTR bumped by set-price + authorize
         let tr = expect_data(d.handle_request(&req(0x59, &[])));
         assert_eq!(tr, b"00000002");
+    }
+
+    #[test]
+    fn full_tank_honors_the_encoded_volume_ceiling() {
+        let mut d = sim();
+        expect_short(d.handle_request(&req(0x54, b"010001")), ACK);
+        expect_short(d.handle_request(&req(0x32, &[])), ACK);
+        d.lift_nozzle(None, None).unwrap();
+        d.volume_cl = 1000;
+        d.tick();
+        assert_eq!(d.status, SimStatus::Finished { overfill: false });
+        assert_eq!(d.volume_cl, 1000);
     }
 
     #[test]

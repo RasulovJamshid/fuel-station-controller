@@ -151,7 +151,7 @@ export default function SiteConfigPage() {
         <p className="text-sm text-slate-500">{labels.protocolHint}</p>
         {fields(config.connection, [{ key: 'protocol', options: protocolNames }, { key: 'port' }, number('baud_rate', undefined, 1), choice('parity', ['none', 'odd', 'even']), number('data_bits', undefined, 5, 8), number('stop_bits', undefined, 1, 2), number('response_timeout_ms', undefined, 1)], next => {
           if (next.protocol !== config.connection.protocol && protocolPresets[next.protocol]) {
-            Object.assign(next, protocolPresets[next.protocol], { data_bits: 8, stop_bits: 1 });
+            Object.assign(next, { data_bits: 8, stop_bits: 1 }, protocolPresets[next.protocol]);
             if (config.connection.port.toLowerCase() === 'mock' && next.protocol !== 'mock') next.port = '';
             if (next.protocol === 'mock') next.port = 'mock';
           }
@@ -196,19 +196,37 @@ export default function SiteConfigPage() {
       <Section title={labels.tanks}>
         <p className="text-sm text-slate-500">{labels.tankHint}</p>
         {rows('tanks').map((tank, i) => <div key={i} className="rounded-xl border border-slate-200 p-4 space-y-3">
-          {fields(tank, [productField, { key: 'label' }, { ...number('capacity_l', undefined, 0), step: 0.01 }, { ...number('current_l', undefined, 0), step: 0.01 }], next => changeRow('tanks', i, next))}
+          {fields(tank, [{ key: 'tank_id', fallback: String(tank.product_id) }, productField, { key: 'label' }, { ...number('capacity_l', undefined, 0), step: 0.01 }, { ...number('current_l', undefined, 0), step: 0.01 }], next => {
+            const tankId = tank.tank_id ?? String(tank.product_id);
+            next = { ...next, tank_id: next.tank_id ?? tankId };
+            if (next.product_id !== tank.product_id) next.nozzle_sources = [];
+            const atg = config.atg && { ...config.atg, branches: config.atg.branches.map((branch: ConfigRecord) => ({
+              ...branch, slots: branch.slots.map((slot: ConfigRecord) => {
+                if (slot.tank_id !== tankId) return slot;
+                const maxima = { ...slot.maxima };
+                delete maxima.product_volume;
+                return { ...slot, tank_id: next.tank_id, product_id: next.product_id, capacity_l: undefined, maxima };
+              }),
+            })) };
+            update({ ...config, tanks: rows('tanks').map((row, j) => j === i ? next : row), atg });
+          })}
+          <details><summary className="text-sm">{labels.nozzles}</summary><div className="flex flex-wrap gap-3 mt-2">
+            {rows('fueling_positions').flatMap(fp => fp.nozzles.filter((n: ConfigRecord) => n.product_id === tank.product_id).map((n: ConfigRecord) => <label className="text-xs" key={`${fp.id}/${n.index}`}>
+              <input type="checkbox" checked={(tank.nozzle_sources ?? []).some((s: ConfigRecord) => s.fp_id === fp.id && s.nozzle_index === n.index)} onChange={e => changeRow('tanks', i, { ...tank, nozzle_sources: e.target.checked ? [...(tank.nozzle_sources ?? []), { fp_id: fp.id, nozzle_index: n.index }] : (tank.nozzle_sources ?? []).filter((s: ConfigRecord) => s.fp_id !== fp.id || s.nozzle_index !== n.index) })} /> {fp.label} / {n.index}
+            </label>))}
+          </div></details>
           {removeButton(() => removeRow('tanks', i))}
         </div>)}
         {addButton(() => {
-          const product = rows('products').find(p => !rows('tanks').some(t => t.product_id === p.id));
-          if (product) addRow('tanks', { product_id: product.id, label: product.name, capacity_l: 20000, current_l: 0 });
-        }, !rows('products').some(p => !rows('tanks').some(t => t.product_id === p.id)))}
+          const product = rows('products')[0];
+          if (product) section('tanks', [...rows('tanks').map(t => ({...t, tank_id: t.tank_id ?? String(t.product_id)})), { tank_id: crypto.randomUUID(), product_id: product.id, label: `Tank ${rows('tanks').length + 1}`, capacity_l: 25000, current_l: 0 }]);
+        }, !rows('products').length)}
       </Section>
 
       <Section title={labels.atg}>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(config.atg)} onChange={e => section('atg', e.target.checked ? { poll_interval_secs: 300, modbus_timeout_secs: 10, api_url: '', auth: null, branches: [] } : null)} />{labels.enabled}</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={config.atg?.enabled ?? Boolean(config.atg)} onChange={e => section('atg', { ...(config.atg ?? { poll_interval_secs: 300, modbus_timeout_secs: 10, api_url: '', auth: null, branches: [] }), enabled: e.target.checked })} />{labels.enabled}</label>
         {config.atg && <>
-          {fields(config.atg, [number('poll_interval_secs', 300, 1), { ...number('modbus_timeout_secs', 10, 0), step: 0.1 }, { key: 'api_url', fallback: '' }], next => section('atg', next))}
+          {fields(config.atg, [checkbox('export_enabled', true), number('poll_interval_secs', 300, 1, 86400), { ...number('modbus_timeout_secs', 10, 0.1, 120), step: 0.1 }, { ...number('stale_after_secs', undefined, 1, 604800), optional: true }, { key: 'api_url', fallback: '' }], next => section('atg', next))}
           <details className="space-y-3"><summary className="cursor-pointer text-sm font-medium">{labels.auth}</summary>
             {fields(config.atg.auth ?? {}, [{ key: 'api_token', type: 'password', fallback: '' }, { key: 'username', fallback: '' }, { key: 'password', type: 'password', fallback: '' }, { key: 'login_url', fallback: '' }], next => section('atg', { ...config.atg, auth: next }))}
           </details>
@@ -216,19 +234,33 @@ export default function SiteConfigPage() {
           {(config.atg.branches ?? []).map((branch: ConfigRecord, i: number) => {
             const changeBranch = (next: ConfigRecord) => section('atg', { ...config.atg, branches: config.atg.branches.map((b: ConfigRecord, j: number) => i === j ? next : b) });
             return <div key={i} className="rounded-xl border border-slate-200 p-4 space-y-4">
-              {fields(branch, [number('id', undefined, 0, 4294967295), { key: 'name', fallback: '' }, { key: 'host' }, number('port', 502, 1, 65535), number('unit_id', 1, 0, 255), number('start_register', 1000, 0, 65535), number('address_base', 1, 0, 65535), { key: 'register_count', type: 'number', fallback: 12, options: { 12: '12', 24: '24', 36: '36', 48: '48' } }], changeBranch)}
+              {fields(branch, [number('id', undefined, 0, 4294967295), { ...number('external_station_id', undefined, 0, 4294967295), optional: true }, { key: 'name', fallback: '' }, { key: 'host' }, number('port', 502, 1, 65535), number('unit_id', 1, 0, 255), number('start_register', 1000, 0, 65535), number('address_base', 1, 0, 1), { ...number('register_count', 12, 12, 65532), step: 12 }, choice('word_order', ['ABCD','CDAB','BADC','DCBA'], 'ABCD'), choice('height_unit', ['mm','m'], 'mm')], changeBranch)}
               <h4 className="text-sm font-medium">{labels.slots}</h4>
               {branch.slots.map((slot: ConfigRecord, j: number) => <div key={j} className="rounded-lg bg-slate-50 p-3 space-y-3">
-                {fields(slot, [number('slot', undefined, 1, 4), { ...productField, optional: true }, { key: 'type' }, { key: 'tank_id', optional: true }, { key: 'label', optional: true }, { ...number('capacity_l', undefined, 0), step: 0.01, optional: true }], next => changeBranch({ ...branch, slots: branch.slots.map((s: ConfigRecord, k: number) => j === k ? next : s) }))}
+                <label className="flex flex-col gap-1.5 text-sm">{labels.tank_id}
+                  <select className="input-control" value={slot.tank_id ?? ''} onChange={e => {
+                    const tank = rows('tanks').find(t => (t.tank_id ?? String(t.product_id)) === e.target.value);
+                    if (!tank) return;
+                    const next: ConfigRecord = { ...slot, tank_id: tank.tank_id ?? String(tank.product_id), product_id: tank.product_id, type: rows('products').find(p => p.id === tank.product_id)?.name ?? slot.type };
+                    delete next.capacity_l;
+                    next.maxima = { ...slot.maxima };
+                    delete next.maxima.product_volume;
+                    changeBranch({ ...branch, slots: branch.slots.map((s: ConfigRecord, k: number) => j === k ? next : s) });
+                  }}><option value="">{labels.choose}</option>{rows('tanks').map(t => <option key={t.tank_id ?? t.product_id} value={t.tank_id ?? String(t.product_id)}>{t.label} ({rows('products').find(p => p.id === t.product_id)?.name})</option>)}</select>
+                </label>
+                {fields(slot, [number('slot', undefined, 1, 5461), { ...productField, optional: true }, { key: 'type' }, { key: 'tank_id', optional: true }, { key: 'label', optional: true }, { ...number('capacity_l', undefined, 0), step: 0.01, optional: true }], next => changeBranch({ ...branch, slots: branch.slots.map((s: ConfigRecord, k: number) => j === k ? next : s) }))}
+                <details><summary className="text-sm">{labels.maxima}</summary><div className="grid grid-cols-2 gap-2">
+                  {['product_height','water_height','product_temperature','product_and_water_volume','product_volume','water_volume'].map(key => <label className="text-xs" key={key}>{key}<input className="input-control" type="number" min={0} step="any" value={slot.maxima?.[key] ?? ''} onChange={e => { const maxima = {...slot.maxima}; if(e.target.value==='')delete maxima[key];else maxima[key]=Number(e.target.value);changeBranch({...branch,slots:branch.slots.map((s: ConfigRecord,k:number)=>j===k?{...s,maxima}:s)}); }} /></label>)}
+                </div></details>
                 {removeButton(() => changeBranch({ ...branch, slots: branch.slots.filter((_: ConfigRecord, k: number) => j !== k) }))}
               </div>)}
               <div className="flex justify-between gap-2">
                 {addButton(() => {
-                  const slot = nextNumber(branch.slots, 'slot', 4);
-                  const tank = rows('tanks')[0];
+                  const slot = nextNumber(branch.slots, 'slot', 5461);
+                  const tank = rows('tanks').find(t => !config.atg.branches.some((b: ConfigRecord) => b.slots.some((s: ConfigRecord) => s.tank_id === (t.tank_id ?? String(t.product_id)))));
                   const product = rows('products').find(p => p.id === tank?.product_id);
-                  changeBranch({ ...branch, register_count: Math.max(branch.register_count ?? 12, slot * 12), slots: [...branch.slots, { slot, type: product?.name ?? '', ...(tank ? { product_id: tank.product_id } : {}) }] });
-                }, branch.slots.length >= 4)}
+                  changeBranch({ ...branch, register_count: Math.max(branch.register_count ?? 12, slot * 12), slots: [...branch.slots, { slot, type: product?.name ?? '', ...(tank ? { tank_id: tank.tank_id ?? String(tank.product_id), product_id: tank.product_id } : {}) }] });
+                }, branch.slots.length >= 5461)}
                 {removeButton(() => section('atg', { ...config.atg, branches: config.atg.branches.filter((_: ConfigRecord, j: number) => i !== j) }))}
               </div>
             </div>;

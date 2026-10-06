@@ -200,6 +200,11 @@ export function Header({ shift, onOpenWorkspace }: HeaderProps) {
         {eStopButton}
       </div>
 
+      {states.filter((state) => state.protocol_error).map((state) => (
+        <div key={state.fp_id} role="alert" className="border-t border-accent-red-dark/50 bg-accent-red-dark/40 px-3 py-1 text-[12px] text-accent-red-light">
+          {state.label}: {state.protocol_error}
+        </div>
+      ))}
       {invokeError ? (
         <div className="flex items-center justify-between gap-3 border-t border-accent-red-dark/50 bg-accent-red-dark/40 px-3 py-1 text-[11px] text-accent-red-light">
           <span className="min-w-0 break-words">{invokeError}</span>

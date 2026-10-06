@@ -100,6 +100,30 @@ describe('StationsService', () => {
         }));
     });
 
+    it('backs up and returns legacy ATG settings without applying new station validation or rewriting them', async () => {
+        const legacy = {
+            ...serviceConfig,
+            tanks: [{ product_id: 1, label: 'Tank 1', capacity_l: 20000, current_l: 10000 }],
+            atg: { branches: [{ id: 1, host: '192.0.2.1', register_count: 24, slots: [
+                { slot: 1, product_id: 1, type: 'AI-92', capacity_l: 25000 },
+                { slot: 2, product_id: 1, type: 'AI-92', capacity_l: 25000 },
+            ] }] },
+        };
+        const station: any = { id: 'station-1', name: 'Station 1', timezone: 'Asia/Tashkent', apiKey: 'key' };
+        const prisma: any = { station: {
+            findFirst: jest.fn(async () => station),
+            update: jest.fn(async ({ data }) => { station.serviceConfigBackup = data.serviceConfigBackup; return {}; }),
+        } };
+        const service = new StationsService(prisma, {} as any, {} as any, {} as any);
+        await service.backupServiceConfig('station-1', 'company-1', legacy);
+        const downloaded = await service.getServiceConfig('station-1', 'company-1', 'https://server.example');
+        expect(downloaded.config.tanks).toEqual(legacy.tanks);
+        expect(downloaded.config.atg).toEqual(legacy.atg);
+        expect(downloaded.source).toBe('station-backup');
+        expect(legacy.tanks[0]).not.toHaveProperty('tank_id');
+        expect(legacy.sync.api_key).toBe('local-secret');
+    });
+
     it('downloads the dashboard config with current station identity and credentials', async () => {
         const prisma: any = {
             station: {

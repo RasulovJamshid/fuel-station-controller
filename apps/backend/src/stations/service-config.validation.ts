@@ -35,18 +35,21 @@ const schema = object({
         id: text().required(), label: text().required(), address_byte: byte().required(), active: Joi.boolean().required(),
         nozzles: Joi.array().unique('index').items(nozzle).required(),
     })).required(),
-    tanks: Joi.array().unique('product_id').items(object({
+    tanks: Joi.array().items(object({
+        tank_id: text(), nozzle_sources: Joi.array().items(object({ fp_id: text().required(), nozzle_index: byte().min(1).required() })),
         product_id: byte().required(), label: text().required(), capacity_l: positive().required(), current_l: Joi.number().min(0).required(),
     })),
     atg: object({
-        poll_interval_secs: uint().min(1), modbus_timeout_secs: positive(), api_url: optionalText(),
-        auth: object({ api_token: optionalText(), username: optionalText(), password: optionalText(), login_url: optionalText() }).allow(null),
+        enabled: Joi.boolean(), export_enabled: Joi.boolean(),
+        poll_interval_secs: uint(86400).min(1), modbus_timeout_secs: Joi.number().min(0.1).max(120), stale_after_secs: uint(604800).min(1).allow(null), api_url: optionalText().uri({ scheme: ['http', 'https'] }),
+        auth: object({ api_token: optionalText(), username: optionalText(), password: optionalText(), login_url: optionalText().uri({ scheme: ['http', 'https'] }) }).allow(null),
         branches: Joi.array().unique('id').items(object({
+            external_station_id: uint(4294967295).allow(null), word_order: Joi.string().valid('ABCD','CDAB','BADC','DCBA'), height_unit: Joi.string().valid('mm','m'),
             id: uint(4294967295).required(), name: optionalText(), host: text().required(),
-            port: uint(65535).min(1), unit_id: byte(), start_register: uint(65535), address_base: uint(65535),
-            register_count: Joi.number().valid(12, 24, 36, 48),
+            port: uint(65535).min(1), unit_id: byte(), start_register: uint(65535), address_base: uint(1),
+            register_count: uint(65532).min(12).multiple(12),
             slots: Joi.array().min(1).unique('slot').items(object({
-                slot: uint(4).min(1).required(), tank_id: text().allow(null), type: text().required(),
+                slot: uint(5461).min(1).required(), tank_id: text().allow(null), type: text().required(),
                 product_id: byte().allow(null), label: text().allow(null), capacity_l: positive().allow(null),
                 maxima: Joi.object().pattern(text(), positive()),
             })).required(),
@@ -74,7 +77,9 @@ export function validateDashboardServiceConfig(value: Record<string, any>): void
     if (error) throw new BadRequestException(error.details.map(detail => detail.message));
     const errors: string[] = [];
     const products = new Set(value.products.map((p: any) => p.id));
-    const tanks = new Set((value.tanks ?? []).map((t: any) => t.product_id));
+    const tankRows = value.tanks ?? [];
+    const tankIds = new Set<string>();
+    const nozzleSources = new Set<string>();
     const addresses = new Set<number>();
     const hoseAddresses = new Set<number>();
     const protocol = value.connection.protocol;
@@ -104,20 +109,67 @@ export function validateDashboardServiceConfig(value: Record<string, any>): void
             }
         }
     }
-    for (const tank of value.tanks ?? []) {
+    for (const tank of tankRows) {
+        const tankId = tank.tank_id ?? String(tank.product_id);
+        if (!tankId.trim() || tankIds.has(tankId)) errors.push('Tank IDs must be non-empty and unique');
+        tankIds.add(tankId);
+        if (!tank.tank_id && tankRows.filter((t: any) => t.product_id === tank.product_id).length > 1) errors.push('Multiple tanks for one product require explicit tank IDs');
+        if (tank.current_l > tank.capacity_l) errors.push(`${tank.label}: starting volume exceeds capacity`);
+        for (const source of tank.nozzle_sources ?? []) {
+            const key = `${source.fp_id}/${source.nozzle_index}`;
+            if (nozzleSources.has(key)) errors.push('Nozzle source assigned to multiple tanks');
+            nozzleSources.add(key);
+            if (!value.fueling_positions.some((fp: any) => fp.id === source.fp_id && fp.nozzles.some((n: any) => n.index === source.nozzle_index && n.product_id === tank.product_id))) errors.push('Tank nozzle source must have the same product');
+        }
         if (!products.has(tank.product_id)) errors.push(`${tank.label}: unknown product ${tank.product_id}`);
         if (!tank.label.trim()) errors.push('Tank label cannot be blank');
     }
+    const mappedTanks = new Set<string>();
+    const slotIds = new Set<string>();
+    const probes = new Set<string>();
+    const groupUnits = new Map<string,string>();
+    if (value.atg) {
+        if (value.atg.enabled !== false && !value.atg.branches?.length) errors.push('Enabled ATG requires a controller');
+        if (value.atg.stale_after_secs != null && value.atg.stale_after_secs < (value.atg.poll_interval_secs ?? 300)) errors.push('Stale interval must be at least poll interval');
+        for (const raw of [value.atg.api_url, value.atg.auth?.login_url]) {
+            if (raw) {const url=new URL(raw);if (url.username || url.password) errors.push('ATG URLs must not include credentials');}
+        }
+        const auth = value.atg.auth;
+        if (auth && !auth.api_token && Boolean(auth.username) !== Boolean(auth.password)) errors.push('ATG login requires username and password');
+    }
     for (const branch of value.atg?.branches ?? []) {
+        const start = (branch.start_register ?? 1000) - (branch.address_base ?? 1);
+        if (start < 0 || start + (branch.register_count ?? 12) > 65536) errors.push('Invalid ATG register window');
         if (!branch.host.trim()) errors.push(`ATG ${branch.id}: host cannot be blank`);
         for (const slot of branch.slots) {
             const label = `ATG ${branch.id}, slot ${slot.slot}`;
+            const probe = `${branch.host.trim()}:${branch.port ?? 502}/${branch.unit_id ?? 1}/${start+(slot.slot-1)*12}`;
+            if (probes.has(probe)) errors.push(`${label}: duplicate physical probe`);
+            probes.add(probe);
+            const group = `${branch.external_station_id ?? branch.id}/${slot.type}`;
+            const unit = branch.height_unit ?? 'mm';
+            if (groupUnits.has(group) && groupUnits.get(group) !== unit) errors.push('External fuel group must use consistent height units');
+            groupUnits.set(group,unit);
             if (slot.slot * 12 > (branch.register_count ?? 12)) errors.push(`${label}: outside register count`);
-            if (slot.product_id != null && (!products.has(slot.product_id) || !tanks.has(slot.product_id))) errors.push(`${label}: product must have a matching tank`);
+            if (slot.tank_id) {
+                if (slotIds.has(slot.tank_id)) errors.push(`${label}: duplicate tank ID`);
+                slotIds.add(slot.tank_id);
+            }
+            if (slot.product_id != null) {
+                const candidates = tankRows.filter((t: any) => t.product_id === slot.product_id && (!slot.tank_id || !t.tank_id || t.tank_id === slot.tank_id));
+                if (!products.has(slot.product_id) || candidates.length !== 1) errors.push(`${label}: select one matching physical tank`);
+                else {
+                    const tank = candidates[0];
+                    const id = tank.tank_id ?? String(tank.product_id);
+                    if (mappedTanks.has(id)) errors.push(`${label}: tank is mapped more than once`);
+                    mappedTanks.add(id);
+                    if ([slot.capacity_l, slot.maxima?.product_volume].some(capacity => capacity != null && Math.abs(capacity - tank.capacity_l) > 0.01)) errors.push(`${label}: capacity conflicts with tank capacity`);
+                }
+            }
             for (const key of ['type', 'label', 'tank_id']) {
                 if (slot[key] != null && !slot[key].trim()) errors.push(`${label}: ${key} cannot be blank`);
             }
-            if (Object.keys(slot.maxima ?? {}).some(key => !key.trim())) errors.push(`${label}: maxima keys cannot be blank`);
+            if (Object.keys(slot.maxima ?? {}).some(key => !['product_height','water_height','product_temperature','product_and_water_volume','product_volume','water_volume'].includes(key))) errors.push(`${label}: maxima keys cannot be blank`);
         }
     }
     if (value.shifts?.mode === 'scheduled') {

@@ -17,10 +17,10 @@ use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tower_http::trace::TraceLayer;
 use types::{
-    AuthorizeCmd, CloseStoppedTxCmd, CreateOperatorCmd, EndShiftCmd, FpSnapshot,
-    FpState, FpStatus, HandoverCmd, NozzleSnapshot, Operator, Preset, ProductSnapshot,
-    Shift, ShiftSlot, SiteSnapshot, StartShiftCmd, StopCmd, StopSource,
-    TankSnapshot, Transaction, TxStatus, TxSummary, UpdateAllPricesCmd, WsEvent,
+    AuthorizeCmd, CloseStoppedTxCmd, CreateOperatorCmd, EndShiftCmd, FpSnapshot, FpState, FpStatus,
+    HandoverCmd, NozzleSnapshot, Operator, Preset, ProductSnapshot, Shift, ShiftSlot, SiteSnapshot,
+    StartShiftCmd, StopCmd, StopSource, Transaction, TxStatus, TxSummary, UpdateAllPricesCmd,
+    WsEvent,
 };
 
 use crate::admin::AdminSessions;
@@ -124,7 +124,7 @@ fn protocol_str(p: &Protocol) -> String {
 
 fn site_snapshot(
     cfg: &SiteConfig,
-    live: &std::collections::HashMap<u8, types::TankLiveLevel>,
+    live: &std::collections::HashMap<String, types::TankLiveLevel>,
 ) -> SiteSnapshot {
     let positions: Vec<FpSnapshot> = cfg
         .fueling_positions
@@ -180,33 +180,7 @@ fn site_snapshot(
             end: s.end.clone(),
         })
         .collect();
-    let tanks: Vec<TankSnapshot> = cfg
-        .tanks
-        .iter()
-        .map(|t| {
-            if let Some(l) = live.get(&t.product_id) {
-                TankSnapshot {
-                    product_id: t.product_id,
-                    label: t.label.clone(),
-                    capacity_l: t.capacity_l,
-                    current_l: l.current_l,
-                    temperature_c: Some(l.temperature_c),
-                    water_l: Some(l.water_l),
-                    updated_at_ms: Some(l.updated_at_ms),
-                }
-            } else {
-                TankSnapshot {
-                    product_id: t.product_id,
-                    label: t.label.clone(),
-                    capacity_l: t.capacity_l,
-                    current_l: t.current_l,
-                    temperature_c: None,
-                    water_l: None,
-                    updated_at_ms: None,
-                }
-            }
-        })
-        .collect();
+    let tanks = atg::snapshots(cfg, live, chrono::Utc::now().timestamp_millis());
     SiteSnapshot {
         site_id: cfg.site.id.clone(),
         site_name: cfg.site.name.clone(),
@@ -284,13 +258,26 @@ fn validate_preset(preset: &Preset) -> Result<(), (StatusCode, String)> {
     }
 }
 
-fn validate_shelf_minimum(preset: &Preset, price: u32, unit: &str) -> Result<(), (StatusCode, String)> {
-    let liquid = matches!(unit.trim().to_lowercase().as_str(),
-        "l" | "litre" | "liter" | "litres" | "liters" | "л" | "литр");
-    if liquid && (matches!(preset, Preset::Volume(v) if *v < 2.0)
-        || matches!(preset, Preset::Amount(a) if *a < u64::from(price) * 2)) {
-        return Err((StatusCode::BAD_REQUEST,
-            format!("SHELF minimum dose is 2 litres ({} sum at the selected price)", u64::from(price) * 2)));
+fn validate_shelf_minimum(
+    preset: &Preset,
+    price: u32,
+    unit: &str,
+) -> Result<(), (StatusCode, String)> {
+    let liquid = matches!(
+        unit.trim().to_lowercase().as_str(),
+        "l" | "litre" | "liter" | "litres" | "liters" | "л" | "литр"
+    );
+    if liquid
+        && (matches!(preset, Preset::Volume(v) if *v < 2.0)
+            || matches!(preset, Preset::Amount(a) if *a < u64::from(price) * 2))
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "SHELF minimum dose is 2 litres ({} sum at the selected price)",
+                u64::from(price) * 2
+            ),
+        ));
     }
     Ok(())
 }
@@ -325,8 +312,16 @@ mod shelf_preset_tests {
     #[test]
     fn petrol_minimum_uses_selected_price_and_leaves_gas_unchanged() {
         for price in [11600, 17000, 16000] {
-            assert!(validate_shelf_minimum(&Preset::Amount(u64::from(price) * 2 - 1), price, "litre").is_err());
-            assert!(validate_shelf_minimum(&Preset::Amount(u64::from(price) * 2), price, "litre").is_ok());
+            assert!(validate_shelf_minimum(
+                &Preset::Amount(u64::from(price) * 2 - 1),
+                price,
+                "litre"
+            )
+            .is_err());
+            assert!(
+                validate_shelf_minimum(&Preset::Amount(u64::from(price) * 2), price, "litre")
+                    .is_ok()
+            );
         }
         assert!(validate_shelf_minimum(&Preset::Volume(1.99), 11600, "L").is_err());
         assert!(validate_shelf_minimum(&Preset::Volume(2.0), 11600, "L").is_ok());
@@ -600,9 +595,18 @@ pub async fn authorize(
     drop(map);
     if is_shelf {
         let cfg = st.cfg.read().await;
-        let unit = fp.nozzles.iter().find(|n| n.index == nozzle_index)
-            .and_then(|n| cfg.product(n.product_id)).map(|p| p.unit.as_str()).unwrap_or("m³");
+        let unit = fp
+            .nozzles
+            .iter()
+            .find(|n| n.index == nozzle_index)
+            .and_then(|n| cfg.product(n.product_id))
+            .map(|p| p.unit.as_str())
+            .unwrap_or("m³");
         validate_shelf_minimum(&cmd.preset, price, unit)?;
+    }
+    if st.cfg.read().await.connection.protocol == Protocol::Azt20 {
+        crate::engine::validate_azt_order(&cmd.preset, price)
+            .map_err(|reason| (StatusCode::BAD_REQUEST, reason.to_owned()))?;
     }
     st.commands
         .send(DispatchCommand::Authorize {
@@ -738,9 +742,18 @@ pub async fn preauthorize(
     };
     if is_shelf {
         let cfg = st.cfg.read().await;
-        let unit = fp.nozzles.iter().find(|n| n.index == nozzle_index)
-            .and_then(|n| cfg.product(n.product_id)).map(|p| p.unit.as_str()).unwrap_or("m³");
+        let unit = fp
+            .nozzles
+            .iter()
+            .find(|n| n.index == nozzle_index)
+            .and_then(|n| cfg.product(n.product_id))
+            .map(|p| p.unit.as_str())
+            .unwrap_or("m³");
         validate_shelf_minimum(&cmd.preset, price, unit)?;
+    }
+    if st.cfg.read().await.connection.protocol == Protocol::Azt20 {
+        crate::engine::validate_azt_order(&cmd.preset, price)
+            .map_err(|reason| (StatusCode::BAD_REQUEST, reason.to_owned()))?;
     }
     let command = if route_as_reactive {
         DispatchCommand::Authorize {
@@ -923,6 +936,12 @@ pub async fn update_prices(
     State(st): State<AppState>,
     Json(cmd): Json<UpdateAllPricesCmd>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    if st.cfg.read().await.connection.protocol == Protocol::Azt20 {
+        for update in &cmd.updates {
+            crate::engine::validate_azt_price(update.price)
+                .map_err(|reason| (StatusCode::BAD_REQUEST, reason.to_owned()))?;
+        }
+    }
     let n = cmd.updates.len();
     st.commands
         .send(DispatchCommand::UpdatePrices {
@@ -1063,145 +1082,112 @@ pub async fn update_sync_config(
 
 // ── ATG config ────────────────────────────────────────────────────────────────
 
-#[derive(serde::Serialize)]
-struct AtgBranchInfo {
-    id: u32,
-    name: String,
-    host: String,
-    port: u16,
-    unit_id: u8,
-    start_register: u16,
-    address_base: u16,
-    register_count: u16,
-    slots: Vec<AtgSlotInfo>,
-}
-
-#[derive(serde::Serialize)]
-struct AtgSlotInfo {
-    slot: u8,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tank_id: Option<String>,
-    #[serde(rename = "type")]
-    fuel_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    product_id: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    label: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    capacity_l: Option<f64>,
-    maxima: std::collections::HashMap<String, f64>,
-}
-
-#[derive(serde::Serialize)]
-struct AtgConfigSnapshot {
-    enabled: bool,
-    poll_interval_secs: u64,
-    modbus_timeout_secs: f64,
-    api_url: String,
-    auth: Option<site_config::AtgAuth>,
-    branches: Vec<AtgBranchInfo>,
-}
-
-async fn get_atg_config(State(st): State<AppState>) -> Json<AtgConfigSnapshot> {
+async fn get_atg_config(
+    State(st): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    admin::require_admin(&st, &headers).await?;
     let cfg = st.cfg.read().await;
-    match &cfg.atg {
-        None => Json(AtgConfigSnapshot {
-            enabled: false,
-            poll_interval_secs: 300,
-            modbus_timeout_secs: 10.0,
-            api_url: String::new(),
-            auth: None,
-            branches: vec![],
-        }),
-        Some(atg) => Json(AtgConfigSnapshot {
-            enabled: true,
-            poll_interval_secs: atg.poll_interval_secs,
-            modbus_timeout_secs: atg.modbus_timeout_secs,
-            api_url: atg.api_url.clone(),
-            auth: atg.auth.clone(),
-            branches: atg
-                .branches
-                .iter()
-                .map(|b| AtgBranchInfo {
-                    id: b.id,
-                    name: b.name.clone(),
-                    host: b.host.clone(),
-                    port: b.port,
-                    unit_id: b.unit_id,
-                    start_register: b.start_register,
-                    address_base: b.address_base,
-                    register_count: b.register_count,
-                    slots: b
-                        .slots
-                        .iter()
-                        .map(|s| AtgSlotInfo {
-                            slot: s.slot,
-                            tank_id: s.tank_id.clone(),
-                            fuel_type: s.fuel_type.clone(),
-                            product_id: s.product_id,
-                            label: s.label.clone(),
-                            capacity_l: s.capacity_l,
-                            maxima: s.maxima.clone(),
-                        })
-                        .collect(),
-                })
-                .collect(),
-        }),
-    }
-}
-
-#[derive(serde::Deserialize)]
-pub struct UpdateAtgConfigBody {
-    pub poll_interval_secs: Option<u64>,
-    pub modbus_timeout_secs: Option<f64>,
-    pub api_url: Option<String>,
-    pub auth: Option<site_config::AtgAuth>,
-    pub branches: Option<Vec<site_config::AtgBranch>>,
+    let atg = cfg.atg.clone().unwrap_or_default();
+    let mut result = serde_json::to_value(&atg).expect("ATG config serializes");
+    result["enabled"] = serde_json::json!(cfg.atg.as_ref().is_some_and(|a| a.enabled));
+    result["tanks"] = serde_json::json!(cfg.tanks);
+    result["auth"] = atg
+        .auth
+        .as_ref()
+        .map(|a| {
+            serde_json::json!({
+                "username":a.username,"login_url":a.login_url,
+                "api_token_set":!a.api_token.is_empty(),"password_set":!a.password.is_empty()
+            })
+        })
+        .unwrap_or(serde_json::Value::Null);
+    result["environment_overrides"] = serde_json::json!([
+        "API_URL",
+        "API_TOKEN",
+        "AUTH_USERNAME",
+        "AUTH_PASSWORD",
+        "AUTH_LOGIN_URL"
+    ]
+    .into_iter()
+    .filter(|key| std::env::var(key).is_ok_and(|v| !v.trim().is_empty()))
+    .collect::<Vec<_>>());
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM atg_outbox")
+        .fetch_one(&st.pool)
+        .await
+        .unwrap_or(0);
+    result["pending_exports"] = serde_json::json!(pending);
+    result["export_error"]=serde_json::json!(sqlx::query_scalar::<_,Option<String>>("SELECT last_error FROM atg_outbox WHERE last_error IS NOT NULL ORDER BY created_at LIMIT 1")
+        .fetch_optional(&st.pool).await.ok().flatten().flatten());
+    Ok(Json(result))
 }
 
 async fn update_atg_config(
     State(st): State<AppState>,
-    Json(body): Json<UpdateAtgConfigBody>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let snapshot = {
-        let cfg = st.cfg.read().await;
-        let mut snapshot = cfg.clone();
-        if let Some(ref mut atg) = snapshot.atg {
-            if let Some(v) = body.poll_interval_secs {
-                atg.poll_interval_secs = v;
-            }
-            if let Some(v) = body.modbus_timeout_secs {
-                atg.modbus_timeout_secs = v;
-            }
-            if let Some(v) = body.api_url {
-                atg.api_url = v;
-            }
-            if let Some(v) = body.auth {
-                atg.auth = Some(v);
-            }
-            if let Some(v) = body.branches {
-                atg.branches = v;
+    admin::require_admin(&st, &headers).await?;
+    let bad = |e: String| (StatusCode::BAD_REQUEST, e);
+    let mut cfg = st.cfg.write().await;
+    let mut snapshot = cfg.clone();
+    if let Some(tanks) = body.get("tanks") {
+        snapshot.tanks = serde_json::from_value(tanks.clone()).map_err(|e| bad(e.to_string()))?;
+    }
+    {
+        let mut value = serde_json::to_value(snapshot.atg.clone().unwrap_or_default())
+            .map_err(|e| bad(e.to_string()))?;
+        for key in [
+            "enabled",
+            "export_enabled",
+            "poll_interval_secs",
+            "modbus_timeout_secs",
+            "stale_after_secs",
+            "api_url",
+            "branches",
+        ] {
+            if let Some(v) = body.get(key) {
+                value[key] = v.clone();
             }
         }
-        snapshot
-            .validate()
-            .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-        snapshot
-    };
-
+        if let Some(auth) = body.get("auth") {
+            if auth.is_null() {
+                value["auth"] = serde_json::Value::Null;
+            } else {
+                if value["auth"].is_null() {
+                    value["auth"] = serde_json::json!({});
+                }
+                for key in ["username", "password", "login_url", "api_token"] {
+                    if let Some(v) = auth.get(key) {
+                        value["auth"][key] = v.clone();
+                    }
+                }
+            }
+        }
+        snapshot.atg = Some(serde_json::from_value(value).map_err(|e| bad(e.to_string()))?);
+    }
+    snapshot
+        .normalize_tank_ids()
+        .map_err(|e| bad(e.to_string()))?;
+    snapshot.validate().map_err(|e| bad(e.to_string()))?;
     crate::config::save(&snapshot, &st.config_path)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    {
-        let mut cfg = st.cfg.write().await;
-        *cfg = snapshot;
-    }
-    Ok(Json(serde_json::json!({ "ok": true })))
+    *cfg = snapshot;
+    st.tank_levels.write().await.clear();
+    let tanks = atg::snapshots(&cfg, &HashMap::new(), chrono::Utc::now().timestamp_millis());
+    let _ = st.events.send(WsEvent::TankUpdated { tanks });
+    Ok(Json(serde_json::json!({"ok":true})))
 }
 
 // ── ATG network discovery ─────────────────────────────────────────────────────
 
 #[derive(serde::Deserialize)]
 struct DiscoverQuery {
+    word_order: Option<site_config::AtgWordOrder>,
+    height_unit: Option<site_config::AtgHeightUnit>,
+    host: Option<String>,
+    branch_id: Option<u32>,
+    subnet: Option<String>,
     /// Modbus TCP port to probe. Defaults to first configured ATG branch or 6400.
     port: Option<u16>,
     /// Connect timeout per host in milliseconds. Defaults to 600.
@@ -1243,33 +1229,53 @@ struct DiscoveredAtgDevice {
 
 async fn atg_discover(
     State(st): State<AppState>,
+    headers: axum::http::HeaderMap,
     Query(params): Query<DiscoverQuery>,
 ) -> Result<Json<DiscoverResult>, (StatusCode, String)> {
-    let local = local_ipv4().ok_or_else(|| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "cannot determine local IP".into(),
-        )
-    })?;
-
-    let octets = local.octets();
-    let subnet = format!("{}.{}.{}", octets[0], octets[1], octets[2]);
+    admin::require_admin(&st, &headers).await?;
+    let local = local_ipv4();
+    let subnet = if let Some(subnet) = params.subnet.as_ref() {
+        let prefix = subnet.trim_end_matches(".0/24");
+        let ip = format!("{prefix}.1")
+            .parse::<std::net::Ipv4Addr>()
+            .map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "Subnet must be an IPv4 /24 prefix".into(),
+                )
+            })?;
+        let o = ip.octets();
+        format!("{}.{}.{}", o[0], o[1], o[2])
+    } else if let Some(ip) = local {
+        let o = ip.octets();
+        format!("{}.{}.{}", o[0], o[1], o[2])
+    } else if params.host.is_some() {
+        String::new()
+    } else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Specify a host or subnet when no default network route is available".into(),
+        ));
+    };
     let (configured, configured_host) = {
         let cfg = st.cfg.read().await;
         match cfg.atg.as_ref().and_then(|atg| {
-            atg.branches.first().map(|branch| {
-                (
+            atg.branches
+                .iter()
+                .find(|b| params.branch_id.is_none_or(|id| b.id == id))
+                .map(|branch| {
                     (
-                        branch.port,
-                        branch.unit_id,
-                        branch.start_register,
-                        branch.address_base,
-                        branch.register_count,
-                        atg.modbus_timeout_secs,
-                    ),
-                    branch.host.clone(),
-                )
-            })
+                        (
+                            branch.port,
+                            branch.unit_id,
+                            branch.start_register,
+                            branch.address_base,
+                            branch.register_count,
+                            atg.modbus_timeout_secs,
+                        ),
+                        branch.host.clone(),
+                    )
+                })
         }) {
             Some((cfg, host)) => (Some(cfg), Some(host)),
             None => (None, None),
@@ -1278,7 +1284,7 @@ async fn atg_discover(
     let port = params
         .port
         .or_else(|| configured.map(|c| c.0))
-        .unwrap_or(6400);
+        .unwrap_or(502);
     let unit_id = params
         .unit_id
         .or_else(|| configured.map(|c| c.1))
@@ -1294,7 +1300,22 @@ async fn atg_discover(
     let register_count = params
         .register_count
         .or_else(|| configured.map(|c| c.4))
-        .unwrap_or(48);
+        .unwrap_or(12);
+    if port == 0
+        || address_base > 1
+        || start_register < address_base
+        || register_count == 0
+        || register_count % 12 != 0
+        || u32::from(start_register - address_base) + u32::from(register_count) > 65536
+        || params
+            .timeout_ms
+            .is_some_and(|v| !(100..=10000).contains(&v))
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Invalid ATG discovery register window or timeout".into(),
+        ));
+    }
     let scan_timeout = Duration::from_millis(params.timeout_ms.unwrap_or(600));
     let probe_timeout = configured
         .map(|c| Duration::from_secs_f64(c.5.max(0.1)))
@@ -1317,11 +1338,14 @@ async fn atg_discover(
         .collect();
 
     let mut handles = Vec::with_capacity(subnets_to_scan.len() * 254);
-    for sn in &subnets_to_scan {
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(32));
+    for sn in subnets_to_scan.iter().filter(|_| params.host.is_none()) {
         for host in 1u8..=254 {
             let addr = format!("{}.{}:{}", sn, host, port);
             let sn_clone = sn.clone();
+            let semaphore = semaphore.clone();
             handles.push(tokio::spawn(async move {
+                let _permit = semaphore.acquire_owned().await.ok()?;
                 match tokio::time::timeout(scan_timeout, tokio::net::TcpStream::connect(&addr))
                     .await
                 {
@@ -1332,7 +1356,7 @@ async fn atg_discover(
         }
     }
 
-    let mut found = Vec::new();
+    let mut found: Vec<String> = params.host.into_iter().collect();
     for h in handles {
         if let Ok(Some(ip)) = h.await {
             found.push(ip);
@@ -1341,21 +1365,20 @@ async fn atg_discover(
     found.sort();
     found.dedup();
 
-    let mut probe_handles = Vec::with_capacity(found.len());
+    let template:site_config::AtgBranch=serde_json::from_value(serde_json::json!({
+        "id":0,"host":"probe","port":port,"unit_id":unit_id,"start_register":start_register,
+        "address_base":address_base,"register_count":register_count,"slots":[],
+        "word_order":params.word_order.unwrap_or_default(),"height_unit":params.height_unit.unwrap_or_default()
+    })).map_err(|e|(StatusCode::BAD_REQUEST,e.to_string()))?;
+    let mut probe_handles = Vec::new();
     for host in &found {
         let host = host.clone();
+        let mut branch = template.clone();
+        branch.host = host.clone();
+        let semaphore = semaphore.clone();
         probe_handles.push(tokio::spawn(async move {
-            match atg::discover_host_tanks(
-                &host,
-                port,
-                unit_id,
-                start_register,
-                address_base,
-                register_count,
-                probe_timeout,
-            )
-            .await
-            {
+            let _permit = semaphore.acquire_owned().await;
+            match atg::discover_branch(&branch, probe_timeout).await {
                 Ok(tanks) => DiscoveredAtgDevice {
                     host,
                     tanks,
@@ -1363,7 +1386,7 @@ async fn atg_discover(
                 },
                 Err(e) => DiscoveredAtgDevice {
                     host,
-                    tanks: Vec::new(),
+                    tanks: vec![],
                     error: Some(e.to_string()),
                 },
             }
@@ -1377,6 +1400,11 @@ async fn atg_discover(
         }
     }
     devices.sort_by(|a, b| a.host.cmp(&b.host));
+    found = devices
+        .iter()
+        .filter(|d| d.error.is_none())
+        .map(|d| d.host.clone())
+        .collect();
 
     Ok(Json(DiscoverResult {
         subnet,

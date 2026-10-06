@@ -28,7 +28,10 @@ pub fn router() -> Router<AppState> {
             "/admin/prices/schedule",
             get(list_scheduled).post(create_scheduled),
         )
-        .route("/admin/prices/schedule/:id", axum::routing::delete(cancel_scheduled))
+        .route(
+            "/admin/prices/schedule/:id",
+            axum::routing::delete(cancel_scheduled),
+        )
 }
 
 fn internal<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
@@ -43,6 +46,7 @@ fn bad<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
 
 #[derive(Debug, Deserialize)]
 pub struct DeliveryQuery {
+    pub tank_id: Option<String>,
     pub product_id: Option<u8>,
     pub from_ms: Option<i64>,
     pub to_ms: Option<i64>,
@@ -54,10 +58,17 @@ async fn list_deliveries(
     Query(q): Query<DeliveryQuery>,
 ) -> Result<Json<Vec<FuelDelivery>>, (StatusCode, String)> {
     let limit = q.limit.unwrap_or(100).clamp(1, 500);
-    wetstock::list_deliveries(&st.pool, q.product_id, q.from_ms, q.to_ms, limit)
-        .await
-        .map(Json)
-        .map_err(internal)
+    wetstock::list_deliveries(
+        &st.pool,
+        q.product_id,
+        q.from_ms,
+        q.to_ms,
+        limit,
+        q.tank_id.as_deref(),
+    )
+    .await
+    .map(Json)
+    .map_err(internal)
 }
 
 async fn get_delivery(
@@ -75,10 +86,10 @@ async fn create_delivery(
     State(st): State<AppState>,
     Json(cmd): Json<CreateDeliveryCmd>,
 ) -> Result<Json<FuelDelivery>, (StatusCode, String)> {
-    if cmd.delivered_l <= 0.0 {
+    if !cmd.delivered_l.is_finite() || cmd.delivered_l <= 0.0 {
         return Err(bad("delivered_l must be greater than zero"));
     }
-    let (product_name, tank_label) = {
+    let (product_name, tank_label, tank_id) = {
         let cfg = st.cfg.read().await;
         let product = cfg.product(cmd.product_id).ok_or_else(|| {
             (
@@ -86,14 +97,26 @@ async fn create_delivery(
                 format!("unknown product_id {}", cmd.product_id),
             )
         })?;
-        let tank_label = cmd.tank_label.clone().unwrap_or_else(|| {
-            cfg.tanks
-                .iter()
-                .find(|t| t.product_id == cmd.product_id)
-                .map(|t| t.label.clone())
-                .unwrap_or_default()
-        });
-        (product.name.clone(), tank_label)
+        let tanks: Vec<_> = cfg
+            .tanks
+            .iter()
+            .filter(|t| {
+                t.product_id == cmd.product_id
+                    && cmd.tank_id.as_ref().is_none_or(|id| t.id() == *id)
+            })
+            .collect();
+        if tanks.len() != 1 {
+            return Err(bad("Select the physical tank_id receiving this delivery"));
+        }
+        let tank = tanks[0];
+        for volume in [cmd.tank_before_l, cmd.tank_after_l].into_iter().flatten() {
+            if !volume.is_finite() || volume < 0.0 || volume > tank.capacity_l {
+                return Err(bad(
+                    "Delivery tank measurements exceed capacity or are invalid",
+                ));
+            }
+        }
+        (product.name.clone(), tank.label.clone(), Some(tank.id()))
     };
     let (shift_id, operator_name) = st.shifts.active_info().await;
     let now = chrono::Utc::now().timestamp_millis();
@@ -106,6 +129,7 @@ async fn create_delivery(
     }
 
     let delivery = FuelDelivery {
+        tank_id,
         id: Uuid::new_v4().to_string(),
         product_id: cmd.product_id,
         product_name,
@@ -146,37 +170,40 @@ async fn create_delivery(
 async fn tank_contexts(
     st: &AppState,
     product_id: Option<u8>,
+    tank_id: Option<&str>,
 ) -> Result<Vec<wetstock::TankContext>, (StatusCode, String)> {
     let cfg = st.cfg.read().await;
     let levels = st.tank_levels.read().await;
-    let tanks: Vec<_> = cfg
-        .tanks
-        .iter()
-        .filter(|t| product_id.is_none_or(|p| t.product_id == p))
-        .collect();
-    if tanks.is_empty() {
-        return Err(bad(match product_id {
-            Some(p) => format!("no tank configured for product_id {p}"),
-            None => "no tanks configured for this site".to_string(),
-        }));
+    let snapshots = atg::snapshots(&cfg, &levels, chrono::Utc::now().timestamp_millis());
+    let mut groups: std::collections::BTreeMap<u8, Vec<&site_config::TankConfig>> =
+        std::collections::BTreeMap::new();
+    for tank in &cfg.tanks {
+        if product_id.is_none_or(|p| p == tank.product_id)
+            && tank_id.is_none_or(|id| id == tank.id())
+        {
+            groups.entry(tank.product_id).or_default().push(tank);
+        }
     }
-    Ok(tanks
-        .into_iter()
-        .map(|t| wetstock::TankContext {
-            product_id: t.product_id,
-            product_name: cfg
-                .product(t.product_id)
-                .map(|p| p.name.clone())
-                .unwrap_or_default(),
-            tank_label: t.label.clone(),
-            measured_l: levels.get(&t.product_id).map(|l| l.current_l),
-            configured_opening_l: t.current_l,
-        })
-        .collect())
+    if groups.is_empty() {
+        return Err(bad("No matching tank configured"));
+    }
+    groups.into_iter().map(|(pid,tanks)| {
+        let source= tanks[0];
+        if tank_id.is_some() && cfg.tanks.iter().filter(|t|t.product_id==pid).count()>1 && source.nozzle_sources.is_empty() {
+            return Err(bad("Per-tank reconciliation requires nozzle_sources for products stored in multiple tanks; omit tank_id for a combined product balance"));
+        }
+        let readings:Option<Vec<f64>>=tanks.iter().map(|t| snapshots.iter().find(|s|s.tank_id==t.id() && s.reading_status=="fresh").map(|s|s.current_l)).collect();
+        Ok(wetstock::TankContext { tank_id:tank_id.map(str::to_string),
+            nozzle_sources:if tank_id.is_some() { source.nozzle_sources.clone() } else { vec![] },
+            product_id:pid,product_name:cfg.product(pid).map(|p|p.name.clone()).unwrap_or_default(),
+            tank_label:if tanks.len()==1 {source.label.clone()} else {format!("{} tanks / product {}",tanks.len(),pid)},
+            measured_l:readings.map(|r|r.iter().sum()),configured_opening_l:tanks.iter().map(|t|t.current_l).sum() })
+    }).collect()
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ReconcileQuery {
+    pub tank_id: Option<String>,
     pub product_id: Option<u8>,
     pub period_start: Option<i64>,
 }
@@ -187,7 +214,7 @@ async fn preview_reconciliation(
     State(st): State<AppState>,
     Query(q): Query<ReconcileQuery>,
 ) -> Result<Json<Vec<WetstockReconciliation>>, (StatusCode, String)> {
-    let contexts = tank_contexts(&st, q.product_id).await?;
+    let contexts = tank_contexts(&st, q.product_id, q.tank_id.as_deref()).await?;
     let now = chrono::Utc::now().timestamp_millis();
     let (shift_id, _) = st.shifts.active_info().await;
     let mut out = Vec::new();
@@ -205,7 +232,7 @@ async fn reconcile(
     State(st): State<AppState>,
     Json(cmd): Json<ReconcileCmd>,
 ) -> Result<Json<Vec<WetstockReconciliation>>, (StatusCode, String)> {
-    let contexts = tank_contexts(&st, cmd.product_id).await?;
+    let contexts = tank_contexts(&st, cmd.product_id, cmd.tank_id.as_deref()).await?;
     let now = chrono::Utc::now().timestamp_millis();
     let (shift_id, _) = st.shifts.active_info().await;
     let mut out = Vec::new();
@@ -238,6 +265,7 @@ async fn reconcile(
 
 #[derive(Debug, Deserialize)]
 pub struct ReconListQuery {
+    pub tank_id: Option<String>,
     pub product_id: Option<u8>,
     pub limit: Option<i64>,
 }
@@ -247,7 +275,7 @@ async fn list_reconciliations(
     Query(q): Query<ReconListQuery>,
 ) -> Result<Json<Vec<WetstockReconciliation>>, (StatusCode, String)> {
     let limit = q.limit.unwrap_or(50).clamp(1, 500);
-    wetstock::list_reconciliations(&st.pool, q.product_id, limit)
+    wetstock::list_reconciliations(&st.pool, q.product_id, limit, q.tank_id.as_deref())
         .await
         .map(Json)
         .map_err(internal)

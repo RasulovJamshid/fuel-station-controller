@@ -92,3 +92,22 @@ describe('dashboard service config validation', () => {
         validateDashboardServiceConfig(value);
     });
 });
+
+
+describe('physical ATG tanks', () => {
+    it('accepts twelve tanks sharing one product and controllers sharing an external station ID', () => {
+        const c=config();
+        c.tanks=Array.from({length:12},(_,i)=>({tank_id:`tank-${i+1}`,product_id:1,label:`Tank ${i+1}`,capacity_l:25000,current_l:0}));
+        c.atg.branches=[{id:1,external_station_id:42,host:'192.0.2.1',register_count:144,slots:c.tanks.map((t:any,i:number)=>({slot:i+1,tank_id:t.tank_id,product_id:1,type:'AI-92'}))}];
+        validateDashboardServiceConfig(c);
+        const second={...c.atg.branches[0],id:2,host:'192.0.2.2',register_count:12,slots:[{...c.atg.branches[0].slots.pop(),slot:1}]};
+        c.atg.branches.push(second);
+        validateDashboardServiceConfig(c);
+    });
+    it.each([
+        (c:any)=>{c.atg.branches[0].start_register=0;},
+        (c:any)=>{c.atg.branches[0].start_register=65530;},
+        (c:any)=>{c.atg.branches[0].slots[0].capacity_l=25000;},
+        (c:any)=>{c.atg.branches[0].slots.push({...c.atg.branches[0].slots[0],slot:2});c.atg.branches[0].register_count=24;},
+    ])('rejects ambiguous mappings and invalid windows', mutate=>{const c=config();mutate(c);expect(()=>validateDashboardServiceConfig(c)).toThrow();});
+});

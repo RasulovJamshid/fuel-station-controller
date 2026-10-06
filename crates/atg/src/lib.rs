@@ -1,79 +1,87 @@
-//! ATG (Automatic Tank Gauge) Modbus TCP polling and integration posting.
-//!
-//! After each successful poll the task:
-//! 1. Updates the shared `TankLevels` map (product_id keyed).
-//! 2. Broadcasts a `WsEvent::TankUpdated` with a full `TankSnapshot` slice so
-//!    the dispenser-service can push real data to all connected clients.
-//! 3. POSTs integration payloads to the configured external API.
-
+//! Physical tank polling, live status and durable delivery.
 mod integration;
 mod modbus;
+mod outbox;
 mod poster;
-
+#[cfg(test)]
+mod tests;
 pub use site_config::{AtgAuth, AtgBranch, AtgConfig, AtgSlot};
-
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
-
-use tokio::sync::{broadcast, mpsc, RwLock};
-use tracing::{info, warn};
-
-use site_config::SiteConfig;
+use site_config::{AtgHeightUnit, SiteConfig};
+use sqlx::SqlitePool;
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use tokio::sync::{broadcast, RwLock};
 use types::{TankLiveLevel, TankSnapshot, WsEvent};
 
-/// Shared live-level store: product_id → `TankLiveLevel`.
-/// Pass the same `Arc` to `AppState` so the HTTP snapshot can overlay live data.
-pub type TankLevels = Arc<RwLock<HashMap<u8, TankLiveLevel>>>;
+pub type TankLevels = Arc<RwLock<HashMap<String, TankLiveLevel>>>;
 
-// ── Slot field indices (6 floats per slot, in Modbus register order) ──────
-const IDX_PRODUCT_HEIGHT: usize = 0;
-const IDX_WATER_HEIGHT: usize = 1;
-const IDX_TEMPERATURE: usize = 2;
-const IDX_PRODUCT_AND_WATER_VOLUME: usize = 3;
-const IDX_PRODUCT_VOLUME: usize = 4;
-const IDX_WATER_VOLUME: usize = 5;
-
-/// Extract the live fields we care about for one 1-based slot from the float slice.
-/// Returns `None` if the slot is out of range or the reading looks invalid.
-fn read_slot(floats: &[f32], slot_1based: u8) -> Option<(f64, f64, f64, f64, f64)> {
-    let base = ((slot_1based - 1) as usize) * 6;
-    if base + 5 >= floats.len() {
+/// The same validation governs discovery, local readings and external totals.
+fn slot_values(floats: &[f32], slot: u16) -> Option<&[f32]> {
+    let start = usize::from(slot.checked_sub(1)?) * 6;
+    let values = floats.get(start..start + 6)?;
+    if values
+        .iter()
+        .enumerate()
+        .any(|(i, v)| !v.is_finite() || (i != 2 && *v < 0.0))
+    {
         return None;
     }
-    let current_l = floats[base + IDX_PRODUCT_VOLUME] as f64;
-    // Reject only NaN/Inf — a zero-volume tank is a valid (empty) reading.
-    if !current_l.is_finite() {
-        return None;
-    }
-    let temperature_c = floats[base + IDX_TEMPERATURE] as f64;
-    let water_l = floats[base + IDX_WATER_VOLUME] as f64;
-    let product_height = floats[base + IDX_PRODUCT_HEIGHT] as f64;
-    let water_height = floats[base + IDX_WATER_HEIGHT] as f64;
-    Some((
-        current_l,
-        temperature_c,
-        water_l,
-        product_height,
-        water_height,
-    ))
+    Some(values)
 }
 
-#[derive(Debug, Clone)]
-pub struct LocalTankReading {
-    pub tank_id: String,
-    pub product_id: u8,
-    pub volume_litres: f64,
-    pub level_mm: f64,
-    pub temperature_c: f64,
-    pub water_mm: f64,
-    pub fill_percent: Option<f64>,
-    pub reading_at_ms: i64,
+pub fn snapshots(
+    cfg: &SiteConfig,
+    levels: &HashMap<String, TankLiveLevel>,
+    now: i64,
+) -> Vec<TankSnapshot> {
+    let stale_after = cfg.atg.as_ref().map(|a| a.stale_after_ms()).unwrap_or(0);
+    cfg.tanks
+        .iter()
+        .map(|t| {
+            let mapped = cfg
+                .atg
+                .iter()
+                .filter(|a| a.enabled)
+                .flat_map(|a| &a.branches)
+                .flat_map(|b| &b.slots)
+                .any(|s| {
+                    cfg.tank_for_slot(s)
+                        .is_some_and(|target| target.id() == t.id())
+                });
+            let live = mapped.then(|| levels.get(&t.id())).flatten();
+            let status = if !mapped {
+                "disabled"
+            } else if let Some(l) = live {
+                if l.last_error.is_some() {
+                    "offline"
+                } else if now - l.updated_at_ms > stale_after {
+                    "stale"
+                } else {
+                    "fresh"
+                }
+            } else {
+                "waiting"
+            };
+            let sampled = live.filter(|l| l.updated_at_ms > 0);
+            TankSnapshot {
+                tank_id: t.id(),
+                product_id: t.product_id,
+                label: t.label.clone(),
+                capacity_l: t.capacity_l,
+                current_l: sampled.map(|l| l.current_l).unwrap_or(t.current_l),
+                temperature_c: sampled.map(|l| l.temperature_c),
+                water_l: sampled.map(|l| l.water_l),
+                updated_at_ms: sampled.map(|l| l.updated_at_ms),
+                reading_status: status.into(),
+                stale_after_ms: stale_after,
+                last_error: live.and_then(|l| l.last_error.clone()),
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DiscoveredTankSlot {
-    pub slot: u8,
+    pub slot: u16,
     pub product_height: f64,
     pub water_height: f64,
     pub temperature_c: f64,
@@ -81,8 +89,6 @@ pub struct DiscoveredTankSlot {
     pub product_volume: f64,
     pub water_volume: f64,
 }
-
-/// Probe one ATG host using the standard tank-gauge register layout and return active slots.
 pub async fn discover_host_tanks(
     host: &str,
     port: u16,
@@ -92,205 +98,194 @@ pub async fn discover_host_tanks(
     register_count: u16,
     timeout: Duration,
 ) -> anyhow::Result<Vec<DiscoveredTankSlot>> {
-    let pdu_addr = start_register
+    let start = start_register
         .checked_sub(address_base)
         .ok_or_else(|| anyhow::anyhow!("start_register must be >= address_base"))?;
-    let floats = modbus::read_host(host, port, unit_id, pdu_addr, register_count, timeout).await?;
-    Ok(floats
-        .chunks_exact(6)
-        .enumerate()
-        .filter_map(|(index, slot)| {
-            let product_volume = slot[IDX_PRODUCT_VOLUME] as f64;
-            if product_volume <= 0.0 {
-                return None;
-            }
+    let floats = modbus::read_host(host, port, unit_id, start, register_count, timeout).await?;
+    Ok((1..=register_count / 12)
+        .filter_map(|slot| {
+            let v = slot_values(&floats, slot)?;
             Some(DiscoveredTankSlot {
-                slot: (index + 1) as u8,
-                product_height: slot[IDX_PRODUCT_HEIGHT] as f64,
-                water_height: slot[IDX_WATER_HEIGHT] as f64,
-                temperature_c: slot[IDX_TEMPERATURE] as f64,
-                product_and_water_volume: slot[IDX_PRODUCT_AND_WATER_VOLUME] as f64,
-                product_volume,
-                water_volume: slot[IDX_WATER_VOLUME] as f64,
+                slot,
+                product_height: v[0] as f64,
+                water_height: v[1] as f64,
+                temperature_c: v[2] as f64,
+                product_and_water_volume: v[3] as f64,
+                product_volume: v[4] as f64,
+                water_volume: v[5] as f64,
             })
         })
         .collect())
 }
 
-/// Run the ATG polling loop indefinitely. Call from `tokio::spawn`.
+pub async fn discover_branch(
+    branch: &AtgBranch,
+    timeout: Duration,
+) -> anyhow::Result<Vec<DiscoveredTankSlot>> {
+    let floats = modbus::read_branch(branch, timeout).await?;
+    Ok((1..=branch.register_count / 12)
+        .filter_map(|slot| {
+            let v = slot_values(&floats, slot)?;
+            Some(DiscoveredTankSlot {
+                slot,
+                product_height: v[0] as f64,
+                water_height: v[1] as f64,
+                temperature_c: v[2] as f64,
+                product_and_water_volume: v[3] as f64,
+                product_volume: v[4] as f64,
+                water_volume: v[5] as f64,
+            })
+        })
+        .collect())
+}
+
+pub fn effective_api_url(cfg: &AtgConfig) -> String {
+    if !cfg.export_enabled {
+        return String::new();
+    }
+    std::env::var("API_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| cfg.api_url.clone())
+        .trim()
+        .into()
+}
+
 pub async fn run(
     cfg: Arc<RwLock<SiteConfig>>,
-    tank_levels: TankLevels,
+    levels: TankLevels,
     events: broadcast::Sender<WsEvent>,
-    sync_tx: Option<mpsc::UnboundedSender<LocalTankReading>>,
+    pool: SqlitePool,
 ) {
+    tokio::spawn(outbox::deliver(cfg.clone(), pool.clone()));
+    let mut previous = serde_json::Value::Null;
+    let mut next = tokio::time::Instant::now();
     loop {
-        let current = {
-            let cfg = cfg.read().await;
-            cfg.atg.clone().map(|atg| (atg, cfg.tanks.clone()))
-        };
-        let Some((atg_cfg, tank_configs)) = current else {
-            warn!("ATG: config disabled — sleeping");
-            tokio::time::sleep(Duration::from_secs(300)).await;
-            continue;
-        };
-
-        if atg_cfg.branches.is_empty() {
-            warn!("ATG: no branches configured — task will do nothing");
-        }
-        if atg_cfg.api_url.is_empty() {
-            warn!("ATG: api_url not set — payloads built but not POSTed");
-        }
-
-        let interval = Duration::from_secs(atg_cfg.poll_interval_secs);
-        let modbus_timeout = Duration::from_secs_f64(atg_cfg.modbus_timeout_secs);
-        let poster = poster::Poster::new(atg_cfg.api_url.clone(), atg_cfg.auth.clone());
-
-        let now_ms = chrono::Utc::now().timestamp_millis();
-        let collected_at = {
-            use chrono::Utc;
-            Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
-        };
-
-        let total = atg_cfg.branches.len();
-        let mut ok_count = 0usize;
-        let mut all_payloads = Vec::new();
-        // product_id → (current_l, temperature_c, water_l)
-        let mut level_updates: HashMap<u8, TankLiveLevel> = HashMap::new();
-
-        for branch in &atg_cfg.branches {
-            match modbus::read_branch(branch, modbus_timeout).await {
-                Ok(floats) => {
-                    ok_count += 1;
-
-                    // Collect live readings for every slot that names a product_id.
-                    for slot in &branch.slots {
-                        if let Some(pid) = slot.product_id {
-                            match read_slot(&floats, slot.slot) {
-                                Some((
-                                    current_l,
-                                    temperature_c,
-                                    water_l,
-                                    product_height,
-                                    water_height,
-                                )) => {
-                                    level_updates.insert(
-                                        pid,
-                                        TankLiveLevel {
-                                            product_id: pid,
-                                            current_l,
-                                            temperature_c,
-                                            water_l,
-                                            updated_at_ms: now_ms,
-                                        },
-                                    );
-                                    if let Some(tx) = &sync_tx {
-                                        let capacity_l = slot.capacity_l.or_else(|| {
-                                            tank_configs
-                                                .iter()
-                                                .find(|t| t.product_id == pid)
-                                                .map(|t| t.capacity_l)
-                                        });
-                                        let fill_percent = capacity_l
-                                            .filter(|capacity| *capacity > 0.0)
-                                            .map(|capacity| current_l / capacity * 100.0);
-                                        let tank_id = slot
-                                            .tank_id
-                                            .as_deref()
-                                            .or(slot.label.as_deref())
-                                            .filter(|s| !s.trim().is_empty())
-                                            .map(str::to_string)
-                                            .unwrap_or_else(|| pid.to_string());
-                                        let _ = tx.send(LocalTankReading {
-                                            tank_id,
-                                            product_id: pid,
-                                            volume_litres: current_l,
-                                            level_mm: product_height,
-                                            temperature_c,
-                                            water_mm: water_height,
-                                            fill_percent,
-                                            reading_at_ms: now_ms,
-                                        });
-                                    }
-                                }
-                                None => warn!(
-                                    branch_id = branch.id,
-                                    slot = slot.slot,
-                                    "ATG slot out of range or product_volume=0"
-                                ),
-                            }
-                        }
-                    }
-
-                    match integration::build_payloads(branch, &floats, &collected_at) {
-                        Ok(bodies) => all_payloads.extend(bodies),
-                        Err(e) => warn!(branch_id = branch.id, ?e, "ATG payload build error"),
-                    }
-                }
-                Err(e) => warn!(
-                    branch_id = branch.id,
-                    branch_name = %branch.name,
-                    host = %branch.host,
-                    port = branch.port,
-                    ?e,
-                    "ATG Modbus read failed"
-                ),
+        let snapshot = cfg.read().await.clone();
+        let identity = serde_json::json!({"atg":snapshot.atg,"tanks":snapshot.tanks,"products":snapshot.products});
+        if previous != identity {
+            levels.write().await.clear();
+            // Keep this change pending until the catalog is durable.
+            if let Err(e) = outbox::catalog(&pool, &snapshot).await {
+                tracing::error!(?e, "ATG catalog persistence failed");
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
             }
-        }
-
-        info!(
-            ok = ok_count,
-            total = total,
-            payloads = all_payloads.len(),
-            live_updates = level_updates.len(),
-            "ATG poll round complete"
-        );
-
-        // Merge updates into the shared map and broadcast a full snapshot.
-        if !level_updates.is_empty() {
-            {
-                let mut map = tank_levels.write().await;
-                for (pid, level) in level_updates {
-                    map.insert(pid, level);
-                }
-            }
-
-            let live = tank_levels.read().await;
-            let tanks: Vec<TankSnapshot> = tank_configs
-                .iter()
-                .map(|t| {
-                    if let Some(l) = live.get(&t.product_id) {
-                        TankSnapshot {
-                            product_id: t.product_id,
-                            label: t.label.clone(),
-                            capacity_l: t.capacity_l,
-                            current_l: l.current_l,
-                            temperature_c: Some(l.temperature_c),
-                            water_l: Some(l.water_l),
-                            updated_at_ms: Some(l.updated_at_ms),
-                        }
-                    } else {
-                        TankSnapshot {
-                            product_id: t.product_id,
-                            label: t.label.clone(),
-                            capacity_l: t.capacity_l,
-                            current_l: t.current_l,
-                            temperature_c: None,
-                            water_l: None,
-                            updated_at_ms: None,
-                        }
-                    }
-                })
-                .collect();
-            drop(live);
-
+            previous = identity;
+            next = tokio::time::Instant::now();
+            let tanks = snapshots(
+                &snapshot,
+                &*levels.read().await,
+                chrono::Utc::now().timestamp_millis(),
+            );
             let _ = events.send(WsEvent::TankUpdated { tanks });
         }
-
-        for payload in all_payloads {
-            poster.post(payload).await;
+        if let Some(atg) = &snapshot.atg {
+            if atg.enabled && tokio::time::Instant::now() >= next {
+                let started = tokio::time::Instant::now();
+                poll_round(&snapshot, &cfg, &levels, &events, &pool).await;
+                next = started + Duration::from_secs(atg.poll_interval_secs);
+            }
         }
-
-        tokio::time::sleep(interval).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
+}
+
+async fn poll_round(
+    cfg: &SiteConfig,
+    current: &Arc<RwLock<SiteConfig>>,
+    levels: &TankLevels,
+    events: &broadcast::Sender<WsEvent>,
+    pool: &SqlitePool,
+) {
+    let Some(atg) = &cfg.atg else {
+        return;
+    };
+    let mut readings = HashMap::new();
+    let mut sync = Vec::new();
+    for branch in &atg.branches {
+        let result =
+            modbus::read_branch(branch, Duration::from_secs_f64(atg.modbus_timeout_secs)).await;
+        let guard = current.read().await;
+        if serde_json::json!([guard.atg, guard.tanks]) != serde_json::json!([cfg.atg, cfg.tanks]) {
+            return;
+        }
+        let now = chrono::Utc::now().timestamp_millis();
+        for slot in &branch.slots {
+            let Some(tank) = cfg.tank_for_slot(slot) else {
+                continue;
+            };
+            let values = result.as_ref().ok().and_then(|v| slot_values(v, slot.slot));
+            if let Some(v) = values {
+                let scale = if branch.height_unit == AtgHeightUnit::M {
+                    1000.0
+                } else {
+                    1.0
+                };
+                levels.write().await.insert(
+                    tank.id(),
+                    TankLiveLevel {
+                        tank_id: tank.id(),
+                        product_id: tank.product_id,
+                        current_l: v[4] as f64,
+                        temperature_c: v[2] as f64,
+                        water_l: v[5] as f64,
+                        updated_at_ms: now,
+                        last_error: None,
+                    },
+                );
+                sync.push(serde_json::json!({"tank_id":tank.id(),"product_id":tank.product_id,
+                    "product_name":cfg.product(tank.product_id).map(|p|p.name.as_str()).unwrap_or(""),
+                    "volume_litres":v[4],"temperature_c":v[2],"level_mm":f64::from(v[0])*scale,
+                    "water_mm":f64::from(v[1])*scale,"fill_percent":f64::from(v[4])/tank.capacity_l*100.0,"reading_at":now}));
+            } else {
+                let error = result
+                    .as_ref()
+                    .err()
+                    .map(|e| e.to_string())
+                    .unwrap_or_else(|| "Invalid tank measurements".into());
+                tracing::warn!(tank_id=%tank.id(),%error,"ATG tank unavailable");
+                levels
+                    .write()
+                    .await
+                    .entry(tank.id())
+                    .and_modify(|l| l.last_error = Some(error.clone()))
+                    .or_insert(TankLiveLevel {
+                        tank_id: tank.id(),
+                        product_id: tank.product_id,
+                        current_l: tank.current_l,
+                        temperature_c: 0.0,
+                        water_l: 0.0,
+                        updated_at_ms: 0,
+                        last_error: Some(error),
+                    });
+            }
+        }
+        if let Ok(values) = result {
+            readings.insert(branch.id, values);
+        }
+    }
+    let now = chrono::Utc::now();
+    let external = integration::build_round(
+        cfg,
+        &readings,
+        &now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    );
+    let target = effective_api_url(atg);
+    // Never discard a successfully sampled batch because a database write failed.
+    loop {
+        match outbox::persist(pool, &sync, &external, &target).await {
+            Ok(()) => break,
+            Err(e) => {
+                tracing::error!(?e, "ATG batch persistence failed; retrying");
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        }
+    }
+    let guard = current.read().await;
+    if serde_json::json!([guard.atg, guard.tanks]) != serde_json::json!([cfg.atg, cfg.tanks]) {
+        return;
+    }
+    let tanks = snapshots(cfg, &*levels.read().await, now.timestamp_millis());
+    let _ = events.send(WsEvent::TankUpdated { tanks });
 }

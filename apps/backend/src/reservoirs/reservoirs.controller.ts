@@ -38,6 +38,13 @@ export class ReservoirsController {
         return this.reservoirs.findAll(user.companyId, stationId, allowed);
     }
 
+    @Get('stock-records')
+    @ApiOperation({summary:'Station delivery and reconciliation history'})
+    async stockRecords(@CurrentUser() user: any, @Query('stationId') stationId?: string, @Query('tankId') tankId?: string) {
+        const allowed = await resolveStationIds(this.prisma,user,stationId?[stationId]:[]);
+        return this.reservoirs.stockRecords(user.companyId,allowed,tankId);
+    }
+
     @Get('latest')
     @ApiOperation({ summary: 'Get the latest reading per active reservoir for accessible stations' })
     @ApiOkResponse({ description: 'Latest volume, fill percentage, level and temperature per reservoir' })

@@ -1,13 +1,13 @@
 // Preserve fields the form does not edit, including protocol extensions and UUIDs.
 export type ConfigRecord = Record<string, any>;
 
-export const protocolPresets: Record<string, { baud_rate: number; parity: string }> = {
+export const protocolPresets: Record<string, { baud_rate: number; parity: string; data_bits?: number; stop_bits?: number }> = {
   mock: { baud_rate: 9600, parity: 'none' },
   wayne_europump: { baud_rate: 9600, parity: 'odd' },
   wayne_dart_v1: { baud_rate: 9600, parity: 'odd' },
   wayne_dart_v2: { baud_rate: 9600, parity: 'odd' },
   gilbarco: { baud_rate: 9600, parity: 'even' },
-  azt2_0: { baud_rate: 4800, parity: 'none' },
+  azt2_0: { baud_rate: 4800, parity: 'even', data_bits: 7, stop_bits: 2 },
   texnouz_bluesky: { baud_rate: 9600, parity: 'even' },
   shelf_v2_2: { baud_rate: 19200, parity: 'none' },
 };
@@ -24,7 +24,13 @@ export function copySiteSetup(source: ConfigRecord, target: ConfigRecord): Confi
   copy.site = { ...target.site };
   copy.sync = { ...copy.sync, enabled: target.sync.enabled, backend_url: target.sync.backend_url, api_key: target.sync.api_key };
   copy.tanks = (copy.tanks ?? []).map((tank: ConfigRecord) => ({ ...tank, current_l: 0 }));
-  if (copy.atg) copy.atg.auth = null;
+  // ATG addresses and external station IDs belong to the destination as well.
+  // Start disabled when cloning into an installation without its own ATG setup.
+  copy.atg = target.atg ? JSON.parse(JSON.stringify(target.atg)) : null;
+  if (copy.atg) {
+    copy.atg.auth = null;
+    copy.tanks = JSON.parse(JSON.stringify(target.tanks ?? []));
+  }
   return copy;
 }
 

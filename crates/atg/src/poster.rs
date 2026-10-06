@@ -8,12 +8,9 @@ use std::time::Duration;
 
 use serde_json::Value;
 use tokio::sync::Mutex;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use site_config::AtgAuth;
-
-const MAX_ATTEMPTS: u32 = 4;
-const BACKOFF_BASE: f64 = 2.0;
 
 struct TokenCache {
     token: Option<String>,
@@ -134,7 +131,7 @@ impl Poster {
         {
             Ok(r) => r,
             Err(e) => {
-                error!(?e, "ATG auth login request failed");
+                error!(error = %e.without_url(), "ATG auth login request failed");
                 return None;
             }
         };
@@ -152,6 +149,7 @@ impl Poster {
             }
         };
 
+        let data = data.get("data").unwrap_or(&data);
         let token = data
             .get("accessToken")
             .or_else(|| data.get("access_token"))
@@ -174,67 +172,46 @@ impl Poster {
         Some(token)
     }
 
-    pub async fn post(&self, payload: Value) {
+    /// One delivery attempt. The durable outbox owns retries and ordering.
+    pub async fn post(&self, payload: Value) -> Result<(), String> {
         if self.api_url.is_empty() {
-            return;
+            return Err("ATG export URL is empty".into());
         }
-
-        let mut auth_retried = false;
-
-        let mut attempt = 0u32;
-        while attempt < MAX_ATTEMPTS {
-            attempt += 1;
-
-            let tok = self.bearer().await;
-            let req = {
-                let mut b = self.client.post(&self.api_url).json(&payload);
-                if let Some(ref t) = tok {
-                    let value = if t.to_ascii_lowercase().starts_with("bearer ") {
-                        t.clone()
-                    } else {
-                        format!("Bearer {}", t)
-                    };
-                    b = b.header("Authorization", value);
-                }
-                b
-            };
-
-            match req.send().await {
-                Ok(resp) => {
-                    let status = resp.status();
-                    if status.is_success() {
-                        info!(status = %status, "ATG POST ok");
-                        return;
-                    }
-                    if status == reqwest::StatusCode::UNAUTHORIZED && tok.is_some() && !auth_retried
-                    {
-                        auth_retried = true;
-                        self.invalidate().await;
-                        attempt -= 1; // don't count the 401 as a normal attempt
-                        continue;
-                    }
-                    if status.is_server_error() && attempt < MAX_ATTEMPTS {
-                        warn!(status = %status, attempt, "ATG POST server error, retrying");
-                        tokio::time::sleep(backoff(attempt)).await;
-                        continue;
-                    }
-                    error!(status = %status, "ATG POST failed permanently");
-                    return;
-                }
-                Err(e) => {
-                    warn!(?e, attempt, "ATG POST request error");
-                    if attempt < MAX_ATTEMPTS {
-                        tokio::time::sleep(backoff(attempt)).await;
-                    }
-                }
+        let expects_auth = self
+            .auth
+            .as_ref()
+            .is_some_and(|a| !a.api_token.is_empty() || !a.username.is_empty())
+            || ["API_TOKEN", "AUTH_USERNAME"]
+                .iter()
+                .any(|key| std::env::var(key).is_ok_and(|v| !v.is_empty()));
+        for attempt in 0..2 {
+            let token = self.bearer().await;
+            if expects_auth && token.is_none() {
+                return Err("ATG authentication failed".into());
             }
+            let mut request = self.client.post(&self.api_url).json(&payload);
+            if let Some(token) = token {
+                let token = token
+                    .strip_prefix("Bearer ")
+                    .or_else(|| token.strip_prefix("bearer "))
+                    .unwrap_or(&token);
+                request = request.bearer_auth(token);
+            }
+            let response = request
+                .send()
+                .await
+                .map_err(|e| format!("ATG HTTP request failed: {}", e.without_url()))?;
+            if response.status().is_success() {
+                return Ok(());
+            }
+            if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 {
+                self.invalidate().await;
+                continue;
+            }
+            return Err(format!("ATG HTTP status {}", response.status()));
         }
-        error!("ATG POST gave up after {} attempts", MAX_ATTEMPTS);
+        Err("ATG authentication rejected".into())
     }
-}
-
-fn backoff(attempt: u32) -> Duration {
-    Duration::from_secs_f64(BACKOFF_BASE * attempt as f64)
 }
 
 fn unix_now() -> f64 {

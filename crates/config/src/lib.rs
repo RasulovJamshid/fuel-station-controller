@@ -26,10 +26,30 @@ pub struct SiteConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TankConfig {
+    #[serde(default)]
+    pub tank_id: String,
+    #[serde(default)]
+    pub nozzle_sources: Vec<TankNozzleSource>,
     pub product_id: u8,
     pub label: String,
     pub capacity_l: f64,
     pub current_l: f64,
+}
+
+impl TankConfig {
+    pub fn id(&self) -> String {
+        if self.tank_id.is_empty() {
+            self.product_id.to_string()
+        } else {
+            self.tank_id.clone()
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TankNozzleSource {
+    pub fp_id: String,
+    pub nozzle_index: u8,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -129,7 +149,10 @@ impl Protocol {
     /// True when each nozzle occupies its own RS-485 address rather than sharing
     /// the fueling position's address byte.
     pub fn per_nozzle_addresses(self) -> bool {
-        matches!(self, Protocol::Azt20 | Protocol::TexnoUzBlueSky | Protocol::ShelfV22)
+        matches!(
+            self,
+            Protocol::Azt20 | Protocol::TexnoUzBlueSky | Protocol::ShelfV22
+        )
     }
 
     /// True when the pump can be armed while the nozzle is still holstered, so a
@@ -376,8 +399,14 @@ impl ShiftConfig {
 
 // ── ATG (Automatic Tank Gauge) configuration ──────────────────────────────
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct AtgConfig {
+    #[serde(default = "atg_enabled_by_default")]
+    pub enabled: bool,
+    #[serde(default = "atg_enabled_by_default")]
+    pub export_enabled: bool,
+    #[serde(default)]
+    pub stale_after_secs: Option<u64>,
     /// How often to poll all branches in seconds. Default: 300 (5 min).
     #[serde(default = "default_atg_poll_interval")]
     pub poll_interval_secs: u64,
@@ -393,6 +422,9 @@ pub struct AtgConfig {
     pub branches: Vec<AtgBranch>,
 }
 
+fn atg_enabled_by_default() -> bool {
+    true
+}
 fn default_atg_poll_interval() -> u64 {
     300
 }
@@ -400,7 +432,7 @@ fn default_atg_modbus_timeout() -> f64 {
     10.0
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 pub struct AtgAuth {
     /// Static Bearer token — takes priority over username/password login.
     #[serde(default)]
@@ -414,9 +446,15 @@ pub struct AtgAuth {
     pub login_url: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct AtgBranch {
-    /// Integer used as `ayoqshMdmId` in the integration payload.
+    #[serde(default)]
+    pub external_station_id: Option<u32>,
+    #[serde(default)]
+    pub word_order: AtgWordOrder,
+    #[serde(default)]
+    pub height_unit: AtgHeightUnit,
+    /// Local controller identity; external station identity defaults to this for legacy configs.
     pub id: u32,
     #[serde(default)]
     pub name: String,
@@ -431,7 +469,7 @@ pub struct AtgBranch {
     /// Offset used to convert start_register to a 0-based PDU address (usually 1).
     #[serde(default = "default_atg_address_base")]
     pub address_base: u16,
-    /// Number of 16-bit registers to read. Must be a multiple of 12 (12 per slot, max 48).
+    /// Number of 16-bit registers to read. Must be a multiple of 12. Large windows are read in batches.
     #[serde(default = "default_atg_register_count")]
     pub register_count: u16,
     pub slots: Vec<AtgSlot>,
@@ -453,7 +491,67 @@ fn default_atg_register_count() -> u16 {
     12
 }
 
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub enum AtgWordOrder {
+    #[default]
+    ABCD,
+    CDAB,
+    BADC,
+    DCBA,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AtgHeightUnit {
+    #[default]
+    Mm,
+    M,
+}
+
+impl Default for AtgConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            export_enabled: true,
+            poll_interval_secs: 300,
+            modbus_timeout_secs: 10.0,
+            stale_after_secs: None,
+            api_url: String::new(),
+            auth: None,
+            branches: vec![],
+        }
+    }
+}
+impl AtgConfig {
+    pub fn stale_after_ms(&self) -> i64 {
+        (self
+            .stale_after_secs
+            .unwrap_or(self.poll_interval_secs.saturating_mul(2).max(30))
+            * 1000) as i64
+    }
+}
+
 impl AtgBranch {
+    pub fn validate_window(&self) -> Result<()> {
+        if self.port == 0 {
+            bail!("ATG port must be 1..=65535");
+        }
+        let start = self
+            .start_register
+            .checked_sub(self.address_base)
+            .context("ATG start_register must be >= address_base")?;
+        if self.address_base > 1 {
+            bail!("ATG address_base must be 0 or 1");
+        }
+        if self.register_count == 0 || self.register_count % 12 != 0 {
+            bail!("ATG register_count must be a positive multiple of 12");
+        }
+        if u32::from(start) + u32::from(self.register_count) > 65536 {
+            bail!("ATG register window exceeds address 65535");
+        }
+        Ok(())
+    }
+
     /// 0-based PDU register address for the Modbus request.
     pub fn pdu_address(&self) -> u16 {
         self.start_register.saturating_sub(self.address_base)
@@ -464,10 +562,10 @@ impl AtgBranch {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct AtgSlot {
-    /// 1-based tank slot number (1–4).
-    pub slot: u8,
+    /// 1-based tank slot number within the register window.
+    pub slot: u16,
     /// Optional backend reservoir tankId. Defaults to product_id when omitted.
     #[serde(default)]
     pub tank_id: Option<String>,
@@ -491,12 +589,118 @@ pub struct AtgSlot {
     pub maxima: HashMap<String, f64>,
 }
 
+/// Replace a configuration only after its complete new contents are durable.
+pub fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    let temporary = path.with_extension(format!("tmp-{}", uuid::Uuid::new_v4()));
+    let result = (|| -> Result<()> {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        if let Ok(metadata) = std::fs::metadata(path) {
+            file.set_permissions(metadata.permissions())?;
+        }
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        std::fs::rename(&temporary, path)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result.with_context(|| format!("save configuration {}", path.display()))
+}
+
+fn validate_http_url(value: &str) -> Result<()> {
+    if value.is_empty() {
+        return Ok(());
+    }
+    let url = url::Url::parse(value).context("Invalid ATG URL")?;
+    if !["http", "https"].contains(&url.scheme())
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        bail!("ATG URL must be HTTP(S), with a host and without embedded credentials");
+    }
+    Ok(())
+}
+
 impl SiteConfig {
+    /// Freeze unambiguous legacy identities before labels/products can be edited.
+    pub fn normalize_tank_ids(&mut self) -> Result<()> {
+        for tank in &mut self.tanks {
+            if tank.tank_id.is_empty() {
+                let slots: Vec<_> = self
+                    .atg
+                    .iter()
+                    .flat_map(|a| &a.branches)
+                    .flat_map(|b| &b.slots)
+                    .filter(|s| s.product_id == Some(tank.product_id))
+                    .collect();
+                if slots.len() > 1 {
+                    bail!("Product {} has multiple ATG tanks: assign explicit tank_id to tanks and slots", tank.product_id);
+                }
+                tank.tank_id = slots
+                    .first()
+                    .and_then(|s| s.tank_id.as_ref().or(s.label.as_ref()))
+                    .filter(|s| !s.trim().is_empty())
+                    .cloned()
+                    .unwrap_or_else(|| tank.product_id.to_string());
+            }
+        }
+        let tanks = self.tanks.clone();
+        if let Some(atg) = &mut self.atg {
+            for branch in &mut atg.branches {
+                for slot in &mut branch.slots {
+                    if slot.tank_id.is_none() {
+                        let matches: Vec<_> = tanks
+                            .iter()
+                            .filter(|t| Some(t.product_id) == slot.product_id)
+                            .collect();
+                        if matches.len() > 1 {
+                            bail!("ATG slot {} needs an explicit tank_id", slot.slot);
+                        }
+                        slot.tank_id = Some(matches.first().map(|t| t.id()).unwrap_or_else(|| {
+                            format!("controller-{}-slot-{}", branch.id, slot.slot)
+                        }));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn tank_for_slot(&self, slot: &AtgSlot) -> Option<&TankConfig> {
+        if let Some(id) = &slot.tank_id {
+            if let Some(t) = self
+                .tanks
+                .iter()
+                .find(|t| t.id() == *id && Some(t.product_id) == slot.product_id)
+            {
+                return Some(t);
+            }
+        }
+        let mut tanks = self.tanks.iter().filter(|t| {
+            Some(t.product_id) == slot.product_id
+                && (slot.tank_id.is_none() || t.tank_id.is_empty())
+        });
+        let first = tanks.next()?;
+        if tanks.next().is_some() {
+            None
+        } else {
+            Some(first)
+        }
+    }
+
     pub fn load(path: &str) -> Result<Self> {
         let text =
             std::fs::read_to_string(path).with_context(|| format!("read site config {}", path))?;
-        let cfg: Self =
+        let mut cfg: Self =
             serde_json::from_str(&text).with_context(|| format!("parse site config {}", path))?;
+        cfg.normalize_tank_ids()?;
         cfg.validate()?;
         Ok(cfg)
     }
@@ -504,7 +708,7 @@ impl SiteConfig {
     pub fn save(&self, path: &str) -> Result<()> {
         self.validate()?;
         let text = serde_json::to_string_pretty(self).context("serialize site config")?;
-        std::fs::write(path, text).with_context(|| format!("write site config {}", path))?;
+        write_atomic(std::path::Path::new(path), text.as_bytes())?;
         Ok(())
     }
 
@@ -530,8 +734,8 @@ impl SiteConfig {
             .fueling_positions
             .iter()
             .any(|fp| fp.nozzles.iter().any(|n| n.product_id == id));
-        if in_use {
-            bail!("product {id} is assigned to a nozzle — remove assignments first");
+        if in_use || self.tanks.iter().any(|t| t.product_id == id) {
+            bail!("product {id} is assigned to a nozzle or tank — remove assignments first");
         }
         let before = self.products.len();
         self.products.retain(|p| p.id != id);
@@ -682,27 +886,53 @@ impl SiteConfig {
     }
 
     fn validate_tanks(&self) -> Result<()> {
-        let product_ids: HashSet<u8> = self.products.iter().map(|p| p.id).collect();
-        let mut tank_products = HashSet::new();
+        let mut ids = HashSet::new();
+        let mut sources = HashSet::new();
         for t in &self.tanks {
-            if !product_ids.contains(&t.product_id) {
+            if !self.products.iter().any(|p| p.id == t.product_id) {
+                bail!("Tank '{}' references unknown product", t.label);
+            }
+            if !ids.insert(t.id()) || t.id().trim().is_empty() {
+                bail!("Tank IDs must be non-empty and unique: {}", t.id());
+            }
+            if self
+                .tanks
+                .iter()
+                .filter(|other| other.product_id == t.product_id)
+                .count()
+                > 1
+                && t.tank_id.is_empty()
+            {
                 bail!(
-                    "Tank '{}' references unknown product_id {}",
-                    t.label,
+                    "Multiple tanks for product {} require explicit tank_id",
                     t.product_id
                 );
             }
-            if !tank_products.insert(t.product_id) {
-                bail!("Duplicate tank for product_id {}", t.product_id);
-            }
             if t.label.trim().is_empty() {
-                bail!("Tank for product_id {} has empty label", t.product_id);
+                bail!("Tank label cannot be blank");
             }
-            if t.capacity_l <= 0.0 {
-                bail!("Tank '{}' capacity_l must be > 0", t.label);
+            if !t.capacity_l.is_finite() || t.capacity_l <= 0.0 {
+                bail!("Tank capacity must be finite and positive");
             }
-            if t.current_l < 0.0 {
-                bail!("Tank '{}' current_l cannot be negative", t.label);
+            if !t.current_l.is_finite() || t.current_l < 0.0 || t.current_l > t.capacity_l {
+                bail!("Tank starting volume must be between zero and capacity");
+            }
+            for source in &t.nozzle_sources {
+                if !sources.insert((source.fp_id.clone(), source.nozzle_index)) {
+                    bail!("A nozzle can supply only one tank accounting group");
+                }
+                if !self.fueling_positions.iter().any(|fp| {
+                    fp.id == source.fp_id
+                        && fp
+                            .nozzles
+                            .iter()
+                            .any(|n| n.index == source.nozzle_index && n.product_id == t.product_id)
+                }) {
+                    bail!(
+                        "Tank {} nozzle source must reference a nozzle with the same product",
+                        t.id()
+                    );
+                }
             }
         }
         Ok(())
@@ -712,15 +942,35 @@ impl SiteConfig {
         let Some(atg) = &self.atg else {
             return Ok(());
         };
-        if atg.poll_interval_secs == 0 {
-            bail!("atg.poll_interval_secs must be > 0");
+        if !(1..=86400).contains(&atg.poll_interval_secs) {
+            bail!("atg.poll_interval_secs must be 1..=86400");
         }
-        if atg.modbus_timeout_secs <= 0.0 {
-            bail!("atg.modbus_timeout_secs must be > 0");
+        if !atg.modbus_timeout_secs.is_finite() || !(0.1..=120.0).contains(&atg.modbus_timeout_secs)
+        {
+            bail!("atg.modbus_timeout_secs must be 0.1..=120");
         }
 
+        if atg
+            .stale_after_secs
+            .is_some_and(|v| v < atg.poll_interval_secs || v > 604800)
+        {
+            bail!("ATG stale_after_secs must be at least poll interval and at most 604800");
+        }
+        validate_http_url(&atg.api_url)?;
+        if let Some(auth) = &atg.auth {
+            validate_http_url(&auth.login_url)?;
+            if auth.api_token.is_empty() && (auth.username.is_empty() != auth.password.is_empty()) {
+                bail!("ATG login requires both username and password");
+            }
+        }
+        if atg.enabled && atg.branches.is_empty() {
+            bail!("Enabled ATG requires at least one controller");
+        }
         let product_ids: HashSet<u8> = self.products.iter().map(|p| p.id).collect();
-        let tank_product_ids: HashSet<u8> = self.tanks.iter().map(|t| t.product_id).collect();
+        let mut mapped_tanks = HashSet::new();
+        let mut slot_ids = HashSet::new();
+        let mut probes = HashSet::new();
+        let mut group_units = HashMap::new();
         let mut branch_ids = HashSet::new();
 
         for branch in &atg.branches {
@@ -730,37 +980,46 @@ impl SiteConfig {
             if branch.host.trim().is_empty() {
                 bail!("ATG branch {} has empty host", branch.id);
             }
-            if branch.register_count < 12
-                || branch.register_count > 48
-                || branch.register_count % 12 != 0
-            {
-                bail!(
-                    "ATG branch {} register_count must be 12, 24, 36, or 48",
-                    branch.id
-                );
-            }
+            branch.validate_window()?;
             if branch.slots.is_empty() {
                 bail!("ATG branch {} must define at least one slot", branch.id);
             }
 
             let mut slots = HashSet::new();
             for slot in &branch.slots {
-                if !(1..=4).contains(&slot.slot) {
-                    bail!(
-                        "ATG branch {} slot must be 1..=4, got {}",
-                        branch.id,
-                        slot.slot
-                    );
+                if slot.slot == 0 {
+                    bail!("ATG slots start at 1");
                 }
                 if !slots.insert(slot.slot) {
                     bail!("ATG branch {} has duplicate slot {}", branch.id, slot.slot);
                 }
-                if slot.slot as u16 * 12 > branch.register_count {
+                if u32::from(slot.slot) * 12 > u32::from(branch.register_count) {
                     bail!(
                         "ATG branch {} slot {} is outside register_count {}",
                         branch.id,
                         slot.slot,
                         branch.register_count
+                    );
+                }
+                let probe = (
+                    branch.host.trim(),
+                    branch.port,
+                    branch.unit_id,
+                    u32::from(branch.pdu_address()) + (u32::from(slot.slot) - 1) * 12,
+                );
+                if !probes.insert(probe) {
+                    bail!("Physical ATG register slot is configured more than once");
+                }
+                let group = (
+                    branch.external_station_id.unwrap_or(branch.id),
+                    slot.fuel_type.as_str(),
+                );
+                if group_units
+                    .insert(group, branch.height_unit)
+                    .is_some_and(|unit| unit != branch.height_unit)
+                {
+                    bail!(
+                        "An external fuel group must use the same height unit across controllers"
                     );
                 }
                 if slot.fuel_type.trim().is_empty() {
@@ -773,6 +1032,11 @@ impl SiteConfig {
                         slot.slot
                     );
                 }
+                if let Some(id) = &slot.tank_id {
+                    if !slot_ids.insert(id) {
+                        bail!("Duplicate ATG tank_id {}", id);
+                    }
+                }
                 if let Some(pid) = slot.product_id {
                     if !product_ids.contains(&pid) {
                         bail!(
@@ -782,13 +1046,21 @@ impl SiteConfig {
                             pid
                         );
                     }
-                    if !tank_product_ids.contains(&pid) {
-                        bail!(
-                            "ATG branch {} slot {} product_id {} has no matching tanks[] entry",
-                            branch.id,
-                            slot.slot,
-                            pid
-                        );
+                    let tank = self.tank_for_slot(slot).with_context(|| {
+                        format!(
+                            "ATG slot {} must reference one matching physical tank",
+                            slot.slot
+                        )
+                    })?;
+                    if !mapped_tanks.insert(tank.id()) {
+                        bail!("Tank {} is mapped to multiple ATG slots", tank.id());
+                    }
+                    if [slot.capacity_l, slot.maxima.get("product_volume").copied()]
+                        .into_iter()
+                        .flatten()
+                        .any(|c| (c - tank.capacity_l).abs() > 0.01)
+                    {
+                        bail!("ATG tank {} capacity conflicts with tanks[]; use its canonical capacity", tank.id());
                     }
                 }
                 if matches!(slot.label.as_deref(), Some(label) if label.trim().is_empty()) {
@@ -798,7 +1070,8 @@ impl SiteConfig {
                         slot.slot
                     );
                 }
-                if matches!(slot.capacity_l, Some(capacity) if capacity <= 0.0) {
+                if matches!(slot.capacity_l, Some(capacity) if !capacity.is_finite() || capacity <= 0.0)
+                {
                     bail!(
                         "ATG branch {} slot {} capacity_l must be > 0",
                         branch.id,
@@ -806,14 +1079,23 @@ impl SiteConfig {
                     );
                 }
                 for (key, value) in &slot.maxima {
-                    if key.trim().is_empty() {
+                    if ![
+                        "product_height",
+                        "water_height",
+                        "product_temperature",
+                        "product_and_water_volume",
+                        "product_volume",
+                        "water_volume",
+                    ]
+                    .contains(&key.as_str())
+                    {
                         bail!(
                             "ATG branch {} slot {} has empty maxima key",
                             branch.id,
                             slot.slot
                         );
                     }
-                    if *value <= 0.0 {
+                    if !value.is_finite() || *value <= 0.0 {
                         bail!(
                             "ATG branch {} slot {} maxima.{} must be > 0",
                             branch.id,
@@ -940,6 +1222,13 @@ impl SiteConfig {
                     );
                 }
                 if self.connection.protocol == Protocol::Azt20 && fp.active && nozzle.active {
+                    if nozzle.price > 99_990 || nozzle.price % 10 != 0 {
+                        bail!(
+                            "AZT nozzle {} in position '{}' requires a price in multiples of 10, at most 99990",
+                            nozzle.index,
+                            fp.id
+                        );
+                    }
                     let azt_addr = if nozzle.azt_address == 0 {
                         fp.address_byte
                     } else {

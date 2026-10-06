@@ -3,8 +3,8 @@ mod api;
 mod config;
 mod db;
 mod engine;
-mod scan;
 mod price_scheduler;
+mod scan;
 mod shifts;
 mod sync;
 
@@ -95,6 +95,7 @@ async fn reinit_auth(config_path: std::path::PathBuf) -> Result<()> {
 
 async fn run(config_path: std::path::PathBuf) -> Result<()> {
     let (cfg_loaded, config_path_buf) = load(Some(config_path))?;
+    config::persist_tank_ids(&cfg_loaded, &config_path_buf)?;
     let log_level = cfg_loaded.service.log_level.clone();
     let db_path = cfg_loaded.service.db_path.clone();
     let port = cfg_loaded.service.port;
@@ -123,6 +124,11 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal)
         .busy_timeout(std::time::Duration::from_secs(5));
+    let db_opts = if cfg.read().await.connection.protocol == site_config::Protocol::Azt20 {
+        db_opts.synchronous(sqlx::sqlite::SqliteSynchronous::Full)
+    } else {
+        db_opts
+    };
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(db_opts)
@@ -137,6 +143,34 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
     }
 
     admin::ensure_admin_defaults(&pool).await?;
+    {
+        let site = cfg.read().await;
+        for tank in &site.tanks {
+            if site
+                .tanks
+                .iter()
+                .filter(|t| t.product_id == tank.product_id)
+                .count()
+                == 1
+            {
+                sqlx::query(
+                    "UPDATE fuel_deliveries SET tank_id=? WHERE product_id=? AND tank_id IS NULL",
+                )
+                .bind(tank.id())
+                .bind(tank.product_id)
+                .execute(&pool)
+                .await?;
+            }
+        }
+    }
+
+    let recovered = db::wetstock_queries::backfill_stock_sync(&pool).await?;
+    if recovered > 0 {
+        tracing::info!(
+            recovered,
+            "queued historical stock records for backend recovery"
+        );
+    }
 
     // DB is the source of truth for products and nozzle configs.
     // Seed from JSON on first run so DB is always populated.
@@ -194,8 +228,7 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
         Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 
     let shifts = Arc::new(
-        ShiftCoordinator::new(pool.clone(), cfg_for_shifts.clone())
-            .with_runtimes(runtimes.clone()),
+        ShiftCoordinator::new(pool.clone(), cfg_for_shifts.clone()).with_runtimes(runtimes.clone()),
     );
     shifts.restore().await?;
     // Recover shifts closed locally whose CLOSED state never reached the backend (so they are
@@ -264,53 +297,12 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
         cmd_tx.clone(),
     ));
 
-    // Spawn ATG Modbus polling task. It reads the shared config each cycle, so admin
-    // changes to ATG settings take effect without restarting the service.
-    {
-        let atg_cfg = cfg.read().await.atg.clone();
-        let (atg_sync_tx, mut atg_sync_rx) =
-            tokio::sync::mpsc::unbounded_channel::<atg::LocalTankReading>();
-        let atg_pool = pool.clone();
-        tokio::spawn(async move {
-            while let Some(reading) = atg_sync_rx.recv().await {
-                let payload = serde_json::json!({
-                    "tank_id": reading.tank_id,
-                    "product_id": reading.product_id,
-                    "volume_litres": reading.volume_litres,
-                    "level_mm": reading.level_mm,
-                    "temperature_c": reading.temperature_c,
-                    "water_mm": reading.water_mm,
-                    "fill_percent": reading.fill_percent,
-                    "reading_at": reading.reading_at_ms,
-                });
-                let entity_id = format!(
-                    "{}/{}",
-                    payload["tank_id"].as_str().unwrap_or("tank"),
-                    reading.reading_at_ms
-                );
-                if let Err(e) =
-                    crate::sync::enqueue(&atg_pool, "reservoir_reading", &entity_id, &payload).await
-                {
-                    tracing::warn!(?e, "ATG reservoir_reading sync enqueue failed");
-                }
-            }
-        });
-        tracing::info!(
-            enabled = atg_cfg.is_some(),
-            branches = atg_cfg.as_ref().map(|a| a.branches.len()).unwrap_or(0),
-            interval_secs = atg_cfg
-                .as_ref()
-                .map(|a| a.poll_interval_secs)
-                .unwrap_or(300),
-            "ATG task starting"
-        );
-        tokio::spawn(atg::run(
-            cfg.clone(),
-            tank_levels.clone(),
-            events_tx.clone(),
-            Some(atg_sync_tx),
-        ));
-    }
+    tokio::spawn(atg::run(
+        cfg.clone(),
+        tank_levels.clone(),
+        events_tx.clone(),
+        pool.clone(),
+    ));
 
     tracing::info!(config = %config_path_buf.display(), "config file");
     let state = AppState {

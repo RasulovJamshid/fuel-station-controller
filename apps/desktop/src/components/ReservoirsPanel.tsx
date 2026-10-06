@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TankGauge } from "./TankGauge";
 import { useAppStore } from "../store";
@@ -8,6 +8,8 @@ const TONE_ORDER = ["emerald", "amber", "blue"] as const;
 
 export function ReservoirsPanel() {
   const { t } = useTranslation();
+  const [now,setNow] = useState(Date.now());
+  useEffect(() => { const timer=setInterval(()=>setNow(Date.now()),5000); return ()=>clearInterval(timer); },[]);
   const siteSnapshot = useAppStore((s) => s.siteSnapshot);
 
   const tanks = useMemo(() => {
@@ -15,31 +17,21 @@ export function ReservoirsPanel() {
     const products = siteSnapshot?.products ?? [];
     const productMap = new Map(products.map((p) => [p.id, p]));
 
-    const activeProductIds = new Set(
-      (siteSnapshot?.positions ?? [])
-        .filter((p) => p.active)
-        .flatMap((p) => p.nozzles)
-        .filter((n) => n.active)
-        .map((n) => n.product_id),
-    );
-
-    const liveTanks = allTanks.filter((t) => t.updated_at_ms != null);
-    const visible = activeProductIds.size > 0
-      ? liveTanks.filter((t) => activeProductIds.has(t.product_id))
-      : liveTanks;
+    const visible = allTanks;
 
     const clampPct = (value: number) =>
       Math.max(0, Math.min(100, Math.round(value)));
 
     return visible.map((tank, i) => ({
       ...tank,
+      reading_status: tank.reading_status === "fresh" && now - (tank.updated_at_ms ?? 0) > tank.stale_after_ms ? "stale" : tank.reading_status,
       product: productMap.get(tank.product_id),
-      levelPct: tank.capacity_l > 0
+      levelPct: tank.updated_at_ms != null && tank.capacity_l > 0
         ? clampPct((tank.current_l / tank.capacity_l) * 100)
         : 0,
       tone: TONE_ORDER[i % TONE_ORDER.length],
     }));
-  }, [siteSnapshot]);
+  }, [siteSnapshot,now]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -55,14 +47,12 @@ export function ReservoirsPanel() {
           <div className="ml-auto flex items-center gap-3">
             <div className="hidden items-center gap-2 text-xs text-text-secondary sm:flex">
               <span className="h-1.5 w-1.5 rounded-full bg-accent-emerald" aria-hidden />
-              {t("reservoirs.live")}
+              ATG
               <span className="border-l border-border-primary/60 pl-2 font-medium tabular-nums text-text-primary">
                 {t("reservoirs.tanks", { n: tanks.length })}
               </span>
             </div>
-            <button className="flex items-center justify-center rounded border border-border-primary/60 bg-bg-primary px-3 py-2 text-xs font-medium text-text-primary transition-colors hover:bg-bg-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/40">
-              {t("reservoirs.settings")}
-            </button>
+
           </div>
         </div>
 
@@ -80,14 +70,16 @@ export function ReservoirsPanel() {
             <div className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-3">
               {tanks.map((tank) => (
                 <TankGauge
-                  key={tank.product_id}
+                  key={tank.tank_id}
                   label={tank.label}
                   levelPct={tank.levelPct}
-                  currentL={tank.current_l}
+                  currentL={tank.updated_at_ms != null ? tank.current_l : undefined}
                   capacityL={tank.capacity_l}
                   temperatureC={tank.temperature_c}
                   waterL={tank.water_l}
                   updatedAtMs={tank.updated_at_ms}
+                  readingStatus={tank.reading_status}
+                  error={tank.last_error}
                   tone={tank.tone}
                   subtitle={tank.product?.name}
                 />

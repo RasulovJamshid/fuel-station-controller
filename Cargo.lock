@@ -137,9 +137,11 @@ dependencies = [
  "serde",
  "serde_json",
  "site_config",
+ "sqlx",
  "tokio",
  "tracing",
  "types",
+ "uuid",
 ]
 
 [[package]]
@@ -3891,6 +3893,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serialport",
+ "url",
  "uuid",
 ]
 

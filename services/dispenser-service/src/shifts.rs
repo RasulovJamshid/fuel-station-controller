@@ -353,6 +353,39 @@ impl ShiftCoordinator {
         Ok((outgoing, incoming))
     }
 
+    /// AZT has terminal sales only. Commit its sale, outbound record and shift
+    /// credit together; legacy STOPPED/continuation paths keep their semantics.
+    pub(crate) async fn commit_azt_sale(&self, tx: &Transaction) -> Result<()> {
+        anyhow::ensure!(
+            matches!(tx.status, TxStatus::Completed | TxStatus::Aborted),
+            "AZT requires a terminal transaction"
+        );
+        let mut active = self.active.write().await;
+        let mut db = self.pool.begin().await?;
+        crate::db::queries::insert_transaction_on(&mut *db, tx).await?;
+        crate::sync::enqueue_on(&mut *db, "transaction", &tx.id, &serde_json::to_value(tx)?)
+            .await?;
+        let credit = tx.status.counts_toward_revenue() && tx.shift_id.is_some();
+        if credit {
+            let result = sqlx::query("UPDATE shifts SET total_transactions = total_transactions + 1, total_volume = total_volume + ?, total_amount = total_amount + ? WHERE id = ?")
+                .bind(tx.volume).bind(tx.amount as i64).bind(&tx.shift_id)
+                .execute(&mut *db).await?;
+            anyhow::ensure!(result.rows_affected() == 1, "AZT sale's shift is missing");
+        }
+        db.commit().await?;
+        if credit {
+            if let Some(cur) = active
+                .as_mut()
+                .filter(|s| Some(&s.id) == tx.shift_id.as_ref())
+            {
+                cur.total_transactions = cur.total_transactions.saturating_add(1);
+                cur.total_volume += tx.volume;
+                cur.total_amount = cur.total_amount.saturating_add(tx.amount);
+            }
+        }
+        Ok(())
+    }
+
     pub async fn on_transaction_recorded(&self, tx: &Transaction) -> Result<()> {
         if !tx.status.counts_toward_revenue() {
             return Ok(());

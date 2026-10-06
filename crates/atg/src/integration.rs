@@ -4,11 +4,9 @@
 
 use std::collections::HashMap;
 
-use anyhow::bail;
 use serde_json::{json, Value};
-use tracing::warn;
 
-use site_config::{AtgBranch, AtgSlot};
+use site_config::SiteConfig;
 
 /// Six legacy metadata field names in Modbus register order (6 floats per slot).
 const SLOT_FIELDS: [&str; 6] = [
@@ -21,27 +19,14 @@ const SLOT_FIELDS: [&str; 6] = [
 ];
 
 /// Extract the 6 float fields for one 1-based slot from the full float slice.
-fn extract_slot_meta(floats: &[f32], slot_1based: u8) -> anyhow::Result<HashMap<String, f64>> {
-    let start = ((slot_1based - 1) as usize) * 6;
-    if start + 6 > floats.len() {
-        bail!(
-            "slot {}: need floats[{}..{}], only {} available",
-            slot_1based,
-            start,
-            start + 6,
-            floats.len()
-        );
-    }
+fn extract_slot_meta(floats: &[f32], slot: u16) -> anyhow::Result<HashMap<String, f64>> {
+    let values =
+        crate::slot_values(floats, slot).ok_or_else(|| anyhow::anyhow!("Invalid tank reading"))?;
     Ok(SLOT_FIELDS
         .iter()
-        .enumerate()
-        .map(|(i, &name)| (name.to_string(), floats[start + i] as f64))
+        .zip(values.iter())
+        .map(|(k, v)| (k.to_string(), f64::from(*v)))
         .collect())
-}
-
-/// A slot whose product_volume is <= 0 is treated as a bad Modbus transfer.
-fn is_unusable(meta: &HashMap<String, f64>) -> bool {
-    meta.get("product_volume").copied().unwrap_or(0.0) <= 0.0
 }
 
 /// Combine multiple physical slots into one logical metadata object.
@@ -118,101 +103,60 @@ fn apply_percentages(meta: &mut HashMap<String, f64>, maxima: &HashMap<String, f
     }
 }
 
-/// Build one POST body per distinct fuel type on this branch.
-///
-/// Multiple slots with the same `fuel_type` are aggregated. Slots whose
-/// `product_volume <= 0` are skipped (bad Modbus transfer).
-pub fn build_payloads(
-    branch: &AtgBranch,
-    floats: &[f32],
-    source_timestamp: &str,
-) -> anyhow::Result<Vec<Value>> {
-    if floats.len() < branch.float_count() {
-        bail!(
-            "branch {}: need {} floats (register_count={}), got {}",
-            branch.id,
-            branch.float_count(),
-            branch.register_count,
-            floats.len()
-        );
+/// Aggregate a complete external station/fuel group across all its controllers.
+/// A failed member suppresses the whole group; never publish a partial total.
+pub fn build_round(
+    cfg: &SiteConfig,
+    readings: &HashMap<u32, Vec<f32>>,
+    timestamp: &str,
+) -> Vec<Value> {
+    struct Group {
+        metas: Vec<HashMap<String, f64>>,
+        maxima: Vec<HashMap<String, f64>>,
+        complete: bool,
     }
-    if branch.slots.is_empty() {
-        bail!("branch {}: no slots configured", branch.id);
-    }
-
-    // Group slots by fuel type in first-seen order.
-    let mut order: Vec<&str> = Vec::new();
-    let mut groups: HashMap<&str, Vec<&AtgSlot>> = HashMap::new();
-    for slot in &branch.slots {
-        let ft = slot.fuel_type.as_str();
-        if !groups.contains_key(ft) {
-            order.push(ft);
-        }
-        groups.entry(ft).or_default().push(slot);
-    }
-
-    let mut bodies = Vec::new();
-
-    for fuel_type in order {
-        let slot_group = &groups[fuel_type];
-        let mut slot_metas: Vec<HashMap<String, f64>> = Vec::new();
-        let mut maxima_list: Vec<&HashMap<String, f64>> = Vec::new();
-
-        for sc in slot_group {
-            match extract_slot_meta(floats, sc.slot) {
-                Ok(meta) => {
-                    if is_unusable(&meta) {
-                        warn!(
-                            branch = branch.id,
-                            slot = sc.slot,
-                            fuel_type = fuel_type,
-                            "skipping slot: product_volume <= 0 (likely bad Modbus read)"
-                        );
-                        continue;
-                    }
-                    slot_metas.push(meta);
-                    maxima_list.push(&sc.maxima);
+    let mut groups: std::collections::BTreeMap<(u32, String), Group> =
+        std::collections::BTreeMap::new();
+    for branch in cfg.atg.iter().flat_map(|a| &a.branches) {
+        for slot in &branch.slots {
+            let group = groups
+                .entry((
+                    branch.external_station_id.unwrap_or(branch.id),
+                    slot.fuel_type.clone(),
+                ))
+                .or_insert_with(|| Group {
+                    metas: vec![],
+                    maxima: vec![],
+                    complete: true,
+                });
+            let meta = readings
+                .get(&branch.id)
+                .and_then(|f| extract_slot_meta(f, slot.slot).ok());
+            if let Some(meta) = meta {
+                group.metas.push(meta);
+                let mut maxima = slot.maxima.clone();
+                if let Some(capacity) = cfg
+                    .tank_for_slot(slot)
+                    .map(|t| t.capacity_l)
+                    .or(slot.capacity_l)
+                {
+                    maxima.insert("product_volume".into(), capacity);
+                    maxima.insert("product_and_water_volume".into(), capacity);
                 }
-                Err(e) => warn!(
-                    branch = branch.id,
-                    slot = sc.slot,
-                    ?e,
-                    "slot extraction failed"
-                ),
+                group.maxima.push(maxima);
+            } else {
+                group.complete = false;
             }
         }
-
-        if slot_metas.is_empty() {
-            warn!(
-                branch = branch.id,
-                fuel_type = fuel_type,
-                "no usable slots; skipping POST"
-            );
-            continue;
-        }
-
-        let mut meta = aggregate_metas(&slot_metas);
-        let combined_maxima = sum_maxima(&maxima_list);
-        apply_percentages(&mut meta, &combined_maxima);
-
-        // Build metadata JSON object with sorted keys for stable output.
-        let mut keys: Vec<_> = meta.keys().cloned().collect();
-        keys.sort();
-        let meta_obj: serde_json::Map<String, Value> = keys
-            .into_iter()
-            .map(|k| {
-                let v = json!(meta[&k]);
-                (k, v)
-            })
-            .collect();
-
-        bodies.push(json!({
-            "ayoqshMdmId": branch.id,
-            "metadata": Value::Object(meta_obj),
-            "sourceTimestamp": source_timestamp,
-            "type": fuel_type,
-        }));
     }
-
-    Ok(bodies)
+    groups.into_iter().filter_map(|((station,fuel),g)| {
+        if !g.complete || g.metas.is_empty() { return None; }
+        let mut meta = aggregate_metas(&g.metas);
+        // A percentage is only meaningful if every member supplied its denominator.
+        let refs: Vec<_> = g.maxima.iter().collect();
+        let mut maxima = sum_maxima(&refs);
+        maxima.retain(|key,_| g.maxima.iter().all(|m| m.contains_key(key)));
+        apply_percentages(&mut meta,&maxima);
+        Some(json!({"ayoqshMdmId":station,"type":fuel,"sourceTimestamp":timestamp,"metadata":meta}))
+    }).collect()
 }

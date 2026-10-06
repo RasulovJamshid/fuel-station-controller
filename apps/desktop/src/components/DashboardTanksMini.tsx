@@ -1,17 +1,13 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../store";
 
 const fmtInt = new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 0 });
 
-/** Returns true when the ATG reading is recent (< 10 minutes old). */
-function isLive(updatedAtMs: number | undefined): boolean {
-  if (updatedAtMs == null) return false;
-  return Date.now() - updatedAtMs < 10 * 60 * 1000;
-}
-
 export function DashboardTanksMini() {
   const { t } = useTranslation();
+  const [now,setNow] = useState(Date.now());
+  useEffect(() => { const timer=setInterval(()=>setNow(Date.now()),5000); return ()=>clearInterval(timer); },[]);
   const siteSnapshot = useAppStore((s) => s.siteSnapshot);
 
   const rows = useMemo(() => {
@@ -19,22 +15,11 @@ export function DashboardTanksMini() {
     const products = siteSnapshot?.products ?? [];
     const productMap = new Map(products.map((p) => [p.id, p]));
 
-    const activeProductIds = new Set(
-      (siteSnapshot?.positions ?? [])
-        .filter((p) => p.active)
-        .flatMap((p) => p.nozzles)
-        .filter((n) => n.active)
-        .map((n) => n.product_id),
-    );
-
-    const liveTanks = tanks.filter((t) => t.updated_at_ms != null);
-    const visible = activeProductIds.size > 0
-      ? liveTanks.filter((t) => activeProductIds.has(t.product_id))
-      : liveTanks;
+    const visible = tanks;
 
     return visible.map((tank) => {
       const product = productMap.get(tank.product_id);
-      const levelPct = tank.capacity_l > 0
+      const levelPct = tank.updated_at_ms != null && tank.capacity_l > 0
         ? Math.max(0, Math.min(100, Math.round((tank.current_l / tank.capacity_l) * 100)))
         : 0;
       return { ...tank, product, levelPct };
@@ -64,19 +49,19 @@ export function DashboardTanksMini() {
             </p>
           </div>
         ) : (
-          <div className="flex h-full items-stretch gap-2">
+          <div className="flex h-full items-stretch gap-2 overflow-x-auto">
             {rows.map((row) => {
               const color = row.product?.color ?? "#6b7280";
               const warn = alertColor(row.levelPct);
-              const live = isLive(row.updated_at_ms);
+              const live = row.reading_status === "fresh" && now - (row.updated_at_ms ?? 0) <= row.stale_after_ms;
               const tempStr = row.temperature_c != null
                 ? `${row.temperature_c.toFixed(0)}°`
                 : null;
 
               return (
                 <div
-                  key={row.product_id}
-                  className="flex flex-1 flex-col items-center gap-1.5 rounded-xl border border-border-primary/50 bg-bg-primary/40 px-2 py-2"
+                  key={row.tank_id}
+                  className="flex min-w-[85px] flex-1 flex-col items-center gap-1.5 rounded-xl border border-border-primary/50 bg-bg-primary/40 px-2 py-2"
                 >
                   {/* Label + live dot */}
                   <div className="flex items-center gap-1.5">
@@ -110,7 +95,7 @@ export function DashboardTanksMini() {
 
                   {/* Current volume */}
                   <span className="whitespace-nowrap font-mono text-[11px] font-semibold tabular-nums text-text-primary">
-                    {fmtInt.format(row.current_l)} L
+                    {row.updated_at_ms != null ? `${fmtInt.format(row.current_l)} L` : "—"}
                   </span>
 
                   {/* Temperature badge — only when ATG data is present */}

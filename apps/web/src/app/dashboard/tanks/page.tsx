@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useEffect, useState, useCallback } from 'react';
 import { Droplets, RefreshCw, AlertTriangle, Plus, Pencil } from 'lucide-react';
 import { reservoirsApi, stationsApi } from '@/lib/api';
@@ -45,6 +46,8 @@ export default function TanksPage() {
   const role = useAuthStore(s => s.user?.role);
   const canManage = role === 'SUPER_ADMIN' || role === 'COMPANY_ADMIN' || role === 'STATION_MANAGER';
 
+  const [now,setNow] = useState(Date.now());
+  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),5000);return()=>clearInterval(timer);},[]);
   const [tanks, setTanks]     = useState<any[]>([]);
   const [stations, setStations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,7 +148,7 @@ export default function TanksPage() {
                       <p className="text-xs text-slate-400 mt-0.5">{tank.productName || '—'}</p>
                     </div>
                     <div className="flex items-center gap-1">
-                      {canManage && (
+                      {canManage && !tank.managedByStation && (
                         <button onClick={() => openEdit(tank)} title={t('editTank')}
                           className="p-2 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors">
                           <Pencil size={14} />
@@ -157,6 +160,8 @@ export default function TanksPage() {
                     </div>
                   </div>
 
+                  {tank.managedByStation && canManage && <Link className="text-xs text-brand-600" href={`/dashboard/stations/${tank.stationId}/config`}>Manage in station configuration</Link>}
+                  <p className="text-xs text-slate-500">{tank.monitoringEnabled === false ? 'ATG disabled' : !tank.readingAt ? 'Waiting for reading' : !tank.managedByStation ? 'Last received reading' : now - new Date(tank.readingAt).getTime() > (tank.staleAfterSecs ?? 600)*1000 ? 'Stale reading' : 'Live reading'}</p>
                   <TankGauge percent={pct} levelLabel={t('tankLevel')} />
 
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
@@ -178,6 +183,7 @@ export default function TanksPage() {
                         <p className="font-semibold text-slate-800 mt-0.5">{tank.temperatureC.toFixed(1)}°C</p>
                       </div>
                     )}
+                    {tank.waterMm != null && <div className="bg-slate-50 rounded-lg p-2"><p className="text-slate-400">Water</p><p>{tank.waterMm.toFixed(1)} mm</p></div>}
                     {tank.levelMm != null && (
                       <div className="bg-slate-50 rounded-lg p-2">
                         <p className="text-slate-400">{t('tankLevel')}</p>

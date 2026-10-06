@@ -226,26 +226,30 @@
     {
       "product_id": 1,
       "label": "AI-92",
-      "capacity_l": 20000.0,
-      "current_l": 10000.0
+      "capacity_l": 25000.0,
+      "current_l": 10000.0,
+      "tank_id": "1"
     },
     {
       "product_id": 2,
       "label": "AI-95",
-      "capacity_l": 20000.0,
-      "current_l": 10000.0
+      "capacity_l": 25000.0,
+      "current_l": 10000.0,
+      "tank_id": "2"
     },
     {
       "product_id": 3,
       "label": "Diesel Euro K4",
-      "capacity_l": 20000.0,
-      "current_l": 10000.0
+      "capacity_l": 25000.0,
+      "current_l": 10000.0,
+      "tank_id": "3"
     },
     {
       "product_id": 4,
       "label": "Diesel Euro 6",
-      "capacity_l": 20000.0,
-      "current_l": 10000.0
+      "capacity_l": 25000.0,
+      "current_l": 10000.0,
+      "tank_id": "4"
     }
   ],
   "atg": {

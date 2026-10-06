@@ -557,22 +557,17 @@ pub async fn update_sync_config(
 #[tauri::command]
 pub async fn admin_atg_discover(
     client: tauri::State<'_, ServiceClient>,
-    port: Option<u16>,
-    unit_id: Option<u8>,
-    start_register: Option<u16>,
-    address_base: Option<u16>,
-    register_count: Option<u16>,
+    token: String,
+    query: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    client
-        .admin_atg_discover(port, unit_id, start_register, address_base, register_count)
-        .await
+    client.admin_atg_discover(&token, query).await
 }
-
 #[tauri::command]
 pub async fn admin_get_atg_config(
     client: tauri::State<'_, ServiceClient>,
+    token: String,
 ) -> Result<serde_json::Value, String> {
-    client.admin_get_atg_config().await
+    client.admin_get_atg_config(&token).await
 }
 
 #[tauri::command]
@@ -580,8 +575,9 @@ pub async fn list_deliveries(
     client: tauri::State<'_, ServiceClient>,
     product_id: Option<u8>,
     limit: Option<i64>,
+    tank_id: Option<String>,
 ) -> Result<Vec<types::FuelDelivery>, String> {
-    client.list_deliveries(product_id, limit).await
+    client.list_deliveries(product_id, limit, tank_id).await
 }
 
 #[tauri::command]
@@ -596,8 +592,9 @@ pub async fn create_delivery(
 pub async fn wetstock_preview(
     client: tauri::State<'_, ServiceClient>,
     product_id: Option<u8>,
+    tank_id: Option<String>,
 ) -> Result<Vec<types::WetstockReconciliation>, String> {
-    client.wetstock_preview(product_id).await
+    client.wetstock_preview(product_id, tank_id).await
 }
 
 #[tauri::command]
@@ -613,8 +610,11 @@ pub async fn list_reconciliations(
     client: tauri::State<'_, ServiceClient>,
     product_id: Option<u8>,
     limit: Option<i64>,
+    tank_id: Option<String>,
 ) -> Result<Vec<types::WetstockReconciliation>, String> {
-    client.list_reconciliations(product_id, limit).await
+    client
+        .list_reconciliations(product_id, limit, tank_id)
+        .await
 }
 
 #[tauri::command]
@@ -647,31 +647,10 @@ pub async fn admin_cancel_scheduled_price(
 #[tauri::command]
 pub async fn admin_save_atg_config(
     client: tauri::State<'_, ServiceClient>,
-    poll_interval_secs: Option<u64>,
-    modbus_timeout_secs: Option<f64>,
-    api_url: Option<String>,
-    auth: Option<serde_json::Value>,
-    branches: Option<serde_json::Value>,
+    token: String,
+    body: serde_json::Value,
 ) -> Result<(), String> {
-    let mut body = serde_json::Map::new();
-    if let Some(v) = poll_interval_secs {
-        body.insert("poll_interval_secs".into(), serde_json::json!(v));
-    }
-    if let Some(v) = modbus_timeout_secs {
-        body.insert("modbus_timeout_secs".into(), serde_json::json!(v));
-    }
-    if let Some(v) = api_url {
-        body.insert("api_url".into(), serde_json::json!(v));
-    }
-    if let Some(v) = auth {
-        body.insert("auth".into(), v);
-    }
-    if let Some(v) = branches {
-        body.insert("branches".into(), v);
-    }
-    client
-        .admin_save_atg_config(serde_json::Value::Object(body))
-        .await
+    client.admin_save_atg_config(&token, body).await
 }
 
 pub async fn ws_forward_loop(app: AppHandle, ws_url: String) {

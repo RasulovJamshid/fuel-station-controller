@@ -9,3 +9,4 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 serialport = { workspace = true }
 uuid = { workspace = true }
+url = "2"

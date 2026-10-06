@@ -1,7 +1,7 @@
 const en = {
   title: 'Site configuration', intro: 'Prepare the complete setup for a new installation. Save it on the server, then download the configuration file.',
   installation: 'Install the downloaded file as site.config.json before the first service start. Existing installations keep products and nozzle settings in their local database; use local administration to change those settings.',
-  copy: 'Copy setup from a station', copyAction: 'Copy into this draft', copyHint: 'Replaces this draft. Keeps the destination identity and sync credentials, clears ATG credentials, and resets starting tank volumes. Review serial ports, ATG hosts and branch IDs for the new site.',
+  copy: 'Copy setup from a station', copyAction: 'Copy into this draft', copyHint: 'Replaces this draft. Keeps the destination identity and sync credentials, keeps the destination ATG setup (disabled if absent), clears ATG credentials, and resets starting tank volumes. Review product and tank mappings.',
   choose: 'Select a station', saved: 'Configuration saved on the server.', copied: 'Setup copied. Review the site-specific connection and ATG settings.',
   save: 'Save configuration', download: 'Save & download', back: 'Back to station', loading: 'Loading…', error: 'Unable to load configuration.', saveError: 'Unable to save configuration.', denied: 'Only company administrators can manage site configurations.',
   connection: 'Protocol & connection', products: 'Products', positions: 'Pumps & nozzles', tanks: 'Tanks', atg: 'ATG', advanced: 'Service, sync & shifts', review: 'Review configuration',
@@ -10,15 +10,18 @@ const en = {
   id: 'ID', name: 'Name', color: 'Color', unit: 'Unit', label: 'Label', address_byte: 'Address (decimal)', active: 'Active', index: 'Nozzle index', product_id: 'Product', price: 'Price',
   shelf_address: 'Shelf gun address (0 = position address)', azt_address: 'AZT address (0 = position address)', bluesky_hose_number: 'BlueSky address (0 = position + index)', wayne_code: 'Wayne hose byte (decimal)', wayne_product_code: 'Wayne product byte (decimal)',
   capacity_l: 'Capacity (litres)', current_l: 'Starting volume (litres)', enabled: 'Enabled', poll_interval_secs: 'Poll interval (seconds)', modbus_timeout_secs: 'Modbus timeout (seconds)',
+  export_enabled: 'External reporting enabled',
+  maxima: 'Optional measurement scales',
+  external_station_id: 'External station ID', word_order: 'Float word order', height_unit: 'Height unit', stale_after_secs: 'Stale after (seconds)',
   api_url: 'Integration URL (optional)', host: 'Host / IP', unit_id: 'Modbus unit ID', start_register: 'Start register', address_base: 'Address base', register_count: 'Register count',
-  slot: 'Slot', tank_id: 'Tank ID (optional)', type: 'Fuel type', auth: 'ATG integration credentials', api_token: 'API token', username: 'Username', password: 'Password', login_url: 'Login URL (optional)',
+  slot: 'Slot', tank_id: 'Physical tank ID', type: 'Fuel type', auth: 'ATG integration credentials', api_token: 'API token', username: 'Username', password: 'Password', login_url: 'Login URL (optional)',
   service: 'Service', polling: 'Polling', sync: 'Server sync', shifts: 'Shifts', ui: 'Operator interface',
   log_level: 'Log level', log_file: 'Log file', db_path: 'Database path', serial_log_file: 'Serial log file (optional)', interval_ms: 'Polling interval (ms)', offline_threshold_polls: 'Offline threshold (polls)', reconnect_settle_rounds: 'Reconnect settle rounds',
   backend_url: 'Server URL', retry_interval_secs: 'Retry interval (seconds)', batch_size: 'Batch size', max_retries: 'Max retries', price_pull_interval_hours: 'Price pull interval (hours)', price_pull_enabled: 'Pull server prices',
   mode: 'Shift mode', require_operator_pin: 'Require operator PIN', warn_before_end_minutes: 'Warn before end (minutes)', allow_overlap_minutes: 'Allowed overlap (minutes)', auto_close_on_restart: 'Close shift on restart', start: 'Start (HH:MM)', end: 'End (HH:MM)',
   default_auth_mode: 'Authorization mode', preauth_timeout_seconds: 'Preauthorization timeout (seconds)', use_decel_window_on_stop: 'Deceleration window on stop', use_cancel_mode: 'Use cancel mode',
   protocolHint: 'Changing protocol fills standard serial settings. Check them against the hardware; pump addresses and prices stay as entered.',
-  tankHint: 'One local tank per product. ATG slots can identify individual reservoirs using Tank ID.',
+  tankHint: 'Each physical tank has a stable Tank ID and its own capacity. Multiple tanks may contain the same product.',
   unsaved: 'Unsaved changes', none: 'None', optional: 'Optional',
 };
 
@@ -34,6 +37,9 @@ const ru: typeof en = {
   id: 'ID', name: 'Название', color: 'Цвет', unit: 'Единица', label: 'Метка', address_byte: 'Адрес (десятичный)', active: 'Активен', index: 'Номер пистолета', product_id: 'Продукт', price: 'Цена',
   shelf_address: 'Адрес пистолета Shelf (0 = адрес стороны)', azt_address: 'Адрес AZT (0 = адрес колонки)', bluesky_hose_number: 'Адрес BlueSky (0 = колонка + номер)', wayne_code: 'Байт пистолета Wayne (десятичный)', wayne_product_code: 'Байт продукта Wayne (десятичный)',
   capacity_l: 'Ёмкость (литры)', current_l: 'Начальный объём (литры)', enabled: 'Включено', poll_interval_secs: 'Интервал опроса (секунды)', modbus_timeout_secs: 'Таймаут Modbus (секунды)',
+  export_enabled: 'Внешняя интеграция включена',
+  maxima: 'Шкалы измерений',
+  external_station_id: 'ID станции интеграции', word_order: 'Порядок float', height_unit: 'Единица высоты', stale_after_secs: 'Срок актуальности (сек)',
   api_url: 'URL интеграции (необязательно)', host: 'Хост / IP', unit_id: 'ID устройства Modbus', start_register: 'Начальный регистр', address_base: 'База адреса', register_count: 'Число регистров',
   slot: 'Слот', tank_id: 'ID резервуара (необязательно)', type: 'Тип топлива', auth: 'Учётные данные интеграции ATG', api_token: 'API-токен', username: 'Имя пользователя', password: 'Пароль', login_url: 'URL входа (необязательно)',
   service: 'Сервис', polling: 'Опрос', sync: 'Синхронизация с сервером', shifts: 'Смены', ui: 'Интерфейс оператора',
@@ -42,7 +48,7 @@ const ru: typeof en = {
   mode: 'Режим смен', require_operator_pin: 'Требовать PIN оператора', warn_before_end_minutes: 'Предупреждать до конца (минуты)', allow_overlap_minutes: 'Перекрытие смен (минуты)', auto_close_on_restart: 'Закрывать смену при перезапуске', start: 'Начало (ЧЧ:ММ)', end: 'Конец (ЧЧ:ММ)',
   default_auth_mode: 'Режим авторизации', preauth_timeout_seconds: 'Таймаут предавторизации (секунды)', use_decel_window_on_stop: 'Окно замедления при остановке', use_cancel_mode: 'Режим отмены',
   protocolHint: 'При смене протокола заполняются стандартные параметры порта. Сверьте их с оборудованием; адреса колонок и цены сохраняются.',
-  tankHint: 'Один локальный резервуар на продукт. Слоты ATG могут различать резервуары по ID.',
+  tankHint: 'Каждый резервуар имеет постоянный ID и объём. Несколько резервуаров могут содержать один продукт.',
   unsaved: 'Есть несохранённые изменения', none: 'Нет', optional: 'Необязательно',
 };
 
@@ -58,6 +64,9 @@ const uz: typeof en = {
   id: 'ID', name: 'Nomi', color: 'Rang', unit: 'Birlik', label: 'Yorliq', address_byte: 'Manzil (o‘nlik)', active: 'Faol', index: 'Pistolet raqami', product_id: 'Mahsulot', price: 'Narx',
   shelf_address: 'Shelf pistolet manzili (0 = tomon manzili)', azt_address: 'AZT manzili (0 = kolonka manzili)', bluesky_hose_number: 'BlueSky manzili (0 = kolonka + raqam)', wayne_code: 'Wayne pistolet bayti (o‘nlik)', wayne_product_code: 'Wayne mahsulot bayti (o‘nlik)',
   capacity_l: 'Sig‘im (litr)', current_l: 'Boshlang‘ich hajm (litr)', enabled: 'Yoqilgan', poll_interval_secs: 'So‘rov oralig‘i (soniya)', modbus_timeout_secs: 'Modbus kutish (soniya)',
+  export_enabled: 'Tashqi integratsiya yoqilgan',
+  maxima: 'O‘lchov chegaralari',
+  external_station_id: 'Tashqi stansiya IDsi', word_order: 'Float tartibi', height_unit: 'Balandlik birligi', stale_after_secs: 'Eskirish vaqti (soniya)',
   api_url: 'Integratsiya URL (ixtiyoriy)', host: 'Xost / IP', unit_id: 'Modbus qurilma ID', start_register: 'Boshlang‘ich registr', address_base: 'Manzil bazasi', register_count: 'Registrlar soni',
   slot: 'Slot', tank_id: 'Rezervuar ID (ixtiyoriy)', type: 'Yoqilg‘i turi', auth: 'ATG integratsiya hisob ma’lumotlari', api_token: 'API token', username: 'Foydalanuvchi nomi', password: 'Parol', login_url: 'Kirish URL (ixtiyoriy)',
   service: 'Xizmat', polling: 'So‘rov', sync: 'Server bilan sinxronlash', shifts: 'Smenalar', ui: 'Operator interfeysi',
@@ -66,7 +75,7 @@ const uz: typeof en = {
   mode: 'Smena rejimi', require_operator_pin: 'Operator PIN talab qilish', warn_before_end_minutes: 'Tugashdan oldin ogohlantirish (daqiqa)', allow_overlap_minutes: 'Smenalar kesishishi (daqiqa)', auto_close_on_restart: 'Qayta ishga tushishda smenani yopish', start: 'Boshlanish (SS:DD)', end: 'Tugash (SS:DD)',
   default_auth_mode: 'Avtorizatsiya rejimi', preauth_timeout_seconds: 'Oldindan avtorizatsiya kutish (soniya)', use_decel_window_on_stop: 'To‘xtashda sekinlashish oynasi', use_cancel_mode: 'Bekor qilish rejimi',
   protocolHint: 'Protokol o‘zgarsa, standart port sozlamalari to‘ldiriladi. Ularni uskuna bilan tekshiring; kolonka manzillari va narxlar saqlanadi.',
-  tankHint: 'Har mahsulotga bitta mahalliy rezervuar. ATG slotlari rezervuarlarni ID orqali ajratishi mumkin.',
+  tankHint: 'Har rezervuarning doimiy IDsi va sig‘imi bor. Bir mahsulot bir nechta rezervuarda bo‘lishi mumkin.',
   unsaved: 'Saqlanmagan o‘zgarishlar', none: 'Yo‘q', optional: 'Ixtiyoriy',
 };
 

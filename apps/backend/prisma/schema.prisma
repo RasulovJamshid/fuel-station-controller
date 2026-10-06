@@ -117,6 +117,7 @@ model StationAccess {
 // ── Stations ───────────────────────────────────────────────────
 
 model Station {
+  tankCatalogUpdatedAt DateTime?
   id             String    @id
   companyId      String
   oilBaseId      String?
@@ -315,6 +316,10 @@ model ShiftPositionTotal {
 // ── Reservoirs ─────────────────────────────────────────────────
 
 model Reservoir {
+  managedByStation Boolean @default(false)
+  monitoringEnabled Boolean @default(true)
+  staleAfterSecs Int @default(600)
+  configUpdatedAt DateTime?
   id          String    @id @default(uuid())
   stationId   String
   tankId      String
@@ -332,6 +337,8 @@ model Reservoir {
 }
 
 model ReservoirReading {
+  productId Int?
+  productName String?
   id           String   @id @default(uuid())
   reservoirId  String
   stationId    String
@@ -346,6 +353,7 @@ model ReservoirReading {
 
   reservoir Reservoir @relation(fields: [reservoirId], references: [id])
 
+  @@unique([reservoirId, readingAt])
   @@index([stationId, readingAt])
   @@index([companyId, readingAt])
 }
@@ -512,4 +520,20 @@ model ProcessedSyncRecord {
   processedAt DateTime @default(now())
 
   @@index([processedAt])
+}
+
+// Station delivery/reconciliation records retain their complete historical payload.
+model StationStockRecord {
+  id String @id @default(uuid())
+  stationId String
+  companyId String
+  entityType String
+  sourceId String
+  tankId String?
+  productId Int
+  occurredAt DateTime
+  payload Json
+  @@unique([stationId, entityType, sourceId])
+  @@index([companyId, stationId, occurredAt])
+  @@index([stationId, tankId, occurredAt])
 }

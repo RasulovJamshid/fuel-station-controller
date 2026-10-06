@@ -98,6 +98,9 @@ pub struct FpState {
     pub seq: u8,
     pub missed_polls: u32,
     pub updated_at: i64,
+    /// Operator-visible protocol failure; omitted by drivers without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocol_error: Option<String>,
     /// Set when `status` is `STOPPED` — transaction that can be continued or closed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped_tx_id: Option<String>,
@@ -435,6 +438,12 @@ pub struct ProductSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TankSnapshot {
+    pub tank_id: String,
+    /// fresh, stale, offline, waiting, or disabled.
+    pub reading_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    pub stale_after_ms: i64,
     pub product_id: u8,
     pub label: String,
     pub capacity_l: f64,
@@ -450,9 +459,11 @@ pub struct TankSnapshot {
     pub updated_at_ms: Option<i64>,
 }
 
-/// Live reading from the ATG poller, keyed by product_id.
+/// Live reading from the ATG poller, keyed by physical tank ID.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TankLiveLevel {
+    pub tank_id: String,
+    pub last_error: Option<String>,
     pub product_id: u8,
     /// Current fuel volume in litres from the Modbus probe.
     pub current_l: f64,
@@ -787,6 +798,8 @@ pub struct TxSummary {
 /// falls and reconciliation against the ATG dip is meaningless.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FuelDelivery {
+    #[serde(default)]
+    pub tank_id: Option<String>,
     pub id: String,
     pub product_id: u8,
     pub product_name: String,
@@ -826,6 +839,8 @@ pub struct FuelDelivery {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CreateDeliveryCmd {
+    #[serde(default)]
+    pub tank_id: Option<String>,
     pub product_id: u8,
     #[serde(default)]
     pub tank_label: Option<String>,
@@ -869,6 +884,8 @@ pub enum VarianceStatus {
 /// the classic signature of a leak or unrecorded draw-off.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WetstockReconciliation {
+    #[serde(default)]
+    pub tank_id: Option<String>,
     pub id: String,
     pub product_id: u8,
     pub product_name: String,
@@ -893,6 +910,8 @@ pub struct WetstockReconciliation {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ReconcileCmd {
+    #[serde(default)]
+    pub tank_id: Option<String>,
     /// Reconcile only this product; omit to reconcile every configured tank.
     #[serde(default)]
     pub product_id: Option<u8>,

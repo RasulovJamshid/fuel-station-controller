@@ -9,3 +9,7 @@ pub use preauth_timeout::spawn_preauth_timeout_task;
 pub use protocols::shared::{MockSerial, SerialBackend};
 pub use serial::{init_serial_logger, ReconnectingSerial};
 pub use state::{initial_runtimes, RuntimeFp};
+
+pub(crate) use protocols::azt::{
+    validate_order as validate_azt_order, validate_price as validate_azt_price,
+};

@@ -7,7 +7,7 @@ export class SyncRecordDto {
     @IsUUID()
     id: string;
 
-    @ApiProperty({ description: 'Type of entity carried by this record', enum: ['transaction', 'shift', 'reservoir_reading', 'price_change', 'health_event'], example: 'transaction' })
+    @ApiProperty({ description: 'Type of entity carried by this record', enum: ['transaction', 'shift', 'reservoir_reading', 'price_change', 'health_event', 'tank_catalog', 'fuel_delivery', 'wetstock_reconciliation'], example: 'transaction' })
     @IsString()
     entity_type: string;
 

@@ -16,6 +16,13 @@ fn status_str(status: &TxStatus) -> String {
 }
 
 pub async fn insert_transaction(pool: &SqlitePool, tx: &Transaction) -> Result<()> {
+    insert_transaction_on(pool, tx).await
+}
+
+pub(crate) async fn insert_transaction_on<'e>(
+    executor: impl sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    tx: &Transaction,
+) -> Result<()> {
     sqlx::query(
         r#"INSERT INTO transactions
         (id, fp_id, label, address_byte, started_at, completed_at, volume, amount, price, nozzle_index, product_id, product_name, preset_type, preset_value, preset_label, status, shift_id, operator_name, parent_tx_id, combined_volume, combined_amount)
@@ -42,7 +49,7 @@ pub async fn insert_transaction(pool: &SqlitePool, tx: &Transaction) -> Result<(
     .bind(&tx.parent_tx_id)
     .bind(tx.combined_volume)
     .bind(tx.combined_amount as i64)
-    .execute(pool)
+    .execute(executor)
     .await?;
     Ok(())
 }

@@ -62,18 +62,60 @@ pub fn classify_variance(variance_l: f64, throughput_l: f64) -> (f64, VarianceSt
     (pct, status)
 }
 
+/// Replay historic stock records once: older backends acknowledged these without storing them.
+pub async fn backfill_stock_sync(pool: &SqlitePool) -> Result<usize> {
+    let mut tx = pool.begin().await?;
+    let done: Option<String> =
+        sqlx::query_scalar("SELECT value FROM admin_config WHERE key='atg_stock_sync_v1'")
+            .fetch_optional(&mut *tx)
+            .await?;
+    if done.is_some() {
+        return Ok(0);
+    }
+    let deliveries: Vec<DeliveryRow> =
+        sqlx::query_as(&format!("SELECT {DELIVERY_COLS} FROM fuel_deliveries"))
+            .fetch_all(&mut *tx)
+            .await?;
+    let reconciliations: Vec<ReconRow> = sqlx::query_as(&format!(
+        "SELECT {RECON_COLS} FROM wetstock_reconciliations"
+    ))
+    .fetch_all(&mut *tx)
+    .await?;
+    let count = deliveries.len() + reconciliations.len();
+    for row in deliveries {
+        let d: FuelDelivery = row.into();
+        crate::sync::enqueue_on(&mut *tx, "fuel_delivery", &d.id, &serde_json::to_value(&d)?)
+            .await?;
+    }
+    for row in reconciliations {
+        let r: WetstockReconciliation = row.into();
+        crate::sync::enqueue_on(
+            &mut *tx,
+            "wetstock_reconciliation",
+            &r.id,
+            &serde_json::to_value(&r)?,
+        )
+        .await?;
+    }
+    sqlx::query("INSERT INTO admin_config(key,value,updated_at,updated_by) VALUES('atg_stock_sync_v1','1',?,'migration')")
+        .bind(chrono::Utc::now().timestamp_millis()).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(count)
+}
+
 // ── Deliveries ────────────────────────────────────────────────────────────
 
 pub async fn insert_delivery(pool: &SqlitePool, d: &FuelDelivery) -> Result<()> {
-    if d.delivered_l <= 0.0 {
+    if !d.delivered_l.is_finite() || d.delivered_l <= 0.0 {
         return Err(anyhow!("delivered_l must be greater than zero"));
     }
+    let mut tx = pool.begin().await?;
     sqlx::query(
         r#"INSERT INTO fuel_deliveries (
                id, product_id, product_name, tank_label, delivered_at, document_ref, supplier,
                ordered_l, delivered_l, tank_before_l, tank_after_l, temperature_c,
-               price_per_l, shift_id, operator_name, notes, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               price_per_l, shift_id, operator_name, notes, created_at, tank_id
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(&d.id)
     .bind(d.product_id as i64)
@@ -92,27 +134,17 @@ pub async fn insert_delivery(pool: &SqlitePool, d: &FuelDelivery) -> Result<()> 
     .bind(&d.operator_name)
     .bind(&d.notes)
     .bind(d.created_at)
-    .execute(pool)
+    .bind(&d.tank_id)
+    .execute(&mut *tx)
     .await?;
-    enqueue_delivery(pool, d).await;
+    crate::sync::enqueue_on(&mut *tx, "fuel_delivery", &d.id, &serde_json::to_value(&d)?).await?;
+    tx.commit().await?;
     Ok(())
-}
-
-/// Deliveries are a final-state mutation, so they must reach the sync queue or the
-/// backend's stock figures silently drift from the station's.
-async fn enqueue_delivery(pool: &SqlitePool, d: &FuelDelivery) {
-    match serde_json::to_value(d) {
-        Ok(payload) => {
-            if let Err(e) = crate::sync::enqueue(pool, "fuel_delivery", &d.id, &payload).await {
-                tracing::warn!(id = %d.id, ?e, "sync: enqueue fuel_delivery failed");
-            }
-        }
-        Err(e) => tracing::warn!(id = %d.id, ?e, "sync: fuel_delivery serialize failed"),
-    }
 }
 
 #[derive(sqlx::FromRow)]
 struct DeliveryRow {
+    tank_id: Option<String>,
     id: String,
     product_id: i64,
     product_name: String,
@@ -141,6 +173,7 @@ impl From<DeliveryRow> for FuelDelivery {
             _ => None,
         };
         FuelDelivery {
+            tank_id: r.tank_id,
             id: r.id,
             product_id: r.product_id.clamp(0, 255) as u8,
             product_name: r.product_name,
@@ -165,7 +198,7 @@ impl From<DeliveryRow> for FuelDelivery {
 
 const DELIVERY_COLS: &str = r#"id, product_id, product_name, tank_label, delivered_at,
     document_ref, supplier, ordered_l, delivered_l, tank_before_l, tank_after_l,
-    temperature_c, price_per_l, shift_id, operator_name, notes, created_at"#;
+    temperature_c, price_per_l, shift_id, operator_name, notes, created_at, tank_id"#;
 
 pub async fn list_deliveries(
     pool: &SqlitePool,
@@ -173,12 +206,14 @@ pub async fn list_deliveries(
     from_ms: Option<i64>,
     to_ms: Option<i64>,
     limit: i64,
+    tank_id: Option<&str>,
 ) -> Result<Vec<FuelDelivery>> {
     let sql = format!(
         r#"SELECT {DELIVERY_COLS} FROM fuel_deliveries
            WHERE (?1 IS NULL OR product_id = ?1)
              AND (?2 IS NULL OR delivered_at >= ?2)
              AND (?3 IS NULL OR delivered_at <= ?3)
+             AND (?5 IS NULL OR tank_id = ?5)
            ORDER BY delivered_at DESC LIMIT ?4"#
     );
     let rows: Vec<DeliveryRow> = sqlx::query_as(&sql)
@@ -186,6 +221,7 @@ pub async fn list_deliveries(
         .bind(from_ms)
         .bind(to_ms)
         .bind(limit)
+        .bind(tank_id)
         .fetch_all(pool)
         .await?;
     Ok(rows.into_iter().map(Into::into).collect())
@@ -197,20 +233,23 @@ pub async fn get_delivery(pool: &SqlitePool, id: &str) -> Result<Option<FuelDeli
     Ok(row.map(Into::into))
 }
 
-/// Total litres delivered into one tank over a period (inclusive bounds).
+/// Total litres delivered into one tank over a period (start exclusive, end inclusive).
 pub async fn delivered_litres_between(
     pool: &SqlitePool,
     product_id: u8,
     from_ms: i64,
     to_ms: i64,
+    tank_id: Option<&str>,
 ) -> Result<f64> {
     let (total,): (f64,) = sqlx::query_as(
         r#"SELECT COALESCE(SUM(delivered_l), 0.0) FROM fuel_deliveries
-           WHERE product_id = ? AND delivered_at >= ? AND delivered_at <= ?"#,
+           WHERE product_id = ? AND delivered_at > ? AND delivered_at <= ? AND (? IS NULL OR tank_id = ?)"#,
     )
     .bind(product_id as i64)
     .bind(from_ms)
     .bind(to_ms)
+    .bind(tank_id)
+    .bind(tank_id)
     .fetch_one(pool)
     .await?;
     Ok(total)
@@ -223,6 +262,7 @@ pub async fn sold_litres_between(
     product_id: u8,
     from_ms: i64,
     to_ms: i64,
+    sources: &[site_config::TankNozzleSource],
 ) -> Result<f64> {
     let (total,): (f64,) = sqlx::query_as(
         r#"SELECT COALESCE(SUM(CASE
@@ -233,12 +273,17 @@ pub async fn sold_litres_between(
            FROM transactions
            WHERE product_id = ?
              AND status IN ('COMPLETED', 'STOPPED', 'CONTINUED_FROM')
-             AND COALESCE(completed_at, started_at) >= ?
-             AND COALESCE(completed_at, started_at) <= ?"#,
+             AND COALESCE(completed_at, started_at) > ?
+             AND COALESCE(completed_at, started_at) <= ?
+             AND (? = '[]' OR EXISTS (SELECT 1 FROM json_each(?) s
+                 WHERE json_extract(s.value,'$.fp_id') = transactions.fp_id
+                   AND json_extract(s.value,'$.nozzle_index') = transactions.nozzle_index))"#,
     )
     .bind(product_id as i64)
     .bind(from_ms)
     .bind(to_ms)
+    .bind(serde_json::to_string(sources)?)
+    .bind(serde_json::to_string(sources)?)
     .fetch_one(pool)
     .await?;
     Ok(total)
@@ -248,6 +293,7 @@ pub async fn sold_litres_between(
 
 #[derive(sqlx::FromRow)]
 struct ReconRow {
+    tank_id: Option<String>,
     id: String,
     product_id: i64,
     product_name: String,
@@ -270,6 +316,7 @@ struct ReconRow {
 impl From<ReconRow> for WetstockReconciliation {
     fn from(r: ReconRow) -> Self {
         WetstockReconciliation {
+            tank_id: r.tank_id,
             id: r.id,
             product_id: r.product_id.clamp(0, 255) as u8,
             product_name: r.product_name,
@@ -293,19 +340,21 @@ impl From<ReconRow> for WetstockReconciliation {
 
 const RECON_COLS: &str = r#"id, product_id, product_name, tank_label, period_start, period_end,
     opening_l, deliveries_l, sales_l, book_closing_l, measured_l, variance_l, variance_pct,
-    status, shift_id, measured_available, created_at"#;
+    status, shift_id, measured_available, created_at, tank_id"#;
 
 /// Most recent reconciliation for a tank — the anchor for the next period's opening.
 pub async fn last_reconciliation(
     pool: &SqlitePool,
     product_id: u8,
+    tank_id: Option<&str>,
 ) -> Result<Option<WetstockReconciliation>> {
     let sql = format!(
         r#"SELECT {RECON_COLS} FROM wetstock_reconciliations
-           WHERE product_id = ? ORDER BY period_end DESC LIMIT 1"#
+           WHERE product_id = ? AND tank_id IS ? ORDER BY period_end DESC LIMIT 1"#
     );
     let row: Option<ReconRow> = sqlx::query_as(&sql)
         .bind(product_id as i64)
+        .bind(tank_id)
         .fetch_optional(pool)
         .await?;
     Ok(row.map(Into::into))
@@ -315,15 +364,18 @@ pub async fn list_reconciliations(
     pool: &SqlitePool,
     product_id: Option<u8>,
     limit: i64,
+    tank_id: Option<&str>,
 ) -> Result<Vec<WetstockReconciliation>> {
     let sql = format!(
         r#"SELECT {RECON_COLS} FROM wetstock_reconciliations
            WHERE (?1 IS NULL OR product_id = ?1)
+             AND (?3 IS NULL OR tank_id = ?3)
            ORDER BY period_end DESC LIMIT ?2"#
     );
     let rows: Vec<ReconRow> = sqlx::query_as(&sql)
         .bind(product_id.map(|p| p as i64))
         .bind(limit)
+        .bind(tank_id)
         .fetch_all(pool)
         .await?;
     Ok(rows.into_iter().map(Into::into).collect())
@@ -334,12 +386,13 @@ pub async fn insert_reconciliation(
     r: &WetstockReconciliation,
     notes: Option<&str>,
 ) -> Result<()> {
+    let mut tx = pool.begin().await?;
     sqlx::query(
         r#"INSERT INTO wetstock_reconciliations (
                id, product_id, product_name, tank_label, period_start, period_end,
                opening_l, deliveries_l, sales_l, book_closing_l, measured_l,
-               variance_l, variance_pct, status, shift_id, measured_available, notes, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               variance_l, variance_pct, status, shift_id, measured_available, notes, created_at, tank_id
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(&r.id)
     .bind(r.product_id as i64)
@@ -359,23 +412,24 @@ pub async fn insert_reconciliation(
     .bind(i64::from(r.measured_available))
     .bind(notes)
     .bind(r.created_at)
-    .execute(pool)
+    .bind(&r.tank_id)
+    .execute(&mut *tx)
     .await?;
-    match serde_json::to_value(r) {
-        Ok(payload) => {
-            if let Err(e) =
-                crate::sync::enqueue(pool, "wetstock_reconciliation", &r.id, &payload).await
-            {
-                tracing::warn!(id = %r.id, ?e, "sync: enqueue wetstock_reconciliation failed");
-            }
-        }
-        Err(e) => tracing::warn!(id = %r.id, ?e, "sync: reconciliation serialize failed"),
-    }
+    crate::sync::enqueue_on(
+        &mut *tx,
+        "wetstock_reconciliation",
+        &r.id,
+        &serde_json::to_value(&r)?,
+    )
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 
 /// Inputs the caller must supply because they come from config/ATG, not the DB.
 pub struct TankContext {
+    pub tank_id: Option<String>,
+    pub nozzle_sources: Vec<site_config::TankNozzleSource>,
     pub product_id: u8,
     pub product_name: String,
     pub tank_label: String,
@@ -398,7 +452,7 @@ pub async fn compute_reconciliation(
     period_end: i64,
     shift_id: Option<String>,
 ) -> Result<WetstockReconciliation> {
-    let previous = last_reconciliation(pool, ctx.product_id).await?;
+    let previous = last_reconciliation(pool, ctx.product_id, ctx.tank_id.as_deref()).await?;
     let start = period_start
         .or_else(|| previous.as_ref().map(|p| p.period_end))
         .unwrap_or(0);
@@ -407,12 +461,32 @@ pub async fn compute_reconciliation(
     }
     let opening_l = previous
         .as_ref()
-        .filter(|p| p.measured_available)
-        .map(|p| p.measured_l)
+        .map(|p| {
+            if p.measured_available {
+                p.measured_l
+            } else {
+                p.book_closing_l
+            }
+        })
         .unwrap_or(ctx.configured_opening_l);
 
-    let deliveries_l = delivered_litres_between(pool, ctx.product_id, start, period_end).await?;
-    let sales_l = sold_litres_between(pool, ctx.product_id, start, period_end).await?;
+    if ctx.tank_id.is_some() {
+        let ambiguous:i64=sqlx::query_scalar("SELECT COUNT(*) FROM fuel_deliveries WHERE product_id=? AND tank_id IS NULL AND delivered_at>? AND delivered_at<=?")
+            .bind(ctx.product_id).bind(start).bind(period_end).fetch_one(pool).await?;
+        if ambiguous > 0 {
+            return Err(anyhow!("Historical deliveries lack physical tank IDs; use product reconciliation until they are assigned"));
+        }
+    }
+    let deliveries_l = delivered_litres_between(
+        pool,
+        ctx.product_id,
+        start,
+        period_end,
+        ctx.tank_id.as_deref(),
+    )
+    .await?;
+    let sales_l =
+        sold_litres_between(pool, ctx.product_id, start, period_end, &ctx.nozzle_sources).await?;
     let book_closing_l = opening_l + deliveries_l - sales_l;
 
     let measured_available = ctx.measured_l.is_some();
@@ -428,6 +502,7 @@ pub async fn compute_reconciliation(
     };
 
     Ok(WetstockReconciliation {
+        tank_id: ctx.tank_id.clone(),
         id: Uuid::new_v4().to_string(),
         product_id: ctx.product_id,
         product_name: ctx.product_name.clone(),
@@ -468,6 +543,7 @@ mod tests {
 
     fn delivery(id: &str, product_id: u8, litres: f64, at: i64) -> FuelDelivery {
         FuelDelivery {
+            tank_id: None,
             id: id.into(),
             product_id,
             product_name: "AI-92".into(),
@@ -491,6 +567,8 @@ mod tests {
 
     fn ctx(measured: Option<f64>) -> TankContext {
         TankContext {
+            tank_id: None,
+            nozzle_sources: vec![],
             product_id: 1,
             product_name: "AI-92".into(),
             tank_label: "T1".into(),
@@ -593,7 +671,10 @@ mod tests {
             .await
             .unwrap();
         assert!(!r.measured_available);
-        assert!(r.variance_l.abs() < 1e-9, "no probe means no variance claim");
+        assert!(
+            r.variance_l.abs() < 1e-9,
+            "no probe means no variance claim"
+        );
         assert_eq!(r.status, VarianceStatus::Ok);
     }
 
@@ -606,5 +687,95 @@ mod tests {
         // Past the flat tolerance it still warns.
         let (_, status) = classify_variance(-25.0, 50.0);
         assert_eq!(status, VarianceStatus::Warn);
+    }
+    #[tokio::test]
+    async fn physical_tanks_isolate_deliveries_and_sales_and_product_totals_include_both() {
+        let pool = memory_pool().await;
+        for (id, tank, litres) in [("d1", "tank-1", 1000.0), ("d2", "tank-2", 2000.0)] {
+            let mut d = delivery(id, 1, litres, 1000);
+            d.tank_id = Some(tank.into());
+            insert_delivery(&pool, &d).await.unwrap();
+        }
+        for (id, fp, litres) in [("s1", "FP1", 100.0), ("s2", "FP2", 200.0)] {
+            sqlx::query("INSERT INTO transactions(id,fp_id,label,address_byte,started_at,completed_at,volume,amount,price,nozzle_index,product_id,product_name,status,combined_volume,combined_amount) VALUES(?,?,'1',1,1500,1500,?,0,0,1,1,'AI-92','COMPLETED',?,0)")
+                .bind(id).bind(fp).bind(litres).bind(litres).execute(&pool).await.unwrap();
+        }
+        let mut tank = ctx(Some(5900.0));
+        tank.tank_id = Some("tank-1".into());
+        tank.nozzle_sources = vec![site_config::TankNozzleSource {
+            fp_id: "FP1".into(),
+            nozzle_index: 1,
+        }];
+        let r = compute_reconciliation(&pool, &tank, Some(0), 2000, None)
+            .await
+            .unwrap();
+        assert_eq!(
+            (r.deliveries_l, r.sales_l, r.variance_l),
+            (1000.0, 100.0, 0.0)
+        );
+        insert_reconciliation(&pool, &r, None).await.unwrap();
+        let deliveries = list_deliveries(&pool, Some(1), None, None, 100, Some("tank-2"))
+            .await
+            .unwrap();
+        assert_eq!(deliveries.len(), 1);
+        assert_eq!(deliveries[0].id, "d2");
+        assert_eq!(
+            list_reconciliations(&pool, None, 100, Some("tank-1"))
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(list_reconciliations(&pool, None, 100, Some("tank-2"))
+            .await
+            .unwrap()
+            .is_empty());
+        let aggregate = compute_reconciliation(&pool, &ctx(None), Some(0), 2000, None)
+            .await
+            .unwrap();
+        assert_eq!((aggregate.deliveries_l, aggregate.sales_l), (3000.0, 300.0));
+        assert_eq!(
+            aggregate.opening_l, 5000.0,
+            "physical reconciliation must not become product opening"
+        );
+    }
+    #[tokio::test]
+    async fn failed_sync_enqueue_rolls_back_stock_mutations() {
+        let pool = memory_pool().await;
+        sqlx::query("DROP TABLE sync_queue")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(insert_delivery(&pool, &delivery("d1", 1, 100.0, 1000))
+            .await
+            .is_err());
+        assert!(get_delivery(&pool, "d1").await.unwrap().is_none());
+        let r = compute_reconciliation(&pool, &ctx(None), Some(0), 2000, None)
+            .await
+            .unwrap();
+        assert!(insert_reconciliation(&pool, &r, None).await.is_err());
+        assert!(list_reconciliations(&pool, None, 100, None)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+    #[tokio::test]
+    async fn backfill_replays_historic_stock_only_once() {
+        let pool = memory_pool().await;
+        insert_delivery(&pool, &delivery("d1", 1, 100.0, 1000))
+            .await
+            .unwrap();
+        sqlx::query("UPDATE sync_queue SET synced_at=123")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(backfill_stock_sync(&pool).await.unwrap(), 1);
+        let pending: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sync_queue WHERE synced_at IS NULL")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(pending, 1);
+        assert_eq!(backfill_stock_sync(&pool).await.unwrap(), 0);
     }
 }

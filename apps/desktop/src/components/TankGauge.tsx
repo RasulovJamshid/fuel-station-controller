@@ -36,6 +36,8 @@ export function TankGauge(props: {
   temperatureC?: number;
   waterL?: number;
   updatedAtMs?: number;
+  readingStatus?: string;
+  error?: string;
   tone?: Tone;
   className?: string;
   probe?: string;
@@ -52,7 +54,7 @@ export function TankGauge(props: {
   const free     = capacity != null && current != null ? Math.max(capacity - current, 0) : null;
 
   const stale   = staleLabel(props.updatedAtMs);
-  const hasLive = props.updatedAtMs != null;
+  const hasLive = props.readingStatus === "fresh";
 
   const statusBadge =
     state === "critical"
@@ -85,14 +87,14 @@ export function TankGauge(props: {
           ) : null}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          {hasLive && !stale && (
+          {hasLive && (
             <span className="flex items-center gap-1.5 text-xs text-text-secondary">
               <span className="h-1.5 w-1.5 rounded-full bg-accent-emerald" aria-hidden />
               {t("tankGauge.live")}
             </span>
           )}
-          {stale && <span className="text-xs text-accent-amber">{stale}</span>}
-          {statusBadge && (
+          {!hasLive && <span title={props.error} className="text-xs text-accent-amber">{props.readingStatus ?? "waiting"}{stale ? ` · ${stale}` : ""}</span>}
+          {statusBadge && current != null && (
             <span className={`rounded border px-2 py-0.5 text-xs font-semibold ${statusBadge}`}>
               {statusLabel}
             </span>

@@ -1,23 +1,24 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use site_config::{FuelingPositionConfig, SiteConfig};
 use sqlx::SqlitePool;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tracing::{debug, info, warn};
-use types::{
-    preset_label, FpStatus, Preset, PumpNozzleTotals, StopSource, Transaction, TxStatus, WsEvent,
-};
+use types::{preset_label, FpStatus, Preset, PumpNozzleTotals, Transaction, TxStatus, WsEvent};
 
 use super::shared::{
-    active_positions_by_byte, broadcast_status, commit_sale, exchange_serial, mark_missed,
-    preset_metadata, SerialBackend,
+    active_positions_by_byte, broadcast_status, exchange_serial, mark_missed, preset_metadata,
+    SerialBackend,
 };
 use crate::engine::poll_loop::DispatchCommand;
 use crate::engine::state::{CurrentTx, PreAuthContext, RuntimeFp};
 use crate::shifts::ShiftCoordinator;
+
+#[path = "azt_journal.rs"]
+mod journal;
 
 const AZT_REACTIVE_AUTHORIZE_START_TIMEOUT_MS: i64 = 15_000;
 
@@ -25,7 +26,7 @@ const AZT_REACTIVE_AUTHORIZE_START_TIMEOUT_MS: i64 = 15_000;
 //
 // SU-driven protocol: the control system sets price + dose, authorizes, polls
 // live volume, reads final data, and confirms the totals write. One hose per
-// network address (`address_byte & 0x0F`, 1..=15).
+// network address (1..=225, including address offsets).
 //
 // Reached only when `cfg.connection.protocol` is `Protocol::Azt20` (exhaustive
 // match in `run_poll_loop`), so it cannot affect the Wayne or Gilbarco paths.
@@ -50,8 +51,9 @@ const AZT_WIRE_UNIT: u64 = 10;
 const AZT_MAX_PRICE: u32 = 9_999 * AZT_WIRE_UNIT as u32;
 /// §7.12 dose-by-amount field is 6 wire digits → 9 999 990 soum max.
 const AZT_MAX_AMOUNT: u64 = 999_999 * AZT_WIRE_UNIT;
-const AZT_RESET_CLOSE_RETRIES: usize = 5;
-const AZT_RESET_CLOSE_RETRY_DELAY_MS: u64 = 750;
+const AZT_STOP_RETRY_INTERVAL: Duration = Duration::from_millis(500);
+const AZT_STATUS_UNAVAILABLE: &str =
+    "Pump status unavailable; displayed status and meters may be stale.";
 
 pub(in crate::engine) async fn run(
     mut cfg: Arc<SiteConfig>,
@@ -78,6 +80,7 @@ pub(in crate::engine) async fn run(
         while let Ok(cmd) = commands.try_recv() {
             if let DispatchCommand::ReloadConfig { cfg: next_cfg } = cmd {
                 info!("AZT poll loop reloaded site config");
+                trk_types.clear();
                 cfg = next_cfg;
                 disp_by_byte = active_positions_by_byte(&cfg);
                 addrs = cfg.active_addresses();
@@ -86,17 +89,7 @@ pub(in crate::engine) async fn run(
                 interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 continue 'poll_loop;
             }
-            azt_apply_command(
-                &cfg,
-                &runtimes,
-                &events,
-                &backend,
-                cmd,
-                &pool,
-                &shifts,
-                &mut trk_types,
-            )
-            .await;
+            azt_apply_command(&cfg, &runtimes, &events, &backend, &pool, &shifts, cmd).await;
         }
 
         for byte in addrs.clone() {
@@ -104,6 +97,7 @@ pub(in crate::engine) async fn run(
             while let Ok(cmd) = commands.try_recv() {
                 if let DispatchCommand::ReloadConfig { cfg: next_cfg } = cmd {
                     info!("AZT poll loop reloaded site config");
+                    trk_types.clear();
                     cfg = next_cfg;
                     disp_by_byte = active_positions_by_byte(&cfg);
                     addrs = cfg.active_addresses();
@@ -113,17 +107,7 @@ pub(in crate::engine) async fn run(
                     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                     continue 'poll_loop;
                 }
-                azt_apply_command(
-                    &cfg,
-                    &runtimes,
-                    &events,
-                    &backend,
-                    cmd,
-                    &pool,
-                    &shifts,
-                    &mut trk_types,
-                )
-                .await;
+                azt_apply_command(&cfg, &runtimes, &events, &backend, &pool, &shifts, cmd).await;
             }
 
             azt_poll_card(
@@ -159,6 +143,7 @@ pub(in crate::engine) async fn run(
                                     FpStatus::Authorizing
                                         | FpStatus::Delivering
                                         | FpStatus::PreAuthorized
+                                        | FpStatus::Finalizing
                                         | FpStatus::Stopped { .. }
                                 ) || rt.current_tx.is_some()
                             })
@@ -202,6 +187,40 @@ async fn azt_poll_card(
     trk_types: &mut HashMap<u8, azt::TrkType>,
     pending_startup_totals: &mut HashMap<u8, u8>,
 ) {
+    if !azt_restore(byte, cfg, runtimes, pool).await {
+        broadcast_status(byte, runtimes, events).await;
+        return;
+    }
+    azt_poll_card_inner(
+        byte,
+        cfg,
+        backend,
+        runtimes,
+        disp_by_byte,
+        events,
+        pool,
+        shifts,
+        trk_types,
+        pending_startup_totals,
+    )
+    .await;
+    azt_checkpoint(byte, cfg, runtimes, pool).await;
+    broadcast_status(byte, runtimes, events).await;
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn azt_poll_card_inner(
+    byte: u8,
+    cfg: &SiteConfig,
+    backend: &SerialBackend,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    disp_by_byte: &HashMap<u8, FuelingPositionConfig>,
+    events: &broadcast::Sender<WsEvent>,
+    pool: &SqlitePool,
+    shifts: &ShiftCoordinator,
+    trk_types: &mut HashMap<u8, azt::TrkType>,
+    pending_startup_totals: &mut HashMap<u8, u8>,
+) {
     use azt::AztStatus;
 
     let fp_cfg = match disp_by_byte.get(&byte) {
@@ -209,11 +228,14 @@ async fn azt_poll_card(
         None => return,
     };
 
+    azt_send_pending_stops(byte, backend, runtimes).await;
+
     // Resolve which hose of this pump card is active and poll it. `net`
     // is that hose's RS-485 address; `active_nozzle` its 1-based index.
     let Some((net, active_nozzle, status)) =
         azt_resolve_active(byte, fp_cfg, &backend, &runtimes).await
     else {
+        azt_error(byte, runtimes, AZT_STATUS_UNAVAILABLE).await;
         mark_missed(
             byte,
             fp_cfg,
@@ -229,12 +251,18 @@ async fn azt_poll_card(
     {
         let mut map = runtimes.write().await;
         if let Some(rt) = map.get_mut(&byte) {
-            rt.on_poll_success();
+            if !matches!(status, AztStatus::Unknown | AztStatus::Dispensing) {
+                rt.on_poll_success();
+                if rt.state.protocol_error.as_deref() == Some(AZT_STATUS_UNAVAILABLE) {
+                    rt.state.protocol_error = None;
+                }
+            }
         }
     }
 
     match status {
         AztStatus::Unknown => {
+            azt_error(byte, runtimes, AZT_STATUS_UNAVAILABLE).await;
             mark_missed(
                 byte,
                 fp_cfg,
@@ -252,47 +280,39 @@ async fn azt_poll_card(
             // reset/cleared out-of-band. Try to salvage the sale data ('5'
             // is answered in every status), then idle the lane.
             let was_active = {
-                let map = runtimes.read().await;
-                map.get(&byte)
-                    .map(|rt| {
-                        matches!(
-                            rt.state.status,
-                            FpStatus::Delivering | FpStatus::Authorizing
-                        )
-                    })
-                    .unwrap_or(false)
+                let mut map = runtimes.write().await;
+                let Some(rt) = map.get_mut(&byte) else { return };
+                rt.azt.stop_addresses.remove(&net);
+                if rt.azt.pending_confirmation {
+                    // The confirmation reached the pump but its ACK was lost.
+                    rt.azt.pending_confirmation = false;
+                    rt.azt.stop_requested = false;
+                    if rt.current_tx.is_some() {
+                        rt.cancel_pre_auth();
+                        let _ = events.send(WsEvent::PreAuthCancelled {
+                            fp_id: fp_cfg.id.clone(),
+                        });
+                    }
+                    rt.azt.cancel_requested = false;
+                    rt.azt.order_price = None;
+                    rt.state.protocol_error = None;
+                }
+                if rt.current_tx.is_none() && rt.pre_auth.is_none() {
+                    if rt.azt.stop_requested && rt.azt.stop_addresses.is_empty() {
+                        rt.state.protocol_error = None;
+                    }
+                    rt.azt.stop_requested = false;
+                    rt.azt.cancel_requested = false;
+                }
+                rt.current_tx.is_some() || rt.pre_auth.is_some()
             };
             if was_active {
-                warn!(
-                    net,
-                    "AZT: pump idle during active sale — closing out-of-band"
-                );
+                // Even a preauthorization may have dispensed while polls were
+                // missed. Read its final registers before releasing ownership.
                 azt_close_transaction(
-                    byte, fp_cfg, backend, cfg, runtimes, events, pool, shifts, trk_types,
+                    byte, fp_cfg, backend, cfg, runtimes, events, pool, shifts, trk_types, false,
                 )
                 .await;
-                return;
-            }
-
-            // Armed pre-auth but the pump no longer reports '2': arming was
-            // lost (external reset / power cycle) — surface the cancel.
-            let preauth_lost = {
-                let map = runtimes.read().await;
-                map.get(&byte)
-                    .map(|rt| rt.state.status == FpStatus::PreAuthorized)
-                    .unwrap_or(false)
-            };
-            if preauth_lost {
-                warn!(net, "AZT: armed pre-auth lost on pump — cancelling");
-                {
-                    let mut map = runtimes.write().await;
-                    if let Some(rt) = map.get_mut(&byte) {
-                        rt.cancel_pre_auth();
-                    }
-                }
-                let _ = events.send(WsEvent::PreAuthCancelled {
-                    fp_id: fp_cfg.id.clone(),
-                });
                 broadcast_status(byte, runtimes, events).await;
                 return;
             }
@@ -391,63 +411,60 @@ async fn azt_poll_card(
         }
 
         AztStatus::Authorized => {
-            // Pump armed. Keep PreAuthorized lanes as-is (operator armed a
-            // holstered pump: the customer has not lifted yet); everything
-            // else shows Authorizing until fuel flows.
-            let stale_reactive_auth = {
-                let map = runtimes.read().await;
-                map.get(&byte).and_then(|rt| {
-                    let started = rt.auth_session_started_at?;
-                    let elapsed = Utc::now().timestamp_millis().saturating_sub(started);
-                    let stale = rt.state.status == FpStatus::Authorizing
-                        && rt.pre_auth.is_none()
-                        && rt.state.volume <= 0.0
-                        && elapsed >= AZT_REACTIVE_AUTHORIZE_START_TIMEOUT_MS;
-                    stale.then_some((elapsed, rt.state.nozzle_index))
-                })
-            };
-            if let Some((elapsed_ms, nozzle_index)) = stale_reactive_auth {
-                warn!(
-                    net,
-                    ?nozzle_index,
-                    elapsed_ms,
-                    "AZT: reactive authorize stayed in status 2 with no flow — resetting"
-                );
-                if azt_expect_ack(
-                    net,
-                    &azt::reset(net),
-                    &backend,
-                    "reactive_auth_timeout_reset",
-                ) {
-                    azt_expect_ack(
-                        net,
-                        &azt::confirm_totals(net),
-                        &backend,
-                        "reactive_auth_timeout_confirm",
-                    );
-                }
-                {
-                    let mut map = runtimes.write().await;
-                    if let Some(rt) = map.get_mut(&byte) {
-                        rt.state.status = FpStatus::Idle;
-                        rt.state.volume = 0.0;
-                        rt.state.amount = 0;
-                        rt.state.pre_auth_preset = None;
-                        rt.current_tx = None;
-                        rt.pre_auth = None;
-                        rt.pre_auth_started_at = None;
-                        rt.auth_session_started_at = None;
-                    }
-                }
-                broadcast_status(byte, runtimes, events).await;
+            let orphan = runtimes.read().await.get(&byte).is_some_and(|rt| {
+                rt.current_tx.is_none() && !rt.azt.pending_confirmation && !rt.azt.stop_requested
+            });
+            if orphan {
+                // An arm left by another controller has no durable order to run.
+                azt_request_stop(byte, fp_cfg, false, true, cfg, pool, backend, runtimes).await;
+                azt_error(
+                    byte,
+                    runtimes,
+                    "Pump was armed without an order; stop requested.",
+                )
+                .await;
                 return;
+            }
+            if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+                rt.azt.authorize_uncertain = false;
+                if !rt.azt.stop_requested {
+                    rt.state.protocol_error = None;
+                }
+            }
+            let (expired, reactive_timeout) = {
+                let map = runtimes.read().await;
+                let Some(rt) = map.get(&byte) else { return };
+                let now = Utc::now().timestamp_millis();
+                let expired = !rt.azt.stop_requested
+                    && cfg.ui.preauth_timeout_seconds > 0
+                    && rt.pre_auth.is_some()
+                    && rt.pre_auth_started_at.is_some_and(|started| {
+                        now.saturating_sub(started).max(0) as u64
+                            >= cfg.ui.preauth_timeout_seconds.saturating_mul(1000)
+                    });
+                let reactive_timeout = !rt.azt.stop_requested
+                    && rt.pre_auth.is_none()
+                    && rt.auth_session_started_at.is_some_and(|started| {
+                        now.saturating_sub(started) >= AZT_REACTIVE_AUTHORIZE_START_TIMEOUT_MS
+                    });
+                (expired, reactive_timeout)
+            };
+            if expired || reactive_timeout {
+                if expired {
+                    let _ = events.send(WsEvent::PreAuthTimeout {
+                        fp_id: fp_cfg.id.clone(),
+                    });
+                }
+                azt_request_stop(byte, fp_cfg, false, true, cfg, pool, backend, runtimes).await;
             } else {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
-                    if !matches!(
-                        rt.state.status,
-                        FpStatus::PreAuthorized | FpStatus::Authorizing
-                    ) {
+                    rt.state.nozzle_index = Some(active_nozzle);
+                    if rt.azt.stop_requested {
+                        rt.state.status = FpStatus::Finalizing;
+                    } else if rt.pre_auth.is_some() {
+                        rt.state.status = FpStatus::PreAuthorized;
+                    } else {
                         rt.state.status = FpStatus::Authorizing;
                     }
                 }
@@ -458,22 +475,51 @@ async fn azt_poll_card(
             // Live volume via '4' (0.01 L); amount derived from JIT price.
             let live = azt_query_data(net, &azt::current_data(net), &backend)
                 .and_then(|d| azt::parse_current_data(&d));
+            if live.is_none() {
+                azt_error(
+                    byte,
+                    runtimes,
+                    "Live meter reading unavailable; displayed volume may be stale.",
+                )
+                .await;
+                mark_missed(
+                    byte,
+                    fp_cfg,
+                    cfg.polling.offline_threshold_polls,
+                    runtimes,
+                    events,
+                )
+                .await;
+                return;
+            }
+            let (shift_id, operator_name) = shifts.active_info().await;
             let mut map = runtimes.write().await;
             if let Some(rt) = map.get_mut(&byte) {
+                rt.on_poll_success();
+                rt.azt.authorize_uncertain = false;
+                if !rt.azt.stop_requested {
+                    rt.state.protocol_error = None;
+                }
                 let (pid, pname) = azt_nozzle_product(fp_cfg, &cfg, active_nozzle);
-                let price = rt
-                    .nozzle_prices
-                    .get(&active_nozzle)
-                    .copied()
-                    .or_else(|| {
-                        fp_cfg
-                            .nozzles
-                            .iter()
-                            .find(|n| n.index == active_nozzle)
-                            .map(|n| n.price)
-                    })
-                    .unwrap_or(rt.state.price);
-                rt.state.status = FpStatus::Delivering;
+                let price = rt.azt.order_price.unwrap_or_else(|| {
+                    rt.nozzle_prices
+                        .get(&active_nozzle)
+                        .copied()
+                        .or_else(|| {
+                            fp_cfg
+                                .nozzles
+                                .iter()
+                                .find(|n| n.index == active_nozzle)
+                                .map(|n| n.price)
+                        })
+                        .unwrap_or(rt.state.price)
+                });
+                rt.azt.stop_requested |= rt.azt.stop_addresses.contains(&net);
+                rt.state.status = if rt.azt.stop_requested {
+                    FpStatus::Finalizing
+                } else {
+                    FpStatus::Delivering
+                };
                 // Lock the card to the dispensing hose so later polls
                 // stay on this nozzle's address.
                 rt.state.nozzle_index = Some(active_nozzle);
@@ -486,6 +532,8 @@ async fn azt_poll_card(
                     rt.state.amount = (cd.volume_centilitres * rt.state.price as u64 + 50) / 100;
                 }
                 if rt.current_tx.is_none() {
+                    rt.azt.shift_id = shift_id;
+                    rt.azt.operator_name = operator_name;
                     rt.current_tx = Some(CurrentTx {
                         id: uuid::Uuid::new_v4().to_string(),
                         started_at: Utc::now().timestamp_millis(),
@@ -501,46 +549,20 @@ async fn azt_poll_card(
             if reason == azt::FinishReason::Overfill {
                 warn!(net, "AZT: pump reports overfill / unauthorized dispense");
             }
-            let closeable = {
-                let map = runtimes.read().await;
-                map.get(&byte)
-                    .map(|rt| {
-                        matches!(
-                            rt.state.status,
-                            FpStatus::Delivering | FpStatus::Authorizing | FpStatus::Stopped { .. }
-                        )
-                    })
-                    .unwrap_or(false)
-            };
-            if closeable {
-                azt_close_transaction(
-                    byte, fp_cfg, backend, cfg, runtimes, events, pool, shifts, trk_types,
-                )
-                .await;
-            } else {
-                // No sale of ours (cancelled arming, rejected local dose,
-                // service restart after the fact): acknowledge so the pump
-                // returns to idle, then clear the lane. If the ACK is
-                // missed, keep the lane as-is and retry on the next poll;
-                // otherwise the pump can remain stuck in '4' while the UI
-                // has already moved on.
-                let confirmed =
-                    azt_expect_ack(net, &azt::confirm_totals(net), &backend, "confirm_totals");
-                if !confirmed {
-                    warn!(net, "AZT: confirm totals failed — retrying next poll");
-                    return;
-                }
+            {
                 let mut map = runtimes.write().await;
                 if let Some(rt) = map.get_mut(&byte) {
-                    if !matches!(rt.state.status, FpStatus::Stopped { .. }) {
-                        rt.state.status = FpStatus::Idle;
-                        rt.state.volume = 0.0;
-                        rt.state.amount = 0;
-                        rt.current_tx = None;
-                        rt.pre_auth = None;
+                    rt.state.nozzle_index = Some(active_nozzle);
+                    if !rt.azt.pending_confirmation {
+                        rt.state.status = FpStatus::Finalizing;
                     }
                 }
             }
+            // Finished is authoritative even after restart or a missed '3'.
+            azt_close_transaction(
+                byte, fp_cfg, backend, cfg, runtimes, events, pool, shifts, trk_types, true,
+            )
+            .await;
         }
 
         AztStatus::LocalPreset => {
@@ -553,6 +575,50 @@ async fn azt_poll_card(
     }
 
     broadcast_status(byte, runtimes, events).await;
+}
+
+async fn azt_error(byte: u8, runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>, message: &str) {
+    if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+        rt.state.protocol_error = Some(message.to_owned());
+    }
+}
+
+async fn azt_restore(
+    byte: u8,
+    cfg: &SiteConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    pool: &SqlitePool,
+) -> bool {
+    if let Err(e) = journal::restore(byte, cfg, runtimes, pool).await {
+        warn!(byte, %e, "AZT recovery failed");
+        azt_error(
+            byte,
+            runtimes,
+            "Recovery journal unavailable or configuration changed; new orders blocked.",
+        )
+        .await;
+        return false;
+    }
+    true
+}
+
+async fn azt_checkpoint(
+    byte: u8,
+    cfg: &SiteConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    pool: &SqlitePool,
+) -> bool {
+    if let Err(e) = journal::save(byte, cfg, runtimes, pool).await {
+        warn!(byte, %e, "AZT recovery journal write failed");
+        azt_error(
+            byte,
+            runtimes,
+            "Recovery journal could not be saved; new orders blocked.",
+        )
+        .await;
+        return false;
+    }
+    true
 }
 
 // ── AZT wire helpers ─────────────────────────────────────────────────────────
@@ -609,24 +675,23 @@ fn azt_fp_nozzles(fp_cfg: &FuelingPositionConfig) -> Vec<(u8, u8)> {
         .collect()
 }
 
-/// Whether a status means the hose is doing something the card should display.
-fn azt_status_active(st: azt::AztStatus) -> bool {
-    matches!(
-        st,
-        azt::AztStatus::OffLifted
-            | azt::AztStatus::Authorized
-            | azt::AztStatus::Dispensing
-            | azt::AztStatus::Finished(_)
-            | azt::AztStatus::LocalPreset
-    )
+fn azt_status_priority(st: azt::AztStatus) -> u8 {
+    match st {
+        azt::AztStatus::Finished(_) => 6,
+        azt::AztStatus::Dispensing => 5,
+        azt::AztStatus::Authorized => 4,
+        azt::AztStatus::LocalPreset => 3,
+        azt::AztStatus::OffLifted => 2,
+        azt::AztStatus::OffHolstered => 1,
+        azt::AztStatus::Unknown => 0,
+    }
 }
 
 /// Resolve the active hose for a pump card and poll its status.
 ///
 /// Returns `(net, nozzle_index, status)`. While a sale/arm is in progress the
 /// card stays on the nozzle it started (from `rt.state.nozzle_index`); otherwise
-/// every hose address is polled and the first non-idle one wins (one nozzle
-/// dispenses at a time). `None` means no hose answered → the card is offline.
+/// every hose is polled, prioritizing finished and dispensing over lifted hoses. `None` means no hose answered → the card is offline.
 async fn azt_resolve_active(
     byte: u8,
     fp_cfg: &FuelingPositionConfig,
@@ -647,8 +712,10 @@ async fn azt_resolve_active(
                 FpStatus::Authorizing
                     | FpStatus::Delivering
                     | FpStatus::PreAuthorized
+                    | FpStatus::Finalizing
                     | FpStatus::Stopped { .. }
-            ) || rt.current_tx.is_some();
+            ) || rt.current_tx.is_some()
+                || rt.azt.pending_confirmation;
             if busy {
                 rt.state.nozzle_index
             } else {
@@ -663,14 +730,14 @@ async fn azt_resolve_active(
         }
     }
 
-    // Idle: sweep every hose; first active wins, else first that responds at all.
+    // Sweep all hoses so an earlier lifted/invalid reply cannot hide a finished sale.
     let mut idle_fallback: Option<(u8, u8, azt::AztStatus)> = None;
     for (addr, nidx) in nozzles {
         if let Some(st) = azt_query_status(addr, backend) {
-            if azt_status_active(st) {
-                return Some((addr, nidx, st));
-            }
-            if idle_fallback.is_none() {
+            if idle_fallback
+                .as_ref()
+                .is_none_or(|(_, _, best)| azt_status_priority(st) > azt_status_priority(*best))
+            {
                 idle_fallback = Some((addr, nidx, st));
             }
         }
@@ -768,69 +835,80 @@ fn azt_nozzle_product(
     (product_id, product_name)
 }
 
-/// Build the dose frame for an operator preset. Errors are human-readable
-/// refusal reasons (logged, sale not started — mirrors the Gilbarco refusals).
-fn azt_dose_frame(net: u8, preset: &Preset, price: u32) -> Result<Vec<u8>, &'static str> {
+/// Validate before any wire command. AZT must never truncate operator values.
+pub(crate) fn validate_order(preset: &Preset, price: u32) -> Result<(), &'static str> {
+    validate_price(price)?;
     match preset {
-        Preset::Str(s) if s.eq_ignore_ascii_case("full") => {
-            Ok(azt::set_dose_litres_full_tank(net, AZT_MAX_DOSE_CL as u32))
+        Preset::Str(s) if s.eq_ignore_ascii_case("full") => Ok(()),
+        Preset::Volume(litres) if litres.is_finite() && *litres > 0.0 => {
+            let cl = litres * 100.0;
+            if cl > AZT_MAX_DOSE_CL as f64 || cl < 1.0 {
+                Err("AZT volume must be between 0.01 and 990.00 L")
+            } else if (cl - cl.round()).abs() > 0.000001 {
+                Err("AZT volume must be a multiple of 0.01 L")
+            } else {
+                Ok(())
+            }
         }
-        Preset::Volume(litres) if *litres > 0.0 => {
-            let cl = (*litres * 100.0).round() as u64;
-            if cl == 0 || cl > AZT_MAX_DOSE_CL {
-                Err("volume preset outside 0.01–990.00 L")
+        Preset::Amount(amount) if *amount >= AZT_WIRE_UNIT && *amount <= AZT_MAX_AMOUNT => {
+            if amount % AZT_WIRE_UNIT != 0 {
+                Err("AZT amount must be a multiple of 10 soum")
+            } else if amount * 100 > AZT_MAX_DOSE_CL * price as u64 {
+                Err("AZT amount exceeds the maximum volume at this price")
+            } else {
+                Ok(())
+            }
+        }
+        _ => Err("Invalid AZT preset or amount exceeds 9,999,990 soum"),
+    }
+}
+
+pub(crate) fn validate_price(price: u32) -> Result<(), &'static str> {
+    if price == 0 || price > AZT_MAX_PRICE || price % AZT_WIRE_UNIT as u32 != 0 {
+        Err("AZT price must be 10–99,990 soum/L, in multiples of 10")
+    } else {
+        Ok(())
+    }
+}
+
+fn azt_dose_frame(
+    net: u8,
+    preset: &Preset,
+    price: u32,
+    trk: azt::TrkType,
+    full_tank_supported: bool,
+) -> Result<Vec<u8>, &'static str> {
+    validate_order(preset, price)?;
+    let wire_price = price as u64 / AZT_WIRE_UNIT;
+    let cost_max = 10_u64.pow(trk.cost_digits as u32) - 1;
+    // Leave room for half-up rounding in the pump's cost register.
+    let max_cl = AZT_MAX_DOSE_CL
+        .min(10_u64.pow(trk.volume_digits as u32) - 1)
+        .min((cost_max * 100 - 50) / wire_price);
+    match preset {
+        Preset::Str(_) if full_tank_supported => {
+            Ok(azt::set_dose_litres_full_tank(net, max_cl as u32))
+        }
+        // Version 1 has no full-tank flag. A bounded ordinary dose provides
+        // the same operator flow, ending on holster or the safe ceiling.
+        Preset::Str(_) => Ok(azt::set_dose_litres(net, max_cl as u32)),
+        Preset::Volume(litres) => {
+            let cl = (litres * 100.0).round() as u64;
+            if cl > max_cl {
+                Err("AZT volume exceeds this pump's cost register at the selected price")
             } else {
                 Ok(azt::set_dose_litres(net, cl as u32))
             }
         }
-        Preset::Amount(amount) if *amount > 0 => {
-            if *amount > AZT_MAX_AMOUNT {
-                Err("amount preset exceeds the 6-digit protocol field")
-            } else if price == 0 {
-                Err("amount preset with zero price")
+        Preset::Amount(amount) => {
+            let wire = amount / AZT_WIRE_UNIT;
+            if wire > cost_max || wire * 100 > max_cl * wire_price {
+                Err("AZT amount exceeds this pump's cost or volume register")
             } else {
-                // Soum → wire units (10-soum resolution; sub-unit soum dropped).
-                Ok(azt::set_dose_rubles(net, (*amount / AZT_WIRE_UNIT) as u32))
+                Ok(azt::set_dose_rubles(net, wire as u32))
             }
         }
-        _ => Err("invalid preset"),
     }
-}
-
-/// Arm the pump: set price ('Q'), set dose ('T'/'S'), authorize ('2').
-/// Every step requires an ACK; the price (÷10 → wire units) must fit the
-/// 4-digit field (§7.10).
-fn azt_arm(
-    net: u8,
-    price: u32,
-    preset: &Preset,
-    backend: &SerialBackend,
-) -> Result<(), &'static str> {
-    if price == 0 {
-        return Err("zero price");
-    }
-    if price > AZT_MAX_PRICE {
-        return Err("price exceeds the 4-digit protocol field (§7.10, wire = soum/10)");
-    }
-    if price % AZT_WIRE_UNIT as u32 != 0 {
-        // 10-soum wire resolution: 11 305 soum/L would silently sell at 11 300.
-        warn!(
-            net,
-            price, "AZT: price not a multiple of 10 soum — wire truncates"
-        );
-    }
-    let dose = azt_dose_frame(net, preset, price)?;
-    let wire_price = price / AZT_WIRE_UNIT as u32;
-    if !azt_expect_ack(net, &azt::set_price(net, wire_price), backend, "set_price") {
-        return Err("set_price refused");
-    }
-    if !azt_expect_ack(net, &dose, backend, "set_dose") {
-        return Err("set_dose refused");
-    }
-    if !azt_expect_ack(net, &azt::authorize(net), backend, "authorize") {
-        return Err("authorize refused");
-    }
-    Ok(())
 }
 
 /// Read the lifetime totalizer ('6') into the lane's pump-totals view.
@@ -880,8 +958,210 @@ async fn azt_sync_totals(
     true
 }
 
-/// Close a finished sale: read '5' full data, persist (+sync queue, +shift
-/// totals), emit Done, acknowledge with '8', refresh the totalizer.
+/// Request a terminal stop without discarding the owned sale or claiming the
+/// pump has stopped. Every targeted hose remains pending until a status proves it.
+async fn azt_request_stop(
+    byte: u8,
+    fp: &FuelingPositionConfig,
+    all_hoses: bool,
+    cancel: bool,
+    cfg: &SiteConfig,
+    pool: &SqlitePool,
+    backend: &SerialBackend,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+) {
+    // Never withhold a physical stop because storage is unavailable.
+    let _ = tokio::time::timeout(
+        Duration::from_millis(200),
+        azt_restore(byte, cfg, runtimes, pool),
+    )
+    .await;
+    let targets = {
+        let mut map = runtimes.write().await;
+        let Some(rt) = map.get_mut(&byte) else { return };
+        let targets: Vec<u8> = if all_hoses {
+            azt_fp_nozzles(fp).into_iter().map(|(net, _)| net).collect()
+        } else {
+            vec![azt_active_net(fp, rt.state.nozzle_index)]
+        };
+        rt.azt.stop_addresses.extend(targets.iter().copied());
+        rt.azt.stop_requested = true;
+        rt.azt.next_stop_attempt = Some(Instant::now() + AZT_STOP_RETRY_INTERVAL);
+        rt.azt.cancel_requested |= cancel;
+        rt.pre_auth_started_at = None;
+        rt.auth_session_started_at = None;
+        if rt.current_tx.is_some()
+            || rt.pre_auth.is_some()
+            || matches!(
+                rt.state.status,
+                FpStatus::Authorizing | FpStatus::Delivering | FpStatus::PreAuthorized
+            )
+        {
+            rt.azt.stop_requested = true;
+            rt.state.status = FpStatus::Finalizing;
+        }
+        targets
+    };
+    let saved = tokio::time::timeout(
+        Duration::from_millis(200),
+        azt_checkpoint(byte, cfg, runtimes, pool),
+    )
+    .await
+    .unwrap_or(false);
+    if !saved {
+        azt_error(byte, runtimes, "Stop requested but recovery journal unavailable; keep service running until pump stops.").await;
+    }
+    let mut acknowledged = true;
+    for net in targets {
+        // ACK alone is not a final meter reading; polling owns finalization.
+        acknowledged &= azt_expect_ack(net, &azt::reset(net), backend, "stop_reset");
+    }
+    if saved && !acknowledged {
+        azt_error(
+            byte,
+            runtimes,
+            "Stop not confirmed; retrying. Delivery may still be active.",
+        )
+        .await;
+    }
+}
+
+async fn azt_send_pending_stops(
+    byte: u8,
+    backend: &SerialBackend,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+) {
+    let targets = {
+        let mut map = runtimes.write().await;
+        let Some(rt) = map.get_mut(&byte) else { return };
+        if rt.azt.stop_addresses.is_empty()
+            || rt
+                .azt
+                .next_stop_attempt
+                .is_some_and(|next| Instant::now() < next)
+        {
+            return;
+        }
+        rt.azt.next_stop_attempt = Some(Instant::now() + AZT_STOP_RETRY_INTERVAL);
+        rt.azt.stop_addresses.iter().copied().collect::<Vec<_>>()
+    };
+    for net in targets {
+        match azt_query_status(net, backend) {
+            Some(
+                azt::AztStatus::OffHolstered
+                | azt::AztStatus::OffLifted
+                | azt::AztStatus::Finished(_),
+            ) => {
+                if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+                    rt.azt.stop_addresses.remove(&net);
+                }
+            }
+            _ => {
+                azt_expect_ack(net, &azt::reset(net), backend, "retry_stop");
+            }
+        }
+    }
+}
+
+async fn azt_dismiss(
+    byte: u8,
+    fp: &FuelingPositionConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+) {
+    if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+        if rt.current_tx.is_none()
+            && rt.pre_auth.is_none()
+            && !rt.azt.pending_confirmation
+            && rt.azt.stop_addresses.is_empty()
+            && matches!(
+                rt.state.status,
+                FpStatus::Idle | FpStatus::Done | FpStatus::Offline
+            )
+        {
+            rt.reset_for_operator(fp);
+            rt.state.protocol_error = None;
+            let loaded = rt.azt.journal_loaded;
+            let json = rt.azt.journal_json.take();
+            rt.azt = Default::default();
+            rt.azt.journal_loaded = loaded;
+            rt.azt.journal_json = json;
+        }
+    }
+}
+
+/// A pump transaction number survives service restarts. Use it to recognize a
+/// sale saved before an ACK was lost. Older devices rejecting 'Y' can instead
+/// identify the sale by their lifetime counters. A timeout is retried, never
+/// treated as permission to clear an unidentified sale.
+fn azt_sale_id(
+    net: u8,
+    cfg: &SiteConfig,
+    full: azt::FullData,
+    backend: &SerialBackend,
+) -> Option<String> {
+    let identity = match azt_exchange(net, &azt::transaction_number(net), backend)? {
+        azt::Response::Data(data) => {
+            format!("transaction:{}", azt::parse_transaction_number(&data)?)
+        }
+        azt::Response::Short(azt::NAK) => {
+            let (volume, amount) = azt_query_data(net, &azt::totals(net), backend)
+                .and_then(|d| azt::parse_totals(&d))?;
+            format!("totals:{volume}:{amount}")
+        }
+        _ => return None,
+    };
+    let key = format!(
+        "azt:{}:{net}:{identity}:{}:{}:{}",
+        cfg.site.id, full.volume_centilitres, full.cost_kopecks, full.price_kopecks
+    );
+    Some(uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, key.as_bytes()).to_string())
+}
+
+async fn azt_confirm_sale(
+    byte: u8,
+    net: u8,
+    fp: &FuelingPositionConfig,
+    needs_confirmation: bool,
+    cfg: &SiteConfig,
+    pool: &SqlitePool,
+    backend: &SerialBackend,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+) -> bool {
+    if !azt_checkpoint(byte, cfg, runtimes, pool).await {
+        return false;
+    }
+    if needs_confirmation
+        && !azt_expect_ack(net, &azt::confirm_totals(net), backend, "confirm_totals")
+    {
+        azt_error(byte, runtimes, "Sale saved; waiting for pump confirmation.").await;
+        return false;
+    }
+    if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+        rt.state.protocol_error = None;
+        rt.azt.pending_confirmation = false;
+        rt.azt.stop_requested = false;
+        rt.azt.stop_addresses.remove(&net);
+        // Empty cancellations retain ownership until physical confirmation.
+        if rt.current_tx.is_some()
+            || rt.pre_auth.is_some()
+            || rt.state.status == FpStatus::Finalizing
+        {
+            rt.cancel_pre_auth();
+            let _ = events.send(WsEvent::PreAuthCancelled {
+                fp_id: fp.id.clone(),
+            });
+        }
+        rt.azt.cancel_requested = false;
+        rt.azt.order_price = None;
+    }
+    let saved = azt_checkpoint(byte, cfg, runtimes, pool).await;
+    let _ = azt_sync_totals(byte, fp, backend, runtimes).await;
+    saved
+}
+
+/// Read every finished sale, including one recovered at startup. Save before
+/// confirming, and look up the stable identity before crediting it again.
 #[allow(clippy::too_many_arguments)]
 async fn azt_close_transaction(
     byte: u8,
@@ -893,168 +1173,258 @@ async fn azt_close_transaction(
     pool: &SqlitePool,
     shifts: &ShiftCoordinator,
     trk_types: &mut HashMap<u8, azt::TrkType>,
+    needs_confirmation: bool,
 ) -> bool {
-    // Close on the hose the sale ran on (its own RS-485 address), not the card.
-    let net = {
+    let (net, pending, ctx, state_price, nozzle_index, preset, cancel) = {
         let map = runtimes.read().await;
-        azt_active_net(fp_cfg, map.get(&byte).and_then(|rt| rt.state.nozzle_index))
+        let Some(rt) = map.get(&byte) else {
+            return false;
+        };
+        (
+            azt_active_net(fp_cfg, rt.state.nozzle_index),
+            rt.azt.pending_confirmation,
+            rt.current_tx.clone(),
+            rt.state.price,
+            rt.state.nozzle_index.unwrap_or(1),
+            rt.last_preset.clone(),
+            rt.azt.cancel_requested,
+        )
     };
-    let should_close = {
-        let map = runtimes.read().await;
-        map.get(&byte)
-            .map(|rt| {
-                matches!(
-                    rt.state.status,
-                    FpStatus::Delivering | FpStatus::Authorizing | FpStatus::Stopped { .. }
-                )
-            })
-            .unwrap_or(false)
-    };
-    if !should_close {
-        return false;
+    if pending {
+        return azt_confirm_sale(
+            byte,
+            net,
+            fp_cfg,
+            needs_confirmation,
+            cfg,
+            pool,
+            backend,
+            runtimes,
+            events,
+        )
+        .await;
     }
-
-    // Digit widths are mandatory for parsing '5' — retry next poll if unknown.
     let Some(trk) = azt_trk_type(net, backend, trk_types) else {
-        warn!(net, "AZT: TRK type unknown — close retried next poll");
+        azt_error(
+            byte,
+            runtimes,
+            "Cannot read pump type; final sale retained.",
+        )
+        .await;
         return false;
     };
-
     let full = azt_query_data(net, &azt::full_data(net), backend)
         .and_then(|d| azt::parse_full_data(&d, trk))
         .or_else(|| {
             azt_query_data(net, &azt::full_data(net), backend)
                 .and_then(|d| azt::parse_full_data(&d, trk))
         });
-
-    let (ctx, state_price, nozzle_index, preset) = {
-        let map = runtimes.read().await;
-        let Some(rt) = map.get(&byte) else {
-            return false;
-        };
-        (
-            rt.current_tx.clone(),
-            rt.state.price,
-            rt.state.nozzle_index.unwrap_or(1),
-            rt.last_preset.clone(),
-        )
-    };
-
     let Some(full) = full else {
-        warn!(net, "AZT: refusing to save transaction without full data");
+        warn!(net, "AZT: retaining sale until final data can be read");
+        azt_error(
+            byte,
+            runtimes,
+            "Final meter readings unavailable; retrying.",
+        )
+        .await;
         return false;
     };
-
-    let ctx = match ctx {
-        Some(c) => c,
-        None => {
-            if full.volume_centilitres == 0 {
-                // Nothing dispensed and no sale of ours: just acknowledge.
-                azt_expect_ack(net, &azt::confirm_totals(net), backend, "confirm_totals");
-                let mut map = runtimes.write().await;
-                if let Some(rt) = map.get_mut(&byte) {
-                    rt.state.status = FpStatus::Idle;
-                }
-                return false;
-            }
-            let (product_id, product_name) = azt_nozzle_product(fp_cfg, cfg, nozzle_index);
-            CurrentTx {
-                id: uuid::Uuid::new_v4().to_string(),
-                started_at: Utc::now().timestamp_millis(),
-                product_id,
-                product_name,
-                nozzle_index,
-            }
+    if full.volume_centilitres == 0 && full.cost_kopecks == 0 && (cancel || ctx.is_none()) {
+        if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+            rt.azt.pending_confirmation = true;
         }
-    };
-
-    let volume = full.volume_centilitres as f64 / 100.0;
-    // Wire money units → soum (×10, see AZT_WIRE_UNIT).
-    let amount = full.cost_kopecks * AZT_WIRE_UNIT;
-    let price = u32::try_from(full.price_kopecks * AZT_WIRE_UNIT)
-        .ok()
-        .filter(|p| *p > 0)
-        .unwrap_or(state_price);
-
-    // UINTR is the pump's own audit counter — record it in the logs so paper
-    // journals can be reconciled against our transaction ids.
-    if let Some(uintr) = azt_query_data(net, &azt::transaction_number(net), backend)
-        .and_then(|d| azt::parse_transaction_number(&d))
-    {
-        info!(net, uintr, tx_id = %ctx.id, "AZT: pump transaction number");
+        return azt_confirm_sale(
+            byte,
+            net,
+            fp_cfg,
+            needs_confirmation,
+            cfg,
+            pool,
+            backend,
+            runtimes,
+            events,
+        )
+        .await;
     }
-
-    let (shift_id, operator_name) = shifts.active_info().await;
-    let now_ms = Utc::now().timestamp_millis();
-    let (preset_type, preset_value, preset_label) = preset_metadata(&preset);
-    let tx = Transaction {
-        id: ctx.id.clone(),
-        fp_id: fp_cfg.id.clone(),
-        label: fp_cfg.label.clone(),
-        address_byte: byte,
-        started_at: ctx.started_at,
-        completed_at: Some(now_ms),
-        volume,
-        amount,
-        price,
-        nozzle_index: ctx.nozzle_index,
-        product_id: ctx.product_id,
-        product_name: ctx.product_name.clone(),
-        preset_type,
-        preset_value,
-        preset_label,
-        status: TxStatus::resolve(volume, true),
-        shift_id,
-        operator_name,
-        parent_tx_id: None,
-        combined_volume: volume,
-        combined_amount: amount,
-    };
-
-    if !commit_sale(pool, shifts, events, &tx).await {
-        return false;
-    }
-    {
-        let mut map = runtimes.write().await;
-        if let Some(rt) = map.get_mut(&byte) {
-            rt.state.status = FpStatus::Done;
-            rt.state.volume = volume;
-            rt.state.amount = amount;
-            rt.current_tx = None;
-            rt.pre_auth = None;
-        }
-    }
-
-    // §7.8: acknowledge the totals write; the pump returns to '0'/'1'. If the
-    // ACK is missed, keep the app-side transaction saved and retry confirmation
-    // from the next Finished poll instead of pretending the pump cleared.
-    if azt_expect_ack(net, &azt::confirm_totals(net), backend, "confirm_totals") {
-        let _ = azt_sync_totals(byte, fp_cfg, backend, runtimes).await;
-    } else {
+    let Some(id) = azt_sale_id(net, cfg, full, backend) else {
         warn!(
             net,
-            tx_id = %ctx.id,
-            "AZT: transaction saved but confirm totals failed — retrying next poll"
+            "AZT: retaining final data until sale identity can be read"
         );
+        azt_error(
+            byte,
+            runtimes,
+            "Sale identity unavailable; final readings retained.",
+        )
+        .await;
+        return false;
+    };
+    let unchanged = {
+        let map = runtimes.read().await;
+        map[&byte].azt.authorize_uncertain && map[&byte].azt.before_sale_id.as_ref() == Some(&id)
+    };
+    if unchanged && !needs_confirmation {
+        if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+            rt.cancel_pre_auth();
+            rt.azt.order_price = None;
+            rt.azt.authorize_uncertain = false;
+            rt.state.protocol_error =
+                Some("Authorization was not accepted; order cancelled.".into());
+        }
+        return azt_checkpoint(byte, cfg, runtimes, pool).await;
     }
-
-    info!(
+    let existing = match crate::db::queries::get_transaction(pool, &id).await {
+        Ok(tx) => tx,
+        Err(e) => {
+            warn!(net, %e, "AZT: cannot check recovered sale");
+            return false;
+        }
+    };
+    let tx = if let Some(tx) = existing {
+        // Already durable: do not enqueue, credit the shift, or publish Done twice.
+        tx
+    } else {
+        let (product_id, product_name) = ctx
+            .as_ref()
+            .map(|c| (c.product_id, c.product_name.clone()))
+            .unwrap_or_else(|| azt_nozzle_product(fp_cfg, cfg, nozzle_index));
+        let (shift_id, operator_name) = if ctx.is_some() {
+            let map = runtimes.read().await;
+            (
+                map[&byte].azt.shift_id.clone(),
+                map[&byte].azt.operator_name.clone(),
+            )
+        } else {
+            shifts.active_info().await
+        };
+        let owned_order = runtimes
+            .read()
+            .await
+            .get(&byte)
+            .is_some_and(|rt| rt.azt.order_price.is_some());
+        let (preset_type, preset_value, preset_label) = if ctx.is_some() && owned_order {
+            preset_metadata(&preset)
+        } else {
+            (None, None, None)
+        };
+        let volume = full.volume_centilitres as f64 / 100.0;
+        let tx = Transaction {
+            id,
+            fp_id: fp_cfg.id.clone(),
+            label: fp_cfg.label.clone(),
+            address_byte: byte,
+            started_at: ctx
+                .as_ref()
+                .map(|c| c.started_at)
+                .unwrap_or_else(|| Utc::now().timestamp_millis()),
+            completed_at: Some(Utc::now().timestamp_millis()),
+            volume,
+            amount: full.cost_kopecks * AZT_WIRE_UNIT,
+            price: u32::try_from(full.price_kopecks * AZT_WIRE_UNIT)
+                .ok()
+                .filter(|p| *p > 0)
+                .unwrap_or(state_price),
+            nozzle_index,
+            product_id,
+            product_name,
+            preset_type,
+            preset_value,
+            preset_label,
+            status: TxStatus::resolve(volume, true),
+            shift_id,
+            operator_name,
+            parent_tx_id: None,
+            combined_volume: volume,
+            combined_amount: full.cost_kopecks * AZT_WIRE_UNIT,
+        };
+        if let Err(e) = shifts.commit_azt_sale(&tx).await {
+            warn!(net, %e, "AZT: atomic sale commit failed");
+            azt_error(
+                byte,
+                runtimes,
+                "Sale could not be saved; final readings retained for retry.",
+            )
+            .await;
+            return false;
+        }
+        let _ = events.send(WsEvent::Done(tx.clone()));
+        tx
+    };
+    if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+        rt.state.status = FpStatus::Done;
+        rt.state.volume = tx.volume;
+        rt.state.amount = tx.amount;
+        rt.state.price = tx.price;
+        rt.state.product_id = Some(tx.product_id);
+        rt.state.product_name = Some(tx.product_name.clone());
+        rt.current_tx = None;
+        rt.pre_auth = None;
+        rt.pre_auth_started_at = None;
+        rt.auth_session_started_at = None;
+        rt.state.pre_auth_preset = None;
+        rt.azt.pending_confirmation = true;
+    }
+    azt_confirm_sale(
+        byte,
         net,
-        volume, amount, "AZT: transaction complete, Done emitted"
-    );
-    true
+        fp_cfg,
+        needs_confirmation,
+        cfg,
+        pool,
+        backend,
+        runtimes,
+        events,
+    )
+    .await
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn azt_apply_command(
     cfg: &SiteConfig,
     runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
     events: &broadcast::Sender<WsEvent>,
     backend: &SerialBackend,
-    cmd: DispatchCommand,
     pool: &SqlitePool,
     shifts: &ShiftCoordinator,
-    trk_types: &mut HashMap<u8, azt::TrkType>,
+    cmd: DispatchCommand,
+) {
+    let bytes: Vec<u8> = match &cmd {
+        DispatchCommand::Authorize { byte, .. }
+        | DispatchCommand::Preauthorize { byte, .. }
+        | DispatchCommand::Stop { byte }
+        | DispatchCommand::CancelPreauth { byte }
+        | DispatchCommand::ResetLane { byte } => vec![*byte],
+        _ => cfg.active_addresses(),
+    };
+    let stopping = matches!(
+        &cmd,
+        DispatchCommand::Stop { .. }
+            | DispatchCommand::CancelPreauth { .. }
+            | DispatchCommand::EStop
+    );
+    let mut ready = true;
+    for &byte in bytes.iter().filter(|_| !stopping) {
+        ready &= azt_restore(byte, cfg, runtimes, pool).await;
+        if ready {
+            ready &= azt_checkpoint(byte, cfg, runtimes, pool).await;
+        }
+    }
+    if ready || stopping {
+        azt_apply_command_inner(cfg, runtimes, events, backend, pool, shifts, cmd).await;
+    }
+    for byte in bytes {
+        azt_checkpoint(byte, cfg, runtimes, pool).await;
+        broadcast_status(byte, runtimes, events).await;
+    }
+}
+
+async fn azt_apply_command_inner(
+    cfg: &SiteConfig,
+    runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
+    events: &broadcast::Sender<WsEvent>,
+    backend: &SerialBackend,
+    pool: &SqlitePool,
+    shifts: &ShiftCoordinator,
+    cmd: DispatchCommand,
 ) {
     match cmd {
         DispatchCommand::ReloadConfig { .. } => {}
@@ -1067,7 +1437,10 @@ async fn azt_apply_command(
             price,
             preset,
         } => {
-            azt_do_authorize(cfg, runtimes, events, backend, byte, price, preset, None).await;
+            azt_do_authorize(
+                cfg, runtimes, events, backend, pool, shifts, byte, price, preset, None,
+            )
+            .await;
         }
         DispatchCommand::Preauthorize {
             byte,
@@ -1080,6 +1453,8 @@ async fn azt_apply_command(
                 runtimes,
                 events,
                 backend,
+                pool,
+                shifts,
                 byte,
                 price,
                 preset,
@@ -1089,174 +1464,37 @@ async fn azt_apply_command(
         }
 
         DispatchCommand::Stop { byte } => {
-            let fp_cfg = match cfg.position_by_address(byte) {
-                Some(p) => p.clone(),
-                None => return,
-            };
-            // Reset the hose the sale is running on.
-            let net = {
-                let map = runtimes.read().await;
-                azt_active_net(&fp_cfg, map.get(&byte).and_then(|rt| rt.state.nozzle_index))
-            };
-            // §7.3: reset switches the pump off; it lands in '4' and the poll
-            // loop closes the partial sale from the Stopped state.
-            azt_expect_ack(net, &azt::reset(net), backend, "stop_reset");
-            let newly_stopped = {
-                let mut map = runtimes.write().await;
-                if let Some(rt) = map.get_mut(&byte) {
-                    if !rt.state.status.is_stopped() {
-                        let vol = rt.state.volume;
-                        let amt = rt.state.amount;
-                        let tx_id = rt
-                            .current_tx
-                            .as_ref()
-                            .map(|t| t.id.clone())
-                            .unwrap_or_default();
-                        rt.state.status = FpStatus::Stopped {
-                            stopped_volume: vol,
-                            stopped_amount: amt,
-                            stopped_tx_id: tx_id.clone(),
-                            stop_source: StopSource::AppFinal,
-                        };
-                        rt.pre_auth = None;
-                        Some((vol, amt, tx_id))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            };
-            if let Some((vol, amt, tx_id)) = newly_stopped {
-                let _ = events.send(WsEvent::Paused {
-                    fp_id: fp_cfg.id.clone(),
-                    stopped_volume: vol,
-                    stopped_amount: amt,
-                    stopped_tx_id: tx_id,
-                    stop_source: "APP_FINAL".to_string(),
-                });
+            if let Some(fp) = cfg.position_by_address(byte) {
+                azt_request_stop(byte, fp, false, false, cfg, pool, backend, runtimes).await;
+                broadcast_status(byte, runtimes, events).await;
             }
-            broadcast_status(byte, runtimes, events).await;
         }
-
         DispatchCommand::EStop => {
-            // Reset every hose on every pump — any nozzle could be dispensing.
             for fp in cfg.active_positions() {
-                for (net, _) in azt_fp_nozzles(fp) {
-                    azt_expect_ack(net, &azt::reset(net), backend, "estop_reset");
-                }
-            }
-            let mut map = runtimes.write().await;
-            for fp in cfg.active_positions() {
-                if let Some(rt) = map.get_mut(&fp.address_byte) {
-                    let vol = rt.state.volume;
-                    let amt = rt.state.amount;
-                    let tx_id = rt
-                        .current_tx
-                        .as_ref()
-                        .map(|t| t.id.clone())
-                        .unwrap_or_default();
-                    rt.state.status = FpStatus::Stopped {
-                        stopped_volume: vol,
-                        stopped_amount: amt,
-                        stopped_tx_id: tx_id,
-                        stop_source: StopSource::AppFinal,
-                    };
-                    rt.pre_auth = None;
-                    let _ = events.send(WsEvent::Status(rt.snapshot_state()));
-                }
+                azt_request_stop(
+                    fp.address_byte,
+                    fp,
+                    true,
+                    false,
+                    cfg,
+                    pool,
+                    backend,
+                    runtimes,
+                )
+                .await;
+                broadcast_status(fp.address_byte, runtimes, events).await;
             }
         }
-
-        DispatchCommand::ResetAll => {
-            let mut map = runtimes.write().await;
-            for fp in cfg.active_positions() {
-                if let Some(rt) = map.get_mut(&fp.address_byte) {
-                    if matches!(
-                        rt.state.status,
-                        FpStatus::Delivering | FpStatus::Authorizing | FpStatus::PreAuthorized
-                    ) {
-                        warn!(byte = fp.address_byte, "AZT: reset all skipped active lane");
-                        continue;
-                    }
-                    if let FpStatus::Stopped { stopped_amount, .. } = rt.state.status {
-                        if stopped_amount > 0 {
-                            warn!(
-                                byte = fp.address_byte,
-                                "AZT: reset all skipped non-zero stopped sale"
-                            );
-                            continue;
-                        }
-                    }
-                    rt.reset_for_operator(fp);
-                    let _ = events.send(WsEvent::Status(rt.snapshot_state()));
-                }
-            }
-        }
-
         DispatchCommand::ResetLane { byte } => {
-            let fp_cfg = match cfg.position_by_address(byte) {
-                Some(p) => p.clone(),
-                None => return,
-            };
-            let stopped_amount = {
-                let map = runtimes.read().await;
-                map.get(&byte).and_then(|rt| {
-                    if let FpStatus::Stopped { stopped_amount, .. } = rt.state.status {
-                        Some(stopped_amount)
-                    } else {
-                        None
-                    }
-                })
-            };
-            if let Some(amount) = stopped_amount {
-                let mut closed = false;
-                for attempt in 1..=AZT_RESET_CLOSE_RETRIES {
-                    if azt_close_transaction(
-                        byte, &fp_cfg, backend, cfg, runtimes, events, pool, shifts, trk_types,
-                    )
-                    .await
-                    {
-                        closed = true;
-                        break;
-                    }
-                    if amount == 0 || attempt == AZT_RESET_CLOSE_RETRIES {
-                        break;
-                    }
-                    warn!(
-                        byte,
-                        attempt,
-                        max_attempts = AZT_RESET_CLOSE_RETRIES,
-                        "AZT: reset lane close retry failed"
-                    );
-                    tokio::time::sleep(Duration::from_millis(AZT_RESET_CLOSE_RETRY_DELAY_MS)).await;
-                }
-
-                let mut map = runtimes.write().await;
-                if let Some(rt) = map.get_mut(&byte) {
-                    if closed || rt.state.status == FpStatus::Done {
-                        let _ = events.send(WsEvent::Status(rt.snapshot_state()));
-                    } else if amount == 0 {
-                        rt.reset_for_operator(&fp_cfg);
-                        let _ = events.send(WsEvent::Status(rt.snapshot_state()));
-                    } else {
-                        warn!(
-                            byte,
-                            attempts = AZT_RESET_CLOSE_RETRIES,
-                            "AZT: reset lane refused while stopped sale has non-zero amount"
-                        );
-                    }
-                }
-                return;
+            if let Some(fp) = cfg.position_by_address(byte) {
+                azt_dismiss(byte, fp, runtimes).await;
+                broadcast_status(byte, runtimes, events).await;
             }
-            let mut map = runtimes.write().await;
-            if let Some(rt) = map.get_mut(&byte) {
-                match rt.operator_dismiss_display(&fp_cfg) {
-                    Ok(()) => {
-                        let _ = events.send(WsEvent::Status(rt.snapshot_state()));
-                    }
-                    Err(e) => warn!(byte, %e, "AZT: dismiss lane"),
-                }
+        }
+        DispatchCommand::ResetAll => {
+            for fp in cfg.active_positions() {
+                azt_dismiss(fp.address_byte, fp, runtimes).await;
+                broadcast_status(fp.address_byte, runtimes, events).await;
             }
         }
 
@@ -1270,6 +1508,12 @@ async fn azt_apply_command(
                 let Some(fp) = cfg.position_by_id(&u.fp_id) else {
                     continue;
                 };
+                if let Err(reason) = validate_price(u.price) {
+                    if let Some(rt) = map.get_mut(&fp.address_byte) {
+                        rt.state.protocol_error = Some(reason.into());
+                    }
+                    continue;
+                }
                 let product_name = fp
                     .nozzles
                     .iter()
@@ -1278,6 +1522,9 @@ async fn azt_apply_command(
                     .unwrap_or_default();
                 if let Some(rt) = map.get_mut(&fp.address_byte) {
                     let old = rt.set_nozzle_price(u.nozzle_index, u.price);
+                    if let Some(price) = rt.azt.order_price.filter(|_| rt.current_tx.is_some()) {
+                        rt.state.price = price;
+                    }
                     let _ = events.send(WsEvent::PriceUpdated {
                         fp_id: u.fp_id.clone(),
                         nozzle_index: u.nozzle_index,
@@ -1291,39 +1538,13 @@ async fn azt_apply_command(
         }
 
         DispatchCommand::CancelPreauth { byte } => {
-            let fp_cfg = match cfg.position_by_address(byte) {
-                Some(p) => p.clone(),
-                None => return,
-            };
-            // De-arm the hose that was armed (the card's selected nozzle).
-            let net = {
-                let map = runtimes.read().await;
-                azt_active_net(&fp_cfg, map.get(&byte).and_then(|rt| rt.state.nozzle_index))
-            };
-            // De-arm on the wire: reset drops '2' → '4' with zero data, and the
-            // immediate confirm returns the pump to '0'/'1' (§7.3, §7.8).
-            if azt_expect_ack(net, &azt::reset(net), backend, "cancel_preauth_reset") {
-                azt_expect_ack(
-                    net,
-                    &azt::confirm_totals(net),
-                    backend,
-                    "cancel_preauth_confirm",
-                );
+            if let Some(fp) = cfg.position_by_address(byte) {
+                // It may already be dispensing by the time this command runs.
+                // Stop the same hose and let polling read and persist its final data.
+                azt_request_stop(byte, fp, false, true, cfg, pool, backend, runtimes).await;
+                broadcast_status(byte, runtimes, events).await;
             }
-            {
-                let mut map = runtimes.write().await;
-                if let Some(rt) = map.get_mut(&byte) {
-                    rt.cancel_pre_auth();
-                    rt.current_tx = None;
-                }
-            }
-            let _ = events.send(WsEvent::PreAuthCancelled {
-                fp_id: fp_cfg.id.clone(),
-            });
-            broadcast_status(byte, runtimes, events).await;
         }
-
-        // Stops are terminal on this site (no resume) — same policy as Gilbarco.
 
         DispatchCommand::RefreshTotals => {
             for fp in cfg.active_positions() {
@@ -1334,7 +1555,7 @@ async fn azt_apply_command(
                         .map(|rt| {
                             matches!(
                                 rt.state.status,
-                                FpStatus::Delivering | FpStatus::Authorizing
+                                FpStatus::Delivering | FpStatus::Authorizing | FpStatus::Finalizing
                             )
                         })
                         .unwrap_or(false)
@@ -1360,6 +1581,8 @@ async fn azt_do_authorize(
     runtimes: &Arc<RwLock<HashMap<u8, RuntimeFp>>>,
     events: &broadcast::Sender<WsEvent>,
     backend: &SerialBackend,
+    pool: &SqlitePool,
+    shifts: &ShiftCoordinator,
     byte: u8,
     price: u32,
     preset: Preset,
@@ -1397,22 +1620,14 @@ async fn azt_do_authorize(
     let direct_start = preauth_nozzle.is_none() && lifted_nozzle.is_some();
     let net = azt_active_net(&fp_cfg, Some(nozzle));
 
-    if direct_start {
-        match azt_query_status(net, backend) {
-            Some(azt::AztStatus::OffLifted) => {}
-            other => {
-                warn!(
-                    net,
-                    nozzle,
-                    ?other,
-                    "AZT: direct authorize refused — live nozzle status is not lifted"
-                );
-                broadcast_status(byte, runtimes, events).await;
-                return;
-            }
-        }
+    if !fp_cfg.active_nozzles().iter().any(|n| n.index == nozzle) {
+        azt_error(byte, runtimes, "Selected nozzle is not active.").await;
+        return;
     }
-
+    if let Err(reason) = validate_order(&preset, price) {
+        azt_error(byte, runtimes, reason).await;
+        return;
+    }
     // Refuse from non-idle lanes: the wire would CAN anyway (§7.10/§7.13 require
     // status '0'/'1'), this just fails earlier with a clearer message.
     let lane_busy = {
@@ -1422,10 +1637,13 @@ async fn azt_do_authorize(
                 matches!(
                     rt.state.status,
                     FpStatus::Delivering
+                        | FpStatus::Finalizing
                         | FpStatus::Authorizing
                         | FpStatus::PreAuthorized
                         | FpStatus::Stopped { .. }
-                )
+                ) || rt.current_tx.is_some()
+                    || rt.azt.pending_confirmation
+                    || !rt.azt.stop_addresses.is_empty()
             })
             .unwrap_or(false)
     };
@@ -1435,31 +1653,98 @@ async fn azt_do_authorize(
         return;
     }
 
-    if let Err(reason) = azt_arm(net, price, &preset, backend) {
-        warn!(net, reason, "AZT: authorize failed");
-        broadcast_status(byte, runtimes, events).await;
-        return;
-    }
-    if direct_start {
-        if azt_expect_ack(
-            net,
-            &azt::unconditional_start(net),
-            backend,
-            "unconditional_start",
-        ) {
-            info!(
-                net,
-                nozzle, "AZT: direct authorize start command ACKed after status 2"
-            );
-        } else {
-            warn!(
-                net,
-                nozzle,
-                "AZT: direct authorize start command failed; status-2 timeout guard will recover"
-            );
+    {
+        // Fresh status is required even if the UI still shows idle.
+        match azt_query_status(net, backend) {
+            Some(azt::AztStatus::OffLifted) if direct_start => {}
+            Some(azt::AztStatus::OffHolstered) if !direct_start => {}
+            other => {
+                warn!(
+                    net,
+                    nozzle,
+                    ?other,
+                    "AZT: direct authorize refused — live nozzle status is not lifted"
+                );
+                azt_error(
+                    byte,
+                    runtimes,
+                    "Pump is not ready for this order; check nozzle and status.",
+                )
+                .await;
+                broadcast_status(byte, runtimes, events).await;
+                return;
+            }
         }
     }
 
+    let Some(trk) = azt_trk_type(net, backend, &mut HashMap::new()) else {
+        azt_error(byte, runtimes, "Cannot read pump limits; order not sent.").await;
+        return;
+    };
+    let full_tank_supported = if preset.is_full() {
+        match azt_exchange(net, &azt::protocol_version(net), backend) {
+            Some(azt::Response::Data(data)) => match azt::parse_protocol_version(&data) {
+                Some(version) => version >= 2,
+                None => {
+                    azt_error(
+                        byte,
+                        runtimes,
+                        "Invalid pump protocol version; full-tank order not sent.",
+                    )
+                    .await;
+                    return;
+                }
+            },
+            Some(azt::Response::Short(azt::NAK)) => false,
+            _ => {
+                azt_error(
+                    byte,
+                    runtimes,
+                    "Cannot read pump protocol version; full-tank order not sent.",
+                )
+                .await;
+                return;
+            }
+        }
+    } else {
+        false
+    };
+    let dose = match azt_dose_frame(net, &preset, price, trk, full_tank_supported) {
+        Ok(dose) => dose,
+        Err(reason) => {
+            azt_error(byte, runtimes, reason).await;
+            return;
+        }
+    };
+    if !azt_expect_ack(
+        net,
+        &azt::set_price(net, price / AZT_WIRE_UNIT as u32),
+        backend,
+        "set_price",
+    ) || !azt_expect_ack(net, &dose, backend, "set_dose")
+    {
+        azt_error(
+            byte,
+            runtimes,
+            "Pump did not accept price or preset; order not authorized.",
+        )
+        .await;
+        return;
+    }
+    // Price setting can advance Y too, so snapshot after Q/T and before '2'.
+    let before = azt_query_data(net, &azt::full_data(net), backend)
+        .and_then(|d| azt::parse_full_data(&d, trk))
+        .and_then(|full| azt_sale_id(net, cfg, full, backend));
+    let Some(before_sale_id) = before else {
+        azt_error(
+            byte,
+            runtimes,
+            "Cannot establish sale identity; order not authorized.",
+        )
+        .await;
+        return;
+    };
+    let (shift_id, operator_name) = shifts.active_info().await;
     let (product_id, product_name) = azt_nozzle_product(&fp_cfg, cfg, nozzle);
     let preset_label_str = preset_label(&preset);
     let tx = CurrentTx {
@@ -1472,6 +1757,17 @@ async fn azt_do_authorize(
     {
         let mut map = runtimes.write().await;
         if let Some(rt) = map.get_mut(&byte) {
+            let loaded = rt.azt.journal_loaded;
+            let json = rt.azt.journal_json.take();
+            rt.azt = Default::default();
+            rt.azt.journal_loaded = loaded;
+            rt.azt.journal_json = json;
+            rt.azt.order_price = Some(price);
+            rt.azt.shift_id = shift_id;
+            rt.azt.operator_name = operator_name;
+            rt.azt.authorize_uncertain = true;
+            rt.azt.before_sale_id = Some(before_sale_id);
+            rt.state.protocol_error = None;
             rt.current_tx = Some(tx);
             rt.state.price = price;
             rt.state.nozzle_index = Some(nozzle);
@@ -1498,6 +1794,63 @@ async fn azt_do_authorize(
             }
         }
     }
+    // Ownership exists durably before authorize can reach the pump.
+    if !azt_checkpoint(byte, cfg, runtimes, pool).await {
+        if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+            rt.cancel_pre_auth();
+            rt.azt.authorize_uncertain = false;
+            rt.azt.order_price = None;
+        }
+        return;
+    }
+    match azt_exchange(net, &azt::authorize(net), backend) {
+        Some(azt::Response::Short(azt::ACK)) => {
+            if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+                rt.azt.authorize_uncertain = false;
+            }
+        }
+        Some(azt::Response::Short(azt::CAN | azt::NAK)) => {
+            if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+                rt.cancel_pre_auth();
+                rt.azt.authorize_uncertain = false;
+                rt.azt.order_price = None;
+            }
+            azt_error(
+                byte,
+                runtimes,
+                "Pump refused authorization; order cancelled.",
+            )
+            .await;
+            return;
+        }
+        _ => {
+            if let Some(rt) = runtimes.write().await.get_mut(&byte) {
+                rt.state.status = FpStatus::Authorizing;
+            }
+            azt_error(
+                byte,
+                runtimes,
+                "Authorization acknowledgement missing; checking pump before another order.",
+            )
+            .await;
+            return;
+        }
+    }
+    if direct_start
+        && !azt_expect_ack(
+            net,
+            &azt::unconditional_start(net),
+            backend,
+            "unconditional_start",
+        )
+    {
+        azt_error(
+            byte,
+            runtimes,
+            "Start not confirmed; checking pump. Order will stop if it does not start.",
+        )
+        .await;
+    }
     if preauth_nozzle.is_some() {
         let _ = events.send(WsEvent::PreAuthorized {
             fp_id: fp_cfg.id.clone(),
@@ -1512,3 +1865,7 @@ async fn azt_do_authorize(
     );
     broadcast_status(byte, runtimes, events).await;
 }
+
+#[cfg(test)]
+#[path = "azt_tests.rs"]
+mod tests;

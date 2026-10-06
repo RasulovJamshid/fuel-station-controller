@@ -30,7 +30,9 @@
 //!
 //! # Rules a new runtime must follow
 //!
-//! **Close every sale through [`shared::commit_sale`].** It persists the sale,
+//! **Close every sale through [`shared::commit_sale`].** AZT uses
+//! `ShiftCoordinator::commit_azt_sale` for atomic terminal-sale accounting.
+//! The shared helper persists the sale,
 //! enqueues it to `sync_queue` for the server, credits shift totals, and only then
 //! publishes `Done`. Calling those steps by hand is how Gilbarco shift reports
 //! once went stale. If a lane publishes its own event instead of `Done`, use
@@ -57,6 +59,7 @@
 //! and only serves the `protocol: "mock"` runtime configuration.
 
 pub(super) mod azt;
+pub(super) mod azt_state;
 pub(super) mod bluesky_state;
 pub(super) mod gilbarco;
 pub(super) mod shared;

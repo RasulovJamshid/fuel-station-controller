@@ -37,7 +37,8 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/admin/operators/:id",
-            post(admin_update_operator).delete(admin_delete_operator),
+            // Retain the old DELETE endpoint as a deactivation alias for older desktops.
+            post(admin_update_operator).delete(admin_deactivate_operator),
         )
         .route(
             "/admin/config",
@@ -599,13 +600,13 @@ async fn admin_update_operator(
     Ok(Json(op))
 }
 
-async fn admin_delete_operator(
+async fn admin_deactivate_operator(
     State(st): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let _who = require_admin(&st, &headers).await?;
-    let ok = admin_queries::delete_operator(&st.pool, &id)
+    let ok = admin_queries::deactivate_operator(&st.pool, &id)
         .await
         .map_err(internal)?;
     if !ok {

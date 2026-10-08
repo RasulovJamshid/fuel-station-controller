@@ -429,6 +429,21 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
     }
   };
 
+  const setOperatorActive = async (id: string, active: boolean) => {
+    setBusy(true);
+    setInvokeError(null);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("admin_update_operator", { token, id, active, pin: null });
+      await loadAll();
+    } catch (e) {
+      if (is401(e)) { expireSession(); return; }
+      setInvokeError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const changePin = async () => {
     setBusy(true);
     try {
@@ -621,6 +636,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
 
         <section id="admin-operators" className="scroll-mt-14 rounded-2xl border border-border-primary/80 bg-bg-card/80 p-6 shadow-card backdrop-blur-sm">
           <h2 className="mb-4 text-lg font-bold text-text-primary">{t("admin.operators.title")}</h2>
+          <p className="mb-4 text-xs text-text-muted">{t("admin.operators.deactivationHint")}</p>
           <ul className="mb-4 grid gap-3 grid-cols-1">
             {operators.map((op) => (
               <li
@@ -640,16 +656,7 @@ export function AdminPanel({ token, mustChangePin, onLogout, onPinChanged, onSes
                       type="button"
                       disabled={busy}
                       className="font-bold text-accent-blue transition-colors hover:text-accent-blue-light disabled:opacity-50"
-                      onClick={async () => {
-                        const { invoke } = await import("@tauri-apps/api/core");
-                        await invoke("admin_update_operator", {
-                          token,
-                          id: op.id,
-                          active: !op.active,
-                          pin: null,
-                        });
-                        await loadAll();
-                      }}
+                      onClick={() => setOperatorActive(op.id, !op.active)}
                     >
                       {op.active ? t("admin.operators.deactivate") : t("admin.operators.reactivate")}
                     </button>

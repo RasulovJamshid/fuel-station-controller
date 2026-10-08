@@ -204,12 +204,75 @@ pub async fn update_operator(
     }))
 }
 
-pub async fn delete_operator(pool: &SqlitePool, id: &str) -> Result<bool> {
+/// Operator records and their history are retained permanently; removal is deactivation.
+pub async fn deactivate_operator(pool: &SqlitePool, id: &str) -> Result<bool> {
     let r = sqlx::query("UPDATE operators SET active = 0 WHERE id = ?")
         .bind(id)
         .execute(pool)
         .await?;
     Ok(r.rows_affected() > 0)
+}
+
+#[cfg(test)]
+mod operator_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn deactivation_preserves_operator_and_history_and_allows_reactivation() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let operator = insert_operator(
+            &pool,
+            &CreateOperatorCmd {
+                name: "Оператор А".into(),
+                pin: None,
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO shifts(id,operator_id,operator_name,started_at,status) VALUES('old-shift',?, ?,1000,'CLOSED')")
+            .bind(&operator.id).bind(&operator.name).execute(&pool).await.unwrap();
+        assert!(deactivate_operator(&pool, &operator.id).await.unwrap());
+        assert!(deactivate_operator(&pool, &operator.id).await.unwrap());
+        let operators = crate::db::shift_queries::list_operators(&pool)
+            .await
+            .unwrap();
+        let retained = operators.iter().find(|o| o.id == operator.id).unwrap();
+        assert!(!retained.active);
+        assert_eq!(retained.name, operator.name);
+        assert_eq!(retained.created_at, operator.created_at);
+        assert!(crate::db::shift_queries::ensure_operator_active(
+            &pool,
+            Some(&operator.id),
+            &operator.name
+        )
+        .await
+        .is_err());
+        assert!(
+            crate::db::shift_queries::ensure_operator_active(&pool, None, "оператор а")
+                .await
+                .is_err()
+        );
+        let restored = update_operator(&pool, &operator.id, Some(true), None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored.id, operator.id);
+        assert!(restored.active);
+        crate::db::shift_queries::ensure_operator_active(&pool, Some(&operator.id), &operator.name)
+            .await
+            .unwrap();
+        let owner: String =
+            sqlx::query_scalar("SELECT operator_id FROM shifts WHERE id='old-shift'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(owner, operator.id);
+    }
 }
 
 pub async fn save_products_to_db(

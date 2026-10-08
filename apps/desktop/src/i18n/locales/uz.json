@@ -250,7 +250,9 @@
       "DONE": "Tugadi",
       "OFFLINE": "Aloqa yoʼq",
       "UNKNOWN": "Nomaʼlum"
-    }
+    },
+    "hiddenPumps": "Yashirilgan kolonkalar",
+    "allHidden": "Barcha kolonkalar yashirilgan. Ko‘rsatish uchun yuqoridagi kolonkani tanlang."
   },
   "pumpForm": {
     "noActiveProducts": "Bu nasosda faol mahsulot yoʼq.",
@@ -446,7 +448,8 @@
       "namePlaceholder": "Ism",
       "pinPlaceholder": "PIN (ixtiyoriy)",
       "add": "Operator qoʼshish",
-      "newPinPrompt": "Operator uchun yangi PIN (boʼsh qoldiring — oʼkazib yuborish):"
+      "newPinPrompt": "Operator uchun yangi PIN (boʼsh qoldiring — oʼkazib yuborish):",
+      "deactivationHint": "Operatorlarni o‘chirib bo‘lmaydi. Faolsizlantirish smenalar tarixini saqlaydi; operatorni qayta faollashtirish mumkin."
     },
     "shiftSchedule": {
       "title": "Smena jadvali",
@@ -530,7 +533,28 @@
       "discovering": "Skanerlanyapti...",
       "scannedSubnet": "{{subnet}} tarmoqi skanerlandi (port {{port}})",
       "noneFound": "Hech qanday qurilma topilmadi",
-      "useIp": "Ushbu IP manzildan foydalanish"
+      "useIp": "Ushbu IP manzildan foydalanish",
+      "scan": {
+        "results": "Topilgan rezervuarlar",
+        "close": "Yopish",
+        "hint": "O‘rnatilgan datchiklarni tanlang, mahsulotni belgilang va zarur bo‘lsa nomi hamda sig‘imini o‘zgartiring. Nol qiymat bo‘sh rezervuar yoki ishlatilmayotgan slotni anglatishi mumkin.",
+        "tank": "Rezervuar",
+        "select": "Tanlash",
+        "slot": "Slot",
+        "volume": "Hajm",
+        "target": "Qo‘shish / bog‘lash",
+        "name": "Nomi",
+        "product": "Mahsulot",
+        "capacity": "Sig‘im (l)",
+        "newTank": "Yangi rezervuar",
+        "chooseProduct": "Mahsulotni tanlang",
+        "alreadyAdded": "Sozlangan",
+        "noTanks": "Bu registrlar oralig‘ida to‘g‘ri ko‘rsatkichlar topilmadi.",
+        "addSelected": "Tanlanganlarni qo‘shish ({{count}})",
+        "added": "Tanlangan rezervuarlar formaga qo‘shildi. Sozlamalarni tekshiring va ATG sozlamalarini saqlang.",
+        "invalidSelection": "Har bir tanlangan rezervuar uchun to‘g‘ri nom, mahsulot va sig‘im kiriting.",
+        "tankAlreadyMapped": "Bu rezervuar boshqa datchikka bog‘langan. Boshqa rezervuarni tanlang yoki yangisini yarating."
+      }
     },
     "changePin": {
       "title": "Admin PIN ni oʼgartirish",

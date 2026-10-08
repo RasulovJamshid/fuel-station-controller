@@ -1,22 +1,29 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { AtgConfigSnapshot, AtgBranchInfo, AtgSlotInfo } from '../../types/api';
 import { useAppStore } from '../../store';
+import { addScannedTanks, type AtgScanDevice, type AtgTankSelection } from '../../lib/atgDiscovery';
+import { AtgDiscoveryResults } from './AtgDiscoveryResults';
 
 const input = 'rounded border border-border-primary bg-bg-primary px-2 py-1 text-sm w-full';
 export function AtgSetup({ config, token, onSaved }: {config: AtgConfigSnapshot; token: string; onSaved: () => Promise<void>}) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(config);
   const [auth, setAuth] = useState<Record<string,string> | null | undefined>();
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState('');
   const [message,setMessage] = useState('');
   const [subnet,setSubnet] = useState('');
-  const [found,setFound] = useState<{index:number;devices:{host:string;error?:string}[]} | null>(null);
+  const [found,setFound] = useState<{profile:AtgBranchInfo;devices:AtgScanDevice[]} | null>(null);
   const site = useAppStore(s => s.siteSnapshot);
   const products = site?.products ?? [];
   const positions = site?.positions ?? [];
-  useEffect(() => {setDraft(config); setAuth(undefined);},[config]);
+  useEffect(() => {setDraft(config); setAuth(undefined); setFound(null);},[config]);
   const field = (label: string, value: string | number, change: (v: string) => void, type='text') => <label className="text-xs text-text-secondary flex flex-col gap-1">{label}<input className={input} type={type} value={value} onChange={e=>change(e.target.value)} /></label>;
-  const changeBranch = (i: number, patch: Partial<AtgBranchInfo>) => setDraft(d=>({...d,branches:d.branches.map((b,j)=>i===j?{...b,...patch}:b)}));
+  const changeBranch = (i: number, patch: Partial<AtgBranchInfo>) => {
+    if (['host','port','unit_id','start_register','address_base','register_count','word_order','height_unit'].some(key => key in patch)) setFound(null);
+    setDraft(d=>({...d,branches:d.branches.map((b,j)=>i===j?{...b,...patch}:b)}));
+  };
   const changeSlot = (i: number,j: number, patch: Partial<AtgSlotInfo>) => changeBranch(i,{slots:draft.branches[i].slots.map((s,k)=>j===k?{...s,...patch}:s)});
   const save = async () => {
     setBusy(true);setError('');setMessage('');
@@ -37,18 +44,23 @@ export function AtgSetup({ config, token, onSaved }: {config: AtgConfigSnapshot;
       await onSaved();setMessage('ATG settings saved.');
     } catch(e) {setError(String(e));} finally {setBusy(false);}
   };
-  const probe = async (branch: AtgBranchInfo, index?:number) => {
-    setBusy(true);setError('');setMessage('');
+  const probe = async (branch: AtgBranchInfo, network = false) => {
+    setBusy(true);setError('');setMessage('');setFound(null);
     try {
       const {invoke}=await import('@tauri-apps/api/core');
-      const result=await invoke<{devices:{host:string;tanks:{slot:number;product_volume:number}[];error?:string}[]}>('admin_atg_discover',{token,query:{...(index==null?{host:branch.host}:subnet?{subnet}:{}),branch_id:branch.id,port:branch.port,unit_id:branch.unit_id,start_register:branch.start_register,address_base:branch.address_base,register_count:branch.register_count,word_order:branch.word_order,height_unit:branch.height_unit}});
-      if(index!=null){setFound({index,devices:result.devices});setMessage(`${result.devices.filter(d=>!d.error).length} controllers found`);return;}
-      const device=result.devices[0];
-      if (device?.error) throw new Error(device.error);
-      setMessage(device ? device.tanks.map(t=>`Slot ${t.slot}: ${t.product_volume.toFixed(1)} L`).join(' · ') : 'No controller response');
+      const result=await invoke<{devices:AtgScanDevice[]}>('admin_atg_discover',{token,query:{...(!network?{host:branch.host}:subnet?{subnet}:{}),branch_id:branch.id,port:branch.port,unit_id:branch.unit_id,start_register:branch.start_register,address_base:branch.address_base,register_count:branch.register_count,word_order:branch.word_order,height_unit:branch.height_unit}});
+      setFound({profile:{...branch},devices:result.devices});
     } catch(e) {setError(String(e));} finally {setBusy(false);}
   };
+  const addSelected = (selections: AtgTankSelection[]) => {
+    if (!found) return;
+    try {
+      setDraft(addScannedTanks(draft, found.profile, selections, products));
+      setFound(null);setError('');setMessage(t('admin.atg.scan.added'));
+    } catch (e) {setError(t(`admin.atg.scan.${e instanceof Error ? e.message : 'invalidSelection'}`));}
+  };
   return <section id="admin-atg" className="rounded-2xl border border-border-primary p-6 space-y-4">
+    <fieldset disabled={busy} className="min-w-0 space-y-4">
     <h2 className="text-lg font-bold">ATG and physical tanks</h2>
     <label className="flex gap-2"><input type="checkbox" checked={draft.enabled} onChange={e=>setDraft({...draft,enabled:e.target.checked})}/>Enable ATG polling</label>
     <div className="grid grid-cols-3 gap-3">
@@ -74,7 +86,7 @@ export function AtgSetup({ config, token, onSaved }: {config: AtgConfigSnapshot;
     <button type="button" disabled={!products.length} onClick={()=>setDraft({...draft,tanks:[...draft.tanks,{tank_id:crypto.randomUUID(),product_id:products[0].id,label:`Tank ${draft.tanks.length+1}`,capacity_l:25000,current_l:0}]})}>Add tank</button>
     <h3 className="font-semibold">Controllers</h3>
     {field('Discovery subnet (optional, e.g. 192.168.1)',subnet,setSubnet)}
-    {found && <div className="flex flex-wrap gap-2">{found.devices.map(d=><button type="button" key={d.host} disabled={!!d.error} title={d.error} onClick={()=>{changeBranch(found.index,{host:d.host});setFound(null);}}>{d.host}{d.error?' (probe failed)':''}</button>)}</div>}
+    {found && <AtgDiscoveryResults config={draft} profile={found.profile} devices={found.devices} products={products} onAdd={addSelected} onClose={()=>setFound(null)} />}
     {draft.branches.map((b,i)=><div key={b.id} className="rounded border border-border-primary p-3 space-y-3">
       <div className="grid grid-cols-3 gap-2">
         {field('Controller name',b.name,v=>changeBranch(i,{name:v}))}
@@ -94,7 +106,7 @@ export function AtgSetup({ config, token, onSaved }: {config: AtgConfigSnapshot;
         {field('External fuel name',s.type,v=>changeSlot(i,j,{type:v}))}
         <button type="button" onClick={()=>changeBranch(i,{slots:b.slots.filter((_,k)=>j!==k)})}>Remove slot</button>
       </div>)}
-      <div className="flex gap-4"><button type="button" onClick={()=>{let slot=1;while(b.slots.some(s=>s.slot===slot))slot++;const tank=draft.tanks.find(t=>!draft.branches.some(b=>b.slots.some(s=>s.tank_id===t.tank_id)));changeBranch(i,{register_count:Math.max(b.register_count,slot*12),slots:[...b.slots,{slot,type:tank?products.find(p=>p.id===tank.product_id)?.name??'':'',tank_id:tank?.tank_id,product_id:tank?.product_id}]});}}>Add slot</button><button type="button" disabled={busy} onClick={()=>probe(b)}>Test controller</button><button type="button" disabled={busy} onClick={()=>probe(b,i)}>Find controllers</button><button type="button" onClick={()=>setDraft({...draft,branches:draft.branches.filter((_,j)=>j!==i)})}>Remove controller</button></div>
+      <div className="flex gap-4"><button type="button" onClick={()=>{let slot=1;while(b.slots.some(s=>s.slot===slot))slot++;const tank=draft.tanks.find(t=>!draft.branches.some(b=>b.slots.some(s=>s.tank_id===t.tank_id)));changeBranch(i,{register_count:Math.max(b.register_count,slot*12),slots:[...b.slots,{slot,type:tank?products.find(p=>p.id===tank.product_id)?.name??'':'',tank_id:tank?.tank_id,product_id:tank?.product_id}]});}}>Add slot</button><button type="button" disabled={busy} onClick={()=>probe(b)}>Test controller</button><button type="button" disabled={busy} onClick={()=>probe(b,true)}>Find controllers</button><button type="button" onClick={()=>{setFound(null);setDraft({...draft,branches:draft.branches.filter((_,j)=>j!==i)});}}>Remove controller</button></div>
     </div>)}
     <button type="button" onClick={()=>{let id=1;while(draft.branches.some(b=>b.id===id))id++;setDraft({...draft,branches:[...draft.branches,{id,name:`Controller ${id}`,host:'',port:502,unit_id:1,start_register:1000,address_base:1,register_count:12,word_order:'ABCD',height_unit:'mm',slots:[]}]});}}>Add controller</button>
     <details className="space-y-3"><summary>External reporting</summary>
@@ -108,5 +120,6 @@ export function AtgSetup({ config, token, onSaved }: {config: AtgConfigSnapshot;
     </details>
     {error&&<p role="alert" className="text-accent-red">{error}</p>}{message&&<p role="status">{message}</p>}
     <button type="button" disabled={busy} onClick={save} className="rounded bg-accent-blue text-white px-4 py-2">{busy?'Working…':'Save ATG settings'}</button>
+    </fieldset>
   </section>;
 }

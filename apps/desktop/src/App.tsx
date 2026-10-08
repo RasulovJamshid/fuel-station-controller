@@ -569,6 +569,8 @@ export default function App() {
               {dispenserLayoutMode === "classic" ? (
                 <ClassicDispenserConsole
                   states={visibleSorted}
+                  hiddenStates={hiddenSorted}
+                  onToggleVisibility={toggleHideFp}
                   nozzlesByFp={nozzlesByFp}
                   positionActiveByFp={positionActiveByFp}
                   activeFpId={activeDispenserFpId}

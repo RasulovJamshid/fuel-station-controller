@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
-import { AlertTriangle, Check } from "lucide-react";
+import { AlertTriangle, Check, Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { pausedInfo, statusTag } from "../types/api";
 import type { AuthMode, FpState, FpStatus, NozzleSnapshot } from "../types/api";
@@ -180,6 +180,8 @@ type OrderField = "volume" | "amount";
 
 type Props = {
   states: FpState[];
+  hiddenStates: FpState[];
+  onToggleVisibility: (fpId: string) => void;
   nozzlesByFp: Map<string, NozzleSnapshot[]>;
   positionActiveByFp: Map<string, boolean>;
   activeFpId: string | null;
@@ -272,6 +274,8 @@ function classicStatusLabel(meta: PumpMeta, t: (key: string) => string): string 
 
 export function ClassicDispenserConsole({
   states,
+  hiddenStates,
+  onToggleVisibility,
   nozzlesByFp,
   positionActiveByFp,
   activeFpId,
@@ -859,6 +863,8 @@ export function ClassicDispenserConsole({
   }, [defaultAuthMode, drafts, nozzlesByFp, positionActiveByFp, setDraft]);
 
   const handleConsoleKeyDownCapture = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
+    // Visibility buttons keep native keyboard activation; Enter must not start a pump.
+    if (e.target instanceof HTMLElement && e.target.closest('[data-classic-visibility]')) return;
     const handledKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "Delete", "Home", "Enter", "Shift"];
     if (!handledKeys.includes(e.key)) return;
     const selectedState = activeState ?? states[0];
@@ -1100,10 +1106,32 @@ export function ClassicDispenserConsole({
     );
   };
 
+  const hiddenPumps = hiddenStates.length > 0 && (
+    <div data-classic-visibility="" className="flex shrink-0 flex-wrap items-center gap-2 border border-border-primary/60 bg-bg-secondary/30 p-2">
+      <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">{t("classic.hiddenPumps")}</span>
+      {hiddenStates.map(state => (
+        <button
+          key={state.fp_id}
+          type="button"
+          onClick={() => { onToggleVisibility(state.fp_id); onSelectFp(state.fp_id); }}
+          title={`${t("dispenser.show")}: ${pumpTitle(state)}`}
+          className="flex items-center gap-2 border border-border-primary/60 bg-bg-card px-3 py-2 text-xs font-semibold text-text-secondary hover:border-accent-blue hover:text-accent-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
+        >
+          <Eye className="h-3.5 w-3.5" aria-hidden />
+          <span>{pumpTitle(state)}</span>
+          <span className="text-[10px] uppercase text-text-muted">{classicStatusLabel(getMeta(state, defaultAuthMode, positionActiveByFp.get(state.fp_id) ?? true), t)}</span>
+        </button>
+      ))}
+    </div>
+  );
+
   if (states.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center rounded-none border border-border-primary bg-bg-card text-sm font-semibold text-text-muted">
-        {t("classic.noDispensers")}
+      <div className="classic-console flex h-full flex-col gap-2">
+        {hiddenPumps}
+        <div className="flex flex-1 items-center justify-center border border-border-primary bg-bg-card text-sm font-semibold text-text-muted">
+          {t(hiddenStates.length ? "classic.allHidden" : "classic.noDispensers")}
+        </div>
       </div>
     );
   }
@@ -1250,9 +1278,19 @@ export function ClassicDispenserConsole({
               {t("dispenser.nozzle")} {nozzle?.index ?? state.nozzle_index ?? "—"}
             </span>
           </span>
-          <span className={`shrink-0 font-mono font-black ${ui.productPriceText}`} style={{ color: productColor }}>
-            {fmtSum.format(nozzle?.price ?? state.price ?? 0)}
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className={`font-mono font-black ${ui.productPriceText}`} style={{ color: productColor }}>
+              {fmtSum.format(nozzle?.price ?? state.price ?? 0)}
+            </span>
+            <button
+              type="button"
+              data-classic-visibility=""
+              onClick={() => onToggleVisibility(state.fp_id)}
+              title={`${t("dispenser.hideCard")}: ${pumpTitle(state)}`}
+              aria-label={`${t("dispenser.hideCard")}: ${pumpTitle(state)}`}
+              className="border border-border-primary/50 bg-bg-primary/40 p-1.5 text-text-muted hover:border-accent-blue hover:text-accent-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-blue"
+            ><EyeOff className="h-3.5 w-3.5" aria-hidden /></button>
+          </div>
         </div>
         {showPumpTotalizer && pumpTotalizer && (
           <div className={`flex items-center justify-between gap-2 border-t border-border-primary/20 bg-bg-secondary/10 px-3 py-1.5 font-mono tabular-nums ${ui.topCardLabel}`}>
@@ -1292,6 +1330,7 @@ export function ClassicDispenserConsole({
           height: "max-content",
         }}
       >
+      {hiddenPumps}
       <div
         className={`grid shrink-0 ${ui.topGridGap}`}
         style={{ gridTemplateColumns: `8rem repeat(${Math.min(Math.max(states.length, 1), 8)}, minmax(0, 1fr))` }}

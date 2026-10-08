@@ -205,6 +205,12 @@ impl ShiftCoordinator {
             return Err(anyhow!("shift tracking is disabled for this site"));
         }
         shift_queries::validate_start(&cmd, self.cfg.shifts.require_operator_pin)?;
+        shift_queries::ensure_operator_active(
+            &self.pool,
+            cmd.operator_id.as_deref(),
+            &cmd.operator_name,
+        )
+        .await?;
         if self.active.read().await.is_some() {
             return Err(anyhow!(
                 "a shift is already active — end it or hand over before starting another"
@@ -307,6 +313,13 @@ impl ShiftCoordinator {
             return Err(anyhow!("shift tracking is disabled for this site"));
         }
         shift_queries::validate_handover(&cmd)?;
+        // Reject before closing the outgoing operator's shift.
+        shift_queries::ensure_operator_active(
+            &self.pool,
+            cmd.incoming_operator_id.as_deref(),
+            &cmd.incoming_operator,
+        )
+        .await?;
         if self.cfg.shifts.require_operator_pin {
             let p = cmd.incoming_pin.as_deref().unwrap_or("");
             if p.trim().is_empty() {
@@ -479,6 +492,55 @@ mod tests {
             ShiftCoordinator::new(pool, Arc::new(cfg)).with_runtimes(map.clone()),
             map,
         )
+    }
+
+    #[tokio::test]
+    async fn inactive_operator_cannot_start_or_close_outgoing_shift_during_handover() {
+        let (coordinator, _) = setup(None).await;
+        let operator = crate::db::admin_queries::insert_operator(
+            &coordinator.pool,
+            &types::CreateOperatorCmd {
+                name: "Inactive operator".into(),
+                pin: None,
+            },
+        )
+        .await
+        .unwrap();
+        crate::db::admin_queries::deactivate_operator(&coordinator.pool, &operator.id)
+            .await
+            .unwrap();
+        let denied = coordinator
+            .start(StartShiftCmd {
+                operator_name: operator.name.clone(),
+                operator_id: Some(operator.id.clone()),
+                pin: None,
+                notes: None,
+                started_at_override: None,
+            })
+            .await
+            .unwrap_err();
+        assert!(denied.to_string().contains("deactivated"));
+        let outgoing = start(&coordinator).await;
+        let command: HandoverCmd = serde_json::from_value(serde_json::json!({
+            "outgoing_shift_id": outgoing.id,
+            "incoming_operator": operator.name,
+            "incoming_operator_id": operator.id,
+        }))
+        .unwrap();
+        assert!(coordinator
+            .handover(command)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("deactivated"));
+        let active = coordinator.active.read().await;
+        assert_eq!(active.as_ref().unwrap().id, outgoing.id);
+        let status: String = sqlx::query_scalar("SELECT status FROM shifts WHERE id=?")
+            .bind(&outgoing.id)
+            .fetch_one(&coordinator.pool)
+            .await
+            .unwrap();
+        assert_eq!(status, "ACTIVE");
     }
 
     async fn set_meter(map: &RuntimeMap, volume: Option<f64>, offline: bool) {

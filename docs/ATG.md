@@ -73,6 +73,13 @@ host/subnet selection works without an internet/default route. Reading a Modbus
 window cannot distinguish an unused all-zero slot from an empty physical tank;
 configure the actual installed probes explicitly.
 
+After **Test controller** or **Find controllers**, select the detected slots to
+add. Each selection can create a tank or link an existing unmapped tank. Set its
+name, product and actual capacity, then choose **Add selected** and **Save ATG
+settings**. Configured probes are marked as already added. Tank names remain
+editable in the Tanks section without changing their IDs or history. Importing
+another controller preserves the mappings of existing controllers.
+
 `/admin/atg-config` (GET/POST) and `/admin/atg-discover` require an admin bearer
 session. GET returns credential-presence flags, never saved tokens/passwords.
 Omitted credential fields retain their values; empty strings clear individual

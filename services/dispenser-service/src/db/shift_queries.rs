@@ -811,6 +811,28 @@ pub async fn insert_operator_stub(pool: &SqlitePool, cmd: &CreateOperatorCmd) ->
     })
 }
 
+/// Manual entry stays available, but cannot bypass a deactivated registered operator.
+pub async fn ensure_operator_active(pool: &SqlitePool, id: Option<&str>, name: &str) -> Result<()> {
+    let inactive = if let Some(id) = id {
+        let active: Option<i64> = sqlx::query_scalar("SELECT active FROM operators WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+        active.ok_or_else(|| anyhow!("operator not found"))? == 0
+    } else {
+        // SQLite NOCASE only handles ASCII; operator names also use Cyrillic.
+        let names: Vec<String> = sqlx::query_scalar("SELECT name FROM operators WHERE active = 0")
+            .fetch_all(pool)
+            .await?;
+        let name = name.trim().to_lowercase();
+        names.iter().any(|stored| stored.trim().to_lowercase() == name)
+    };
+    if inactive {
+        return Err(anyhow!("operator is deactivated"));
+    }
+    Ok(())
+}
+
 pub fn validate_start(cmd: &StartShiftCmd, require_pin: bool) -> Result<()> {
     if cmd.operator_name.trim().is_empty() {
         return Err(anyhow!("operator_name is required"));

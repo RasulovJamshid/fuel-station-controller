@@ -122,7 +122,7 @@ try {
         Assert-Equal ([IO.File]::ReadAllText((Join-Path $script:install 'dispenser-service.exe'))) 'new-dispenser-service.exe'
         Assert-Equal ($script:events -contains 'register') $false
         $record = Get-Content (Join-Path $script:install 'station-install.json') -Raw | ConvertFrom-Json
-        $files = @(Get-Content (Join-Path $record.backup 'files.json') -Raw | ConvertFrom-Json)
+        $files = Get-Content (Join-Path $record.backup 'files.json') -Raw | ConvertFrom-Json
         $wal = @($files | Where-Object { $_.original -eq "$script:database-wal" })
         Assert-Equal $wal.Count 1
         Assert-Equal ([IO.File]::ReadAllText((Join-Path $record.backup $wal[0].backup))) 'uncheckpointed-sales'

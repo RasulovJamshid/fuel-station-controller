@@ -17,6 +17,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify-and-package:
     runs-on: windows-2022
@@ -36,6 +40,13 @@ jobs:
           cache-on-failure: true
       - name: Installer safety tests (Windows PowerShell 5.1)
         run: ./tools/windows/tests/StationSetup.Tests.ps1
+      - name: Check installer wizard compilation
+        run: |
+          $syntaxDir = Join-Path $env:RUNNER_TEMP 'installer-syntax'
+          New-Item -ItemType Directory -Path "$syntaxDir/payload" -Force | Out-Null
+          Set-Content "$syntaxDir/payload/placeholder.txt" 'Syntax check only; never distributed.'
+          & "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe" "/DPayloadDir=$syntaxDir/payload" "/DOutputDir=$syntaxDir" tools/windows/StationInstaller.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Fetch verified offline dependencies
         run: ./tools/windows/Get-InstallerDependencies.ps1 -Destination dist/windows-installer/dependencies
       - name: Build service

@@ -235,7 +235,7 @@ async fn poll_round(
                     },
                 );
                 sync.push(serde_json::json!({"tank_id":tank.id(),"product_id":tank.product_id,
-                    "product_name":cfg.product(tank.product_id).map(|p|p.name.as_str()).unwrap_or(""),
+                    "product_name":tank.product_id.and_then(|id| cfg.product(id)).map(|p|p.name.as_str()).unwrap_or(""),
                     "volume_litres":v[4],"temperature_c":v[2],"level_mm":f64::from(v[0])*scale,
                     "water_mm":f64::from(v[1])*scale,"fill_percent":f64::from(v[4])/tank.capacity_l*100.0,"reading_at":now}));
             } else {

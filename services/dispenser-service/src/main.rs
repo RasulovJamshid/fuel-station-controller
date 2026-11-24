@@ -146,6 +146,9 @@ async fn run(config_path: std::path::PathBuf) -> Result<()> {
     {
         let site = cfg.read().await;
         for tank in &site.tanks {
+            if tank.product_id.is_none() {
+                continue;
+            }
             if site
                 .tanks
                 .iter()

@@ -64,6 +64,19 @@ function harness() {
 }
 
 describe('atomic physical tank sync',()=>{
+    it('syncs named tanks and zero-volume ATG readings with no product, preserving identity on later assignment', async () => {
+        const h = harness();
+        const tank = { tank_id: 'north', product_id: null, label: 'North tank', capacity_l: 25000, product_name: '' };
+        expect((await h.send(h.record('tank_catalog', 'unassigned', { updated_at: 1, tanks: [tank] }))).accepted).toEqual(['unassigned']);
+        expect((await h.send(h.record('reservoir_reading', 'empty', { tank_id: 'north', product_id: null, reading_at: 2, volume_litres: 0, temperature_c: 20 }))).accepted).toEqual(['empty']);
+        const stored = h.get().tanks[tankKey('station', 'north')];
+        expect(stored).toMatchObject({ label: 'North tank', productId: null, capacity: 25000 });
+        expect(Object.values(h.get().readings)[0]).toMatchObject({ productId: null, volumeLitres: 0, fillPercent: 0 });
+        await h.send(h.record('tank_catalog', 'assigned', { updated_at: 3, tanks: [{ ...tank, product_id: 1, product_name: 'AI-92' }] }));
+        expect(h.get().tanks[tankKey('station', 'north')]).toMatchObject({ id: stored.id, productId: 1 });
+        await h.send(h.record('tank_catalog', 'cleared', { updated_at: 4, tanks: [tank] }));
+        expect(h.get().tanks[tankKey('station', 'north')]).toMatchObject({ id: stored.id, productId: null, productName: '' });
+    });
     it('does not acknowledge unsupported records',async()=>{
         const h=harness();expect(await h.send(h.record('future_type','unknown',{}))).toEqual({accepted:[],rejected:['unknown']});
         expect(h.get().markers).toEqual({});
@@ -166,7 +179,7 @@ describe('unchanged legacy ATG clients', () => {
         expect((await h.send(record)).accepted).toEqual(['iso']);
         expect(Object.values(h.get().readings)[0]).toMatchObject({ productId: 95, productName: 'AI-95', volumeLitres: 0 });
         expect((await h.send(h.record('reservoir_reading', 'minimal', { ...record.payload, tank_id: 'unknown' }))).accepted).toEqual(['minimal']);
-        expect(h.get().tanks[tankKey('station', 'unknown')]).toMatchObject({ productId: 0, managedByStation: false });
+        expect(h.get().tanks[tankKey('station', 'unknown')]).toMatchObject({ productId: null, managedByStation: false });
     });
 
     it('keeps old and new stations independent and transfers metadata ownership only on an explicit catalog', async () => {

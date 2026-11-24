@@ -324,7 +324,7 @@ model Reservoir {
   stationId   String
   tankId      String
   label       String
-  productId   Int
+  productId   Int?
   productName String
   capacity    Float
   active      Boolean   @default(true)

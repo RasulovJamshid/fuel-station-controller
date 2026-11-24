@@ -16,12 +16,12 @@ type TankForm = {
   stationId: string;
   tankId: string;
   label: string;
-  productId: number;
+  productId: number | '';
   productName: string;
   capacity: number;
 };
 
-const EMPTY_FORM: TankForm = { stationId: '', tankId: '', label: '', productId: 0, productName: '', capacity: 0 };
+const EMPTY_FORM: TankForm = { stationId: '', tankId: '', label: '', productId: '', productName: '', capacity: 0 };
 
 function TankGauge({ percent, levelLabel }: { percent: number | null; levelLabel: string }) {
   const pct = Math.max(0, Math.min(100, percent ?? 0));
@@ -85,7 +85,7 @@ export default function TanksPage() {
       stationId: tank.stationId,
       tankId: tank.tankId,
       label: tank.label ?? '',
-      productId: tank.productId ?? 0,
+      productId: tank.productId ?? '',
       productName: tank.productName ?? '',
       capacity: tank.capacity ?? 0,
     });
@@ -100,7 +100,7 @@ export default function TanksPage() {
         stationId: form.stationId,
         tankId: form.tankId.trim(),
         label: form.label.trim() || `Tank ${form.tankId.trim()}`,
-        productId: Number(form.productId) || 0,
+        productId: form.productId === '' ? null : Number(form.productId),
         productName: form.productName.trim(),
         capacity: Number(form.capacity) || 0,
       });
@@ -226,7 +226,7 @@ export default function TanksPage() {
             <div>
               <label className="control-label">{t('productCode')}</label>
               <input type="number" value={form.productId}
-                onChange={e => setForm(f => ({ ...f, productId: Number(e.target.value) }))}
+                onChange={e => setForm(f => ({ ...f, productId: e.target.value === '' ? '' : Number(e.target.value) }))}
                 className="field-control mt-1.5 w-full rounded-lg py-2" />
             </div>
             <Input label={t('product')} value={form.productName}

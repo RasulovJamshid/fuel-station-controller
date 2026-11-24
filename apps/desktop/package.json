@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:nozzles": "node --test tests/nozzleAssignments.test.cjs",
     "test:excel": "node tests/excelExport.test.cjs",
     "test:excel:browser": "node --experimental-vm-modules tests/excelImport.test.mjs",
     "preview": "vite preview",

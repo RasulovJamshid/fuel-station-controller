@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, Download, Save } from 'lucide-react';
@@ -9,6 +9,9 @@ import { useAuthStore } from '@/store/auth';
 import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import { configMessages, ConfigLabel } from '@/lib/service-config-i18n';
+import { ServiceConfigWizard, setupIssueText } from '@/components/service-config-wizard';
+import { prepareSetup, tankId as physicalTankId, validateSetup } from '@/lib/service-setup';
+import { setupMessages } from '@/lib/service-setup-i18n';
 import { ConfigRecord, configErrorMessage, copySiteSetup, downloadConfig, nextNumber, protocolNames, protocolPresets } from '@/lib/service-config';
 
 type Field = { key: ConfigLabel; type?: 'number' | 'checkbox' | 'password' | 'color'; options?: Record<string, string>; optional?: boolean; fallback?: any; min?: number; max?: number; step?: number };
@@ -52,7 +55,13 @@ export default function SiteConfigPage() {
   const { id } = useParams<{ id: string }>();
   const user = useAuthStore(state => state.user);
   const labels = configMessages[(user?.preferences as any)?.language ?? 'ru'] ?? configMessages.ru;
+  const loadErrorLabel = useRef(labels.error);
+  loadErrorLabel.current = labels.error;
   const canManage = user?.role === 'SUPER_ADMIN' || user?.role === 'COMPANY_ADMIN';
+  const language = (user?.preferences as any)?.language ?? 'ru';
+  const wizardLabels = setupMessages[language] ?? setupMessages.ru;
+  const [guided, setGuided] = useState(true);
+  const [setupStep, setSetupStep] = useState(0);
   const [config, setConfig] = useState<ConfigRecord | null>(null);
   const [stations, setStations] = useState<ConfigRecord[]>([]);
   const [sourceId, setSourceId] = useState('');
@@ -68,14 +77,15 @@ export default function SiteConfigPage() {
     setError('');
     setDirty(false);
     setSourceId('');
+    setSetupStep(0);
     stationsApi.serviceConfig(id).then((result: any) => {
-      if (!cancelled) setConfig(result.config);
-    }).catch(e => { if (!cancelled) setError(configErrorMessage(e, labels.error)); });
+      if (!cancelled) setConfig(prepareSetup(result.config));
+    }).catch(e => { if (!cancelled) setError(configErrorMessage(e, loadErrorLabel.current)); });
     stationsApi.list().then((result: any) => {
       if (!cancelled) setStations(result.filter((station: ConfigRecord) => station.id !== id));
-    }).catch(e => { if (!cancelled) setError(configErrorMessage(e, labels.error)); });
+    }).catch(e => { if (!cancelled) setError(configErrorMessage(e, loadErrorLabel.current)); });
     return () => { cancelled = true; };
-  }, [id, canManage, labels.error]);
+  }, [id, canManage]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -90,13 +100,23 @@ export default function SiteConfigPage() {
     setBusy(true); setError('');
     try {
       const result: any = await stationsApi.serviceConfig(sourceId);
-      update(copySiteSetup(result.config, config));
+      update(prepareSetup(copySiteSetup(result.config, config)));
       setMessage(labels.copied);
     } catch (e) { setError(configErrorMessage(e, labels.error)); }
     finally { setBusy(false); }
   };
   const save = async (download: boolean) => {
     if (!config) return;
+    const issues = validateSetup(config);
+    if (issues.length) {
+      if (guided) {
+        setSetupStep(5);
+        setError(wizardLabels.fixErrors);
+      } else {
+        setError(issues.map(issue => `${wizardLabels.steps[issue.step]} · ${issue.path}: ${setupIssueText(issue, wizardLabels)}`).join('\n'));
+      }
+      return;
+    }
     setBusy(true); setError(''); setMessage('');
     try {
       await stationsApi.saveServiceConfig(id, config);
@@ -135,7 +155,14 @@ export default function SiteConfigPage() {
     <p className="text-sm text-slate-600">{labels.intro}</p>
     <p className="rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm text-brand-800">{labels.installation}</p>
 
-    <fieldset disabled={busy} className="space-y-5 min-w-0">
+    <div className="flex flex-wrap gap-2" role="group" aria-label={wizardLabels.guided}>
+      <Button variant={guided ? 'primary' : 'outline'} onClick={() => setGuided(true)}>{wizardLabels.guided}</Button>
+      <Button variant={!guided ? 'primary' : 'outline'} onClick={() => setGuided(false)}>{wizardLabels.all}</Button>
+    </div>
+    <fieldset disabled={busy} hidden={!guided} className="min-w-0">
+      <ServiceConfigWizard config={config} onChange={update} language={language} step={setupStep} onStepChange={setSetupStep} />
+    </fieldset>
+    <fieldset disabled={busy} hidden={guided} className="space-y-5 min-w-0">
       <Section title={labels.copy}>
         <p className="text-sm text-slate-500">{labels.copyHint}</p>
         <div className="flex flex-wrap items-center gap-3">
@@ -196,10 +223,9 @@ export default function SiteConfigPage() {
       <Section title={labels.tanks}>
         <p className="text-sm text-slate-500">{labels.tankHint}</p>
         {rows('tanks').map((tank, i) => <div key={i} className="rounded-xl border border-slate-200 p-4 space-y-3">
-          {fields(tank, [{ key: 'tank_id', fallback: String(tank.product_id) }, productField, { key: 'label' }, { ...number('capacity_l', undefined, 0), step: 0.01 }, { ...number('current_l', undefined, 0), step: 0.01 }], next => {
-            const tankId = tank.tank_id ?? String(tank.product_id);
+          {fields(tank, [{ key: 'tank_id', fallback: physicalTankId(tank) }, { ...productField, optional: true }, { key: 'label' }, { ...number('capacity_l', undefined, 0), step: 0.01 }, { ...number('current_l', undefined, 0), step: 0.01 }], next => {
+            const tankId = physicalTankId(tank);
             next = { ...next, tank_id: next.tank_id ?? tankId };
-            if (next.product_id !== tank.product_id) next.nozzle_sources = [];
             const atg = config.atg && { ...config.atg, branches: config.atg.branches.map((branch: ConfigRecord) => ({
               ...branch, slots: branch.slots.map((slot: ConfigRecord) => {
                 if (slot.tank_id !== tankId) return slot;
@@ -211,16 +237,15 @@ export default function SiteConfigPage() {
             update({ ...config, tanks: rows('tanks').map((row, j) => j === i ? next : row), atg });
           })}
           <details><summary className="text-sm">{labels.nozzles}</summary><div className="flex flex-wrap gap-3 mt-2">
-            {rows('fueling_positions').flatMap(fp => fp.nozzles.filter((n: ConfigRecord) => n.product_id === tank.product_id).map((n: ConfigRecord) => <label className="text-xs" key={`${fp.id}/${n.index}`}>
+            {rows('fueling_positions').flatMap(fp => fp.nozzles.map((n: ConfigRecord) => <label className="text-xs" key={`${fp.id}/${n.index}`}>
               <input type="checkbox" checked={(tank.nozzle_sources ?? []).some((s: ConfigRecord) => s.fp_id === fp.id && s.nozzle_index === n.index)} onChange={e => changeRow('tanks', i, { ...tank, nozzle_sources: e.target.checked ? [...(tank.nozzle_sources ?? []), { fp_id: fp.id, nozzle_index: n.index }] : (tank.nozzle_sources ?? []).filter((s: ConfigRecord) => s.fp_id !== fp.id || s.nozzle_index !== n.index) })} /> {fp.label} / {n.index}
             </label>))}
           </div></details>
           {removeButton(() => removeRow('tanks', i))}
         </div>)}
         {addButton(() => {
-          const product = rows('products')[0];
-          if (product) section('tanks', [...rows('tanks').map(t => ({...t, tank_id: t.tank_id ?? String(t.product_id)})), { tank_id: crypto.randomUUID(), product_id: product.id, label: `Tank ${rows('tanks').length + 1}`, capacity_l: 25000, current_l: 0 }]);
-        }, !rows('products').length)}
+          section('tanks', [...rows('tanks'), { tank_id: crypto.randomUUID(), product_id: null, label: `Tank ${rows('tanks').length + 1}`, capacity_l: 25000, current_l: 0 }]);
+        })}
       </Section>
 
       <Section title={labels.atg}>
@@ -239,14 +264,14 @@ export default function SiteConfigPage() {
               {branch.slots.map((slot: ConfigRecord, j: number) => <div key={j} className="rounded-lg bg-slate-50 p-3 space-y-3">
                 <label className="flex flex-col gap-1.5 text-sm">{labels.tank_id}
                   <select className="input-control" value={slot.tank_id ?? ''} onChange={e => {
-                    const tank = rows('tanks').find(t => (t.tank_id ?? String(t.product_id)) === e.target.value);
+                    const tank = rows('tanks').find(t => (physicalTankId(t)) === e.target.value);
                     if (!tank) return;
-                    const next: ConfigRecord = { ...slot, tank_id: tank.tank_id ?? String(tank.product_id), product_id: tank.product_id, type: rows('products').find(p => p.id === tank.product_id)?.name ?? slot.type };
+                    const next: ConfigRecord = { ...slot, tank_id: physicalTankId(tank), product_id: tank.product_id ?? null, type: rows('products').find(p => p.id === tank.product_id)?.name ?? tank.label };
                     delete next.capacity_l;
                     next.maxima = { ...slot.maxima };
                     delete next.maxima.product_volume;
                     changeBranch({ ...branch, slots: branch.slots.map((s: ConfigRecord, k: number) => j === k ? next : s) });
-                  }}><option value="">{labels.choose}</option>{rows('tanks').map(t => <option key={t.tank_id ?? t.product_id} value={t.tank_id ?? String(t.product_id)}>{t.label} ({rows('products').find(p => p.id === t.product_id)?.name})</option>)}</select>
+                  }}><option value="">{labels.choose}</option>{rows('tanks').map(t => <option key={t.tank_id ?? t.product_id} value={physicalTankId(t)}>{t.label}{t.product_id != null ? ` (${rows('products').find(p => p.id === t.product_id)?.name ?? ''})` : ''}</option>)}</select>
                 </label>
                 {fields(slot, [number('slot', undefined, 1, 5461), { ...productField, optional: true }, { key: 'type' }, { key: 'tank_id', optional: true }, { key: 'label', optional: true }, { ...number('capacity_l', undefined, 0), step: 0.01, optional: true }], next => changeBranch({ ...branch, slots: branch.slots.map((s: ConfigRecord, k: number) => j === k ? next : s) }))}
                 <details><summary className="text-sm">{labels.maxima}</summary><div className="grid grid-cols-2 gap-2">
@@ -257,9 +282,9 @@ export default function SiteConfigPage() {
               <div className="flex justify-between gap-2">
                 {addButton(() => {
                   const slot = nextNumber(branch.slots, 'slot', 5461);
-                  const tank = rows('tanks').find(t => !config.atg.branches.some((b: ConfigRecord) => b.slots.some((s: ConfigRecord) => s.tank_id === (t.tank_id ?? String(t.product_id)))));
+                  const tank = rows('tanks').find(t => !config.atg.branches.some((b: ConfigRecord) => b.slots.some((s: ConfigRecord) => s.tank_id === (physicalTankId(t)))));
                   const product = rows('products').find(p => p.id === tank?.product_id);
-                  changeBranch({ ...branch, register_count: Math.max(branch.register_count ?? 12, slot * 12), slots: [...branch.slots, { slot, type: product?.name ?? '', ...(tank ? { tank_id: tank.tank_id ?? String(tank.product_id), product_id: tank.product_id } : {}) }] });
+                  changeBranch({ ...branch, register_count: Math.max(branch.register_count ?? 12, slot * 12), slots: [...branch.slots, { slot, type: product?.name ?? tank?.label ?? '', ...(tank ? { tank_id: physicalTankId(tank), product_id: tank.product_id } : {}) }] });
                 }, branch.slots.length >= 5461)}
                 {removeButton(() => section('atg', { ...config.atg, branches: config.atg.branches.filter((_: ConfigRecord, j: number) => i !== j) }))}
               </div>
@@ -301,7 +326,7 @@ export default function SiteConfigPage() {
         <span className="text-xs text-slate-500">{dirty ? labels.unsaved : config.site.name}</span>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" disabled={busy} onClick={() => save(false)}><Save size={15} />{labels.save}</Button>
-          <Button loading={busy} onClick={() => save(true)}><Download size={15} />{labels.download}</Button>
+          <Button loading={busy} disabled={guided && setupStep !== 5} onClick={() => save(true)}><Download size={15} />{labels.download}</Button>
         </div>
       </div>
     </div>

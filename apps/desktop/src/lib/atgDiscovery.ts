@@ -11,7 +11,7 @@ export type AtgTankSelection = {
   slot: number;
   tank_id?: string;
   label: string;
-  product_id: number;
+  product_id?: number | null;
   capacity_l: number;
 };
 
@@ -45,15 +45,15 @@ export function addScannedTanks(
     if (scannedSlotMapping(next, profile, selection.host, selection.slot)) continue;
     const product = products.find(p => p.id === selection.product_id);
     if (!selection.host.trim() || !Number.isInteger(selection.slot) || selection.slot < 1 || selection.slot * 12 > profile.register_count
-      || !selection.label.trim() || !product || !Number.isFinite(selection.capacity_l) || selection.capacity_l <= 0) {
+      || !selection.label.trim() || (selection.product_id != null && !product) || !Number.isFinite(selection.capacity_l) || selection.capacity_l <= 0) {
       throw new Error('invalidSelection');
     }
     let tank = selection.tank_id ? next.tanks.find(t => t.tank_id === selection.tank_id) : undefined;
-    if (selection.tank_id && (!tank || tank.product_id !== selection.product_id
+    if (selection.tank_id && (!tank
       || next.branches.some(b => b.slots.some(s => s.tank_id === tank!.tank_id)))) throw new Error('tankAlreadyMapped');
     if (tank && tank.current_l > selection.capacity_l) throw new Error('invalidSelection');
     if (!tank) {
-      tank = { tank_id: newId(), product_id: product.id, label: selection.label.trim(), capacity_l: selection.capacity_l, current_l: 0 };
+      tank = { tank_id: newId(), product_id: product?.id ?? null, label: selection.label.trim(), capacity_l: selection.capacity_l, current_l: 0 };
       next.tanks.push(tank);
     } else {
       tank.label = selection.label.trim();
@@ -74,7 +74,7 @@ export function addScannedTanks(
       }
     }
     branch.register_count = Math.max(branch.register_count, selection.slot * 12);
-    branch.slots.push({ slot: selection.slot, tank_id: tank.tank_id, product_id: product.id, type: product.name });
+    branch.slots.push({ slot: selection.slot, tank_id: tank.tank_id, product_id: tank.product_id, type: products.find(p => p.id === tank.product_id)?.name ?? tank.label });
   }
   return next;
 }

@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { IsString, IsNumber, IsInt, Min, Max, IsNotEmpty, IsPositive } from 'class-validator';
+import { IsString, IsNumber, IsInt, Min, Max, IsNotEmpty, IsPositive, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,8 +8,8 @@ export class CreateReservoirDto {
     @ApiProperty({ description: 'Station the reservoir belongs to', example: 'stn_abc123' }) @IsString() stationId: string;
     @ApiProperty({ description: 'Tank identifier unique within the station', example: 'tank1' }) @IsString() @IsNotEmpty() tankId: string;
     @ApiProperty({ description: 'Human-readable reservoir label', example: 'Tank 1 - AI-92' }) @IsString() @IsNotEmpty() label: string;
-    @ApiProperty({ description: 'Numeric product code stored in the tank', example: 92 }) @IsInt() @Min(0) @Max(255) productId: number;
-    @ApiProperty({ description: 'Human-readable product name', example: 'AI-92' }) @IsString() productName: string;
+    @ApiProperty({ description: 'Optional numeric product code', example: 92, required: false, nullable: true }) @IsOptional() @IsInt() @Min(0) @Max(255) productId?: number | null;
+    @ApiProperty({ description: 'Human-readable product name', example: 'AI-92', required: false }) @IsOptional() @IsString() productName?: string;
     @ApiProperty({ description: 'Tank capacity in litres', example: 50000 }) @IsNumber() @IsPositive() capacity: number;
 }
 
@@ -22,12 +22,12 @@ export class ReservoirsService {
         if (existing?.managedByStation) throw new BadRequestException('This tank is managed by the station configuration. Update it in the station ATG settings.');
         const reservoir = await this.prisma.reservoir.upsert({
             where: { stationId_tankId: { stationId: dto.stationId, tankId: dto.tankId } },
-            create: dto,
+            create: { ...dto, productId: dto.productId ?? null, productName: dto.productId == null ? '' : dto.productName ?? '' },
             update: {
                 label:       dto.label,
                 capacity:    dto.capacity,
                 productId:   dto.productId,
-                productName: dto.productName,
+                productName: dto.productId === null ? '' : dto.productName,
             },
         });
         // fillPercent is denormalized in incoming readings. Recalculate it when

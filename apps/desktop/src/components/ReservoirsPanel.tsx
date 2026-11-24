@@ -25,7 +25,7 @@ export function ReservoirsPanel() {
     return visible.map((tank, i) => ({
       ...tank,
       reading_status: tank.reading_status === "fresh" && now - (tank.updated_at_ms ?? 0) > tank.stale_after_ms ? "stale" : tank.reading_status,
-      product: productMap.get(tank.product_id),
+      product: (tank.product_id == null ? undefined : productMap.get(tank.product_id)),
       levelPct: tank.updated_at_ms != null && tank.capacity_l > 0
         ? clampPct((tank.current_l / tank.capacity_l) * 100)
         : 0,

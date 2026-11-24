@@ -18,7 +18,7 @@ export function DashboardTanksMini() {
     const visible = tanks;
 
     return visible.map((tank) => {
-      const product = productMap.get(tank.product_id);
+      const product = (tank.product_id == null ? undefined : productMap.get(tank.product_id));
       const levelPct = tank.updated_at_ms != null && tank.capacity_l > 0
         ? Math.max(0, Math.min(100, Math.round((tank.current_l / tank.capacity_l) * 100)))
         : 0;

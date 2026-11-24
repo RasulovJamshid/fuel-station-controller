@@ -73,3 +73,16 @@ test('rejects invalid choices and duplicate tank assignments without partially c
   }
   assert.equal(JSON.stringify(original), before);
 });
+
+
+test('adds or links named tanks without assigning a product', () => {
+  const added = addScannedTanks(config(), profile, [selection(1, { product_id: null, label: 'North tank' })], [], newId);
+  assert.equal(added.tanks[0].product_id, null);
+  assert.equal(added.branches[0].slots[0].type, 'North tank');
+  const existing = config();
+  existing.tanks.push({ tank_id: 'unassigned', product_id: null, label: 'East tank', capacity_l: 25000, current_l: 0 });
+  const linked = addScannedTanks(existing, profile, [selection(2, { product_id: null, tank_id: 'unassigned', label: 'East tank' })], [], newId);
+  assert.equal(linked.tanks.length, 1);
+  assert.equal(linked.branches[0].slots[0].tank_id, 'unassigned');
+  assert.equal(linked.branches[0].slots[0].product_id, null);
+});

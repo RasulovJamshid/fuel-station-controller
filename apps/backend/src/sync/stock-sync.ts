@@ -42,8 +42,9 @@ export async function storeStockRecord(tx: Prisma.TransactionClient, stationId: 
             if (ids.has(tankId)) throw new Error('Duplicate tank_id');
             ids.add(tankId);
             const capacity = number(tank.capacity_l, 'capacity_l', Number.MIN_VALUE);
-            const data = { monitoringEnabled: tank.monitoring_enabled !== false, staleAfterSecs: Math.floor(number(tank.stale_after_secs ?? 600, "stale_after_secs", 1)), label: text(tank.label, 'label'), productId: product(tank.product_id),
-                productName: text(tank.product_name, 'product_name'), capacity, managedByStation: true, active: true, deletedAt: null, configUpdatedAt: updatedAt };
+            const productId = tank.product_id == null ? null : product(tank.product_id);
+            const data = { monitoringEnabled: tank.monitoring_enabled !== false, staleAfterSecs: Math.floor(number(tank.stale_after_secs ?? 600, "stale_after_secs", 1)), label: text(tank.label, 'label'), productId,
+                productName: productId == null ? '' : text(tank.product_name, 'product_name'), capacity, managedByStation: true, active: true, deletedAt: null, configUpdatedAt: updatedAt };
             const old = await tx.reservoir.findUnique({ where: { stationId_tankId: { stationId, tankId } } });
             if (!old || !old.configUpdatedAt || old.configUpdatedAt <= updatedAt) {
                 await tx.reservoir.upsert({ where: { stationId_tankId: { stationId, tankId } }, create: { stationId, tankId, ...data }, update: data });
@@ -58,13 +59,14 @@ export async function storeStockRecord(tx: Prisma.TransactionClient, stationId: 
         // Older clients may omit product metadata and send ISO dates. A catalog
         // is optional: accepting a reading must never claim metadata ownership.
         const existing = await tx.reservoir.findUnique({ where: { stationId_tankId: { stationId, tankId } } });
-        const productId = product(p.product_id ?? existing?.productId ?? 0);
+        const rawProductId = p.product_id === undefined ? existing?.productId : p.product_id;
+        const productId = rawProductId == null ? null : product(rawProductId);
         const readingAt = typeof p.reading_at === 'string' ? new Date(p.reading_at) : date(p.reading_at);
         if (!Number.isFinite(readingAt.getTime())) throw new Error('Invalid reading_at');
         const volume = number(p.volume_litres, 'volume_litres', 0);
         let reservoir = existing;
         if (!reservoir) {
-            const nozzle = typeof p.product_name === 'string' && p.product_name.trim() ? null : await tx.nozzle.findFirst({
+            const nozzle = productId == null || (typeof p.product_name === 'string' && p.product_name.trim()) ? null : await tx.nozzle.findFirst({
                 where: { productId, position: { stationId } }, select: { productName: true },
             });
             const productName = typeof p.product_name === 'string' && p.product_name.trim() ? p.product_name : nozzle?.productName ?? '';

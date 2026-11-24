@@ -95,6 +95,25 @@ describe('dashboard service config validation', () => {
 
 
 describe('physical ATG tanks', () => {
+    it.each([undefined, null])('accepts named tanks with optional product %s and independent nozzle/sensor mapping', productId => {
+        const c = config();
+        c.tanks[0] = { ...c.tanks[0], tank_id: 'north', product_id: productId, label: 'North tank',
+            nozzle_sources: [{ fp_id: 'FP1', nozzle_index: 1 }] };
+        c.atg.branches[0].slots[0] = { slot: 1, tank_id: 'north', type: 'North tank' };
+        validateDashboardServiceConfig(c);
+        c.products.push({ id: 2, name: 'Diesel', color: '#000000', unit: 'litre' });
+        c.tanks[0].product_id = 2;
+        c.atg.branches[0].slots[0].product_id = 1;
+        validateDashboardServiceConfig(c);
+        c.tanks[0].nozzle_sources[0].nozzle_index = 5;
+        expect(() => validateDashboardServiceConfig(c)).toThrow(BadRequestException);
+    });
+    it('checks sensor capacity even when the tank has no product', () => {
+        const c = config();
+        c.tanks[0].tank_id = 'north'; c.tanks[0].product_id = null;
+        c.atg.branches[0].slots[0] = { slot: 1, tank_id: 'north', type: 'North', capacity_l: 5 };
+        expect(() => validateDashboardServiceConfig(c)).toThrow();
+    });
     it('accepts twelve tanks sharing one product and controllers sharing an external station ID', () => {
         const c=config();
         c.tanks=Array.from({length:12},(_,i)=>({tank_id:`tank-${i+1}`,product_id:1,label:`Tank ${i+1}`,capacity_l:25000,current_l:0}));

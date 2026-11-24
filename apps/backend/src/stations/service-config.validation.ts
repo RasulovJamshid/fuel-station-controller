@@ -37,7 +37,7 @@ const schema = object({
     })).required(),
     tanks: Joi.array().items(object({
         tank_id: text(), nozzle_sources: Joi.array().items(object({ fp_id: text().required(), nozzle_index: byte().min(1).required() })),
-        product_id: byte().required(), label: text().required(), capacity_l: positive().required(), current_l: Joi.number().min(0).required(),
+        product_id: byte().allow(null), label: text().required(), capacity_l: positive().required(), current_l: Joi.number().min(0).required(),
     })),
     atg: object({
         enabled: Joi.boolean(), export_enabled: Joi.boolean(),
@@ -98,6 +98,7 @@ export function validateDashboardServiceConfig(value: Record<string, any>): void
         for (const n of fp.nozzles) {
             if (!products.has(n.product_id)) errors.push(`${fp.id}/${n.index}: unknown product ${n.product_id}`);
             if (n.active && n.price === 0) errors.push(`${fp.id}/${n.index}: active nozzle price must be positive`);
+            if (protocol === 'azt2_0' && fp.active && n.active && (n.price > 99990 || n.price % 10 !== 0)) errors.push(`${fp.id}/${n.index}: AZT price must be a multiple of 10, at most 99990`);
             if (protocol === 'shelf_v2_2' && n.active && n.price > 65535) errors.push(`${fp.id}/${n.index}: SHELF two-byte wire price maximum is 65535`);
             if (protocol === 'shelf_v2_2' && n.active && n.index > 5) errors.push(`${fp.id}/${n.index}: SHELF nozzle index must be the physical gun number 1–5`);
             if (fp.active && n.active && ['azt2_0', 'texnouz_bluesky', 'shelf_v2_2'].includes(protocol)) {
@@ -110,18 +111,18 @@ export function validateDashboardServiceConfig(value: Record<string, any>): void
         }
     }
     for (const tank of tankRows) {
-        const tankId = tank.tank_id ?? String(tank.product_id);
+        const tankId = tank.tank_id ?? (tank.product_id == null ? tank.label : String(tank.product_id));
         if (!tankId.trim() || tankIds.has(tankId)) errors.push('Tank IDs must be non-empty and unique');
         tankIds.add(tankId);
-        if (!tank.tank_id && tankRows.filter((t: any) => t.product_id === tank.product_id).length > 1) errors.push('Multiple tanks for one product require explicit tank IDs');
+        if (!tank.tank_id && tank.product_id != null && tankRows.filter((t: any) => t.product_id === tank.product_id).length > 1) errors.push('Multiple tanks for one product require explicit tank IDs');
         if (tank.current_l > tank.capacity_l) errors.push(`${tank.label}: starting volume exceeds capacity`);
         for (const source of tank.nozzle_sources ?? []) {
             const key = `${source.fp_id}/${source.nozzle_index}`;
             if (nozzleSources.has(key)) errors.push('Nozzle source assigned to multiple tanks');
             nozzleSources.add(key);
-            if (!value.fueling_positions.some((fp: any) => fp.id === source.fp_id && fp.nozzles.some((n: any) => n.index === source.nozzle_index && n.product_id === tank.product_id))) errors.push('Tank nozzle source must have the same product');
+            if (!value.fueling_positions.some((fp: any) => fp.id === source.fp_id && fp.nozzles.some((n: any) => n.index === source.nozzle_index))) errors.push('Tank nozzle source must reference an existing nozzle');
         }
-        if (!products.has(tank.product_id)) errors.push(`${tank.label}: unknown product ${tank.product_id}`);
+        if (tank.product_id != null && !products.has(tank.product_id)) errors.push(`${tank.label}: unknown product ${tank.product_id}`);
         if (!tank.label.trim()) errors.push('Tank label cannot be blank');
     }
     const mappedTanks = new Set<string>();
@@ -155,12 +156,14 @@ export function validateDashboardServiceConfig(value: Record<string, any>): void
                 if (slotIds.has(slot.tank_id)) errors.push(`${label}: duplicate tank ID`);
                 slotIds.add(slot.tank_id);
             }
-            if (slot.product_id != null) {
-                const candidates = tankRows.filter((t: any) => t.product_id === slot.product_id && (!slot.tank_id || !t.tank_id || t.tank_id === slot.tank_id));
-                if (!products.has(slot.product_id) || candidates.length !== 1) errors.push(`${label}: select one matching physical tank`);
+            const byId = slot.tank_id ? tankRows.find((t: any) => (t.tank_id ?? (t.product_id == null ? t.label : String(t.product_id))) === slot.tank_id) : undefined;
+            if (slot.product_id != null && !products.has(slot.product_id)) errors.push(`${label}: unknown product ${slot.product_id}`);
+            if (slot.product_id != null || byId) {
+                const candidates = byId ? [byId] : tankRows.filter((t: any) => slot.product_id != null && t.product_id === slot.product_id && (!slot.tank_id || !t.tank_id));
+                if (candidates.length !== 1) errors.push(`${label}: select one matching physical tank`);
                 else {
                     const tank = candidates[0];
-                    const id = tank.tank_id ?? String(tank.product_id);
+                    const id = tank.tank_id ?? (tank.product_id == null ? tank.label : String(tank.product_id));
                     if (mappedTanks.has(id)) errors.push(`${label}: tank is mapped more than once`);
                     mappedTanks.add(id);
                     if ([slot.capacity_l, slot.maxima?.product_volume].some(capacity => capacity != null && Math.abs(capacity - tank.capacity_l) > 0.01)) errors.push(`${label}: capacity conflicts with tank capacity`);

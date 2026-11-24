@@ -30,7 +30,8 @@ pub struct TankConfig {
     pub tank_id: String,
     #[serde(default)]
     pub nozzle_sources: Vec<TankNozzleSource>,
-    pub product_id: u8,
+    #[serde(default)]
+    pub product_id: Option<u8>,
     pub label: String,
     pub capacity_l: f64,
     pub current_l: f64,
@@ -39,7 +40,9 @@ pub struct TankConfig {
 impl TankConfig {
     pub fn id(&self) -> String {
         if self.tank_id.is_empty() {
-            self.product_id.to_string()
+            self.product_id
+                .map(|id| id.to_string())
+                .unwrap_or_else(|| self.label.clone())
         } else {
             self.tank_id.clone()
         }
@@ -580,7 +583,7 @@ pub struct AtgSlot {
     #[serde(default)]
     pub label: Option<String>,
     /// Physical tank capacity in litres for the UI fill-percent calculation.
-    /// If absent the value is taken from the matching TankConfig (by product_id) or maxima.product_volume.
+    /// If absent, use the physical tank's capacity (legacy product matching is supported).
     #[serde(default)]
     pub capacity_l: Option<f64>,
     /// Optional per-parameter capacity values for percent calculation in the integration POST.
@@ -638,17 +641,17 @@ impl SiteConfig {
                     .iter()
                     .flat_map(|a| &a.branches)
                     .flat_map(|b| &b.slots)
-                    .filter(|s| s.product_id == Some(tank.product_id))
+                    .filter(|s| tank.product_id.is_some() && s.product_id == tank.product_id)
                     .collect();
                 if slots.len() > 1 {
-                    bail!("Product {} has multiple ATG tanks: assign explicit tank_id to tanks and slots", tank.product_id);
+                    bail!("Tank {} has multiple ATG slots: assign explicit tank_id to tanks and slots", tank.label);
                 }
                 tank.tank_id = slots
                     .first()
                     .and_then(|s| s.tank_id.as_ref().or(s.label.as_ref()))
                     .filter(|s| !s.trim().is_empty())
                     .cloned()
-                    .unwrap_or_else(|| tank.product_id.to_string());
+                    .unwrap_or_else(|| tank.id());
             }
         }
         let tanks = self.tanks.clone();
@@ -658,7 +661,7 @@ impl SiteConfig {
                     if slot.tank_id.is_none() {
                         let matches: Vec<_> = tanks
                             .iter()
-                            .filter(|t| Some(t.product_id) == slot.product_id)
+                            .filter(|t| slot.product_id.is_some() && t.product_id == slot.product_id)
                             .collect();
                         if matches.len() > 1 {
                             bail!("ATG slot {} needs an explicit tank_id", slot.slot);
@@ -678,13 +681,14 @@ impl SiteConfig {
             if let Some(t) = self
                 .tanks
                 .iter()
-                .find(|t| t.id() == *id && Some(t.product_id) == slot.product_id)
+                .find(|t| t.id() == *id)
             {
                 return Some(t);
             }
         }
         let mut tanks = self.tanks.iter().filter(|t| {
-            Some(t.product_id) == slot.product_id
+            slot.product_id.is_some()
+                && t.product_id == slot.product_id
                 && (slot.tank_id.is_none() || t.tank_id.is_empty())
         });
         let first = tanks.next()?;
@@ -734,7 +738,7 @@ impl SiteConfig {
             .fueling_positions
             .iter()
             .any(|fp| fp.nozzles.iter().any(|n| n.product_id == id));
-        if in_use || self.tanks.iter().any(|t| t.product_id == id) {
+        if in_use || self.tanks.iter().any(|t| t.product_id == Some(id)) {
             bail!("product {id} is assigned to a nozzle or tank — remove assignments first");
         }
         let before = self.products.len();
@@ -889,7 +893,9 @@ impl SiteConfig {
         let mut ids = HashSet::new();
         let mut sources = HashSet::new();
         for t in &self.tanks {
-            if !self.products.iter().any(|p| p.id == t.product_id) {
+            if t.product_id
+                .is_some_and(|id| !self.products.iter().any(|p| p.id == id))
+            {
                 bail!("Tank '{}' references unknown product", t.label);
             }
             if !ids.insert(t.id()) || t.id().trim().is_empty() {
@@ -902,9 +908,10 @@ impl SiteConfig {
                 .count()
                 > 1
                 && t.tank_id.is_empty()
+                && t.product_id.is_some()
             {
                 bail!(
-                    "Multiple tanks for product {} require explicit tank_id",
+                    "Multiple tanks for product {:?} require explicit tank_id",
                     t.product_id
                 );
             }
@@ -926,10 +933,10 @@ impl SiteConfig {
                         && fp
                             .nozzles
                             .iter()
-                            .any(|n| n.index == source.nozzle_index && n.product_id == t.product_id)
+                            .any(|n| n.index == source.nozzle_index)
                 }) {
                     bail!(
-                        "Tank {} nozzle source must reference a nozzle with the same product",
+                        "Tank {} nozzle source must reference an existing nozzle",
                         t.id()
                     );
                 }
@@ -1046,6 +1053,8 @@ impl SiteConfig {
                             pid
                         );
                     }
+                }
+                if slot.product_id.is_some() || self.tank_for_slot(slot).is_some() {
                     let tank = self.tank_for_slot(slot).with_context(|| {
                         format!(
                             "ATG slot {} must reference one matching physical tank",

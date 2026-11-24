@@ -101,8 +101,9 @@ async fn create_delivery(
             .tanks
             .iter()
             .filter(|t| {
-                t.product_id == cmd.product_id
-                    && cmd.tank_id.as_ref().is_none_or(|id| t.id() == *id)
+                cmd.tank_id
+                    .as_ref()
+                    .map_or(t.product_id == Some(cmd.product_id), |id| t.id() == *id)
             })
             .collect();
         if tanks.len() != 1 {
@@ -178,10 +179,14 @@ async fn tank_contexts(
     let mut groups: std::collections::BTreeMap<u8, Vec<&site_config::TankConfig>> =
         std::collections::BTreeMap::new();
     for tank in &cfg.tanks {
-        if product_id.is_none_or(|p| p == tank.product_id)
+        // Product reconciliation remains opt-in; unassigned tanks still have live ATG readings.
+        let Some(tank_product) = tank.product_id else {
+            continue;
+        };
+        if product_id.is_none_or(|p| p == tank_product)
             && tank_id.is_none_or(|id| id == tank.id())
         {
-            groups.entry(tank.product_id).or_default().push(tank);
+            groups.entry(tank_product).or_default().push(tank);
         }
     }
     if groups.is_empty() {
@@ -189,7 +194,7 @@ async fn tank_contexts(
     }
     groups.into_iter().map(|(pid,tanks)| {
         let source= tanks[0];
-        if tank_id.is_some() && cfg.tanks.iter().filter(|t|t.product_id==pid).count()>1 && source.nozzle_sources.is_empty() {
+        if tank_id.is_some() && cfg.tanks.iter().filter(|t|t.product_id==Some(pid)).count()>1 && source.nozzle_sources.is_empty() {
             return Err(bad("Per-tank reconciliation requires nozzle_sources for products stored in multiple tanks; omit tank_id for a combined product balance"));
         }
         let readings:Option<Vec<f64>>=tanks.iter().map(|t| snapshots.iter().find(|s|s.tank_id==t.id() && s.reading_status=="fresh").map(|s|s.current_l)).collect();

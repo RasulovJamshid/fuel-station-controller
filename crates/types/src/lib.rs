@@ -444,7 +444,7 @@ pub struct TankSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
     pub stale_after_ms: i64,
-    pub product_id: u8,
+    pub product_id: Option<u8>,
     pub label: String,
     pub capacity_l: f64,
     pub current_l: f64,
@@ -464,7 +464,7 @@ pub struct TankSnapshot {
 pub struct TankLiveLevel {
     pub tank_id: String,
     pub last_error: Option<String>,
-    pub product_id: u8,
+    pub product_id: Option<u8>,
     /// Current fuel volume in litres from the Modbus probe.
     pub current_l: f64,
     /// Fuel temperature in °C.

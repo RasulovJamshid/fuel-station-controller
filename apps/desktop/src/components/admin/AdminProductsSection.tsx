@@ -7,6 +7,7 @@ import type {
 } from "../../types/api";
 import { useAppStore } from "../../store";
 import { formatMoney, parseMoney } from "../../lib/money";
+import { nextAvailableNozzleIndex } from "../../lib/nozzleAssignments";
 
 export interface LiftedNozzle {
   fpId: string;
@@ -209,16 +210,18 @@ export function AdminProductsSection({
   };
 
   const addNozzle = () => {
-    const list = positionNozzles[selectedFp] ?? [];
-    const nextIndex =
-      list.length === 0 ? 1 : Math.max(...list.map((n) => n.index)) + 1;
-    setPositionNozzles((prev) => ({
-      ...prev,
-      [selectedFp]: [
-        ...list,
-        newNozzleDraft(nextIndex, defaultProductId as number),
-      ],
-    }));
+    setPositionNozzles((prev) => {
+      const list = prev[selectedFp] ?? [];
+      const nextIndex = nextAvailableNozzleIndex(list);
+      if (nextIndex === null) return prev;
+      return {
+        ...prev,
+        [selectedFp]: [
+          ...list,
+          newNozzleDraft(nextIndex, defaultProductId as number),
+        ],
+      };
+    });
   };
 
   const removeNozzle = (index: number) => {
@@ -571,7 +574,7 @@ export function AdminProductsSection({
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || nextAvailableNozzleIndex(currentNozzles) === null}
               onClick={addNozzle}
               className="rounded-xl border border-border-primary bg-bg-primary px-5 py-2 text-sm font-bold text-text-primary shadow-sm hover:bg-bg-tertiary transition-all"
             >

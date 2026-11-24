@@ -547,6 +547,7 @@
         "product": "Mahsulot",
         "capacity": "Sig‘im (l)",
         "newTank": "Yangi rezervuar",
+        "noProduct": "Mahsulot belgilanmagan",
         "chooseProduct": "Mahsulotni tanlang",
         "alreadyAdded": "Sozlangan",
         "noTanks": "Bu registrlar oralig‘ida to‘g‘ri ko‘rsatkichlar topilmadi.",

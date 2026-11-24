@@ -81,7 +81,7 @@ export interface TankSnapshot {
   reading_status: 'fresh' | 'stale' | 'offline' | 'waiting' | 'disabled';
   stale_after_ms: number;
   last_error?: string;
-  product_id: number;
+  product_id: number | null;
   label: string;
   capacity_l: number;
   current_l: number;
@@ -412,7 +412,7 @@ export interface AtgSlotInfo {
   slot: number;
   tank_id?: string;
   type: string;
-  product_id?: number;
+  product_id?: number | null;
   label?: string;
   capacity_l?: number;
   maxima?: Record<string, number>;
@@ -434,7 +434,7 @@ export interface AtgBranchInfo {
 }
 
 export interface TankConfig {
-  tank_id: string; product_id: number; label: string; capacity_l: number; current_l: number;
+  tank_id: string; product_id?: number | null; label: string; capacity_l: number; current_l: number;
   nozzle_sources?: { fp_id: string; nozzle_index: number }[];
 }
 export interface AtgConfigSnapshot {

@@ -1,0 +1,1 @@
+ALTER TABLE "Reservoir" ALTER COLUMN "productId" DROP NOT NULL;

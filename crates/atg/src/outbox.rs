@@ -25,7 +25,7 @@ async fn enqueue(
 pub async fn catalog(pool: &SqlitePool, cfg: &SiteConfig) -> anyhow::Result<()> {
     let tanks:Vec<_>=cfg.tanks.iter().map(|t| json!({"tank_id":t.id(),"product_id":t.product_id,
         "label":t.label,"capacity_l":t.capacity_l,"stale_after_secs":cfg.atg.as_ref().map(|a|a.stale_after_ms()/1000).unwrap_or(600),
-        "monitoring_enabled":cfg.atg.iter().filter(|a|a.enabled).flat_map(|a|&a.branches).flat_map(|b|&b.slots).any(|s|cfg.tank_for_slot(s).is_some_and(|target|target.id()==t.id())),"product_name":cfg.product(t.product_id).map(|p| p.name.as_str()).unwrap_or("")})).collect();
+        "monitoring_enabled":cfg.atg.iter().filter(|a|a.enabled).flat_map(|a|&a.branches).flat_map(|b|&b.slots).any(|s|cfg.tank_for_slot(s).is_some_and(|target|target.id()==t.id())),"product_name":t.product_id.and_then(|id| cfg.product(id)).map(|p| p.name.as_str()).unwrap_or("")})).collect();
     let payload = json!({"tanks":tanks,"updated_at":chrono::Utc::now().timestamp_millis()});
     let mut tx = pool.begin().await?;
     enqueue(&mut tx, "tank_catalog", &cfg.site.id, &payload).await?;

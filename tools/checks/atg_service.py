@@ -132,7 +132,25 @@ def main():
         eventually(lambda:any(p==expected and ok for p,auth,ok in state['exports']),30)
         assert all(auth is None for _,auth,ok in state['exports'] if ok)
         eventually(lambda:all(t['reading_status']=='fresh' for t in snapshot()))
-        print('PASS: authenticated config, 12 tanks / one product, batched CDAB reads, metre conversion, empty tanks, failed export isolation, offline reconciliation, physical delivery IDs, disable/re-enable, credential clearing, durable restart replay')
+        # Physical monitoring and nozzle assignments do not require matching products.
+        status,result=call('/admin/auth',{'pin':'0000'});assert status==200,result
+        token=result['token']
+        tanks[0]['product_id']=None;tanks[0]['label']='North underground'
+        tanks[0]['nozzle_sources']=[{'fp_id':cfg['fueling_positions'][0]['id'],'nozzle_index':cfg['fueling_positions'][0]['nozzles'][0]['index']}]
+        branch['slots'][0]['product_id']=None;branch['slots'][0]['type']='North underground'
+        tanks[1]['product_id']=cfg['products'][1]['id']
+        status,result=call('/admin/atg-config',{'tanks':tanks,'branches':[branch],'export_enabled':False},token)
+        assert status==200,result
+        readings=eventually(lambda:(lambda r:r if all(t['reading_status']=='fresh' for t in r) else False)(snapshot()))
+        assert readings[0]['product_id'] is None and readings[0]['label']=='North underground' and readings[0]['current_l']==0
+        assert readings[1]['product_id']==cfg['products'][1]['id'] and readings[1]['current_l']==100
+        assert call('/deliveries',{'product_id':pid,'tank_id':'tank-1','delivered_l':10})[0]==200
+        assert db_value("SELECT count(*) FROM sync_queue WHERE entity_type='reservoir_reading' AND json_extract(payload_json,'$.tank_id')='tank-1' AND json_type(payload_json,'$.product_id')='null'")>0
+        proc.terminate();proc.wait(timeout=10);proc=None
+        proc=start();eventually(lambda:call('/health')[0]==200)
+        readings=eventually(lambda:(lambda r:r if all(t['reading_status']=='fresh' for t in r) else False)(snapshot()))
+        assert readings[0]['product_id'] is None and readings[0]['tank_id']=='tank-1' and readings[0]['label']=='North underground'
+        print('PASS: authenticated config, 12 tanks, batched CDAB reads, metre conversion, empty tanks, failed export isolation, offline reconciliation, physical delivery IDs, disable/re-enable, credential clearing, durable restart replay, productless named tanks, independent nozzle mappings, optional-product sync and restart')
         print('Artifacts:',work)
     finally:
         if proc:

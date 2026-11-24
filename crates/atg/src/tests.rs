@@ -29,6 +29,52 @@ fn accepts_twelve_independent_tanks_for_one_product() {
     assert!(tanks.iter().all(|t| t.reading_status == "waiting"));
     assert_ne!(tanks[0].tank_id, tanks[1].tank_id);
 }
+
+#[test]
+fn named_tanks_keep_readings_without_products_or_matching_nozzle_grades() {
+    let mut cfg = config(2);
+    cfg.tanks[0].product_id = None;
+    cfg.tanks[0].label = "North underground tank".into();
+    cfg.tanks[0].nozzle_sources = vec![site_config::TankNozzleSource {
+        fp_id: cfg.fueling_positions[0].id.clone(),
+        nozzle_index: cfg.fueling_positions[0].nozzles[0].index,
+    }];
+    cfg.atg.as_mut().unwrap().branches[0].slots[0].product_id = None;
+    cfg.atg.as_mut().unwrap().branches[0].slots[0].fuel_type = cfg.tanks[0].label.clone();
+    cfg.normalize_tank_ids().unwrap();
+    cfg.validate().unwrap();
+    let encoded = serde_json::to_string(&cfg).unwrap();
+    let mut cfg: SiteConfig = serde_json::from_str(&encoded).unwrap();
+    let levels = HashMap::from([("tank-1".into(), TankLiveLevel {
+        tank_id: "tank-1".into(), product_id: None, current_l: 0.0,
+        temperature_c: 21.0, water_l: 0.0, updated_at_ms: 1000, last_error: None,
+    })]);
+    let live = snapshots(&cfg, &levels, 2000);
+    assert_eq!(live[0].product_id, None);
+    assert_eq!(live[0].label, "North underground tank");
+    assert_eq!(live[0].reading_status, "fresh");
+    assert_eq!(live[0].current_l, 0.0);
+    // Product metadata may change without breaking physical sensor identity.
+    cfg.tanks[0].product_id = Some(cfg.products[1].id);
+    cfg.validate().unwrap();
+    assert_eq!(snapshots(&cfg, &levels, 2000)[0].reading_status, "fresh");
+    cfg.tanks[0].nozzle_sources[0].nozzle_index = 255;
+    assert!(cfg.validate().is_err());
+}
+
+#[test]
+fn omitted_product_uses_custom_name_and_freezes_identity_before_rename() {
+    let mut value = serde_json::to_value(config(1)).unwrap();
+    value["tanks"][0].as_object_mut().unwrap().remove("product_id");
+    value["tanks"][0].as_object_mut().unwrap().remove("tank_id");
+    value["atg"] = serde_json::Value::Null;
+    let mut cfg: SiteConfig = serde_json::from_value(value).unwrap();
+    cfg.normalize_tank_ids().unwrap();
+    cfg.validate().unwrap();
+    assert_eq!(cfg.tanks[0].id(), "Tank 1");
+    cfg.tanks[0].label = "Renamed".into();
+    assert_eq!(cfg.tanks[0].id(), "Tank 1");
+}
 #[test]
 fn validates_mapping_capacity_and_register_bounds() {
     let base = config(2);

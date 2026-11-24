@@ -1,9 +1,36 @@
 # ATG configuration and deployment
 
 ATG monitoring is separate from dispenser protocols. Each physical tank has one
-stable `tank_id`, a product, a capacity in litres, and an opening volume. Several
+stable `tank_id`, a custom name, an optional product, a capacity in litres, and an opening volume. Several
 tanks may contain the same product. New editor entries default to 25,000 L; enter
 the actual capacity of each tank.
+
+## Guided web configuration
+
+Open a station's **Configuration → Guided setup**. The six steps cover connection,
+pump/nozzle addresses, named tanks, ATG sensors, nozzle products, and review/export.
+Select any supported pump protocol; its serial defaults and address fields are
+shown automatically. Field errors identify the affected pump, nozzle or sensor.
+Changing steps retains the draft. **All settings** keeps the full editor available.
+The existing desktop admin, controller discovery and local editing remain available.
+
+Download the reviewed configuration and install it as `site.config.json`. Saving in
+the web app does not push changes to a running station. For a new installation,
+install the file before the service's first start. Existing stations retain their
+products and nozzle assignments in the local database; use desktop administration
+to change those entries rather than expecting a file replacement to overwrite them.
+
+`tanks[].product_id` may be omitted or `null`. A tank and its ATG slot are linked by
+`tank_id`, independently of product metadata. The wizard supplies the tank name as
+the sensor's external type when no product is selected. Nozzle products are chosen
+independently; tank product differences and low/zero volumes never block dispensing.
+Product-based stock reconciliation still uses tanks with a product assignment;
+unassigned tanks continue to display and synchronize their physical readings.
+
+Before using unassigned tanks, deploy backend migration
+`20261123000000_optional_tank_product`, regenerate Prisma Client, and upgrade the
+station service and desktop together. The migration only makes the reservoir
+product column nullable; existing tank IDs and readings are retained.
 
 ## Configuration
 
@@ -75,7 +102,7 @@ configure the actual installed probes explicitly.
 
 After **Test controller** or **Find controllers**, select the detected slots to
 add. Each selection can create a tank or link an existing unmapped tank. Set its
-name, product and actual capacity, then choose **Add selected** and **Save ATG
+name, optional product and actual capacity, then choose **Add selected** and **Save ATG
 settings**. Configured probes are marked as already added. Tank names remain
 editable in the Tanks section without changing their IDs or history. Importing
 another controller preserves the mappings of existing controllers.
@@ -136,7 +163,7 @@ or catalog messages are required for legacy reading ingestion.
 
 - Original `reservoir_reading` messages remain accepted. A product ID can be
   omitted when older clients do not send it; existing tank metadata supplies it,
-  with the original zero fallback for a newly discovered tank. Numeric timestamps
+  or remains unassigned for a newly discovered tank. Numeric timestamps
   and ISO date strings are supported. Height values retain their submitted units;
   the server cannot infer or correct a legacy controller's physical unit setting.
 - Existing tank IDs, labels and capacities are preserved. Newly discovered tanks

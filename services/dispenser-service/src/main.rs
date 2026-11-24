@@ -42,6 +42,9 @@ struct Cli {
 enum Commands {
     /// Run HTTP + WebSocket API and poll loop (foreground).
     Run,
+    /// Validate configuration without opening devices, starting workers, or writing files.
+    /// Prints only the metadata needed by the Windows installer (no credentials).
+    ValidateConfig,
     /// Read-only AZT RS-485 bus scan (addresses 1..=15) → JSON report.
     /// Requires the serial port to be free (stop the running service first).
     Scan {
@@ -67,6 +70,19 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Run => run(cli.config).await,
+        Commands::ValidateConfig => {
+            let (cfg, path) = load(Some(cli.config))?;
+            println!("{}", serde_json::json!({
+                "site": cfg.site.id,
+                "port": cfg.service.port,
+                "db_path": cfg.service.db_path,
+                "serial_log_file": cfg.service.serial_log_file,
+                "protocol": cfg.connection.protocol,
+                "serial_port": cfg.connection.port,
+                "config_path": path,
+            }));
+            Ok(())
+        }
         Commands::Scan { out } => scan::run_scan(cli.config, out).await,
         Commands::ReinitAuth => reinit_auth(cli.config).await,
         #[cfg(windows)]

@@ -18,12 +18,12 @@ try {
     try {
         $locked = $mutex.WaitOne(0)
         if (!$locked) { throw 'Another station installer is already running.' }
-        Invoke-StationInstall -PayloadDir $PayloadDir -InstallDir $InstallDir -ConfigPath $ConfigPath -MaintenanceConfirmed:$MaintenanceConfirmed
+        $result = Invoke-StationInstall -PayloadDir $PayloadDir -InstallDir $InstallDir -ConfigPath $ConfigPath -MaintenanceConfirmed:$MaintenanceConfirmed
     } finally {
         if ($locked) { $mutex.ReleaseMutex() }
         $mutex.Dispose()
     }
-    if ($ResultFile) { 'Station installed and local health check passed.' | Set-Content -LiteralPath $ResultFile -Encoding UTF8 }
+    if ($ResultFile) { $result | Set-Content -LiteralPath $ResultFile -Encoding UTF8 }
     exit 0
 } catch {
     if ($ResultFile) { $_.ToString() | Set-Content -LiteralPath $ResultFile -Encoding UTF8 }

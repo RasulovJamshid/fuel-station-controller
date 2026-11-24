@@ -120,8 +120,7 @@ function Get-StationPlan([string] $InstallDir, [string] $ConfigPath, $Existing) 
 
 function Assert-SetupPayload([string] $PayloadDir) {
     $manifest = Get-Content -LiteralPath (Join-Path $PayloadDir 'payload.json') -Raw | ConvertFrom-Json
-    $required = @('dispenser-service.exe', 'azs-desktop.exe', 'nssm.exe',
-        'MicrosoftEdgeWebView2RuntimeInstallerX64.exe', 'Launch-Desktop.ps1')
+    $required = @('dispenser-service.exe', 'azs-desktop.exe', 'nssm.exe', 'Launch-Desktop.ps1')
     if (@($manifest.files).Count -ne $required.Count) { throw 'Incomplete installer payload manifest.' }
     foreach ($name in $required) {
         $entry = @($manifest.files | Where-Object { $_.name -ceq $name })
@@ -137,19 +136,9 @@ function Assert-SetupPayload([string] $PayloadDir) {
 function Test-MachineWebView {
     $key = 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
     $value = Get-ItemProperty -LiteralPath "HKLM:\$key" -ErrorAction SilentlyContinue
-    return ($value -and $value.PSObject.Properties['pv'] -and [version]$value.pv -gt [version]'0.0.0.0')
-}
-
-function Install-StationWebView([string] $PayloadDir) {
-    if (Test-MachineWebView) { return }
-    $file = Join-Path $PayloadDir 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
-    $signature = Get-AuthenticodeSignature -LiteralPath $file
-    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation(?:,|$)') {
-        throw 'The bundled WebView2 installer does not have a valid Microsoft signature.'
-    }
-    Write-Host 'Installing the bundled offline WebView2 runtime...'
-    $null = Invoke-SetupProcess $file @('/silent', '/install') 600
-    if (!(Test-MachineWebView)) { throw 'WebView2 installation could not be verified. Station service was not changed.' }
+    $version = $null
+    return ($value -and $value.PSObject.Properties['pv'] -and
+        [version]::TryParse([string]$value.pv, [ref]$version) -and $version -gt [version]'0.0.0.0')
 }
 
 function Assert-DesktopClosed([string] $InstallDir) {
@@ -294,7 +283,7 @@ function Invoke-StationInstall([string] $PayloadDir, [string] $InstallDir, [stri
         throw "Existing station database is missing: $database. Setup will not create a replacement."
     }
     Assert-DesktopClosed $plan.InstallDir
-    Install-StationWebView $PayloadDir
+    $hasWebView = Test-MachineWebView
     $backup = $null
     $touched = @()
     $serviceMayExist = $false
@@ -342,6 +331,11 @@ function Invoke-StationInstall([string] $PayloadDir, [string] $InstallDir, [stri
         Wait-StationHealth $plan $metadata
         try { New-StationShortcut $plan } catch { Write-Warning "Service installed successfully, but desktop shortcut could not be created: $_" }
         Write-Host "Station $($metadata.site) is running. Configuration: $($plan.ConfigPath)"
+        $result = 'Station installed and local health check passed. Open AZS Manager using the desktop shortcut.'
+        if (!$hasWebView) {
+            $result += ' WebView2 was not detected for all users. The desktop requires an existing WebView2 runtime; install it separately if needed. Setup did not download or install it.'
+        }
+        return $result
     } catch {
         $failure = $_
         if ($launchAttempted) {

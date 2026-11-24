@@ -45,6 +45,7 @@ var
   MaintenancePage: TInputOptionWizardPage;
   ExistingService: Boolean;
   Installed: Boolean;
+  CompletionMessage: String;
 
 function Quoted(Value: String): String;
 begin
@@ -76,6 +77,12 @@ begin
   MaintenancePage.Values[0] := ExpandConstant('{param:MAINTENANCE|0}') = '1';
   WizardForm.FinishedLabel.Caption :=
     'The station service is running and its local health check passed. Open AZS Manager using the desktop shortcut.';
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if (CurPageID = wpFinished) and (CompletionMessage <> '') then
+    WizardForm.FinishedLabel.Caption := CompletionMessage;
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
@@ -128,5 +135,9 @@ begin
     else Result := 'Station setup failed. Review the installer log.';
     Log(Result);
   end
-  else Installed := True;
+  else
+  begin
+    Installed := True;
+    if LoadStringFromFile(ResultPath, Detail) then CompletionMessage := UTF8Decode(Detail);
+  end;
 end;

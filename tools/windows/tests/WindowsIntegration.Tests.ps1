@@ -31,13 +31,11 @@ $config | Add-Member -NotePropertyName atg -NotePropertyValue $null -Force
 [IO.File]::WriteAllText($sourceConfig, ($config | ConvertTo-Json -Depth 40), (New-Object Text.UTF8Encoding($false)))
 Copy-Item -LiteralPath $ServiceExe -Destination (Join-Path $payload 'dispenser-service.exe')
 Copy-Item -LiteralPath $NssmExe -Destination (Join-Path $payload 'nssm.exe')
-# Desktop/runtime are never launched by this service lifecycle test.
+# The desktop is never launched by this service lifecycle test.
 Copy-Item -LiteralPath $NssmExe -Destination (Join-Path $payload 'azs-desktop.exe')
-Set-Content -LiteralPath (Join-Path $payload 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe') 'unused'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\Launch-Desktop.ps1') -Destination $payload
 $files = @(Get-ChildItem $payload -File | ForEach-Object { @{ name = $_.Name; sha256 = (Get-FileHash $_.FullName).Hash } })
 @{ files = $files } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $payload 'payload.json') -Encoding UTF8
-function Install-StationWebView($PayloadDir) { }
 function New-StationShortcut($Plan) { }
 
 try {
@@ -65,7 +63,7 @@ try {
         throw 'Upgrade changed station configuration.'
     }
     # Exercise the compiled installer, including extraction, argument passing,
-    # prerequisite installation, maintenance consent and failure propagation.
+    # maintenance consent and failure propagation.
     $null = Invoke-SetupProcess $InstallerExe @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/SP-', '/NORESTART',
         "/DIR=$install", '/MAINTENANCE=1', "/LOG=$(Join-Path $root 'installer-upgrade.log')") 900
     if ((Invoke-RestMethod "http://127.0.0.1:$($config.service.port)/health").status -ne 'ok') { throw 'Compiled installer upgrade failed.' }

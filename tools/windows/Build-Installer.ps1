@@ -34,18 +34,12 @@ try {
         'dispenser-service.exe' = Join-Path $repo 'target\release\dispenser-service.exe'
         'azs-desktop.exe' = Join-Path $repo 'target\release\azs-desktop.exe'
         'nssm.exe' = Join-Path $DependencyDir 'nssm.exe'
-        'MicrosoftEdgeWebView2RuntimeInstallerX64.exe' = Join-Path $DependencyDir 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
         'Launch-Desktop.ps1' = Join-Path $PSScriptRoot 'Launch-Desktop.ps1'
     }
     foreach ($name in $sources.Keys) {
         if (!(Test-Path -LiteralPath $sources[$name] -PathType Leaf)) { throw "Build input missing: $($sources[$name])" }
         Copy-Item -LiteralPath $sources[$name] -Destination (Join-Path $payload $name)
     }
-    # Even offline builds must validate Microsoft's signature and reject a bootstrapper.
-    $runtime = Join-Path $payload 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
-    $signature = Get-AuthenticodeSignature -LiteralPath $runtime
-    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation(?:,|$)' -or
-        (Get-Item -LiteralPath $runtime).Length -lt 50MB) { throw 'Invalid offline WebView2 installer.' }
     if ((Get-FileHash -LiteralPath (Join-Path $payload 'nssm.exe') -Algorithm SHA256).Hash -ine
         'eee9c44c29c2be011f1f1e43bb8c3fca888cb81053022ec5a0060035de16d848') {
         throw 'Use the tested official NSSM 2.24-101 win64 executable.'

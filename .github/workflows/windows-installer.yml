@@ -47,7 +47,7 @@ jobs:
           Set-Content "$syntaxDir/payload/placeholder.txt" 'Syntax check only; never distributed.'
           & "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe" "/DPayloadDir=$syntaxDir/payload" "/DOutputDir=$syntaxDir" tools/windows/StationInstaller.iss
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: Fetch verified offline dependencies
+      - name: Prepare verified bundled NSSM
         run: ./tools/windows/Get-InstallerDependencies.ps1 -Destination dist/windows-installer/dependencies
       - name: Build service
         run: |

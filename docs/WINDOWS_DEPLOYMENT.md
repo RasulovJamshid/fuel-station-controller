@@ -3,9 +3,9 @@
 ## At each station: run one installer
 
 Use **AZS-Station-Setup-<version>-x64.exe** on Windows 10/11 x64. The installer
-contains the compiled dispenser service, desktop app, NSSM and the full offline
-WebView2 runtime. Station computers do not need Node.js, Rust, Chocolatey, Inno
-Setup, or an internet connection for installation.
+contains the compiled dispenser service, desktop app and NSSM. Station computers
+do not need Node.js, Rust, Chocolatey, Inno Setup, or an internet connection for
+installation. WebView2 is not bundled, downloaded or installed by setup.
 
 1. For a new station, create and download its `site.config.json` from the web
    configuration wizard. Set the serial connection to the station's Windows COM
@@ -24,8 +24,10 @@ Setup, or an internet connection for installation.
 6. Open **AZS Manager** using the desktop shortcut. Its launcher reads the local
    service port from the existing configuration, including non-default ports.
 
-The WebView2 runtime is installed for all users only when the machine does not
-already have it. The desktop runs as the logged-in operator. Setup does not
+The desktop uses the WebView2 runtime already installed on Windows. If it is not
+detected for all users, setup reports this on its completion screen; service
+installation and upgrades still proceed. Install WebView2 separately if the
+desktop needs it. The desktop runs as the logged-in operator. Setup does not
 launch the desktop elevated, open firewall ports, or change dispensing behavior.
 
 Existing desktop administration, products, prices, nozzles, tanks, ATG setup,
@@ -101,8 +103,8 @@ From the repository root:
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\windows\Build-Installer.ps1 -BuildVersion 0.1.0
 ```
 
-The script builds the service and Tauri desktop, fetches the offline dependencies
-on the build machine, and writes:
+The script builds the service and Tauri desktop, prepares the verified NSSM
+executable from the repository, and writes:
 
 ```text
 dist\windows-installer\AZS-Station-Setup-0.1.0-x64.exe
@@ -114,14 +116,11 @@ Tauri `bundle.active = false` setting stays unchanged; Inno Setup packages both
 applications together. No station-specific configuration, database or API token
 is bundled into the installer.
 
-Dependencies are cached under `dist\windows-installer\dependencies`:
-
-- NSSM **2.24-101-g897c7ad win64** from the [official download](https://nssm.cc/download),
-  kept under `tools/windows/vendor` with its provenance and pinned SHA-256.
-  No NSSM download is needed during a build. This is the official Windows 10+
-  compatibility build. Existing installations retain their current NSSM.
-- Microsoft's signed **WebView2 Evergreen standalone x64 installer**, not the
-  small online bootstrapper. See [offline distribution](https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution).
+NSSM **2.24-101-g897c7ad win64** from the [official download](https://nssm.cc/download)
+is kept under `tools/windows/vendor` with its provenance and pinned SHA-256. Build
+preparation copies it into `dist\windows-installer\dependencies`; no dependency
+download is needed. This is the official Windows 10+ compatibility build.
+Existing installations retain their current NSSM.
 
 For a build using cached dependencies and already compiled release binaries:
 
@@ -129,8 +128,8 @@ For a build using cached dependencies and already compiled release binaries:
 .\tools\windows\Build-Installer.ps1 -SkipBuild -Offline -BuildVersion 0.1.0
 ```
 
-`-Offline` prevents dependency downloads; use `-SkipBuild` as well to avoid Cargo
-and npm downloads. A custom cache can be passed with `-DependencyDir`. Build
+`-Offline` reuses the already prepared NSSM dependency; use `-SkipBuild` as well
+to avoid Cargo and npm downloads. A custom cache can be passed with `-DependencyDir`. Build
 inputs are verified, and the packaged payload gets its own SHA-256 manifest.
 Sign the final installer through your normal release signing process if your
 organization requires signed executables; no signing key is stored in the repo.

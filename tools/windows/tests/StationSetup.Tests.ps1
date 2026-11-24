@@ -38,13 +38,14 @@ function New-Fixture([switch] $Existing) {
     $script:failValidation = $false
     $script:failRegistration = $false
     $script:failShortcut = $false
+    $script:hasWebView = $true
     $script:registered = $false
     $script:metadata = [pscustomobject]@{
         site = 'station-123'; port = 3025; db_path = 'data/transactions.db'
         protocol = 'mock'; serial_port = 'MOCK'; serial_log_file = $null
     }
     $files = @()
-    foreach ($name in @('dispenser-service.exe', 'azs-desktop.exe', 'nssm.exe', 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe', 'Launch-Desktop.ps1')) {
+    foreach ($name in @('dispenser-service.exe', 'azs-desktop.exe', 'nssm.exe', 'Launch-Desktop.ps1')) {
         Set-TestFile (Join-Path $script:payload $name) "new-$name"
         $files += @{ name = $name; sha256 = (Get-FileHash -LiteralPath (Join-Path $script:payload $name)).Hash }
     }
@@ -72,7 +73,7 @@ function New-Fixture([switch] $Existing) {
 function Read-StationService { return $script:existing }
 function Protect-StationBackup($Directory) { }
 function Assert-DesktopClosed($InstallDir) { $script:events.Add('desktop-check') }
-function Install-StationWebView($PayloadDir) { $script:events.Add('webview') }
+function Test-MachineWebView { $script:events.Add('webview-check'); return $script:hasWebView }
 function Stop-StationService { $script:events.Add('stop') }
 function Start-StationService {
     $script:events.Add('start')
@@ -110,7 +111,15 @@ try {
         New-Fixture
         Invoke-StationInstall $script:payload $script:install $script:config -MaintenanceConfirmed
         Assert-Equal ([IO.File]::ReadAllText((Join-Path $script:install 'site.config.json'))) ([IO.File]::ReadAllText($script:config))
-        Assert-Equal ($script:events -join ',') 'validate,desktop-check,webview,offline-check,port-check,register,start,health,shortcut'
+        Assert-Equal ($script:events -join ',') 'validate,desktop-check,webview-check,offline-check,port-check,register,start,health,shortcut'
+    }
+    Test-Case 'missing WebView2 is reported without installing it or blocking the service upgrade' {
+        New-Fixture -Existing
+        $script:hasWebView = $false
+        $result = Invoke-StationInstall $script:payload $script:install '' -MaintenanceConfirmed
+        Assert-Equal ($result -match 'WebView2 was not detected') $true
+        Assert-Equal ($script:events -contains 'health') $true
+        Assert-Equal ([IO.File]::ReadAllText($script:database)) 'existing-sales'
     }
     Test-Case 'existing installation preserves config, database, WAL and service settings' {
         New-Fixture -Existing

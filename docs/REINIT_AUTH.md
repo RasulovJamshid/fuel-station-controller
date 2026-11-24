@@ -6,12 +6,16 @@ Use this when an admin has forgotten their PIN and you need to recover access wi
 
 **Stop the service first** — the command writes directly to SQLite and cannot run while the service is open on the same DB file.
 
-### Windows (NSSM)
+### Windows (Administrator PowerShell)
+
+Use the service's configured working directory and configuration path. For a
+standard installation these are `C:\azs` and `C:\azs\site.config.json`:
 
 ```powershell
-nssm stop AzsService
+Stop-Service AzsService
+Set-Location C:\azs
 C:\azs\dispenser-service.exe reinit-auth --config C:\azs\site.config.json
-nssm start AzsService
+Start-Service AzsService
 ```
 
 ### Linux

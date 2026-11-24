@@ -117,7 +117,8 @@ is bundled into the installer.
 Dependencies are cached under `dist\windows-installer\dependencies`:
 
 - NSSM **2.24-101-g897c7ad win64** from the [official download](https://nssm.cc/download),
-  pinned by archive and executable SHA-256. This is the official Windows 10+
+  kept under `tools/windows/vendor` with its provenance and pinned SHA-256.
+  No NSSM download is needed during a build. This is the official Windows 10+
   compatibility build. Existing installations retain their current NSSM.
 - Microsoft's signed **WebView2 Evergreen standalone x64 installer**, not the
   small online bootstrapper. See [offline distribution](https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution).

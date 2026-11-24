@@ -5,17 +5,13 @@ $ErrorActionPreference = 'Stop'
 $null = New-Item -ItemType Directory -Path $Destination -Force
 $Destination = (Resolve-Path -LiteralPath $Destination).Path
 
-# Official Windows 10+ build at https://nssm.cc/download. The pinned SHA-256 was
-# computed after checking the upstream SHA-1 ca2f6782a05af85facf9b620e047b01271edd11d.
-$archive = Join-Path $Destination 'nssm-2.24-101-g897c7ad.zip'
-if (!(Test-Path -LiteralPath $archive)) {
-    Invoke-WebRequest -UseBasicParsing -Uri 'https://www.nssm.cc/ci/nssm-2.24-101-g897c7ad.zip' -OutFile $archive
+# Keep the small public-domain wrapper in the repository: the official download
+# server is intermittently unavailable. Provenance and hashes are in vendor/README.md.
+$nssm = Join-Path $PSScriptRoot 'vendor\nssm.exe'
+if ((Get-FileHash -LiteralPath $nssm -Algorithm SHA256).Hash -ine 'eee9c44c29c2be011f1f1e43bb8c3fca888cb81053022ec5a0060035de16d848') {
+    throw 'The bundled NSSM executable differs from the verified upstream build.'
 }
-if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ine '99f5045fffbffb745d67fe3a065a953c4a3d9c253b868892d9b685b0ee7d07b8') {
-    throw 'NSSM archive checksum differs from the official published checksum. Delete the cached archive and retry.'
-}
-Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $Destination 'nssm') -Force
-Copy-Item -LiteralPath (Join-Path $Destination 'nssm\nssm-2.24-101-g897c7ad\win64\nssm.exe') -Destination (Join-Path $Destination 'nssm.exe') -Force
+Copy-Item -LiteralPath $nssm -Destination (Join-Path $Destination 'nssm.exe') -Force
 
 $webview = Join-Path $Destination 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
 if (!(Test-Path -LiteralPath $webview)) {
